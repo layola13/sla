@@ -32,6 +32,8 @@ mod sab_paths;
 mod skills_cmd;
 mod stability;
 mod stability_validate;
+mod test_prune;
+mod test_reach;
 mod workspace;
 mod wyhash;
 

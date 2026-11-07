@@ -164,7 +164,7 @@ pub fn run_check(args: &[Vec<u8>], stdout: &mut impl Write, stderr: &mut impl Wr
         Ok(None) => return 1,
         Err(()) => return 1,
     };
-    if run_frontend(&file, FrontendKind::Check, stderr).is_none() {
+    if run_frontend(&file, FrontendKind::Check, None, stderr).is_none() {
         return 1;
     }
     let _ = writeln!(

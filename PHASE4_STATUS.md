@@ -13,3 +13,12 @@
 - D-C22（裸名段）｜**完工已合入并验真**（pristine+patch 与主本逐字全等）｜测试：checker 175/175、workspace 323/0｜剩余：无（D-C24(b) 登记在册、FB-053 候主会话确认）
 - ORCP（计时记录项）｜本段已交付（PREP + Zig 侧预备值）｜剩余：决定性双侧跑（CLI 合入后协调线静窗补跑）｜阻塞：等 sla-cli
 - 集成（协调线）｜**收编完成**：八 patch 全合并（SAB-I/E 经三方裁决、emit 去重、driver.rs 行数拆分、repeat 段 D31 pin 校准均在 §11.10 在册）；**终验 workspace 483/0、188 文件行数全过、ORCP 决定性双侧跑入档（decisive1）**；REPORT.md §11 已落、本地快照已提交｜阻塞：无
+
+
+## 后四期设计要求（2026-11-07 用户裁定）：FFI 发布逃逸与 unsafe 资格键，两实现同规
+
+- 用户 17:44 裁定：「RUST 也按照这种做」——fnptr A2 的 A 豁免 + consult-ffi-unsafe 的 K2 资格键形态对 Rust 版（稳定版）同样生效，属设计约束、非可选：
+  1. 经发布面暴露给 FFI 的函数对象 cell，仅豁免 exit 泄漏检查；UAF/double-free/provenance 规则不变；同形未发布仍 trap；发布后 double-free 仍 trap。
+  2. 资格附着于发布事件：发布须写在既有 `unsafe {}` 辖区内才获得资格发射形；前端执法（检查器追踪 unsafe 上下文至发布点），宿主/裁判认资格形；块外发布保持可调用、继续响亮报错；块内普通分配不沾光。
+  3. 认形状仅许作非豁免顾问（提示迁移、不据此豁免）；无双钥过渡。
+- 验收与 Zig 侧同规同语料（正负语料对在 Zig 侧 A 线交付后，Rust 侧以差分对拍核对）。Zig 侧实施线 def-sci-fnptr-escape 在跑，其 RESULT 的载体合同为 Rust 侧实现参照。sala 口径一处落字、两实现共用。

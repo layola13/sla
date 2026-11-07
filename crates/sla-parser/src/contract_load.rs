@@ -21,6 +21,18 @@
 //!      registration gap at this layer; the plugin wiring registers
 //!      the records into the checker).
 //!
+//! Root resolution is SHARED with the expansion layer: both go
+//! through `imports::resolve_import_files`, whose ancestor-root
+//! walk covers `sla_std/...` (roots `sla_std`,
+//! `sa_plugin_sla/sla_std`, `sa_plugins/sa_plugin_sla/sla_std`,
+//! then `SLA_STD_DIR`) and `sa_std/...` in Zig's order (CLI-D6;
+//! the walk's start point is `imports::real_path`, which maps the
+//! empty parent of a bare filename to the cwd — see there).
+//! Following a resolved `.sla` wrapper's own `@import` lines
+//! (step 3 above) is what registers the externs a thin wrapper
+//! re-exports; the wrapper's visited entry precedes the nested
+//! `.sai` entry in the closure.
+//!
 //! What this slice deliberately does NOT do (phase-remaining, and
 //! reported loudly in the `LoadReport` instead of silently skipped):
 //!   * `.sla` inline expansion of imported bodies — that lives in
@@ -292,6 +304,72 @@ mod tests {
         assert_eq!(report.layout_defines[0].name, "Thing_SIZE");
         assert_eq!(report.layout_defines[0].val_int, 16);
         assert_eq!(report.visited.len(), 3);
+    }
+
+    const FMT_SAI: &str = "@extern sa_fmt_i64(value: i64, base: u32) -> u64\n\
+        @extern sa_fmt_buffer_len(buffer: u64) -> u64\n\
+        @extern sa_mem_free(^ptr: ptr) -> void\n";
+    const WRAP_FMT_SLA: &str = "@import \"sa_std/fmt.sai\"\n\
+        fn sla_fmt_i64(value: i64, base: u32) -> u64 { return sa_fmt_i64(value, base); }\n\
+        fn sla_fmt_buffer_len(buffer: u64) -> u64 { return sa_fmt_buffer_len(buffer); }\n";
+
+    fn fmt_tree(tag: &str) -> TempTree {
+        let tree = TempTree::new(tag);
+        tree.write("sa_std/fmt.sai", FMT_SAI);
+        tree.write("sla_std/wrap/fmt.sla", WRAP_FMT_SLA);
+        tree
+    }
+
+    #[test]
+    fn sla_std_wrap_form_loads_reexported_extern_closure() {
+        // CLI-D6: the mainstream thin-wrapper form. The wrap file
+        // is a `.sla` body: the loader scans its text, follows its
+        // re-import of the `.sai`, and registers the re-exported
+        // externs. The visited closure (the freshness closure)
+        // holds both files, wrapper first, in first-visit order.
+        let tree = fmt_tree("wrapform");
+        tree.write(
+            "main.sla",
+            "@import \"sla_std/wrap/fmt.sla\"\nfn main() -> i32 { return 0; }\n",
+        );
+        let report = load_imported_contracts(
+            &["sla_std/wrap/fmt.sla".to_string()],
+            &tree.0.join("main.sla"),
+        )
+        .unwrap();
+        assert_eq!(
+            report.extern_names(),
+            vec!["sa_fmt_i64", "sa_fmt_buffer_len", "sa_mem_free"]
+        );
+        assert_eq!(report.visited.len(), 2);
+        assert!(report.visited[0].ends_with("sla_std/wrap/fmt.sla"));
+        assert!(report.visited[1].ends_with("sa_std/fmt.sai"));
+        assert_eq!(report.sla_imports.len(), 1);
+        assert_eq!(report.sla_imports[0], report.visited[0]);
+    }
+
+    #[test]
+    fn sa_std_direct_form_gives_the_same_extern_closure() {
+        // CLI-D6 companion: the direct `.sai` form stays compatible
+        // and yields the identical extern registration for the same
+        // surface, without the wrapper in the closure.
+        let tree = fmt_tree("directform");
+        tree.write(
+            "main.sla",
+            "@import \"sa_std/fmt.sai\"\nfn main() -> i32 { return 0; }\n",
+        );
+        let report = load_imported_contracts(
+            &["sa_std/fmt.sai".to_string()],
+            &tree.0.join("main.sla"),
+        )
+        .unwrap();
+        assert_eq!(
+            report.extern_names(),
+            vec!["sa_fmt_i64", "sa_fmt_buffer_len", "sa_mem_free"]
+        );
+        assert_eq!(report.visited.len(), 1);
+        assert!(report.visited[0].ends_with("sa_std/fmt.sai"));
+        assert!(report.sla_imports.is_empty());
     }
 
     #[test]

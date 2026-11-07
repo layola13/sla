@@ -49,28 +49,82 @@ build-exe / test(sab) 在基线 d811673c 的
 build-exe 运行 rc=45）。这是本线今晚最大的覆盖缺口，坐标
 精确：sla-codegen-sab 直降入口 × std 表面调用。
 
-## CLI-D5 (b) test-codegen 配置下 SAB 清理丢失（MemoryLeak）
-p_tests.sla（while 循环 + 2 个 @test）：`sla test` 的 SAB 测试
-输入被子进程 sa test 以 MemoryLeak trap 拒绝（live register
-tmp_15 于全量、tmp_9 于 --filter alpha），rc=1；stock 同案
-2 passed。同程序走普通 sab build → build-exe 运行干净
-（rc=45 活证），故泄漏为 test-codegen 配置特有。定层坐标：
-Zig runSlaFrontend 在 test_codegen 时于 checkProgram **之前**
-做 filter 剪枝 + 可达剪枝，本线 pipeline 尚未移植该前置剪枝
-阶段（见 REPORT 未移植阶段清单），checker 的 cleanup 数据与
-剪枝后程序的节点对应关系在此错位，候协调线定辖（pipeline
-阶段序补齐 vs codegen-sab 清理消费鲁棒性）。
+## CLI-D5 (b) test-codegen 前置剪枝已移植；残余 MemoryLeak 再定层至 codegen-sab 释放发射
+五期 CLI-D5 线（2026-11-07）处置结果：
+- **阶段序已补齐**：`run_frontend` 的 TestCodegen 路径在 parse
+  之后、contract load/check 之前，按 Zig 原序（读头
+  sa_plugin_sla 2cc12ea8 的 plugin_compile.zig）落
+  `pruneTestsByFilter` + `pruneUnreachableTestFunctionDeclsBeforeTypeCheck`
+  （根集 = @test 体 / const 值 / trait impl 方法体 / overload
+  方法体；传递闭包走 call 名、associated 候选、identifier、
+  generic_func_ref 与 const/macro 引用根扫描；extern/decl-only
+  声明恒保留），移植在 crates/sla-cli/src/test_prune.rs +
+  test_reach.rs；check 之后旧有的 filter 剪枝已删（Zig 原文该
+  函数仅前置一处）。非 TestCodegen 路径逐字不变。
+- **复现形钉死**：p_tests.sla = while_sum 辅助函数（while 循环）
+  + main 返回 while_sum(10) + 2 个 @test（一名含 alpha、无导入
+  无 println 形），与原台账 tmp 编号逐字吻合（修复前 Rust
+  全量 tmp_15 / --filter alpha tmp_9、rc=1；stock 2 passed /
+  1 passed；普通 build-exe rc=45）。
+- **残余再定层（本条未闭合）**：前置剪枝生效后（全量
+  tmp_15→tmp_13、filter tmp_9→tmp_7，泄漏寄存器随 main 被剪
+  而移位），SAB 测试输入仍被 sa test 以 MemoryLeak 拒绝。
+  反汇编三方对拍定层：同一 checked 程序，文本后端
+  （--test-backend sa）释放完整、2/2 PASS；Rust SAB 后端的
+  while_sum 为纯 assign 形、**零 release**（局部量不落
+  stack_alloc、临时量不释放），且普通 build 的 SAB 同形——
+  `sa build-exe` 容忍该形（rc=45 活证）、`sa test` 的严格
+  校验器不容忍；stock SAB 同函数为 stack_alloc+store/load+
+  全量 release 形。故残余缺陷在 **sla-codegen-sab 的释放发射**
+  （checker cleanups 消费面），与 test 配置无关、非管线阶段
+  序问题；归属 codegen-sab 辖区，候协调线另派。
+- 移植范围差（响亮登记）：Zig 的 SyntacticFactSet 常量事实
+  分析未移植（known-false 分支剪枝不做、receiver 类型不由
+  局部事实解析）——可达集为 Zig 的超集（不可解析 receiver
+  时标全部 associated 候选，与 Zig 自身回退同形），不会多
+  剪；模块表/imported macro 面在本管线无对应物（程序仅根
+  文件）；rewriteProjectSnapshotTestShortcuts 未移植（保留名
+  单已逐字镜像）；Zig SAB 尾的 check 后两道可达剪枝
+  （post-typecheck syntactic + tc-based
+  pruneUnreachableFilteredTestDecls）未移植，Rust 测试 SAB
+  可能比 stock 多保留声明（不影响校验、影响字节对拍）。
 
-## CLI-D6 (b·覆盖) sla_std 薄包形式尚不可用（14:39/14:40 规矩差距节）
+## CLI-D6 (b·覆盖→已接通，五期 CLI-D6 线) sla_std 薄包根解析 + 正文衔接
 新探针 p_sla_std.sla（`@import "sla_std/wrap/fmt.sla"`）：
-stock check 通过；Rust 侧
+stock check 通过；Rust 侧原报
 `Import Error: failed to load @import contracts: import resolution failed: FileNotFound: sla_std/wrap/fmt.sla`。
-两处坐标：(1) sla-parser 的 contract_load 解析器没有 sla_std
-祖先根解析（imports.rs 的展开解析器有）；(2) wrap 是 .sla
-本体，需要导入正文展开——IMP 线已在其 patch 接线，候集成。
-旧形式 `@import "sa_std/xxx.sai"` 直引全程兼容（fixtures
-01–07 全部以此形式活体通过），按补正口径：旧形式存在不算
-差距，差距 = 薄包形式未通，本条即是。
+定层（五期复现坐实）：contract_load 与展开层共用
+`imports::resolve_import_files`，其 sla_std 祖先根解析本已在册；
+真缺陷在祖先 walk 的起点——parity 案以**裸文件名**
+（`check p_sla_std.sla`、cwd = 案目录、sla_std 树在上两级祖先的
+`sa_plugin_sla/sla_std` 下）运行时，源文件 parent 为空路径，
+`real_path("")` 规范化失败回退 `""`，walk 起步即终止、永不达
+cwd 的祖先。直引 `.sai` 同病但被 parity 脚本的 `SA_STD_DIR`
+环境根救回，sla_std 无此根故独红。
+修复（共享 helper、一处）：`imports::real_path` 空路径归 cwd
+规范路径，walk 由此获得真实起点；contract_load / sla_expand /
+sla-cli 三消费方同受益、优先序与 imports.rs 原序不变（sla_std
+根序 `sla_std` → `sa_plugin_sla/sla_std` →
+`sa_plugins/sa_plugin_sla/sla_std` → `SLA_STD_DIR`）。
+正文衔接：contract_load 扫描已解析 wrap 的正文、跟随其
+`@import "sa_std/fmt.sai"` 再导入，包装层重导出的 extern
+（sa_fmt_i64 / sa_fmt_buffer_len / sa_mem_free）以嵌套先行序
+登记，visited 闭包 = [wrap/fmt.sla, fmt.sai]（freshness 闭包
+口径不变）；与 sla_expand include-all 组合后（检查路 decl-only
++ 原始路带体）双路 check 均过。
+双形式 fixture（硬验收）：同一 fmt 表面两探针经 Rust 管线
+（sla-plugin 层：contract_load + expand + checker）双双通过、
+extern 闭包逐字同——薄包形式
+`crates/sla-plugin/tests/sla_std_wrap_pipeline.rs` +
+contract_load 双形式闭包测试 + 裸文件名回归
+`crates/sla-parser/tests/sla_std_bare_filename.rs`（修复前红：
+同文 FileNotFound；修复后绿）。
+残留（非本条辖区、如实登记）：sla-cli 二进制前端至今未调用
+任何 `.sla` 正文展开（pipeline.rs 头注在册的未接线阶段，对
+一切 `.sla` 导入同然、非 sla_std 独有）——其 check 案已由
+Import Error 推进到 Undefined call 阶段；展开本体在
+sla-plugin（六家拓扑定案：无人依赖 sla-plugin），cli 接线须
+协调线裁断（展开下沉共享 crate 或授权新边），候裁。
 
 ## CLI-D7 (a·已在册) 函数尾释放序：Zig 非声明序（FB-020 家族）
 build 02_arith / 07_functions 的 .sa 文本各差一行：尾释放序

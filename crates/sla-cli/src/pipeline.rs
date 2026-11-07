@@ -7,8 +7,10 @@
 //! the original).
 //!
 //! Stage order: freshness load → read → parse (with the D-P3
-//! seed prescan) → contract load + extern registration → type
-//! check → tail codegen → freshness store. Stages with no port in
+//! seed prescan) → [TestCodegen only: filter prune +
+//! reachability prune, the CLI-D5 stages in crate::test_prune]
+//! → contract load + extern registration → type check → tail
+//! codegen → freshness store. Stages with no port in
 //! the existing crates — source_expand (@expand_tuple), .sla
 //! import BODY expansion, defer desugar, monomorphizer, syntax
 //! lowering (go/chan/select), the SAB audit, imported-function
@@ -194,8 +196,17 @@ pub enum FrontendKind {
 }
 
 /// Run the mirrored front-end. None = a diagnostic was printed
-/// and the caller returns 1.
-pub fn run_frontend(file: &str, kind: FrontendKind, stderr: &mut impl Write) -> Option<Frontend> {
+/// and the caller returns 1. `test_filter` is the `sla test`
+/// --filter pattern; it only takes effect for
+/// [`FrontendKind::TestCodegen`], whose pruning stages run here —
+/// after parse, before contract load and the type check — in the
+/// Zig order (CLI-D5; see crate::test_prune).
+pub fn run_frontend(
+    file: &str,
+    kind: FrontendKind,
+    test_filter: Option<&str>,
+    stderr: &mut impl Write,
+) -> Option<Frontend> {
     let profile = profile_enabled();
     let prefix = if kind == FrontendKind::Check { "check " } else { "" };
 
@@ -241,7 +252,7 @@ pub fn run_frontend(file: &str, kind: FrontendKind, stderr: &mut impl Write) -> 
     let type_refs: Vec<&str> = seed_types.iter().map(String::as_str).collect();
     let enum_refs: Vec<&str> = seed_enums.iter().map(String::as_str).collect();
     parser.seed_known_type_names(&type_refs, &enum_refs);
-    let root = match parser.parse_program() {
+    let mut root = match parser.parse_program() {
         Ok(root) => root,
         Err(err) => {
             print_parse_diagnostic(stderr, file, &content, &err);
@@ -249,6 +260,22 @@ pub fn run_frontend(file: &str, kind: FrontendKind, stderr: &mut impl Write) -> 
         }
     };
     stage_done(stderr, profile, &format!("{prefix}parse"), start);
+
+    // Test-codegen pre-check pruning (plugin_compile.zig
+    // runSlaFrontend): pruneTestsByFilter, then the syntactic
+    // reachability prune — both BEFORE contract load and
+    // checkProgram, so the checker's node-keyed cleanup tables
+    // describe exactly the program codegen consumes (CLI-D5).
+    // Other kinds never prune here; their stage order is
+    // byte-identical to before.
+    if kind == FrontendKind::TestCodegen {
+        let start = Instant::now();
+        crate::test_prune::prune_tests_by_filter(&mut root, test_filter);
+        stage_done(stderr, profile, "test filter prune", start);
+        let start = Instant::now();
+        crate::test_prune::prune_unreachable_test_function_decls_before_type_check(&mut root);
+        stage_done(stderr, profile, "pre-typecheck reachable decl filter", start);
+    }
 
     let Node::Program(program) = &root else {
         return None;
@@ -352,20 +379,6 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
 
 // -- tails ---------------------------------------------------------------------------
 
-/// Zig `pruneTestsByFilter`.
-pub fn prune_tests_by_filter(root: &mut Node, filter: Option<&str>) {
-    let Some(pattern) = filter.filter(|p| !p.is_empty()) else {
-        return;
-    };
-    let Node::Program(program) = root else {
-        return;
-    };
-    program.decls.retain(|decl| match decl {
-        Node::TestDecl(test) => test.name.contains(pattern),
-        _ => true,
-    });
-}
-
 /// plugin_compile.zig `compileSlaToSaStringWithOptions`, with the
 /// freshness gate at both ends.
 pub fn compile_to_sa_string(
@@ -384,8 +397,13 @@ pub fn compile_to_sa_string(
         }
         return String::from_utf8(cached).ok();
     }
-    let mut frontend = run_frontend(file, kind, stderr)?;
-    prune_tests_by_filter(&mut frontend.root, options.test_filter.as_deref());
+    // No post-check filter prune: in the Zig original
+    // pruneTestsByFilter exists only pre-check (inside
+    // runSlaFrontend), so the former post-check call here — the
+    // CLI-D5 misalignment itself — is gone. (The SAB tail's
+    // post-check reachability prunes are separate stages; see
+    // the CLI-D5 scope note in docs/divergences/cli-commands.md.)
+    let frontend = run_frontend(file, kind, options.test_filter.as_deref(), stderr)?;
     let info = CheckerInfo(&frontend.checker);
     let start = Instant::now();
     let text = match sla_codegen_text::generate(&frontend.root, &info) {
@@ -432,8 +450,7 @@ pub fn compile_to_sab(
         }
         return Some(cached);
     }
-    let mut frontend = run_frontend(file, kind, stderr)?;
-    prune_tests_by_filter(&mut frontend.root, options.test_filter.as_deref());
+    let frontend = run_frontend(file, kind, options.test_filter.as_deref(), stderr)?;
     let info = CheckerInfo(&frontend.checker);
     let start = Instant::now();
     let bytes = match sla_codegen_sab::generate_from_program(&frontend.root, &info) {

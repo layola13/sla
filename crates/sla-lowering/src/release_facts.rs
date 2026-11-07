@@ -56,20 +56,12 @@ pub fn int_constant_expr_value(
                 BinaryOp::Add => left.checked_add(right),
                 BinaryOp::Sub => left.checked_sub(right),
                 BinaryOp::Mul => left.checked_mul(right),
-                BinaryOp::Div => {
-                    if right == 0 {
-                        None
-                    } else {
-                        Some(left.wrapping_div(right))
-                    }
-                }
-                BinaryOp::Mod => {
-                    if right == 0 {
-                        None
-                    } else {
-                        Some(left.wrapping_rem(right))
-                    }
-                }
+                // FB-025: checked forms decline on divide-by-zero
+                // AND on the i64::MIN / -1 overflow, exactly like
+                // the SAB-side fold (prescan_consts.rs) — a wrapping
+                // fold would silently materialize MIN / 0 there.
+                BinaryOp::Div => left.checked_div(right),
+                BinaryOp::Mod => left.checked_rem(right),
                 BinaryOp::BitAnd => Some(left & right),
                 BinaryOp::BitOr => Some(left | right),
                 BinaryOp::BitXor => Some(left ^ right),
@@ -175,6 +167,23 @@ mod tests {
             right: Box::new(Node::Literal(Literal::IntVal(0))),
         });
         assert_eq!(int_constant_expr_value(&div0, &no_consts), None);
+        // FB-025: i64::MIN / -1 (and % -1) overflow must decline the
+        // fold (None), never wrap to MIN / 0.
+        for op in [BinaryOp::Div, BinaryOp::Mod] {
+            let overflow = Node::BinaryExpr(BinaryExpr {
+                op,
+                left: Box::new(Node::Literal(Literal::IntVal(i64::MIN))),
+                right: Box::new(Node::Literal(Literal::IntVal(-1))),
+            });
+            assert_eq!(int_constant_expr_value(&overflow, &no_consts), None);
+        }
+        // Ordinary division still folds.
+        let div = Node::BinaryExpr(BinaryExpr {
+            op: BinaryOp::Div,
+            left: Box::new(Node::Literal(Literal::IntVal(-7))),
+            right: Box::new(Node::Literal(Literal::IntVal(2))),
+        });
+        assert_eq!(int_constant_expr_value(&div, &no_consts), Some(-3));
         let i32ty = Type::Primitive(Primitive::I32);
         assert_eq!(stored_value_moves_identifier(&Node::Identifier("x".into()), &i32ty, true), None);
     }

@@ -12,9 +12,13 @@
 //! which the crate graph forbids on this lane.
 //!
 //! Everything else is mirrored byte-for-byte, including the quirks:
-//!   * the top-level scan matches `@expand_tuple` ANYWHERE in the
-//!     byte stream (inside strings/comments too — Zig does not
-//!     tokenize the outer scan);
+//!   * FB-045 (Rust-side fix, intentional divergence): the top-level
+//!     scan is lexically aware — string literals and `//` comments
+//!     are skipped, so directive-shaped text inside them is copied
+//!     verbatim. Zig's raw scan matches `@expand_tuple` ANYWHERE in
+//!     the byte stream (inside strings/comments too) and thereby
+//!     rejects valid strings / silently rewrites their values;
+//!     the Rust product line does not mirror that defect;
 //!   * `@join` separators are the raw bytes between the quotes (no
 //!     escape processing);
 //!   * `$TYPE_PARAMS` is tried before `$TYPES` at the same spot;
@@ -67,6 +71,21 @@ pub fn expand(source: &str) -> Result<String> {
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len() * 2);
     let mut i = 0usize;
     while i < bytes.len() {
+        // FB-045: skip string literals and `//` comments verbatim —
+        // their bytes are data, never directives. (Unterminated
+        // string: copy the rest verbatim; the parser diagnoses it.)
+        if bytes[i] == b'"' {
+            let end = skip_string(bytes, i).map(|close| close + 1).unwrap_or(bytes.len());
+            out.extend_from_slice(&bytes[i..end]);
+            i = end;
+            continue;
+        }
+        if bytes[i] == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'/' {
+            let end = skip_line(bytes, i + 2);
+            out.extend_from_slice(&bytes[i..end]);
+            i = end;
+            continue;
+        }
         if starts_with_at(bytes, i, b"@expand_tuple") {
             let directive = parse_directive(bytes, i, b"@expand_tuple")?;
             let spec = parse_expand_tuple_args(&bytes[directive.args_start..directive.args_end])?;
@@ -494,6 +513,29 @@ mod tests {
         assert!(first.contains("fn f_1"));
         assert!(first.contains("fn f_2"));
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn expand_tuple_inside_string_or_comment_is_not_a_directive() {
+        // FB-045 (Rust-side fix): the top-level scan is lexically
+        // aware — directive-shaped text inside a string literal or
+        // a `//` comment is copied verbatim, never expanded, never
+        // an error. (Zig's raw scan rejects/rewrites these; the
+        // Rust product line does not mirror that defect.)
+        let a = "fn main() -> i32 { let s = \"@expand_tuple(x)\"; return 0; }\n";
+        assert_eq!(expand(a), Ok(a.to_string()));
+        let b = "fn main() -> i32 { let s = \"@expand_tuple(1, 1, T) { not a directive }\"; return 0; }\n";
+        assert_eq!(expand(b), Ok(b.to_string()));
+        let c = "// @expand_tuple(x)\nfn main() -> i32 { return 0; }\n";
+        assert_eq!(expand(c), Ok(c.to_string()));
+        // An escaped quote does not end the string early.
+        let d = "fn f() -> i32 { let s = \"a\\\"@expand_tuple(x)\"; return 0; }\n";
+        assert_eq!(expand(d), Ok(d.to_string()));
+        // A real directive after a string still expands.
+        let e = "fn f() -> i32 { let s = \"@expand_tuple\"; return 0; }\n@expand_tuple(1, 1, T) {\nfn g_$N() -> i32 { return $N; }\n}\n";
+        let expanded = expand(e).unwrap();
+        assert!(expanded.contains("\"@expand_tuple\""));
+        assert!(expanded.contains("fn g_1"));
     }
 
     #[test]

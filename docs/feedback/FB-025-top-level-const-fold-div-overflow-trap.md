@@ -59,3 +59,32 @@ and ri == -1` 时返回 null（放弃折叠、回退正常发射，与既有
 
 `crates/sla-codegen-sab/src/prescan_consts.rs::fold_top_level_binary_const`
 （checked_div/checked_rem 处注释标明本单号）。
+
+## 五期现头复核（2026-11-07，FB 确认批 1）
+
+场地：盒 /content/rust5/fb；Zig 侧 = sla 现头 `08fabac6` pristine
+克隆（隔离 HOME 装插件，宿主 sci 2fb5ea2a，SA_STD_DIR 钉
+detland sci 的 sa_std）；Rust 侧 = sla-cli @ 65a642e+本批修复。
+
+- **Zig 现头仍崩，本单保持开放**：divmin（`A2 / NEG`）文本路
+  `sa sla build` rc=136 SIGFPE、SAB 路 `sa sla sab build` rc=136；
+  modmin（`A2 % NEG`）两路同为 rc=136。双路双形态现头实证，
+  与三期登记一致，无修复落地。
+- **Rust 侧第二折叠点查实有缺口、已修**：SAB 锚点
+  `prescan_consts.rs` 为 checked_div/checked_rem（放弃折叠）无误；
+  但文本/lowering 侧对应点 `sla-lowering/src/release_facts.rs::
+  int_constant_expr_value`（lowering_rules.zig intConstantExprValue
+  镜像）的 Div/Mod 臂用的是 `wrapping_div`/`wrapping_rem`——
+  MIN / -1 会被静默折成 MIN（%、折成 0），与 SAB 侧及同函数
+  add/sub/mul 的 checked 口径分叉（且函数 doc 自称「Overflow
+  folds to None」，代码不符）。已改 `checked_div`/`checked_rem`
+  （除零同归 None）；新断言（MIN/-1 的 Div/Mod 均须 None、
+  普通除法仍折叠）修复前失败、修复后通过。
+- **Rust 端到端行为（双路、修复前后一致）**：divmin/modmin 经
+  `sla build` 与 `sla sab build` 均 rc=1、不崩，诊断为
+  `Type Check Error: failed to verify types: UndefinedVariable: B`
+  ——折叠放弃后检查器不登记该 const、使用点响亮报错；与既有
+  add 溢出放弃折叠的对照组（`MAX + 1`）形态完全一致，属既有
+  溢出口径，非本单新引入行为。
+- Rust 侧就本单销账（双折叠点均 checked、端到端不崩）；
+  Zig 侧候主线修复（建议形态见上节，两处折叠点同改）。

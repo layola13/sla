@@ -59,6 +59,22 @@ fn normalize_slashes(path: &str) -> String {
 }
 
 pub fn real_path(path: &Path) -> String {
+    // CLI-D6: an empty path is the parent of a bare filename
+    // (`Path::new("main.sla").parent() == Some("")`). Its
+    // canonicalization fails, and the previous fallback returned
+    // "" — so the ancestor-root walk started and ended at the
+    // empty path and never reached the cwd's ancestors, making
+    // `sla_std/...` (and, without `SA_STD_DIR`, `sa_std/...`)
+    // imports unresolvable from a bare filename argument. The
+    // empty path denotes the current directory; resolve it there.
+    if path.as_os_str().is_empty() {
+        if let Ok(cwd) = std::env::current_dir() {
+            return match std::fs::canonicalize(&cwd) {
+                Ok(p) => normalize_slashes(&p.to_string_lossy()),
+                Err(_) => normalize_slashes(&cwd.to_string_lossy()),
+            };
+        }
+    }
     match std::fs::canonicalize(path) {
         Ok(p) => normalize_slashes(&p.to_string_lossy()),
         Err(_) => normalize_slashes(&path.to_string_lossy()),
@@ -637,6 +653,15 @@ mod tests {
             Err(ImportError::FileNotFound(_))
         ));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn real_path_of_empty_path_is_the_current_dir() {
+        // CLI-D6: the ancestor walk's start point for a bare
+        // filename's parent must be the cwd, never "".
+        let empty = real_path(Path::new(""));
+        assert!(!empty.is_empty());
+        assert_eq!(empty, real_path(&std::env::current_dir().unwrap()));
     }
 
     #[test]
