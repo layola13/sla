@@ -145,10 +145,138 @@ impl Checker {
         // under Zig's symbol keys (type_checker.zig checkProgram):
         // inherent methods as `{Type}_{method}`, trait methods as
         // `{Type}__{Trait}_{method}`, overloads as `{Type}__{op}`.
+        //
+        // R-6 (F2/F4): plain functions are grouped by name first
+        // (declaration order preserved). At a group's first
+        // declaration the walk decides: one member registers as
+        // before; several members with an identical repeated
+        // signature are a Redeclaration; several distinct
+        // signatures form an overload set (check_overload.rs).
+        // Function, macro and top-level const names share one
+        // namespace here (Zig rejects a const reusing a function
+        // name with `Redeclaration: const ... is already defined`).
+        let mut fn_groups: std::collections::HashMap<String, Vec<&FuncDecl>> =
+            std::collections::HashMap::new();
+        for decl in &program.decls {
+            if let Node::FuncDecl(f) = decl {
+                // Source-level `extern "C"` declarations are NOT
+                // plain functions: they pair with their prototypes
+                // and promote into extern overload sets
+                // (check_overload2.rs), exactly as contract
+                // declarations do. They never enter fn_groups.
+                if !(f.is_extern && f.abi.is_some()) {
+                    fn_groups.entry(f.name.clone()).or_default().push(f);
+                }
+            }
+        }
+        let mut handled_fn_names: HashSet<String> = HashSet::new();
+        let mut top_names: HashSet<String> = HashSet::new();
         for decl in &program.decls {
             match decl {
-                Node::FuncDecl(f) => self.register_func(f),
-                Node::MacroDecl(m) => self.register_macro(m),
+                Node::FuncDecl(f) => {
+                    if f.is_extern && f.abi.is_some() {
+                        // Source-level extern declaration
+                        // (prototype or @no_mangle definition):
+                        // register under the contract discipline.
+                        // The top-level name is claimed so a plain
+                        // function/macro/const cannot reuse it.
+                        if !handled_fn_names.contains(&f.name) {
+                            top_names.insert(f.name.clone());
+                            handled_fn_names.insert(f.name.clone());
+                        }
+                        self.register_source_extern(f)?;
+                    } else if handled_fn_names.insert(f.name.clone()) {
+                        if !top_names.insert(f.name.clone()) {
+                            return Err(Diagnostic::new(
+                                ErrorKind::Redeclaration,
+                                format!(
+                                    "Redeclaration: function `{}` is already defined",
+                                    f.name
+                                ),
+                            ));
+                        }
+                        let group = &fn_groups[&f.name];
+                        if group.len() == 1 {
+                            self.register_func(f);
+                        } else {
+                            let sigs: Vec<crate::checker::FuncSig> = group
+                                .iter()
+                                .map(|d| crate::check_overload::sig_of_decl(d))
+                                .collect();
+                            for i in 1..sigs.len() {
+                                if sigs[..i].iter().any(|s| {
+                                    crate::check_overload::sigs_identical(
+                                        s, &sigs[i],
+                                    )
+                                }) {
+                                    if let Some(diag) =
+                                        Checker::check_return_only_redeclaration(
+                                            &f.name, &sigs,
+                                        )
+                                    {
+                                        return Err(diag);
+                                    }
+                                    return Err(Diagnostic::new(
+                                        ErrorKind::Redeclaration,
+                                        format!(
+                                            "Redeclaration: function `{}` is already defined",
+                                            f.name
+                                        ),
+                                    ));
+                                }
+                            }
+                            if let Some(g) =
+                                group.iter().find(|d| !d.generics.is_empty())
+                            {
+                                self.func_generics
+                                    .insert(f.name.clone(), g.generics.clone());
+                            }
+                            self.func_overload_sets
+                                .insert(f.name.clone(), sigs);
+                        }
+                    }
+                }
+                Node::MacroDecl(m) => {
+                    // R-6 (F2): duplicate macro parameters and
+                    // duplicate macro names are Redeclarations
+                    // (Zig registerMacro / defineSymbol paths).
+                    let mut seen_params: HashSet<String> = HashSet::new();
+                    for p in &m.params {
+                        if !seen_params.insert(p.clone()) {
+                            return Err(Diagnostic::new(
+                                ErrorKind::Redeclaration,
+                                format!(
+                                    "Redeclaration: symbol `{p}` is already defined"
+                                ),
+                            ));
+                        }
+                    }
+                    if !top_names.insert(m.name.clone()) {
+                        return Err(Diagnostic::new(
+                            ErrorKind::Redeclaration,
+                            format!(
+                                "Redeclaration: macro `{}` is already defined",
+                                m.name
+                            ),
+                        ));
+                    }
+                    self.register_macro(m);
+                }
+                Node::ConstStmt(c) => {
+                    // R-6 (F2): a top-level const shares the
+                    // declaration namespace; a collision with a
+                    // function, macro or earlier const is a
+                    // Redeclaration naming the const.
+                    if !top_names.insert(c.name.clone()) {
+                        return Err(Diagnostic::new(
+                            ErrorKind::Redeclaration,
+                            format!(
+                                "Redeclaration: const `{}` is already defined",
+                                c.name
+                            ),
+                        ));
+                    }
+                }
                 Node::ImplDecl(imp) => {
                     let target_name = target_type_name(&imp.target_ty)?;
                     if let Some(trait_name) = &imp.trait_name {

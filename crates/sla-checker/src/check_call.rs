@@ -7,9 +7,11 @@
 //!   3. builtins `stack_alloc` / `panic` / `panic_msg`;
 //!   4. user macros — consumption decided by static analysis of the
 //!      macro body (rules::macro_param_consumption);
-//!   5. user functions and imported signatures — plain by-value
-//!      arguments are NOT consumed by the checker (the DEF-5
-//!      auto-clone is a codegen behavior, invisible here, D-C7);
+//!   5. user functions and imported signatures — by-value
+//!      arguments follow the R-6 consumption discipline
+//!      (check_call_consume.rs): preserved shallow copies stay
+//!      live (uncloneable closures are rejected), ownership-
+//!      transferring arguments consume their source binding;
 //!   6. struct constructors and fn-ptr locals.
 //! Associated-target specials with consumption (`mem::forget`,
 //! `Box::into_raw`, `ManuallyDrop::into_inner`) sit in the Zig
@@ -116,27 +118,20 @@ impl Checker {
             return crate::check_assoc_helpers::check_sum_call(self, &target_ty);
         }
 
-        // 2. FFI bypass.
+        // 1b. Overload unification (check_overload2.rs): when a
+        // set exists for this name in ANY source (func / imported /
+        // extern contract), candidates from every source compete
+        // under one resolution. This must precede the single-
+        // signature FFI bypass below: a promoted extern name no
+        // longer lives in `extern_funcs`, and a singleton extern
+        // must still join the pool when another source has a set.
+        if let Some(result) = self.try_resolve_unified_call(name, call) {
+            return result;
+        }
+
+        // 2. FFI bypass (single contract, no set anywhere).
         if let Some(ext) = self.extern_funcs.get(name).cloned() {
-            if ext.move_params.len() != call.args.len() {
-                return Err(Diagnostic::new(
-                    ErrorKind::InvalidArgsCount,
-                    format!(
-                        "extern `{name}` expects {} args, got {}",
-                        ext.move_params.len(),
-                        call.args.len()
-                    ),
-                ));
-            }
-            for (is_move, arg) in ext.move_params.iter().zip(call.args.iter()) {
-                self.check_expr(arg)?;
-                if *is_move {
-                    if let Node::Identifier(arg_name) = arg {
-                        self.consume_binding(arg_name, "extern move argument")?;
-                    }
-                }
-            }
-            return Ok(crate::checker::extern_ret_type(&ext.ret_abi));
+            return self.check_extern_contract_call(name, &ext, call);
         }
 
         // 3. Builtins.
@@ -275,14 +270,9 @@ impl Checker {
             }
         }
 
-        // 5. User functions / imported signatures.
-        let sig = self
-            .funcs
-            .get(name)
-            .cloned()
-            .or_else(|| self.imported_funcs.get(name).cloned());
-        if let Some(sig) = sig {
-            return self.check_call_args_against_sig(name, &sig, &call.args);
+        // 5. User functions / imported signatures / overload sets.
+        if let Some(result) = self.resolve_user_call(name, call) {
+            return result;
         }
 
         // 6a. Struct constructor call form.
@@ -452,6 +442,9 @@ impl Checker {
                     ),
                 ));
             }
+            // R-6 (F5/F7): the UncloneableCopy preserved gate and
+            // by-value argument consumption (check_call_consume.rs).
+            self.check_call_arg_consumption(name, param, arg, &arg_ty)?;
         }
         Ok(sig.ret_ty.clone())
     }

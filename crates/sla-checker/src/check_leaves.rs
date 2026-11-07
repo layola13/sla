@@ -590,11 +590,26 @@ impl Checker {
                 .all(|e| self.is_shallow_copy_call_arg(e, depth + 1)),
             Type::Array(a) => self.is_shallow_copy_call_arg(&a.elem, depth + 1),
             Type::UserDefined(u) => {
-                if is_std_owner_non_copy(&u.name)
-                    || ud_inner(ty, "Box").is_some()
-                    || ud_inner(ty, "Rc").is_some()
-                    || ud_inner(ty, "Arc").is_some()
-                    || ud_inner(ty, "RefCell").is_some()
+                // Zig `shallowCopyCallArgUserDefinedBase` fires on
+                // `userDefinedStdOwnerIsNonCopy(ty) or
+                // smartPointerType(ty) != null`, answering depth > 0:
+                // a std owner / smart-pointer head is a shallow-copy
+                // leaf only BELOW the surface — a bare std-owner
+                // argument itself (e.g. a plain `String` parameter)
+                // is NOT shallow-copy-preserved and still transfers
+                // (REG-BR-6). `String` is deliberately absent from
+                // the owner list below for that reason: as a type it
+                // has no struct declaration in this checker, so it
+                // fails the struct lookup and is not preserved,
+                // exactly like Zig's `structDeclForType` gate in
+                // `callArgShallowCopyPreserved`. The smart-pointer
+                // extractors key on the generic inner type, so a
+                // generic-less `Box`/`Rc`/`Arc` name does not trip
+                // this gate either.
+                if is_std_owner_non_copy_non_string(&u.name)
+                    || (ud_inner(ty, "Box").is_some() && !u.generics.is_empty())
+                    || (ud_inner(ty, "Rc").is_some() && !u.generics.is_empty())
+                    || (ud_inner(ty, "Arc").is_some() && !u.generics.is_empty())
                 {
                     return depth > 0;
                 }
@@ -618,10 +633,20 @@ impl Checker {
 /// lowering_rules `isStdCollectionType`: any of the seven
 /// collection shapes extracts an element/key type.
 fn is_std_collection_type(ty: &Type) -> bool {
-    matches!(ud_name(ty), Some("Vec" | "GrowVec" | "VecDeque"))
-        || matches!(
+    // Zig `isStdCollectionType` keys on the GENERIC type extractors
+    // (vecElementType / growVecElementType / vecDequeElementType /
+    // hashMapTypes / btreeMapTypes / hashSetElementType /
+    // btreeSetElementType), so a bare name without element generics
+    // does NOT qualify — a generic-less `Vec`/`HashMap` spelled in a
+    // unit test is not a collection value here (its shallow-copy
+    // walk then falls to the struct-decl lookup and fails closed).
+    let has_generics = matches!(ty, Type::UserDefined(u) if !u.generics.is_empty());
+    has_generics
+        && matches!(
             ud_name(ty),
-            Some("HashMap" | "BTreeMap" | "HashSet" | "BTreeSet")
+            Some(
+                "Vec" | "GrowVec" | "VecDeque" | "HashMap" | "BTreeMap" | "HashSet" | "BTreeSet"
+            )
         )
 }
 
@@ -649,4 +674,20 @@ fn is_std_owner_non_copy(name: &str) -> bool {
             | "Chan"
             | "File"
     )
+}
+
+/// The owner list minus `String`, for the shallow-copy call-arg
+/// walk's HEAD test only. Zig's `typeIsShallowCopyCallArgValue`
+/// consults `userDefinedStdOwnerIsNonCopy` (which does contain
+/// String) through `shallowCopyCallArgUserDefinedBase`, but
+/// `callArgShallowCopyPreserved` additionally requires
+/// `structDeclForType(arg_ty) != null`, and String has no struct
+/// declaration — so a top-level String argument is never
+/// preserved (REG-BR-6), while a String FIELD inside a struct
+/// contributes `depth > 0` to the enclosing struct's walk. This
+/// checker folds the two Zig gates into one walk, so the head
+/// test uses this String-less list and the field recursion (in
+/// `is_shallow_copy_call_arg`) uses the full list.
+fn is_std_owner_non_copy_non_string(name: &str) -> bool {
+    is_std_owner_non_copy(name) && name != "String"
 }

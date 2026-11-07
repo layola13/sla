@@ -35,6 +35,14 @@ pub struct FuncSig {
     /// `resolveUsingMethodSymbolForType`). Imported signatures
     /// default to `true` (the resolver never consults that table).
     pub is_pub: bool,
+    /// R-6 / lang-gap A_min: Zig `FuncDecl.ret_fallible_sugar` —
+    /// the declaration was written `-> T!`, so calls yield
+    /// `Result<T, i32>` and bare-statement calls are rejected
+    /// (FallibleResultDiscarded provenance). No producer sets this
+    /// yet: the SLA-side `!` sugar surface is parser territory
+    /// (R-3); the field exists so the provenance predicate has the
+    /// same three sources as Zig's `isFallibleProvenanceCall`.
+    pub ret_fallible_sugar: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -56,6 +64,19 @@ impl From<&Param> for ParamSig {
     }
 }
 
+/// A `.sai` contract parameter with its ABI spelling (Zig
+/// `contract_parser.Param`): the spelling is the candidate
+/// identity for extern overload matching (`contractParamMatches`
+/// compares spellings, not types).
+#[derive(Debug, Clone)]
+pub struct ExternParam {
+    pub name: String,
+    pub ty: String,
+    pub is_borrow: bool,
+    pub is_move: bool,
+    pub is_raw: bool,
+}
+
 /// An FFI signature registered from `.sai` contracts (Zig fills
 /// `extern_funcs` only from contract files, type_checker.zig:2106).
 /// Argument TYPES are not modeled: the Zig call arm checks argument
@@ -67,8 +88,18 @@ pub struct ExternSig {
     /// Per-parameter move contract (`^` in the contract): the argument
     /// binding is consumed by the call.
     pub move_params: Vec<bool>,
+    /// Full contract parameter spellings (R-6 follow-up): candidate
+    /// identity and matching work on these. Empty for hand-built
+    /// signatures, which behave as the pre-set single path did.
+    pub params: Vec<ExternParam>,
+    /// Whether the contract is variadic (`...` in the .sai line).
+    pub is_variadic: bool,
     /// ABI return type spelling, mapped by [`extern_ret_type`].
+    /// For a fallible extern this is the PAYLOAD spelling (the
+    /// contract parser strips the trailing `!`).
     pub ret_abi: String,
+    /// R-6 / lang-gap A_min: the contract declared `-> T!`.
+    pub fallible: bool,
 }
 
 /// Registered struct shape for field access and Copy derivation.
@@ -142,6 +173,12 @@ pub struct LoopCtx {
     /// Whether the loop body syntactically terminates (return / break
     /// / continue / panic tail), which lifts the consumption ban.
     pub body_terminates: bool,
+    /// Whether checking is currently inside the VALUE of a return
+    /// statement (staged `checking_return_value` stack): escapes
+    /// through a return never stay dead across a back-edge, so the
+    /// loop-consumption ban does not apply while this is set.
+    /// REG-LOOP-CONSUME positive companion of F7.
+    pub in_return_value: bool,
 }
 
 /// The checker. One instance checks one program (Zig `TypeChecker`
@@ -168,6 +205,22 @@ pub struct Checker {
     /// Single-`Ty` component aliases, for name resolution.
     pub aliases: HashMap<String, Type>,
     pub funcs: HashMap<String, FuncSig>,
+    /// R-6: Zig `func_overload_sets` — names declared by two or more
+    /// DISTINCT signatures. Resolution happens at the call site
+    /// (check_overload.rs); a bare reference to a set name is an
+    /// AmbiguousCall. Declaration order is preserved in the Vec —
+    /// candidate lists render in this order, never in hash order.
+    pub func_overload_sets: HashMap<String, Vec<FuncSig>>,
+    /// R-6 follow-up: Zig `extern_overload_sets` / the imported
+    /// analogue — a name enters only when a second DISTINCT
+    /// declaration arrives. Registration order preserved.
+    pub extern_overload_sets: HashMap<String, Vec<ExternSig>>,
+    pub imported_overload_sets: HashMap<String, Vec<FuncSig>>,
+    /// R-6: stage-1 field-borrow ledger (check_field_borrow.rs),
+    /// mirroring Zig's `field_borrows` list. Append order is
+    /// registration order; conflict queries return the FIRST live
+    /// overlapping entry, as in Zig.
+    pub field_borrows: Vec<crate::check_field_borrow::FieldBorrow>,
     pub extern_funcs: HashMap<String, ExternSig>,
     pub imported_funcs: HashMap<String, FuncSig>,
     pub macros: HashMap<String, MacroDecl>,
@@ -237,6 +290,10 @@ impl Checker {
             imported_macros: HashMap::new(),
             aliases: HashMap::new(),
             funcs: HashMap::new(),
+            func_overload_sets: HashMap::new(),
+            extern_overload_sets: HashMap::new(),
+            imported_overload_sets: HashMap::new(),
+            field_borrows: Vec::new(),
             extern_funcs: HashMap::new(),
             imported_funcs: HashMap::new(),
             macros: HashMap::new(),
@@ -284,6 +341,7 @@ impl Checker {
             params: func.params.iter().map(ParamSig::from).collect(),
             ret_ty: (*func.ret_ty).clone(),
             is_pub: func.is_pub,
+            ret_fallible_sugar: false,
         };
         self.funcs.insert(symbol.to_string(), sig);
         if !func.generics.is_empty() {
@@ -317,10 +375,16 @@ impl Checker {
     }
 
     /// Mirrors the `.sai` contract registration that fills
-    /// `extern_funcs` in Zig (type_checker.zig:2106-2111).
+    /// `extern_funcs` in Zig (type_checker.zig:2106-2111) — except
+    /// that a bare insert is what allowed same-name contract pairs
+    /// to silently collapse; see `register_extern_contract` for the
+    /// overload-promoting registration the front ends use for real
+    /// contract files. This entry point stays for hand-built
+    /// signatures (unit tests, fixed-arity tables).
     pub fn register_extern_func(&mut self, name: &str, sig: ExternSig) {
         self.extern_funcs.insert(name.to_string(), sig);
     }
+
 
     pub fn register_macro(&mut self, decl: &MacroDecl) {
         self.macros.insert(decl.name.clone(), decl.clone());
@@ -397,7 +461,7 @@ impl Checker {
             )
         })?;
         if let Some(loop_ctx) = self.loop_ctx.last() {
-            if !loop_ctx.body_terminates && frame < loop_ctx.frame_index {
+            if !loop_ctx.body_terminates && !loop_ctx.in_return_value && frame < loop_ctx.frame_index {
                 return Err(Diagnostic::marked(
                     ErrorKind::CompileError,
                     "LoopConditionalConsume",

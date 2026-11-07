@@ -132,6 +132,7 @@ fn imported_sig(params: Vec<ParamSig>, ret_ty: Type) -> FuncSig {
         params,
         ret_ty,
         is_pub: true,
+        ret_fallible_sugar: false,
     }
 }
 

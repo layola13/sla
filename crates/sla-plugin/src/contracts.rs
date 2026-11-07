@@ -40,16 +40,19 @@ use sla_parser::contract_load::{ContractLoadError, LoadReport};
 use std::path::Path;
 
 /// Convert one contract declaration into the checker's registration
-/// shape. Only the per-parameter move contract (`^`) and the ABI
-/// return spelling survive — that is all `ExternSig` models,
-/// mirroring what the Zig checker itself reads out of
-/// `ExternalFunction` at the extern call arm (arity + move flags +
-/// `setTypeFromAbiReturn`).
+/// shape, carrying the parameter spellings the R-6 overload
+/// unification needs (candidate identity and matching both work on
+/// spellings, exactly as Zig's contract registration does).
 pub fn extern_sig_of(func: &ExternalFunction) -> ExternSig {
-    ExternSig {
-        move_params: func.params.iter().map(|p| p.is_move).collect(),
-        ret_abi: func.ret_ty.clone(),
-    }
+    sla_checker::check_overload3::extern_sig_from_parts(
+        &func
+            .params
+            .iter()
+            .map(|pp| (pp.name.clone(), pp.ty.clone(), pp.is_borrow, pp.is_move))
+            .collect::<Vec<_>>(),
+        &func.ret_ty,
+        func.return_fallible,
+    )
 }
 
 /// The program's `@import` paths, in declaration order (Zig
@@ -99,7 +102,10 @@ pub fn load_imported_contracts_into(
     let paths = decl_import_paths(program);
     let report = sla_parser::contract_load::load_imported_contracts(&paths, source_file)?;
     for func in &report.externs {
-        checker.register_extern_func(&func.name, extern_sig_of(func));
+        // R-6 follow-up: register under the contract discipline
+        // (identical duplicates dedupe; distinct same-name
+        // declarations promote into extern overload sets).
+        let _ = checker.register_extern_contract(&func.name, extern_sig_of(func));
     }
     for record in &report.imported_macro_registry {
         checker.register_imported_macro(&record.name, imported_macro_info_of(record));

@@ -346,13 +346,38 @@ pub fn run_frontend(
         }
     };
     for func in &report.externs {
-        checker.register_extern_func(
+        // R-6 follow-up: contracts register under the
+        // registerExternContract discipline (identical duplicates
+        // dedupe, distinct same-name declarations promote into
+        // extern overload sets) instead of a bare insert that let
+        // same-name pairs silently collapse.
+        if let Err(diag) = checker.register_extern_contract(
             &func.name,
-            sla_checker::ExternSig {
-                move_params: func.params.iter().map(|p| p.is_move).collect(),
-                ret_abi: func.ret_ty.clone(),
-            },
-        );
+            sla_checker::check_overload3::extern_sig_from_parts(
+                &func
+                    .params
+                    .iter()
+                    .map(|pp| {
+                        (
+                            pp.name.clone(),
+                            pp.ty.clone(),
+                            pp.is_borrow,
+                            pp.is_move,
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+                &func.ret_ty,
+                func.return_fallible,
+            ),
+        ) {
+            let zig_err = diag.kind.name();
+            let _ = writeln!(
+                stderr,
+                "Type Check Error: failed to verify types: {} (error.{zig_err})",
+                diag.message
+            );
+            return None;
+        }
     }
     // R-1 fix (all kinds) + R-2 replay note: imported macros
     // register too (mirrors the sla-oracle wiring). Without this

@@ -29,6 +29,14 @@ pub enum ErrorKind {
     AmbiguousCall,
     CompileError,
     OutOfMemory,
+    // R-6 additions: variants the Zig checker gained after the original
+    // port slice — `GenericOverloadConflict` (monomorphizer/checker
+    // overload discipline) and the lang-gap A_min pair
+    // `FallibleResultDiscarded` / `FalliblePayloadUnsupported`
+    // (type_checker.zig TypeError, impl-lang-gap phase 1).
+    GenericOverloadConflict,
+    FallibleResultDiscarded,
+    FalliblePayloadUnsupported,
 }
 
 impl ErrorKind {
@@ -48,6 +56,9 @@ impl ErrorKind {
             ErrorKind::AmbiguousCall => "AmbiguousCall",
             ErrorKind::CompileError => "CompileError",
             ErrorKind::OutOfMemory => "OutOfMemory",
+            ErrorKind::GenericOverloadConflict => "GenericOverloadConflict",
+            ErrorKind::FallibleResultDiscarded => "FallibleResultDiscarded",
+            ErrorKind::FalliblePayloadUnsupported => "FalliblePayloadUnsupported",
         }
     }
 }

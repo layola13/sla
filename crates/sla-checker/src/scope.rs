@@ -35,6 +35,16 @@ pub struct Binding {
     /// Name of the binding this value borrows from, when the defining
     /// expression was borrow-like (Zig `borrow_source`).
     pub borrow_source: Option<String>,
+    /// R-6: Zig `Symbol.consumed_by_call` — the name of the call that
+    /// consumed this binding through a by-value argument, so a later
+    /// read can name the consuming call in its UseAfterMove text
+    /// (REG-BR-6). Cleared when an assignment reactivates the slot.
+    pub consumed_by_call: Option<String>,
+    /// R-6: Zig `Symbol.consumed_by_literal` — a description of the
+    /// struct-literal field fill that consumed this binding, for the
+    /// literal form of the UseAfterMove text (DEF-deep-copy).
+    /// Cleared when an assignment reactivates the slot.
+    pub consumed_by_literal: Option<String>,
 }
 
 /// One lexical frame. Bindings stay in declaration order.
@@ -154,6 +164,8 @@ impl ScopeStack {
             is_const,
             state,
             borrow_source,
+            consumed_by_call: None,
+            consumed_by_literal: None,
         });
         Some(id)
     }

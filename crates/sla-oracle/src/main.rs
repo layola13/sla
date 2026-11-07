@@ -222,12 +222,27 @@ fn main() -> ExitCode {
     match sla_parser::contract_load::load_imported_contracts(&import_paths, &input) {
         Ok(report) => {
             for func in &report.externs {
-                checker.register_extern_func(
+                // R-6 follow-up: register under the
+                // registerExternContract discipline (dedupe /
+                // promote) with parameter spellings carried.
+                let _ = checker.register_extern_contract(
                     &func.name,
-                    sla_checker::ExternSig {
-                        move_params: func.params.iter().map(|p| p.is_move).collect(),
-                        ret_abi: func.ret_ty.clone(),
-                    },
+                    sla_checker::check_overload3::extern_sig_from_parts(
+                        &func
+                            .params
+                            .iter()
+                            .map(|pp| {
+                                (
+                                    pp.name.clone(),
+                                    pp.ty.clone(),
+                                    pp.is_borrow,
+                                    pp.is_move,
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                        &func.ret_ty,
+                        func.return_fallible,
+                    ),
                 );
             }
             // Phase 4 (INT2-4 closed): imported macros register too.

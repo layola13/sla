@@ -5,9 +5,13 @@
 //! `Checker::merge_multi_branch_states`.
 //!
 //! Zig facts preserved verbatim:
-//!   * `switch` checks its scrutinee and DISCARDS the type; case
-//!     patterns are never looked at (no typing, no binding, no
-//!     exhaustiveness) — see D-C13 / FB-011. The result is void.
+//!   * `switch` checks its scrutinee and DISCARDS the type. The
+//!     pre-FB-011 checker never looked at case patterns; FB-011
+//!     (R-6 family F6) checks pattern expressions: identifiers
+//!     named inside a pattern must resolve, and a literal pattern
+//!     whose class differs from the scrutinee's is a TypeMismatch.
+//!     Bare identifier patterns stay unchecked (they may name
+//!     enum variants or constants). The result is void.
 //!   * `match` on an `infer` scrutinee infers the scrutinee type
 //!     from the FIRST case's pattern names with OR-conditions
 //!     (enum name `Option` OR variant `Some`/`None` makes an
@@ -34,13 +38,14 @@ impl Checker {
     pub fn check_switch(&mut self, expr: &SwitchExpr) -> CheckResult<Type> {
         // The scrutinee type is computed and discarded in Zig
         // (`_ = val_ty;`): any type may be switched over.
-        let _ = self.check_expr(&expr.val)?;
+        let scrut_ty = self.check_expr(&expr.val)?;
 
         let pre = self.scopes.save_states();
         let mut live_states = Vec::new();
         let mut live_bodies: Vec<&[Node]> = Vec::new();
         for case in &expr.cases {
             self.scopes.restore_states(&pre);
+            self.check_switch_pattern(&case.pattern, &scrut_ty)?;
             self.check_block(&case.body)?;
             if !crate::check_program::block_terminates(&case.body) {
                 live_states.push(self.scopes.save_states());
@@ -49,6 +54,45 @@ impl Checker {
         }
         self.merge_multi_branch_states(&pre, &live_states, &live_bodies);
         Ok(void_ty())
+    }
+
+    /// FB-011 pattern checking for `switch` cases (R-6 family F6):
+    ///   * the `default` pattern and bare identifier patterns are
+    ///     not checked (a bare name may be an enum variant or a
+    ///     constant pattern — neither is resolved here);
+    ///   * any other pattern expression is fully checked, so an
+    ///     undefined identifier inside it is an UndefinedVariable;
+    ///   * a literal pattern whose class (string vs integer)
+    ///     differs from the scrutinee's class is a TypeMismatch.
+    fn check_switch_pattern(
+        &mut self,
+        pattern: &Node,
+        scrut_ty: &Type,
+    ) -> CheckResult<()> {
+        if crate::types_util::is_switch_default_pattern(pattern) {
+            return Ok(());
+        }
+        if matches!(pattern, Node::Identifier(_)) {
+            return Ok(());
+        }
+        let pat_ty = self.check_expr(pattern)?;
+        let pat_is_string = matches!(pattern, Node::Literal(sla_ast::exprs::Literal::StringVal(_)));
+        let pat_is_int = matches!(pattern, Node::Literal(sla_ast::exprs::Literal::IntVal(_)));
+        if pat_is_string || pat_is_int {
+            let scrut_is_string = crate::types_util::is_string_type(scrut_ty)
+                || matches!(scrut_ty, Type::Primitive(Primitive::RawPtr));
+            if pat_is_string != scrut_is_string {
+                return Err(Diagnostic::new(
+                    ErrorKind::TypeMismatch,
+                    format!(
+                        "TypeMismatch: switch pattern of type {} does not match scrutinee type {}",
+                        crate::types_util::type_desc(&pat_ty),
+                        crate::types_util::type_desc(scrut_ty)
+                    ),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Mirrors the `match_expr` arm (type_checker.zig:5494) with its

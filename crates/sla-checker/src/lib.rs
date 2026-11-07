@@ -30,13 +30,19 @@ pub mod types_util;
 mod check_assoc_helpers;
 mod check_binary;
 mod check_builtin;
+mod check_call_consume;
+mod check_field_borrow;
 mod check_leaves;
 mod check_preassoc;
 mod check_receiver_leaves;
 mod check_receiver_leaves2;
 mod check_call;
+pub mod check_overload2;
+pub mod check_overload3;
+pub mod check_extern;
 mod check_method;
 mod check_literal;
+mod check_overload;
 mod check_expr;
 mod check_macro;
 mod check_flow;
@@ -77,10 +83,14 @@ mod tests_phase3c;
 mod tests_phase3d;
 #[cfg(test)]
 mod tests_phase3e;
+#[cfg(test)]
+mod tests_r6;
+#[cfg(test)]
+mod tests_r6b;
 
 pub use checker::{
-    Checker, EnumVariantInfo, ExternSig, FuncSig, ImportedMacroInfo, ParamSig,
-    StructInfo, TraitInfo, TraitMethodInfo,
+    Checker, EnumVariantInfo, ExternParam, ExternSig, FuncSig, ImportedMacroInfo,
+    ParamSig, StructInfo, TraitInfo, TraitMethodInfo,
 };
 pub use diag::{CheckResult, Diagnostic, ErrorKind};
 pub use rules::ValueState;

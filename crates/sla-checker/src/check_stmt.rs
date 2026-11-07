@@ -42,10 +42,31 @@ impl Checker {
             Node::AssignStmt(a) => self.check_assign(&a.target, &a.value),
             Node::BlockStmt(b) => self.check_block(&b.body),
             Node::ExprStmt(inner) => {
-                self.check_expr(inner)?;
+                let ty = self.check_expr(inner)?;
+                // R-6 (F1): a bare statement that discards a
+                // fallible call's Result is FallibleResultDiscarded
+                // (A_min must-consume).
+                self.check_fallible_stmt_consumption(inner, &ty)?;
                 Ok(())
             }
-            Node::ReturnStmt(r) => self.check_return(node, r.value.as_deref()),
+            Node::ReturnStmt(r) => {
+                // Staged `checking_return_value`: escapes through a
+                // return value never stay dead across a loop
+                // back-edge, so consumption inside the return value
+                // is exempt from the LoopConditionalConsume ban
+                // (REG-LOOP-CONSUME positive). Held on the loop
+                // context so nested statement checks (ifs, struct
+                // literal fields, call args) all see it.
+                let saved_ret = self.loop_ctx.last().map(|l| l.in_return_value);
+                if let Some(top) = self.loop_ctx.last_mut() {
+                    top.in_return_value = true;
+                }
+                let result = self.check_return(node, r.value.as_deref());
+                if let Some(top) = self.loop_ctx.last_mut() {
+                    top.in_return_value = saved_ret.unwrap_or(false);
+                }
+                result
+            }
             Node::ForStmt(f) => {
                 let end = f.end.as_deref();
                 self.check_for(&f.var_name, &f.start, end, &f.body)
@@ -190,9 +211,18 @@ impl Checker {
             if let Node::Identifier(src) = value {
                 if !self.type_is_copy(&val_ty) && !is_borrow_like_type(&val_ty)
                 {
+                    // R-6 (F3): moving a root whose field is
+                    // borrowed live is a BorrowConflict.
+                    self.check_let_move_root_free(src, name)?;
                     self.consume_binding(src, "implicit let move")?;
                 }
             }
+        }
+        // R-6 (F3): a let bound to a borrowed place registers the
+        // field borrow against the new binding (Zig gates this on
+        // the declared type being borrow-like).
+        if !is_const && !is_discard_name(name) {
+            self.register_borrow_from_value(name, value, &expected);
         }
         Ok(())
     }
@@ -393,6 +423,10 @@ impl Checker {
                     ))
                 }
             };
+            // R-6 (F3): reassigning a root with a live field borrow
+            // is a BorrowConflict; otherwise the assignment drops
+            // the target's own registered borrows.
+            self.check_assign_root_free(name)?;
             let val_ty = self.check_expr(value)?;
             if !value_assignable_to(&target_ty, &val_ty) {
                 return Err(Diagnostic::new(
@@ -409,11 +443,23 @@ impl Checker {
                     self.consume_binding(src, "assignment move")?;
                 }
             }
-            // Assignment (re)initializes the slot.
+            // Assignment (re)initializes the slot and clears any
+            // consumption marks (R-6).
             self.set_state(name, ValueState::Active);
+            self.clear_consumed_marks(name);
+            // R-6 (F3): assigning a borrowed place re-registers
+            // the borrow against the target (Zig gates this on the
+            // target type being borrow-like).
+            self.register_borrow_from_value(name, value, &target_ty);
             return Ok(());
         }
-        // Field / index / deref targets: type both sides and compare.
+        // Field / index / deref targets: a direct write to a place
+        // borrowed live is a BorrowConflict (R-6 F3); deref targets
+        // write THROUGH a borrow and are exempt (the gate's
+        // place_of_expr yields no place for them at the root).
+        if !matches!(target, Node::DerefExpr(_)) {
+            self.check_assign_place_free(target)?;
+        }
         let target_ty = self.check_expr(target)?;
         let val_ty = self.check_expr(value)?;
         if !value_assignable_to(&target_ty, &val_ty) {
@@ -534,6 +580,7 @@ impl Checker {
         self.loop_ctx.push(LoopCtx {
             frame_index: frame,
             body_terminates: crate::check_program::block_terminates(body),
+            in_return_value: false,
         });
         let result = self.check_block(body);
         self.loop_ctx.pop();
@@ -588,6 +635,7 @@ impl Checker {
         self.loop_ctx.push(LoopCtx {
             frame_index: frame,
             body_terminates: crate::check_program::block_terminates(body),
+            in_return_value: false,
         });
         let result = self.check_block(body);
         self.loop_ctx.pop();

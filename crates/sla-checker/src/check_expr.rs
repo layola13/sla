@@ -61,6 +61,13 @@ impl Checker {
                     }
                 }
                 let inner = self.check_expr(&b.expr)?;
+                // R-6 (F3): borrowing a place that is already
+                // borrowed live is a BorrowConflict.
+                if let Some(place) =
+                    crate::check_field_borrow::place_of_expr(&b.expr)
+                {
+                    self.check_borrow_place_free(&place)?;
+                }
                 Ok(Type::Borrow(Box::new(inner)))
             }
             Node::MoveExpr(m) => {
@@ -69,7 +76,15 @@ impl Checker {
                     self.consume_binding(name, "explicit move")?;
                     return Ok(ty);
                 }
-                self.check_expr(&m.expr)
+                let ty = self.check_expr(&m.expr)?;
+                // R-6 (F3): moving a place that is borrowed live
+                // is a BorrowConflict.
+                if let Some(place) =
+                    crate::check_field_borrow::place_of_expr(&m.expr)
+                {
+                    self.check_move_place_free(&place)?;
+                }
+                Ok(ty)
             }
             Node::DerefExpr(d) => {
                 let inner = self.check_expr(&d.expr)?;
@@ -359,10 +374,17 @@ impl Checker {
         }
         if let Some(binding) = self.scopes.lookup(name) {
             let (state, ty) = (binding.state, binding.ty.clone());
+            let consumed_by_literal = binding.consumed_by_literal.clone();
+            let consumed_by_call = binding.consumed_by_call.clone();
             return match state {
                 ValueState::Consumed => Err(Diagnostic::new(
                     ErrorKind::UseAfterMove,
-                    format!("UseAfterMove: identifier `{name}` was already consumed"),
+                    consumed_use_after_move_message(
+                        name,
+                        &ty,
+                        consumed_by_literal.as_deref(),
+                        consumed_by_call.as_deref(),
+                    ),
                 )),
                 ValueState::Uninitialized => Err(Diagnostic::new(
                     ErrorKind::UseBeforeInit,
@@ -373,6 +395,11 @@ impl Checker {
         }
         if let Some(sig) = self.funcs.get(name) {
             return Ok(fn_ptr_of(sig));
+        }
+        // R-6 (F4): a bare reference to an overload set cannot
+        // choose a member.
+        if let Some(diag) = self.check_overload_set_reference(name) {
+            return Err(diag);
         }
         if let Some(sig) = self.imported_funcs.get(name) {
             return Ok(fn_ptr_of(sig));
@@ -440,8 +467,10 @@ impl Checker {
     /// type, duplicate fields are a CompileError, unknown fields
     /// FieldNotFound, mistyped fields TypeMismatch, unions take
     /// exactly one field, and without an update expression every
-    /// field is required (missing -> FieldNotFound). Field VALUES
-    /// are not consumed by the checker.
+    /// field is required (missing -> FieldNotFound). Handle-owning
+    /// field VALUES are consumed (R-6 port of the staging
+    /// struct_literal arm; the pre-deep-copy tree this mirror
+    /// originally followed did not consume them).
     fn check_struct_literal(
         &mut self,
         lit: &sla_ast::exprs::StructLiteral,
@@ -503,6 +532,11 @@ impl Checker {
                             ),
                         ));
                     }
+                    // R-6 (F7): the field fill may consume its
+                    // source binding (check_call_consume.rs).
+                    self.consume_struct_literal_field(
+                        &name, &f.name, &f.value, expected,
+                    )?;
                 }
                 None => {
                     return Err(Diagnostic::new(
@@ -527,6 +561,35 @@ impl Checker {
         }
         Ok(ty)
     }
+}
+
+/// The UseAfterMove text for reading a consumed binding, mirroring
+/// Zig's identifier arm (staging :7392-7412): the literal form
+/// names the struct-literal field context, the call form
+/// (REG-BR-6) names the consuming call and the explicit-copy
+/// remedy (with the `format` example for String bindings), and
+/// anything else keeps the plain form.
+fn consumed_use_after_move_message(
+    name: &str,
+    ty: &Type,
+    consumed_by_literal: Option<&str>,
+    consumed_by_call: Option<&str>,
+) -> String {
+    if let Some(ctx) = consumed_by_literal {
+        return format!(
+            "UseAfterMove: variable `{name}` was already moved into {ctx}; a struct literal takes ownership of a deep field value, so the binding cannot be used again - fill the field with an explicit copy (for example `{name}.clone()`) if the value is still needed"
+        );
+    }
+    if let Some(call) = consumed_by_call {
+        let mut msg = format!(
+            "UseAfterMove: variable `{name}` was already moved by the call to `{call}`; a by-value argument transfers ownership, so it cannot be used again - pass an explicit copy to the earlier call if the value is still needed"
+        );
+        if crate::types_util::is_string_type(ty) {
+            msg.push_str(&format!(" (for example `format(\"{{}}\", {name})`)"));
+        }
+        return msg;
+    }
+    format!("UseAfterMove: identifier `{name}` was already consumed")
 }
 
 /// The fn-ptr type of a signature (identifier arm for function names).

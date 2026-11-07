@@ -452,7 +452,10 @@ fn extern_bypass_ignores_arg_types() {
         "c_write",
         ExternSig {
             move_params: vec![false],
+            params: Vec::new(),
+            is_variadic: false,
             ret_abi: "i32".to_string(),
+            fallible: false,
         },
     );
     let program = Program {
@@ -480,7 +483,10 @@ fn extern_move_contract_consumes() {
         "c_consume",
         ExternSig {
             move_params: vec![true],
+            params: Vec::new(),
+            is_variadic: false,
             ret_abi: "void".to_string(),
+            fallible: false,
         },
     );
     let program = Program {
@@ -524,6 +530,7 @@ fn imported_println_in_test_block() {
             }],
             ret_ty: void_ty(),
             is_pub: true,
+            ret_fallible_sugar: false,
         },
     );
     let program = Program {
