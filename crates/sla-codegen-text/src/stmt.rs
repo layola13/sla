@@ -133,18 +133,41 @@ impl<'c> Codegen<'c> {
             return Ok(());
         }
 
-        // Atomic/Cell/ManuallyDrop associated-constructor lets route
-        // through dedicated stack-slot materialization in the Zig.
+        // Atomic/Cell/ManuallyDrop associated-constructor lets
+        // materialize directly into the binding's own storage
+        // (codegen.zig:13846-13897): heap cells for the atomics
+        // and Cell (their addresses escape into owners), a stack
+        // slot for ManuallyDrop.
         if let Node::CallExpr(call) = &*let_stmt.value {
-            if let Some(target) = &call.associated_target {
-                if target.starts_with("Atomic")
-                    || target.starts_with("Cell")
-                    || target == "ManuallyDrop"
-                {
-                    return unsupported(
-                        "Atomic/Cell/ManuallyDrop let materialization",
-                        "codegen.zig:10660 (genAtomicValueStmt family)",
-                    );
+            if call.func_name == "new" && call.args.len() == 1 {
+                let materialize: Option<(&str, &str, bool)> =
+                    match call.associated_target.as_deref() {
+                        Some("AtomicI32") => {
+                            Some(("alloc AtomicI32_SIZE", "ATOMIC_I32_INIT", false))
+                        }
+                        Some("AtomicUsize") => {
+                            Some(("alloc AtomicUsize_SIZE", "ATOMIC_USIZE_INIT", false))
+                        }
+                        Some("AtomicPtr") => {
+                            Some(("alloc AtomicPtr_SIZE", "ATOMIC_PTR_INIT", false))
+                        }
+                        Some("Cell") => Some(("alloc Cell_SIZE", "CELL_SET", false)),
+                        Some("ManuallyDrop") => Some((
+                            "stack_alloc ManuallyDropU64_SIZE",
+                            "MANUALLY_DROP_U64_NEW",
+                            true,
+                        )),
+                        _ => None,
+                    };
+                if let Some((alloc_op, init_macro, is_stack)) = materialize {
+                    let value_reg = self.gen_expr(&call.args[0])?;
+                    if is_stack {
+                        self.stack_alloc_bindings.insert(resolved_name.clone());
+                    }
+                    self.ins(&format!("{resolved_name} = {alloc_op}"));
+                    self.ins(&format!("EXPAND {init_macro} {resolved_name}, {value_reg}"));
+                    self.release_after_call_arg_if_needed(&call.args[0], &value_reg)?;
+                    return Ok(());
                 }
             }
         }
@@ -294,6 +317,72 @@ impl<'c> Codegen<'c> {
             Node::AssignStmt(a) => a,
             _ => unreachable!(),
         };
+        // Vec/GrowVec scalar index assignment (codegen.zig
+        // `genIndexAssign` vec arm): bounds check with panic(87),
+        // then ptr arithmetic + store. The overwritten-value drop
+        // is a no-op for scalar elements; owned-element drops and
+        // the other target shapes stay on the loud path.
+        if let Node::IndexExpr(idx) = &*assign.target {
+            let target_ty = self.expr_type(&idx.target);
+            let vec_shape = match &target_ty {
+                Some(sla_ast::Type::UserDefined(u))
+                    if u.name == "Vec" || u.name == "GrowVec" =>
+                {
+                    Some((u.name.clone(), u.generics.first().cloned()))
+                }
+                _ => None,
+            };
+            if let Some((tname, Some(elem))) = vec_shape {
+                if !matches!(elem, sla_ast::Type::Primitive(_)) {
+                    return unsupported(
+                        "index assign of non-scalar Vec element",
+                        "codegen.zig:15930 (genIndexAssign drop variants)",
+                    );
+                }
+                let (len_def, ptr_def) = if tname == "GrowVec" {
+                    ("GrowVec_len", "GrowVec_ptr")
+                } else {
+                    ("Vec_len", "Vec_ptr")
+                };
+                let vec_reg = self.gen_expr(&idx.target)?;
+                let index_reg = self.gen_expr(&idx.index)?;
+                let val_reg = self.gen_expr(&assign.value)?;
+                let len_reg = self.new_tmp();
+                let in_bounds_reg = self.new_tmp();
+                let hit_label = self.new_label("L_VEC_INDEX_ASSIGN_OK");
+                let miss_label = self.new_label("L_VEC_INDEX_ASSIGN_OOB");
+                self.ins(&format!("{len_reg} = load {vec_reg}+{len_def} as u64"));
+                self.ins(&format!("{in_bounds_reg} = ult {index_reg}, {len_reg}"));
+                self.ins(&format!(
+                    "br {in_bounds_reg} -> {hit_label}, {miss_label}"
+                ));
+                self.ins(&format!("{miss_label}:"));
+                self.ins("panic(87)");
+                self.ins(&format!("{hit_label}:"));
+                let data_reg = self.new_tmp();
+                let offset_reg = self.new_tmp();
+                let ptr_reg = self.new_tmp();
+                self.ins(&format!("!{in_bounds_reg}"));
+                self.ins(&format!("{data_reg} = load {vec_reg}+{ptr_def} as ptr"));
+                self.ins(&format!(
+                    "{offset_reg} = mul {index_reg}, {}",
+                    type_size(&elem).max(8)
+                ));
+                self.ins(&format!("{ptr_reg} = ptr_add {data_reg}, {offset_reg}"));
+                self.ins(&format!(
+                    "store {ptr_reg}+0, {val_reg} as {}",
+                    type_string(&elem)
+                ));
+                self.emit_release(&ptr_reg)?;
+                self.emit_release(&offset_reg)?;
+                self.emit_release(&data_reg)?;
+                self.emit_release(&len_reg)?;
+                if sla_lowering::call_arg_needs_release(&idx.index) {
+                    self.emit_release(&index_reg)?;
+                }
+                return Ok(());
+            }
+        }
         let target_name = match &*assign.target {
             Node::Identifier(name) => name.clone(),
             Node::IndexExpr(_) | Node::DerefExpr(_) | Node::FieldExpr(_) => {
@@ -480,7 +569,19 @@ impl<'c> Codegen<'c> {
         }
         match self.func_decl(&call.func_name) {
             Some(f) => is_void_type(&f.ret_ty),
-            None => false,
+            // No user declaration: std surface methods (Vec::push,
+            // Cell::set and kin) are void by their checker-recorded
+            // call type. Without this arm they took the value route
+            // in gen_expr_stmt, whose dummy result register was
+            // released undeclared (host UnknownRegister) — the
+            // phase-6 census R-2 codegen residual.
+            None => {
+                !is_panic_builtin_name(&call.func_name)
+                    && matches!(
+                        self.expr_type(expr),
+                        Some(sla_ast::Type::Primitive(sla_ast::Primitive::VoidType))
+                    )
+            }
         }
     }
 

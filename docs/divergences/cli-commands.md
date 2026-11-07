@@ -225,3 +225,38 @@ test --test-backend sa 案：两跑之间 [PASS] 行序翻转过一次
 **未使用**。本轮唯一 Zig 侧缺陷候选家族（尾释放序）已在册
 为 FB-016/FB-020；其余分歧或为本移植覆盖/保真问题，或为
 形态固有差异，均不新占号。
+
+## 六期 R-2 销账（2026-11-07，rust-r2-fix 线）
+
+- **CLI 展开接线（UNDEF-MODULE 91 跑根因）**：`run_frontend`
+  此前对任何 FrontendKind 都不做 .sla 导入展开——展开实现
+  （sla-plugin `sla_expand`）只接在 decl-only 的 check 形组合
+  上，TestCodegen 形拿到未展开程序，模块函数全域
+  `Undefined call`。现接线：仅 TestCodegen 形在解析后、CLI-D5
+  剪枝前执行 include-all + 保留体展开（sla-cli 以 rlib 依赖
+  sla-plugin——其 crate-type 本含 rlib，与 Zig 的插件/CLI
+  拓扑一致，零代码搬移）；展开模块并入 freshness 闭包。
+  Check/Compile 形的登记面按本线范围纪律**未动**。
+- **导入宏登记（同根第二面）**：contracts 报告的
+  `imported_macro_registry`（STR_PTR/VEC_RESERVE_GROW 等 SA
+  宏）此前只有插件与 oracle 前端登记进检查器，CLI 只登记
+  extern——test 体里一切宏调用 `Undefined call`。现于
+  TestCodegen 形补登记（字段拷贝与 oracle 同形）。
+  **Check/Compile 形的同一缺口在册**：普通 fn 体里的导入宏
+  调用在 `sla check` 下仍 Undefined——与 R-1 同根，留 R-1
+  后续线（本线范围纪律：不动 check 管线登记面）。
+  【R-2 replay 合成订正（2026-11-08）】本节记述的是
+  cc52e91 基线（rust-r2-fix 线）的状态。现头（3604444，含
+  R-1 落地）上，R-1 已把同一登记循环对**全部形态无条件**接
+  入 pipeline.rs——Check/Compile 形的导入宏登记缺口已闭合，
+  不再在册；replay 树中 R-2 的 TestCodegen 限定登记循环因与
+  R-1 循环逐字重复已被移除（见 rust-r2-replay/RESULT.md
+  合成登记第 4 项）。
+- **展开体解析回退（记录式）**：bodies 形展开中，模块体（或
+  签名）含未移植解析面（impl 块、`&[T][owner]`、`T!`、go）
+  时整展开失败会把仅传递导入该模块的程序一并拖死。现按模块
+  回退 decl-only 并记入 `ExpandedProgram.body_fallback_modules`
+  （不静默）：被调用的回退模块在检查期按签名解析、在发射期
+  响亮失败；未被调用的模块不再阻塞程序。签名级缺口
+  （impl/`&[T][owner]`/`T!`）decl-only 同样不可解析、回退不
+  覆盖——那是 R-3 解析面本账。

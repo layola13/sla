@@ -136,3 +136,125 @@ fn include_all_raw_keeps_bodies_and_non_sla_root_imports() {
     assert!(!helper.is_decl_only);
     assert!(!helper.body.is_empty());
 }
+
+#[test]
+fn bodies_mode_retains_module_contract_imports_decl_only_drops_them() {
+    // Phase-6 census R-2: in bodies mode the kept module bodies
+    // call the module's own .sai contracts, so the import must be
+    // retained (declaration + contract_imports). In decl-only
+    // mode the same import is dropped (check-path shape, pinned
+    // by the venue probes in the module docs).
+    let tree = TempTree::new("bodymode");
+    tree.write("defs.sai", "@extern sa_fixture_ping(x: u64) -> u64\n");
+    tree.write(
+        "lib.sla",
+        "@import \"defs.sai\"\nfn lib_answer() -> u64 { return sa_fixture_ping(40); }\n",
+    );
+    let source = "@import \"lib.sla\"\nfn main() -> i32 { return 0; }\n";
+    tree.write("main.sla", source);
+    let program = parse(source);
+
+    let bodies = expand_sla_imports(
+        &program,
+        &tree.0.join("main.sla"),
+        &SlaImportExpansionOptions {
+            imported_bodies_decl_only: false,
+            include_all_imported_decls: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let lib_fn = bodies
+        .program
+        .decls
+        .iter()
+        .find_map(|d| match d {
+            Node::FuncDecl(f) if f.name == "lib_answer" => Some(f),
+            _ => None,
+        })
+        .expect("module function must be present in bodies mode");
+    assert!(!lib_fn.is_decl_only);
+    assert!(!lib_fn.body.is_empty());
+    assert!(
+        bodies
+            .contract_imports
+            .iter()
+            .any(|r| r.path.ends_with("defs.sai")),
+        "bodies mode must collect the module's .sai contract import"
+    );
+    assert!(bodies.program.decls.iter().any(|d| matches!(
+        d,
+        Node::ImportDecl(i) if i.path.ends_with("defs.sai")
+    )));
+
+    let decl_only = expand_sla_imports(
+        &program,
+        &tree.0.join("main.sla"),
+        &SlaImportExpansionOptions {
+            imported_bodies_decl_only: true,
+            include_all_imported_decls: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let stub = decl_only
+        .program
+        .decls
+        .iter()
+        .find_map(|d| match d {
+            Node::FuncDecl(f) if f.name == "lib_answer" => Some(f),
+            _ => None,
+        })
+        .expect("module function must be present as a stub in decl-only mode");
+    assert!(stub.is_decl_only);
+    assert!(stub.body.is_empty());
+    assert!(
+        !decl_only
+            .contract_imports
+            .iter()
+            .any(|r| r.path.ends_with("defs.sai")),
+        "decl-only mode must NOT retain the module's .sai contract import"
+    );
+}
+
+#[test]
+fn bodies_mode_falls_back_to_decl_only_for_unparseable_module_bodies() {
+    // A module whose function BODIES use a parser surface the
+    // Rust parser has not ported (here a `go` statement, the
+    // sa_std/executor.sla shape) parses decl-only but not with
+    // bodies. Bodies-mode expansion must include it decl-only
+    // and RECORD the fallback instead of failing the whole
+    // expansion; other modules keep their bodies.
+    let tree = TempTree::new("bodyfallback");
+    tree.write(
+        "gapped.sla",
+        "fn worker() { }\nfn lib_go() -> i32 { go worker(); return 1; }\n",
+    );
+    tree.write("plain.sla", "fn lib_plain() -> i32 { return 3; }\n");
+    let source = "@import \"gapped.sla\"\n@import \"plain.sla\"\nfn main() -> i32 { return 0; }\n";
+    tree.write("main.sla", source);
+    let program = parse(source);
+    let expanded = expand_sla_imports(
+        &program,
+        &tree.0.join("main.sla"),
+        &SlaImportExpansionOptions {
+            imported_bodies_decl_only: false,
+            include_all_imported_decls: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(expanded.body_fallback_modules.len(), 1);
+    assert!(expanded.body_fallback_modules[0].ends_with("gapped.sla"));
+    let plain = expanded
+        .program
+        .decls
+        .iter()
+        .find_map(|d| match d {
+            Node::FuncDecl(f) if f.name == "lib_plain" => Some(f),
+            _ => None,
+        })
+        .expect("plain module function must be present");
+    assert!(!plain.is_decl_only);
+    assert!(!plain.body.is_empty());
+}

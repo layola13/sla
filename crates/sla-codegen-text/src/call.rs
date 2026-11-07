@@ -286,6 +286,12 @@ impl<'c> Codegen<'c> {
                 "lowering_rules.zig:5819 (resolved static call plans)",
             );
         }
+        if let Some(surface) = self.gen_std_surface_call(expr, call) {
+            return match surface? {
+                crate::surface::SurfaceCall::Value(reg) => Ok(reg),
+                crate::surface::SurfaceCall::Void => Ok(self.new_tmp()),
+            };
+        }
         if call.associated_target.is_some() {
             return unsupported(
                 "associated-target call (method/special families deferred)",
@@ -413,6 +419,17 @@ impl<'c> Codegen<'c> {
         };
         if is_println_call(call) {
             return self.emit_println(call);
+        }
+        if let Some(surface) = self.gen_std_surface_call(expr, call) {
+            match surface? {
+                crate::surface::SurfaceCall::Value(reg) => {
+                    if self.expr_result_reg_needs_release(expr) {
+                        self.emit_release(&reg)?;
+                    }
+                }
+                crate::surface::SurfaceCall::Void => {}
+            }
+            return Ok(());
         }
         if call.callee.is_some() || call.associated_target.is_some() {
             return unsupported(

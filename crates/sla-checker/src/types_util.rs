@@ -388,6 +388,141 @@ pub fn rc_inner_type(ty: &Type) -> Option<Type> {
     user_defined_generic_inner(ty, "Rc")
 }
 
+/// Mirrors lowering_rules `growVecElementType` (`GrowVec<T>` -> `T`).
+pub fn grow_vec_element_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "GrowVec")
+}
+
+/// Mirrors lowering_rules `vecDequeElementType` (`VecDeque<T>` -> `T`).
+pub fn vec_deque_element_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "VecDeque")
+}
+
+/// Mirrors lowering_rules `arcInnerType` (`Arc<T>` -> `T`).
+pub fn arc_inner_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "Arc")
+}
+
+/// Mirrors the checker's `cellInnerType` (`Cell<T>` -> `T`).
+pub fn cell_inner_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "Cell")
+}
+
+/// Mirrors the checker's `refCellInnerType` (`RefCell<T>` -> `T`).
+pub fn ref_cell_inner_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "RefCell")
+}
+
+/// Mirrors the checker's `mutexInnerType` (`Mutex<T>` -> `T`).
+pub fn mutex_inner_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "Mutex")
+}
+
+/// Mirrors the checker's `rwLockInnerType` (`RwLock<T>` -> `T`).
+pub fn rw_lock_inner_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "RwLock")
+}
+
+/// Mirrors lowering_rules `senderInnerType` (`Sender<T>` -> `T`).
+pub fn sender_inner_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "Sender")
+}
+
+/// Mirrors lowering_rules `receiverInnerType` (`Receiver<T>` -> `T`).
+pub fn receiver_inner_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "Receiver")
+}
+
+/// Mirrors lowering_rules `joinHandleInnerType`
+/// (`JoinHandle<T>` -> `T`).
+pub fn join_handle_inner_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "JoinHandle")
+}
+
+/// Mirrors the checker's `atomicPtrInnerType`
+/// (`AtomicPtr<T>` -> `T`).
+pub fn atomic_ptr_inner_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "AtomicPtr")
+}
+
+/// Two-generic shape shared by the map extractors:
+/// `Name<K, V>` (after a peel) yields `(K, V)`.
+fn user_defined_pair(ty: &Type, name: &str) -> Option<(Type, Type)> {
+    match peel_borrow_pointer(ty) {
+        Type::UserDefined(u) if u.name == name && u.generics.len() == 2 => {
+            Some((u.generics[0].clone(), u.generics[1].clone()))
+        }
+        _ => None,
+    }
+}
+
+/// Mirrors the checker's `hashMapTypes` (`HashMap<K, V>`).
+pub fn hash_map_types(ty: &Type) -> Option<(Type, Type)> {
+    user_defined_pair(ty, "HashMap")
+}
+
+/// Mirrors the checker's `hashSetTypes` (`HashSet<K>` -> key type).
+pub fn hash_set_element_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "HashSet")
+}
+
+/// Mirrors the checker's `btreeMapTypes` (`BTreeMap<K, V>`).
+pub fn btree_map_types(ty: &Type) -> Option<(Type, Type)> {
+    user_defined_pair(ty, "BTreeMap")
+}
+
+/// Mirrors the checker's `btreeSetTypes` (`BTreeSet<K>` -> key type).
+pub fn btree_set_element_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "BTreeSet")
+}
+
+/// Name-only user-defined shape (after a peel), for the nominal
+/// std types whose generics do not carry the checked payload
+/// (`AtomicI32`, `File`, `Ordering`, ...).
+fn is_named_type(ty: &Type, name: &str) -> bool {
+    matches!(peel_borrow_pointer(ty), Type::UserDefined(u) if u.name == name)
+}
+
+/// Mirrors the checker's `isAtomicI32Type`.
+pub fn is_atomic_i32_type(ty: &Type) -> bool {
+    is_named_type(ty, "AtomicI32")
+}
+
+/// Mirrors the checker's `isAtomicUsizeType`.
+pub fn is_atomic_usize_type(ty: &Type) -> bool {
+    is_named_type(ty, "AtomicUsize")
+}
+
+/// Mirrors lowering_rules `isFileType`.
+pub fn is_file_type(ty: &Type) -> bool {
+    is_named_type(ty, "File")
+}
+
+/// Mirrors lowering_rules `isMetadataType`.
+pub fn is_metadata_type(ty: &Type) -> bool {
+    is_named_type(ty, "Metadata")
+}
+
+/// Mirrors lowering_rules `isOrderingType`.
+pub fn is_ordering_type(ty: &Type) -> bool {
+    is_named_type(ty, "Ordering")
+}
+
+/// Mirrors lowering_rules `vecLikeElementType`: `Vec<T>` or
+/// `GrowVec<T>` yields `T`.
+pub fn vec_like_element_type(ty: &Type) -> Option<Type> {
+    vec_element_type(ty).or_else(|| grow_vec_element_type(ty))
+}
+
+/// Mirrors the checker's `iterableElementType`: array element,
+/// else Vec-like element, else slice element.
+pub fn iterable_element_type(ty: &Type) -> Option<Type> {
+    if let Some((elem, _)) = array_type_of(ty) {
+        return Some(elem);
+    }
+    vec_like_element_type(ty).or_else(|| slice_element_type(ty))
+}
+
 /// Mirrors lowering_rules `arrayType`: the array shape under any
 /// borrow/pointer peel.
 pub fn array_type_of(ty: &Type) -> Option<(Type, usize)> {

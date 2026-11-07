@@ -639,3 +639,50 @@ tests_phase3e.rs 29 条单测与 90 件真插件探针逐名对应。
 - 反馈候选：本段新发 **FB-053**（构造四谓词不查
   associated_target，见 docs/feedback/）；号段 FB-054、
   FB-055 未使用，归还协调线。
+
+## 六期 R-2/R-1 同根销账（2026-11-07，rust-r2-fix 线）
+
+三期剩余未覆盖清单前两项**销账**：
+
+- **接收者形状键控的 std 叶级联**：`check_std_leaf.rs` /
+  `check_std_leaf2.rs` 落地（Option/Result 查询与变换、Cell/
+  RefCell、Mutex/RwLock、File/Metadata、JoinHandle、mpsc
+  Sender/Receiver、clone/strong_count/weak_count/as_ptr、
+  Atomic 值面、VecDeque、字符串面、HashMap/HashSet/BTreeMap/
+  BTreeSet 的 insert/get/contains/clear、名字键控 push/pop/
+  remove、iter/into_iter/copied、collect/join/map/filter/fold）。
+  接入点为 `check_receiver_call` 末尾（固有/特型/dyn/using 全
+  落空后才轮到叶级联）——与 Zig 分派序（叶级联在 method_match
+  之前）的位置差登记在下：用户为 std 接收者形状手写的同名
+  方法在 Zig 侧被叶遮蔽、在 Rust 侧先行命中，属可观察分歧，
+  语料未见此形。
+- **静态构造叶 + `str::from_utf8`**：`check_std_ctor.rs` 落地
+  （ManuallyDrop/Box/Rc/Arc、mpsc::channel、thread::spawn、
+  原子/Cell/RefCell/Mutex/RwLock、File::open、Vec/GrowVec/
+  VecDeque、HashMap/HashSet/BTreeMap/BTreeSet、str::from_utf8）。
+
+**根因定性（六期普查 R-2 与 R-1 同根）**：基线（cc52e91）下
+单 @test 文件 `sla check` 通过是**空过**——Check/Compile 形
+解析器跳过 @test 体（skip_block），叶级联未移植只在 test 形
+与普通 fn 体暴露。普查 R-2 的 274 跑 = UNDEF-STD 183（本节
+销账的叶缺失）+ UNDEF-MODULE 91（见 cli-commands.md 的展开
+接线销账）。push 消费纪律补齐 DEF-5 浅拷贝豁免
+（`type_is_shallow_copy_call_arg_value` 移植，check_std_ctor.rs）；
+insert 消费按 Zig 叶面原规（原语/FnPtr/指针/借用/Slice/Chan
+豁免，枚举载荷 Copy 豁免因检查器枚举表只存变体名无法求值，
+在册未移植）。
+
+**仍未移植（在册）**：future::/poll::/task::/executor:: 关联
+构造族；clone/push 臂的 UncloneableClone/UncloneableCopy 闭包
+诊断；checkArenaMoveArg 逃逸校验；`sum` 之外的聚合特判细节。
+
+【R-2 replay 合成订正（2026-11-08）】本节自 cc52e91 基线
+移植，记述口径为该基线。本节销账的两项级联在现头（3604444，
+含 R-1 落地）上与 R-1 的同根移植并行存在：R-1 的
+check_leaves.rs / check_receiver_leaves{,2}.rs 在关联调用与
+接收者分派上**先行裁决**，本节的 check_std_ctor.rs /
+check_std_leaf{,2,3}.rs 仅在 R-1 落空时咨询（合成次序见
+check_call.rs / check_method.rs 接线注释与
+rust-r2-replay/RESULT.md）。「仍未移植」清单中
+future::/poll:: 已由 R-1 的 preassoc 委托覆盖（见 R-1 销账
+段），task::/executor:: 仍未移植。

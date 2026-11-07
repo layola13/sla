@@ -23,3 +23,9 @@ sla-checker = { path = "../sla-checker" }
 sla-lowering = { path = "../sla-lowering" }
 sla-codegen-text = { path = "../sla-codegen-text" }
 sla-codegen-sab = { path = "../sla-codegen-sab" }
+# The .sla import-expansion machinery lives in sla-plugin (the
+# Zig topology keeps commands and expansion in one plugin
+# binary); sla-cli consumes its rlib form for the TestCodegen
+# body-expansion stage (phase-6 census R-2). No new edges among
+# the pipeline crates themselves.
+sla-plugin = { path = "../sla-plugin" }

@@ -7,22 +7,25 @@
 //! the original).
 //!
 //! Stage order: freshness load → read → parse (with the D-P3
-//! seed prescan) → [TestCodegen only: filter prune +
+//! seed prescan) → [TestCodegen only: .sla import BODY
+//! expansion (sla_plugin::sla_expand, include-all with bodies
+//! kept — phase-6 census R-2), then filter prune +
 //! reachability prune, the CLI-D5 stages in crate::test_prune]
 //! → contract load + extern registration → type check → tail
 //! codegen → freshness store. Stages with no port in
 //! the existing crates — source_expand (@expand_tuple), .sla
-//! import BODY expansion, defer desugar, monomorphizer, syntax
-//! lowering (go/chan/select), the SAB audit, imported-function
-//! alias registration, and output import-path rewriting — are NOT
-//! silently skipped: programs needing them either fail loudly in
-//! a downstream ported stage or diverge, and every such surface
-//! is registered in docs/divergences/cli-commands.md. The
+//! import body expansion on the Check/Compile kinds, defer
+//! desugar, monomorphizer, syntax lowering (go/chan/select),
+//! the SAB audit, imported-function alias registration, and
+//! output import-path rewriting — are NOT silently skipped:
+//! programs needing them either fail loudly in a downstream
+//! ported stage or diverge, and every such surface is
+//! registered in docs/divergences/cli-commands.md. The
 //! front-end closure used for the freshness store is
-//! (root file + contract-load visited files + sibling sa.mod),
-//! the closest counterpart of Zig's (root + module-table keys +
-//! contract imports + sa.mod); composition differences are
-//! registered there too.
+//! (root file + expanded module files + contract-load visited
+//! files + sibling sa.mod), the closest counterpart of Zig's
+//! (root + module-table keys + contract imports + sa.mod);
+//! composition differences are registered there too.
 
 use crate::freshness::{CompileOptions, FreshKind};
 use crate::out::zig_error_name;
@@ -261,6 +264,44 @@ pub fn run_frontend(
     };
     stage_done(stderr, profile, &format!("{prefix}parse"), start);
 
+    // Test-codegen .sla import BODY expansion (phase-6 census
+    // R-2): on the test path the Zig front-end checks the program
+    // with imported module bodies present — `sla test` bodies
+    // call imported module functions, and a decl-only surface
+    // leaves every such call undefined. The expansion runs the
+    // include-all combination with bodies kept
+    // (sla_plugin::sla_expand), BEFORE the CLI-D5 prunes so the
+    // reachability prune sees (and keeps) the module functions
+    // the tests actually reach. Other kinds are untouched: their
+    // stage order is byte-identical to before. The expanded
+    // modules join the freshness closure below.
+    let mut expanded_modules: Vec<String> = Vec::new();
+    if kind == FrontendKind::TestCodegen {
+        let Node::Program(parsed) = &root else {
+            return None;
+        };
+        let start = Instant::now();
+        let options = sla_plugin::sla_expand::SlaImportExpansionOptions {
+            include_all_imported_decls: true,
+            imported_bodies_decl_only: false,
+            ..Default::default()
+        };
+        match sla_plugin::sla_expand::expand_sla_imports(parsed, Path::new(file), &options) {
+            Ok(expanded) => {
+                expanded_modules = expanded.ordered_modules.clone();
+                root = Node::Program(expanded.program);
+            }
+            Err(err) => {
+                let _ = writeln!(
+                    stderr,
+                    "Import Error: failed to expand @import modules: {err}"
+                );
+                return None;
+            }
+        }
+        stage_done(stderr, profile, "sla import body expansion", start);
+    }
+
     // Test-codegen pre-check pruning (plugin_compile.zig
     // runSlaFrontend): pruneTestsByFilter, then the syntactic
     // reachability prune — both BEFORE contract load and
@@ -313,12 +354,19 @@ pub fn run_frontend(
             },
         );
     }
-    // R-1 fix: imported macros register too (mirrors the
-    // sla-oracle wiring). Without this the CLI front end never
-    // populated `imported_macros`, so every sa_std macro call
-    // (STR_PTR, BYTES_EQ, PTR_NULL, ...) in an ordinary fn body
-    // fell to "Undefined call" even though the checker's
-    // imported-macro stage and the contract registry both exist.
+    // R-1 fix (all kinds) + R-2 replay note: imported macros
+    // register too (mirrors the sla-oracle wiring). Without this
+    // the CLI front end never populated `imported_macros`, so
+    // every sa_std macro call (STR_PTR, BYTES_EQ, PTR_NULL,
+    // VEC_RESERVE_GROW, ...) in any checked body fell to
+    // "Undefined call" even though the checker's imported-macro
+    // stage and the contract registry both exist. The R-2 line
+    // scoped the same registration to the TestCodegen kind on
+    // the pre-R-1 base; R-1's all-kind loop (already on this
+    // head) is the superset, so the replay keeps exactly this
+    // one loop — registering twice would be a no-op re-insert
+    // of identical records, and the Check/Compile-kind gap the
+    // R-2 batch deliberately left open is already closed here.
     for record in &report.imported_macro_registry {
         checker.register_imported_macro(
             &record.name,
@@ -352,6 +400,7 @@ pub fn run_frontend(
     stage_done(stderr, profile, &format!("{prefix}type check"), start);
 
     let mut closure = vec![file.to_string()];
+    closure.extend(expanded_modules.iter().cloned());
     closure.extend(report.visited.iter().cloned());
     match Path::new(file).parent() {
         Some(dir) => closure.push(dir.join("sa.mod").to_string_lossy().into_owned()),
@@ -561,3 +610,5 @@ pub fn test_filter_selects_no_tests(file: &str, filter: Option<&str>, stderr: &m
     Some(true)
 }
 
+#[cfg(test)]
+mod tests;

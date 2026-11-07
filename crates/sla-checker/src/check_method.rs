@@ -618,6 +618,24 @@ impl Checker {
             }
         }
 
+        // 5. Std receiver leaves (R-2 port, check_std_leaf.rs /
+        // check_std_leaf2.rs / check_std_leaf3.rs): the
+        // receiver-shape cascade and the name-keyed container
+        // arms of the Zig call arm. They run last inside this
+        // dispatch — inherent / trait / dyn / `using` keep
+        // precedence, and the R-1 receiver cascade
+        // (check_receiver_leaves.rs, consulted from check_call
+        // before this function) has already had first refusal
+        // on every shared name, so current-head verdicts win;
+        // a leaf here can only resolve a call every earlier
+        // stage missed.
+        if let Some(result) = self.check_std_receiver_leaf(call, &recv_ty) {
+            return Some(result);
+        }
+        if let Some(result) = self.check_std_receiver_leaf2(call, &recv_ty) {
+            return Some(result);
+        }
+
         None
     }
 }

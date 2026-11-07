@@ -3,7 +3,7 @@
 //! are ported in full; every other expression family fails loudly
 //! with its Zig reference until its lane lands.
 
-use sla_ast::{Literal, Node, Type};
+use sla_ast::{Literal, Node, Primitive, Type};
 use sla_lowering::{
     is_option_none_name, plan_scalar_binary_op, scalar_binary_op_name,
 };
@@ -20,6 +20,84 @@ impl<'c> Codegen<'c> {
             Node::BinaryExpr(_) => self.gen_binary_expr(expr),
             Node::IfExpr(_) => self.gen_if_expr(expr),
             Node::CallExpr(_) => self.gen_expr_call(expr),
+            Node::IndexExpr(idx) => {
+                // Vec/GrowVec scalar-element reads
+                // (codegen.zig `genVecIndexRead`): bounds check
+                // with panic(32), then ptr arithmetic + load.
+                // Other target shapes (arrays, slices, non-scalar
+                // elements) stay on the loud path.
+                let target_ty = self.expr_type(&idx.target).ok_or_else(|| {
+                    TextError::MissingType {
+                        context: "index target type".to_string(),
+                    }
+                })?;
+                let (tname, elem) = match &target_ty {
+                    Type::UserDefined(u) if u.name == "Vec" || u.name == "GrowVec" => {
+                        (u.name.clone(), u.generics.first().cloned())
+                    }
+                    _ => {
+                        return unsupported(
+                            "index read on non-Vec target",
+                            "codegen.zig:16020 (genVecIndexRead family)",
+                        )
+                    }
+                };
+                let elem = elem.ok_or_else(|| TextError::MissingType {
+                    context: "vec element type".to_string(),
+                })?;
+                if !matches!(elem, Type::Primitive(_)) {
+                    return unsupported(
+                        "index read of non-scalar Vec element",
+                        "codegen.zig:16020 (genVecIndexRead load variants)",
+                    );
+                }
+                let (len_def, ptr_def) = if tname == "GrowVec" {
+                    ("GrowVec_len", "GrowVec_ptr")
+                } else {
+                    ("Vec_len", "Vec_ptr")
+                };
+                let vec_reg = self.gen_expr(&idx.target)?;
+                let vec_needs_release = self.expr_result_reg_needs_release(&idx.target);
+                let index_reg = self.gen_expr(&idx.index)?;
+                let len_reg = self.new_tmp();
+                let in_bounds_reg = self.new_tmp();
+                let hit_label = self.new_label("L_VEC_INDEX_OK");
+                let miss_label = self.new_label("L_VEC_INDEX_OOB");
+                self.ins(&format!("{len_reg} = load {vec_reg}+{len_def} as u64"));
+                self.ins(&format!("{in_bounds_reg} = ult {index_reg}, {len_reg}"));
+                self.ins(&format!(
+                    "br {in_bounds_reg} -> {hit_label}, {miss_label}"
+                ));
+                self.ins(&format!("{miss_label}:"));
+                self.ins("panic(32)");
+                self.ins(&format!("{hit_label}:"));
+                let data_reg = self.new_tmp();
+                let offset_reg = self.new_tmp();
+                let ptr_reg = self.new_tmp();
+                self.ins(&format!("!{in_bounds_reg}"));
+                self.ins(&format!("{data_reg} = load {vec_reg}+{ptr_def} as ptr"));
+                self.ins(&format!(
+                    "{offset_reg} = mul {index_reg}, {}",
+                    crate::codegen::type_size(&elem).max(8)
+                ));
+                self.ins(&format!("{ptr_reg} = ptr_add {data_reg}, {offset_reg}"));
+                let reg = self.new_tmp();
+                self.ins(&format!(
+                    "{reg} = load {ptr_reg}+0 as {}",
+                    crate::codegen::type_string(&elem)
+                ));
+                self.emit_release(&ptr_reg)?;
+                self.emit_release(&offset_reg)?;
+                self.emit_release(&data_reg)?;
+                self.emit_release(&len_reg)?;
+                if sla_lowering::call_arg_needs_release(&idx.index) {
+                    self.emit_release(&index_reg)?;
+                }
+                if vec_needs_release {
+                    self.emit_release(&vec_reg)?;
+                }
+                Ok(reg)
+            }
             Node::MoveExpr(inner) => {
                 // codegen.zig:13063 move_expr (verified verbatim):
                 // evaluate the inner expression and prefix the
@@ -71,6 +149,71 @@ impl<'c> Codegen<'c> {
                 if sla_lowering::expr_result_needs_release(&d.expr) {
                     self.emit_release(&inner)?;
                 }
+                Ok(reg)
+            }
+            Node::CastExpr(cast) => {
+                // codegen.zig:17018 cast_expr: fn-ptr vtable load,
+                // pointer-carrier identity, the non-consuming copy
+                // guards for identifier / chained-cast sources,
+                // then `{reg} = {src} as {ty}`.
+                let inner = self.gen_expr(&cast.expr)?;
+                let src_ty = self.require_expr_type(&cast.expr, "cast source type")?;
+                if matches!(src_ty, Type::FnPtr(_)) {
+                    let loaded = self.new_tmp();
+                    self.ins(&format!(
+                        "{loaded} = load {inner}+0 as {}",
+                        crate::codegen::type_string(&cast.ty)
+                    ));
+                    if self.call_arg_result_temp_needs_release(&cast.expr, &inner) {
+                        self.emit_release(&inner)?;
+                    }
+                    if matches!(&*cast.ty, Type::Primitive(Primitive::RawPtr)) {
+                        let reg = self.new_tmp();
+                        self.ins(&format!("{reg} = {loaded} as ptr"));
+                        self.emit_release(&loaded)?;
+                        return Ok(reg);
+                    }
+                    return Ok(loaded);
+                }
+                let carrier = |t: &Type| {
+                    matches!(
+                        t,
+                        Type::Pointer(_)
+                            | Type::Borrow(_)
+                            | Type::Primitive(Primitive::RawPtr)
+                    )
+                };
+                if carrier(&src_ty) && carrier(&cast.ty) {
+                    return Ok(inner);
+                }
+                let mut src_reg = inner.clone();
+                if let Node::Identifier(name) = &*cast.expr {
+                    if matches!(src_ty, Type::Primitive(_)) {
+                        let resolved = self.resolve_binding_name(name);
+                        if inner == resolved || inner == *name {
+                            let copied = self.new_tmp();
+                            self.emit_primitive_copy(&copied, &inner, &src_ty)?;
+                            src_reg = copied;
+                        }
+                    } else if (matches!(src_ty, Type::Pointer(_) | Type::Borrow(_))
+                        && sla_lowering::is_any_integer_type(&cast.ty))
+                    {
+                        let copied = self.new_tmp();
+                        self.ins(&format!("{copied} = ptr_add {inner}, 0"));
+                        src_reg = copied;
+                    }
+                } else if matches!(&*cast.expr, Node::CastExpr(_))
+                    && matches!(src_ty, Type::Primitive(_))
+                {
+                    let copied = self.new_tmp();
+                    self.emit_primitive_copy(&copied, &inner, &src_ty)?;
+                    src_reg = copied;
+                }
+                let reg = self.new_tmp();
+                self.ins(&format!(
+                    "{reg} = {src_reg} as {}",
+                    crate::codegen::type_string(&cast.ty)
+                ));
                 Ok(reg)
             }
             Node::UnsafeExpr(ue) => self.gen_block_tail_value_into_fresh(&ue.body),

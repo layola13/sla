@@ -27,6 +27,7 @@ pub mod rules;
 pub mod scope;
 pub mod types_util;
 
+mod check_assoc_helpers;
 mod check_binary;
 mod check_builtin;
 mod check_leaves;
@@ -43,6 +44,10 @@ mod check_match;
 mod check_pattern;
 mod check_program;
 mod check_stmt;
+mod check_std_ctor;
+mod check_std_leaf;
+mod check_std_leaf2;
+mod check_std_leaf3;
 mod check_trait;
 
 #[cfg(test)]
@@ -50,6 +55,8 @@ mod tests;
 
 #[cfg(test)]
 mod tests_r1;
+#[cfg(test)]
+mod tests_std_leaf;
 #[cfg(test)]
 mod tests_e2e;
 #[cfg(test)]

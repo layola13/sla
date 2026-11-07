@@ -129,3 +129,37 @@
   （D-T10 的 clone 失效、字面量/标识符类型未登记致实参误判所有权转移）
   已定位并修复，**复验待新场地**（原场地 hold 于约 01:15 UTC 到期关闭，
   修复轮未及上场）。修复后预期 5/5，结论以场地复跑为准，不提前报绿。
+
+## 六期 R-2 codegen 销账（2026-11-07，rust-r2-fix 线）
+
+- **std surface 发射级（新文件 surface.rs）**：codegen.zig 调用
+  分派中的 `EXPAND <MACRO>` 臂按 std_surface.sla_meta 规则表
+  落 tier-1/tier-2 子集：构造器（Vec/HashMap/HashSet/BTreeMap/
+  BTreeSet/VecDeque new、GrowVec new/with_max、Box new/into_raw/
+  from_raw、Rc/Arc new、RefCell new、Mutex/RwLock new）、堆单元
+  构造器（Cell/AtomicI32/AtomicUsize/AtomicPtr = alloc + 原地
+  初始化，Zig 文本形与 meta 的 CELL_NEW_VALUE 形分工不同——
+  后者是 SAB 分派形）、push（Vec/GrowVec）、insert/get
+  （HashMap/BTreeMap，经 emitHashMapMacros 的 SLA_* helper）、
+  insert/contains（HashSet/BTreeSet）、len 五形、Cell get/set、
+  Box/Rc/Arc get/as_ptr、Option/Result 查询与 unwrap/unwrap_or、
+  fallible Vec remove（panic 86 臂）。未落：Vec pop、HashMap
+  非 u64 值形、迭代器组合子发射、索引表达式（VEC_INDEX 家族）
+  ——保持响亮 Unsupported，在册。
+- **宏家族条件导入（program.rs）**：programNeeds*Macros 扫描
+  移植为收集式单遍（检查器类型 + 类型注记 + 调用触发三信号），
+  按 MACRO_FAMILIES 序发射 `@import`，HashMap/BTreeMap 另发
+  内联 helper 宏体（family_macros.rs，Zig 固定文本）。async/
+  trait-object/ffi 家族仍为响亮绊线（其发射含 helper 函数体，
+  不在本线面内）。检测近似登记：cmp/iter 家族的触发谓词为
+  近似形（关联名/方法名键控），与 Zig 的逐谓词递归形可能在
+  边角上多发/漏发导入——多发无害（flattener 去重），漏发以
+  UndefinedMacro 响亮暴露。
+- **is_void_call 修复（stmt.rs）**：void 判定此前只查用户
+  FuncDecl，std void 方法（push/set）在语句位被误走值路由，
+  gen_expr_stmt 对从未声明的哑结果寄存器发 `!tmp_N`，host 以
+  UnknownRegister 拒绝。现 None 臂回落检查器记录的调用类型
+  （panic 内建豁免，其路由在 gen_expr_stmt 中独立在后）。
+- **let 物化五臂（stmt.rs）**：AtomicI32/AtomicUsize/AtomicPtr/
+  Cell/ManuallyDrop 的 `::new` let 直接物化进绑定存储
+  （codegen.zig:13846-13897），替换原响亮绊线。

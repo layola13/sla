@@ -111,28 +111,9 @@ impl Checker {
                 ));
             }
             let target_ty = self.check_expr(&call.args[0])?;
-            // Zig sum arm: array element, else sliceElementType,
-            // else vecElementType, else growVecElementType — NOT
-            // "any generic user type's first parameter" (the
-            // phase-1 slice accepted e.g. Option<i32>, which Zig
-            // rejects). (GrowVec added with the R-1 port.)
-            return match target_ty {
-                Type::Array(a) => Ok((*a.elem).clone()),
-                ref other => {
-                    match crate::types_util::slice_element_type(other)
-                        .or_else(|| crate::types_util::vec_element_type(other))
-                        .or_else(|| {
-                            crate::check_leaves::ud_inner(other, "GrowVec")
-                        })
-                    {
-                        Some(elem) => Ok(elem),
-                        None => Err(Diagnostic::new(
-                            ErrorKind::TypeMismatch,
-                            format!("sum over {}", type_desc(other)),
-                        )),
-                    }
-                }
-            };
+            // Zig sum arm: element-type extraction lives in
+            // check_assoc_helpers.rs (R-2 replay split).
+            return crate::check_assoc_helpers::check_sum_call(self, &target_ty);
         }
 
         // 2. FFI bypass.
@@ -483,10 +464,12 @@ impl Checker {
     /// `Some(Err(..))`. Consumption specials first.
     ///
     /// Order inside the block (Zig): trait target -> `ptr` leaves
-    /// -> std-surface associated leaves (`Vec::new` and kin,
-    /// check_leaves.rs, R-1 port) -> inherent `{Target}_{name}`
-    /// in funcs ONLY -> the `Option::None` unit constructor ->
-    /// trait fallback for the target type.
+    /// -> std-surface associated leaves (`Vec::new` and kin:
+    /// check_leaves.rs, R-1 port; then the R-2 constructor
+    /// leaves, check_std_ctor.rs, consulted only on an R-1
+    /// miss) -> inherent `{Target}_{name}` in funcs ONLY ->
+    /// the `Option::None` unit constructor -> trait fallback
+    /// for the target type.
     fn check_associated_call(
         &mut self,
         target: &str,
@@ -588,6 +571,18 @@ impl Checker {
         // name-keyed static constructors (`Vec::new`, ...),
         // between the `ptr` leaves and the inherent lookup.
         if let Some(result) = self.check_std_assoc_leaf(target, call) {
+            return Some(result);
+        }
+
+        // Std constructor leaves (R-2 port, check_std_ctor.rs):
+        // the same Zig name-keyed constructor set, ported
+        // independently by the R-2 line against the pre-R-1
+        // base. Consulted only when the R-1 cascade missed, so
+        // current-head verdicts win on every shared name; the
+        // R-2 cascade additionally carries its DEF-5 shallow-
+        // copy push discipline (types_util extractors) used by
+        // its receiver leaves.
+        if let Some(result) = self.check_std_associated_leaf(target, call) {
             return Some(result);
         }
 

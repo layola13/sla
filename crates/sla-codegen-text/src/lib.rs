@@ -24,6 +24,8 @@
 mod block;
 mod call;
 mod codegen;
+mod family_macros;
+mod surface;
 mod collect;
 mod expr;
 mod expr_if;

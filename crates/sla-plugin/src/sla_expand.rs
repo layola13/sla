@@ -30,6 +30,16 @@
 //!     unconditionally as import declarations and collected into
 //!     `contract_imports` when they need contract loading.
 //!
+//! ALSO WIRED (phase-6 census R-2): the include-all combination
+//! with `imported_bodies_decl_only = false` — module functions
+//! keep their bodies, and modules' non-`.sla` imports are
+//! retained (appended as declarations and collected into
+//! `contract_imports`), because the kept bodies call those
+//! contracts. This is the combination the CLI's TestCodegen
+//! front-end runs so `sla test` bodies can call imported module
+//! functions. The decl-only combination above is byte-identical
+//! to before.
+//!
 //! LOUDLY UNWIRED (returns `SlaExpandError::SelectiveUnwired`):
 //! the default selective mode (plugin_reachability.zig, 2,762
 //! lines at the box head: reachable-symbol computation, lazy
@@ -86,6 +96,15 @@ pub struct ExpandedProgram {
     /// Module canonical paths in collection order (children before
     /// parents), for boundary dumps.
     pub ordered_modules: Vec<String>,
+    /// Bodies-mode only: modules whose full-body parse failed
+    /// (an unported parser surface inside a module body or
+    /// signature — impl blocks, `&[T][owner]`, `T!`, `go`) and
+    /// which were therefore included decl-only. Recorded, never
+    /// silent: calls into such a module resolve by signature at
+    /// the checker and fail loudly downstream (no body exists to
+    /// emit), while modules the program never calls stop
+    /// blocking it. Empty in decl-only mode.
+    pub body_fallback_modules: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -136,6 +155,7 @@ struct SlaModule {
 struct SlaModuleTable {
     modules: Vec<SlaModule>,
     decl_only_parse: bool,
+    body_fallback_modules: Vec<String>,
 }
 
 impl SlaModuleTable {
@@ -153,28 +173,61 @@ impl SlaModuleTable {
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."));
+        let decl_only_options = ParserOptions {
+            parse_function_bodies: false,
+            function_body_names: None,
+            parse_macro_bodies: true,
+            macro_body_names: None,
+            parse_test_bodies: false,
+        };
         let options = if self.decl_only_parse {
-            ParserOptions {
-                parse_function_bodies: false,
-                function_body_names: None,
-                parse_macro_bodies: true,
-                macro_body_names: None,
-                parse_test_bodies: false,
-            }
+            decl_only_options.clone()
         } else {
             ParserOptions::default()
         };
-        let mut parser = Parser::with_options(&expanded, options);
-        let (types, enums) = prescan_import_type_names(&base_dir, &expanded);
-        if !types.is_empty() || !enums.is_empty() {
-            let type_refs: Vec<&str> = types.iter().map(String::as_str).collect();
-            let enum_refs: Vec<&str> = enums.iter().map(String::as_str).collect();
-            parser.seed_known_type_names(&type_refs, &enum_refs);
-        }
-        let node = parser.parse_program().map_err(|kind| SlaExpandError::Parse {
-            file: resolved.path.clone(),
-            kind,
-        })?;
+        let parse_with = |options: ParserOptions| -> Result<Node, sla_parser::ParseError> {
+            let mut parser = Parser::with_options(&expanded, options);
+            let (types, enums) = prescan_import_type_names(&base_dir, &expanded);
+            if !types.is_empty() || !enums.is_empty() {
+                let type_refs: Vec<&str> = types.iter().map(String::as_str).collect();
+                let enum_refs: Vec<&str> = enums.iter().map(String::as_str).collect();
+                parser.seed_known_type_names(&type_refs, &enum_refs);
+            }
+            parser.parse_program()
+        };
+        let node = match parse_with(options) {
+            Ok(node) => node,
+            Err(kind) => {
+                // Bodies mode only: a module whose bodies (or a
+                // signature inside it) use a parser surface the
+                // Rust parser has not ported — impl blocks,
+                // `&[T][owner]`, `T!`, `go` — must not take down
+                // programs that import it transitively. Retry
+                // decl-only for THIS module and record it in
+                // body_fallback_modules (see ExpandedProgram).
+                // The decl-only parse is the same one the check
+                // path has always used; if it also fails, the
+                // original error stands.
+                if self.decl_only_parse {
+                    return Err(SlaExpandError::Parse {
+                        file: resolved.path.clone(),
+                        kind,
+                    });
+                }
+                match parse_with(decl_only_options) {
+                    Ok(node) => {
+                        self.body_fallback_modules.push(resolved.path.clone());
+                        node
+                    }
+                    Err(_) => {
+                        return Err(SlaExpandError::Parse {
+                            file: resolved.path.clone(),
+                            kind,
+                        })
+                    }
+                }
+            }
+        };
         let Node::Program(program) = node else {
             return Err(SlaExpandError::Parse {
                 file: resolved.path.clone(),
@@ -452,9 +505,22 @@ fn append_module_decls_include_all(
                     if child_resolved.path.ends_with(".sla") {
                         continue;
                     }
-                    // shouldRetainResolvedContractImport against
-                    // empty reachable/referenced sets is always
-                    // false in this mode (module docs).
+                    // Decl-only mode: shouldRetainResolvedContractImport
+                    // against empty reachable/referenced sets is always
+                    // false (module docs) — nothing is retained.
+                    // Bodies mode (imported_bodies_decl_only = false):
+                    // the kept bodies CALL these contracts, so the
+                    // import is retained exactly like a root import —
+                    // appended as a declaration and collected into
+                    // contract_imports when it needs contract loading.
+                    if !options.imported_bodies_decl_only {
+                        append_resolved_non_sla_import_decl(
+                            child_resolved,
+                            out_decls,
+                            primary,
+                            contract_imports,
+                        );
+                    }
                 }
             }
             Node::FuncDecl(_) => {
@@ -540,6 +606,7 @@ pub fn expand_sla_imports(
     let mut table = SlaModuleTable {
         modules: Vec::new(),
         decl_only_parse: options.imported_bodies_decl_only,
+        body_fallback_modules: Vec::new(),
     };
 
     // Root import groups + module collection (children first).
@@ -604,6 +671,7 @@ pub fn expand_sla_imports(
         primary,
         contract_imports,
         ordered_modules,
+        body_fallback_modules: table.body_fallback_modules.clone(),
     })
 }
 

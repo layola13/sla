@@ -2,12 +2,15 @@
 //! the import/macro prelude it drives (7278-7302, 4080-4090).
 //!
 //! The conditional macro-family imports (cmp/option/result/mpsc/rc/
-//! collections/atomics/cell/box/vec/iter/trait-object/async/ffi) are
-//! driven in the Zig original by `programNeeds*Macros` scans over the
-//! whole program. The slice supports none of those families, so the
-//! scan here is a loud tripwire: a program that would need a family
-//! import fails with `Unsupported` naming the family, instead of
-//! silently emitting a header that's missing it.
+//! collections/atomics/cell/box/vec/iter) are driven in the Zig
+//! original by `programNeeds*Macros` scans over the whole program;
+//! they are ported here as a collecting scan (checker-recorded
+//! expression types + type annotations + call triggers) that emits
+//! the family's `@import` in Zig order, plus the inline HashMap /
+//! BTreeMap helper macros. The async / trait-object / ffi families
+//! stay a loud tripwire: their emission involves helper-function
+//! bodies outside this lane (registered in
+//! docs/divergences/lowering-text.md).
 
 use sla_ast::{Literal, Node};
 use sla_lowering::int_constant_expr_value;
@@ -22,6 +25,7 @@ const MACRO_FAMILIES: &[(&str, &str)] = &[
     ("option", "sa_std/core/option.sa"),
     ("result", "sa_std/core/result.sa"),
     ("mpsc", "sa_std/sync/mpsc.sa"),
+    ("mem", "sa_std/mem.sa"),
     ("rc", "sa_std/core/rc.sa"),
     ("vec_deque", "sa_std/vec_deque.sa"),
     ("hashmap", "sa_std/hashmap.sa"),
@@ -33,6 +37,7 @@ const MACRO_FAMILIES: &[(&str, &str)] = &[
     ("refcell", "sa_std/core/refcell.sa"),
     ("box", "sa_std/core/box.sa"),
     ("vec", "sa_std/vec.sa"),
+    ("growvec", "sa_std/growvec.sa"),
     ("iter", "sa_std/iter.sa"),
     ("trait_object", "sa_std/core/trait_object.sa"),
     ("async", "sa_std/core/future.sa"),
@@ -74,7 +79,7 @@ impl<'c> Codegen<'c> {
         self.emit_array_fill_macros();
 
         // Conditional family imports / macro bodies: loud tripwire.
-        self.check_macro_families(program)?;
+        self.emit_macro_family_imports(program)?;
 
         // 3a-3c. Register top-level consts; fold scalar aliases and
         // scalar binary consts into the scalar-const table.
@@ -285,152 +290,323 @@ impl<'c> Codegen<'c> {
         self.w("\n[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length\n    call @sa_mem_set(&%array_ptr, %value, %length)\n[END_MACRO]\n");
     }
 
-    /// Tripwire replacing the `programNeeds*Macros` scans: walk every
-    /// node once; a construct that would pull in a macro family fails
-    /// loudly. Slice programs contain none of these shapes.
-    fn check_macro_families(&self, program: &Node) -> Result<()> {
-        fn walk(node: &Node, hit: &mut Option<&'static str>) {
-            if hit.is_some() {
-                return;
-            }
-            match node {
-                Node::Program(p) => {
-                    for d in &p.decls {
-                        walk(d, hit);
-                    }
-                }
-                Node::FuncDecl(f) => {
-                    if f.is_async {
-                        *hit = Some("async");
-                    }
-                    for s in &f.body {
-                        walk(s, hit);
-                    }
-                }
-                Node::TestDecl(t) => {
-                    for s in &t.body {
-                        walk(s, hit);
-                    }
-                }
-                Node::CallExpr(call) => {
-                    let name = call.func_name.as_str();
-                    let family = if call.associated_target.is_some() {
-                        match call.associated_target.as_deref() {
-                            Some("Cell") => Some("cell"),
-                            Some("AtomicI32") | Some("AtomicUsize") | Some("AtomicPtr") => {
-                                Some("atomic")
-                            }
-                            Some("Box") => Some("box"),
-                            Some("Rc") => Some("rc"),
-                            Some("thread") => Some("async"),
-                            _ => None,
-                        }
-                    } else {
-                        match name {
-                            "Some" | "None" => Some("option"),
-                            "Ok" | "Err" => Some("result"),
-                            "vec" => Some("vec"),
-                            _ => None,
-                        }
+    /// Port of the `programNeeds*Macros` scans (codegen.zig:
+    /// 6300-8200) + the conditional import block (8884-8970) and
+    /// `emitHashMapMacros` / `emitBTreeMapMacros` (5633-5780).
+    /// One collecting walk over the whole program: a family is
+    /// needed when a checker-recorded expression type, a type
+    /// annotation, or a call trigger names it (the Zig predicates
+    /// key on the same three signals, per family). Imports are
+    /// emitted in MACRO_FAMILIES order; duplicate lines are
+    /// harmless (the flattener deduplicates), matching the Zig
+    /// note on the thread import. The async family (async fns,
+    /// `thread::spawn`, future/task types) stays loud: its
+    /// emission also writes helper bodies this lane has not
+    /// ported.
+    fn emit_macro_family_imports(&mut self, program: &Node) -> Result<()> {
+        fn type_families(ty: &sla_ast::Type, out: &mut std::collections::HashSet<&'static str>) {
+            match ty {
+                sla_ast::Type::UserDefined(u) => {
+                    let fam = match u.name.as_str() {
+                        "Vec" => Some("vec"),
+                        "GrowVec" => Some("growvec"),
+                        "VecDeque" => Some("vec_deque"),
+                        "HashMap" => Some("hashmap"),
+                        "BTreeMap" => Some("btreemap"),
+                        "HashSet" => Some("hashset"),
+                        "BTreeSet" => Some("btreeset"),
+                        "Cell" => Some("cell"),
+                        "RefCell" => Some("refcell"),
+                        "Box" => Some("box"),
+                        "Rc" | "Arc" => Some("rc"),
+                        "AtomicI32" | "AtomicUsize" | "AtomicPtr" => Some("atomic"),
+                        "Option" => Some("option"),
+                        "Result" => Some("result"),
+                        "Sender" | "Receiver" => Some("mpsc"),
+                        "ManuallyDrop" => Some("mem"),
+                        "Ordering" => Some("cmp"),
+                        _ => None,
                     };
-                    if let Some(fam) = family {
-                        *hit = Some(fam);
+                    if let Some(f) = fam {
+                        out.insert(f);
                     }
-                    for a in &call.args {
-                        walk(a, hit);
-                    }
-                }
-                Node::Identifier(name) if name == "None" => {
-                    *hit = Some("option");
-                }
-                Node::LetStmt(l) => walk(&l.value, hit),
-                Node::LetElseStmt(l) => {
-                    walk(&l.value, hit);
-                }
-                Node::ConstStmt(c) => walk(&c.value, hit),
-                Node::AssignStmt(a) => {
-                    walk(&a.target, hit);
-                    walk(&a.value, hit);
-                }
-                Node::ExprStmt(e) => walk(e, hit),
-                Node::ReturnStmt(r) => {
-                    if let Some(v) = &r.value {
-                        walk(v, hit);
+                    for g in &u.generics {
+                        type_families(g, out);
                     }
                 }
-                Node::BlockStmt(b) => {
-                    for s in &b.body {
-                        walk(s, hit);
+                sla_ast::Type::Borrow(inner) | sla_ast::Type::Pointer(inner) => {
+                    type_families(inner, out)
+                }
+                sla_ast::Type::Array(arr) => type_families(&arr.elem, out),
+                sla_ast::Type::Tuple(tup) => {
+                    for e in &tup.elems {
+                        type_families(e, out);
                     }
                 }
-                Node::WhileStmt(w) => {
-                    walk(&w.cond, hit);
-                    for s in &w.body {
-                        walk(s, hit);
+                sla_ast::Type::Future(inner) => type_families(inner, out),
+                sla_ast::Type::Closure(sig) => {
+                    for p in &sig.params {
+                        type_families(p, out);
                     }
+                    type_families(&sig.ret, out);
                 }
-                Node::ForStmt(f) => {
-                    walk(&f.start, hit);
-                    if let Some(e) = &f.end {
-                        walk(e, hit);
+                sla_ast::Type::FnPtr(sig) => {
+                    for p in &sig.params {
+                        type_families(p, out);
                     }
-                    for s in &f.body {
-                        walk(s, hit);
-                    }
-                }
-                Node::BinaryExpr(b) => {
-                    walk(&b.left, hit);
-                    walk(&b.right, hit);
-                }
-                Node::IfExpr(i) => {
-                    walk(&i.cond, hit);
-                    for s in &i.then_block {
-                        walk(s, hit);
-                    }
-                    if let Some(e) = &i.else_block {
-                        for s in e {
-                            walk(s, hit);
-                        }
-                    }
-                }
-                Node::BorrowExpr(b) => walk(&b.expr, hit),
-                Node::MoveExpr(m) => walk(&m.expr, hit),
-                Node::DerefExpr(d) => walk(&d.expr, hit),
-                Node::CastExpr(c) => walk(&c.expr, hit),
-                Node::FieldExpr(f) => walk(&f.expr, hit),
-                Node::IndexExpr(i) => {
-                    walk(&i.target, hit);
-                    walk(&i.index, hit);
+                    type_families(&sig.ret, out);
                 }
                 _ => {}
             }
         }
-        let mut hit: Option<&'static str> = None;
-        walk(program, &mut hit);
-        if let Some(family) = hit {
-            let import = MACRO_FAMILIES
-                .iter()
-                .find(|(name, _)| *name == family)
-                .map(|(_, imp)| *imp)
-                .unwrap_or("");
+        fn walk(
+            check: &dyn sla_lowering::CheckInfo,
+            node: &Node,
+            out: &mut std::collections::HashSet<&'static str>,
+        ) {
+            if let Some(ty) = check.expr_type(node) {
+                type_families(&ty, out);
+            }
+            match node {
+                Node::Program(p) => {
+                    for d in &p.decls {
+                        walk(check, d, out);
+                    }
+                }
+                Node::FuncDecl(f) => {
+                    if f.is_async {
+                        out.insert("async");
+                    }
+                    for param in &f.params {
+                        type_families(&param.ty, out);
+                    }
+                    type_families(&f.ret_ty, out);
+                    for s in &f.body {
+                        walk(check, s, out);
+                    }
+                }
+                Node::TestDecl(t) => {
+                    for s in &t.body {
+                        walk(check, s, out);
+                    }
+                }
+                Node::StructDecl(sd) => {
+                    for field in &sd.fields {
+                        type_families(&field.ty, out);
+                    }
+                }
+                Node::CallExpr(call) => {
+                    if let Some(target) = &call.associated_target {
+                        let leaf = target.rsplit("::").next().unwrap_or(target);
+                        match leaf {
+                            "Cell" => {
+                                out.insert("cell");
+                            }
+                            "AtomicI32" | "AtomicUsize" | "AtomicPtr" => {
+                                out.insert("atomic");
+                            }
+                            "Box" => {
+                                out.insert("box");
+                            }
+                            "Rc" | "Arc" => {
+                                out.insert("rc");
+                            }
+                            "RefCell" => {
+                                out.insert("refcell");
+                            }
+                            "Vec" => {
+                                out.insert("vec");
+                            }
+                            "GrowVec" => {
+                                out.insert("growvec");
+                            }
+                            "VecDeque" => {
+                                out.insert("vec_deque");
+                            }
+                            "HashMap" => {
+                                out.insert("hashmap");
+                            }
+                            "BTreeMap" => {
+                                out.insert("btreemap");
+                            }
+                            "HashSet" => {
+                                out.insert("hashset");
+                            }
+                            "BTreeSet" => {
+                                out.insert("btreeset");
+                            }
+                            "thread" => {
+                                out.insert("async");
+                            }
+                            "mpsc" => {
+                                out.insert("mpsc");
+                            }
+                            "cmp" => {
+                                out.insert("cmp");
+                            }
+                            _ => {}
+                        }
+                    }
+                    match call.func_name.as_str() {
+                        "Some" | "None" => {
+                            out.insert("option");
+                        }
+                        "Ok" | "Err" => {
+                            out.insert("result");
+                        }
+                        "vec" => {
+                            out.insert("vec");
+                        }
+                        "iter" | "into_iter" => {
+                            out.insert("iter");
+                        }
+                        _ => {}
+                    }
+                    if let Some(callee) = &call.callee {
+                        walk(check, callee, out);
+                    }
+                    for a in &call.args {
+                        walk(check, a, out);
+                    }
+                }
+                Node::Identifier(name) if name == "None" => {
+                    out.insert("option");
+                }
+                Node::LetStmt(l) => {
+                    if let Some(ty) = &l.ty {
+                        type_families(ty, out);
+                    }
+                    walk(check, &l.value, out);
+                }
+                Node::LetElseStmt(l) => walk(check, &l.value, out),
+                Node::VarStmt(v) => type_families(&v.ty, out),
+                Node::ConstStmt(c) => walk(check, &c.value, out),
+                Node::AssignStmt(a) => {
+                    walk(check, &a.target, out);
+                    walk(check, &a.value, out);
+                }
+                Node::ExprStmt(e) => walk(check, e, out),
+                Node::ReturnStmt(r) => {
+                    if let Some(v) = &r.value {
+                        walk(check, v, out);
+                    }
+                }
+                Node::BlockStmt(b) => {
+                    for s in &b.body {
+                        walk(check, s, out);
+                    }
+                }
+                Node::WhileStmt(w) => {
+                    walk(check, &w.cond, out);
+                    for s in &w.body {
+                        walk(check, s, out);
+                    }
+                }
+                Node::ForStmt(f) => {
+                    walk(check, &f.start, out);
+                    if let Some(e) = &f.end {
+                        walk(check, e, out);
+                    }
+                    for s in &f.body {
+                        walk(check, s, out);
+                    }
+                }
+                Node::BinaryExpr(b) => {
+                    walk(check, &b.left, out);
+                    walk(check, &b.right, out);
+                }
+                Node::IfExpr(i) => {
+                    walk(check, &i.cond, out);
+                    for s in &i.then_block {
+                        walk(check, s, out);
+                    }
+                    if let Some(e) = &i.else_block {
+                        for s in e {
+                            walk(check, s, out);
+                        }
+                    }
+                }
+                Node::BorrowExpr(b) => walk(check, &b.expr, out),
+                Node::MoveExpr(m) => walk(check, &m.expr, out),
+                Node::DerefExpr(d) => walk(check, &d.expr, out),
+                Node::CastExpr(c) => {
+                    type_families(&c.ty, out);
+                    walk(check, &c.expr, out);
+                }
+                Node::FieldExpr(f) => walk(check, &f.expr, out),
+                Node::IndexExpr(i) => {
+                    walk(check, &i.target, out);
+                    walk(check, &i.index, out);
+                }
+                Node::SliceExpr(sl) => {
+                    walk(check, &sl.target, out);
+                    walk(check, &sl.start, out);
+                    walk(check, &sl.end, out);
+                }
+                Node::ClosureLiteral(c) => walk(check, &c.body, out),
+                Node::AwaitExpr(a) => walk(check, &a.expr, out),
+                Node::TryExpr(t) => walk(check, &t.expr, out),
+                Node::StructLiteral(l) => {
+                    for f in &l.fields {
+                        walk(check, &f.value, out);
+                    }
+                }
+                Node::EnumLiteral(l) => {
+                    for f in &l.fields {
+                        walk(check, &f.value, out);
+                    }
+                }
+                Node::TupleLiteral(l) => {
+                    for e in &l.elements {
+                        walk(check, e, out);
+                    }
+                }
+                Node::ArrayLiteral(l) => {
+                    for e in &l.elements {
+                        walk(check, e, out);
+                    }
+                }
+                Node::SwitchExpr(sw) => {
+                    walk(check, &sw.val, out);
+                    for case in &sw.cases {
+                        walk(check, &case.pattern, out);
+                        for s in &case.body {
+                            walk(check, s, out);
+                        }
+                    }
+                }
+                Node::MatchExpr(m) => {
+                    walk(check, &m.val, out);
+                    for case in &m.cases {
+                        if let Some(g) = &case.guard {
+                            walk(check, g, out);
+                        }
+                        for s in &case.body {
+                            walk(check, s, out);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut families: std::collections::HashSet<&'static str> = Default::default();
+        walk(self.check, program, &mut families);
+        if families.contains("async") {
             return unsupported(
-                match family {
-                    "option" => "program needs option macros",
-                    "result" => "program needs result macros",
-                    "vec" => "program needs vec macros",
-                    "cell" => "program needs cell macros",
-                    "atomic" => "program needs atomic macros",
-                    "box" => "program needs box macros",
-                    "rc" => "program needs rc macros",
-                    "async" => "program needs async/thread macros",
-                    _ => "program needs macro family imports",
-                },
-                if import.is_empty() {
-                    "codegen.zig:7060-7130 (programNeeds*Macros)"
-                } else {
-                    "codegen.zig:7060-7130 (programNeeds*Macros)"
-                },
+                "program needs async/thread macros",
+                "codegen.zig:7060-7130 (programNeeds*Macros)",
             );
+        }
+        for (name, import) in MACRO_FAMILIES {
+            if families.contains(name) {
+                self.wl(&format!("@import \"{import}\""));
+            }
+        }
+        if families.contains("hashmap") {
+            self.w(crate::family_macros::HASHMAP_HELPER_MACROS);
+        }
+        if families.contains("btreemap") {
+            self.w(crate::family_macros::BTREEMAP_HELPER_MACROS);
         }
         Ok(())
     }
