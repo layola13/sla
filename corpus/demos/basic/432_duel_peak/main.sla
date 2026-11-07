@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 峰值双实现对峙（循环 vs 递归：27 皆得 9232）。
+// 意对标 411 数位和对峙的冰雹版（429 互补）。
+
+fn peak_loop(n: int) -> int {
+    let m = n;
+    let peak = n;
+    while m != 1 {
+        if m % 2 == 0 { m = m / 2; } else { m = 3 * m + 1; };
+        if m > peak { peak = m; };
+    }
+    return peak;
+}
+
+fn peak_rec_top(n: int) -> int {
+    return peak_rec_trace(n, n);
+}
+
+fn peak_rec_trace(n: int, peak: int) -> int {
+    if n == 1 { return peak; };
+    let m = n;
+    if m % 2 == 0 { m = m / 2; } else { m = 3 * m + 1; };
+    if m > peak { peak = m; };
+    return peak_rec_trace(m, peak);
+}
+
+fn main() -> i32 {
+    println("{},{}", peak_loop(27), peak_rec_top(27));
+    return 0;
+}
+
+@test "basic 432 duel peak"() {
+    if peak_loop(27) != 9232 { panic(43201); };
+    if peak_rec_top(27) != 9232 { panic(43202); };
+    if peak_loop(27) != peak_rec_top(27) { panic(43203); };
+    if peak_loop(7) != 52 { panic(43204); };
+}

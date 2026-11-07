@@ -1,0 +1,13 @@
+@import "sa_std/core/cell.sa"
+
+@test "cell bool get and set"() {
+    let flag = Cell::new(false);
+    if flag.get() != false {
+        panic(1);
+    };
+
+    flag.set(true);
+    if flag.get() != true {
+        panic(2);
+    };
+}

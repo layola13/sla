@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn inline_assembly_value() -> i32 {
+    let value: i32 = 7;
+    unsafe {
+        asm!("/* native escape */", inout("eax") value);
+    };
+    return value;
+}
+
+fn main() -> i32 {
+    let result = inline_assembly_value();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 117 117_inline_assembly"() {
+    let got = inline_assembly_value();
+    if got != 7 {
+        panic(117);
+    };
+}

@@ -1,0 +1,55 @@
+@import "sa_std/core/trait_object.sa"
+
+// DEF-SAB-BORROW-RESIDUAL regression: a method's `&self` param is
+// recorded by the parser as the bare Self type with is_borrow set,
+// not as a .borrow type, so the SAB object-pointer provenance marking
+// for borrow params never fired for self. Field reads/writes through
+// self in a method body emitted the cell through-load and
+// dereferenced the object's first word as a pointer (signal 11).
+// Plain functions with &Struct params were already covered by
+// DEF-SAB-BORROW-WRITE; method receivers were not.
+
+trait Probe {
+    fn probe_get(&self) -> i32;
+}
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn get(&self) -> i32 {
+        return self.n;
+    }
+    fn set(&self, v: i32) {
+        self.n = v;
+    }
+}
+
+impl Probe for Counter {
+    fn probe_get(&self) -> i32 {
+        return self.n + 1;
+    }
+}
+
+@test "inherent method borrow self field read"() {
+    let c = Counter { n: 37 };
+    if c.get() != 37 {
+        panic(45101);
+    };
+}
+
+@test "inherent method borrow self field write"() {
+    let c = Counter { n: 37 };
+    c.set(41);
+    if c.n != 41 {
+        panic(45102);
+    };
+}
+
+@test "trait method borrow self field read direct call"() {
+    let c = Counter { n: 37 };
+    if c.probe_get() != 38 {
+        panic(45103);
+    };
+}

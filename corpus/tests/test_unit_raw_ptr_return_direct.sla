@@ -1,0 +1,16 @@
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+
+fn raw_ptr_return_literal() -> ptr {
+    return STR_PTR("ok");
+}
+
+fn raw_ptr_forward(value: ptr) -> ptr {
+    return value;
+}
+
+@test "raw ptr survives custom function return"() {
+    let data = raw_ptr_forward(raw_ptr_return_literal());
+    if PTR_READ_U8(data) != 111 { panic(43101); };
+    if PTR_READ_U8(PTR_BYTE_ADD(data, 1)) != 107 { panic(43102); };
+}

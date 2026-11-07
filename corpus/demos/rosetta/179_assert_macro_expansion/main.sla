@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+fn assert_macro_result() -> i32 { if 1 + 1 != 2 { panic(179); }; return 2; }
+fn main() -> i32 {
+    if 1 + 1 != 2 { panic(179); };
+    let result = 2;
+    println("{}", result);
+    return result;
+}
+@test "rosetta 179 179_assert_macro_expansion"() { let got = assert_macro_result(); if got != 2 { panic(179); }; }

@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 互素对判定（gcd==1 即互素）。
+// 意对标 336 欧拉函数计数的判定版（336 为计数版，本例为成对判定版）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn is_coprime(a: int, b: int) -> int {
+    if gcd(a, b) == 1 { return 1; };
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", is_coprime(8, 9), is_coprime(6, 8), is_coprime(15, 28));
+    return 0;
+}
+
+@test "basic 346 coprime pairs"() {
+    if is_coprime(8, 9) != 1 { panic(34601); };
+    if is_coprime(6, 8) != 0 { panic(34602); };
+    if is_coprime(15, 28) != 1 { panic(34603); };
+    if gcd(6, 8) != 2 { panic(34604); };
+}

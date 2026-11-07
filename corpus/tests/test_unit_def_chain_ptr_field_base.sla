@@ -1,0 +1,122 @@
+// DEF-CHAIN regression corpus: field access whose base expression
+// has raw-pointer type (a pointer-typed field, a raw-pointer local,
+// a call result) read/wrote through the pointer value's CELL HANDLE
+// instead of loading the object pointer out of the cell first —
+// `(*a).b.c`, `a.b.c` on a value root, and `p.c` on a raw-pointer
+// local all landed one indirection short (the cell's first bytes,
+// or a wild address), while the explicit-deref form `(*p).c` and
+// value-typed field chains were correct. Both backends shared the
+// shape (SA-text genExpr/genStmt/genFieldAddress, SAB
+// genField/genFieldAddress). Tests marked GUARD passed before the
+// fix as well; every other test fails on the pre-fix compiler.
+@import "sa_std/io/print.sai"
+@import "sa_std/core/box.sa"
+@import "sa_std/string.sa"
+
+struct ChainInner {
+    flag: bool,
+    n: u64,
+}
+
+struct ChainOuter {
+    inner: *ChainInner,
+    other: u64,
+}
+
+struct ChainOuter2 {
+    next: *ChainOuter,
+    other: u64,
+}
+
+struct ChainMid {
+    inner: ChainInner,
+    tag: u64,
+}
+
+struct ChainOuterV {
+    mid: ChainMid,
+    other: u64,
+}
+
+struct ChainInnerStr {
+    s: String,
+    n: u64,
+}
+
+struct ChainOuterStr {
+    inner: *ChainInnerStr,
+    other: u64,
+}
+
+fn chain_mk_inner() -> *ChainInner {
+    return Box::into_raw(Box::new(ChainInner { flag: false, n: 7 }));
+}
+
+fn chain_mk_str(s: String) -> String {
+    return s;
+}
+
+@test "def_chain chained deref bool read"() {
+    let inner = chain_mk_inner();
+    let outer = Box::into_raw(Box::new(ChainOuter { inner: inner, other: 1 }));
+    if (*outer).inner.flag { panic(45101); };
+}
+
+@test "def_chain chained deref u64 read"() {
+    let inner = chain_mk_inner();
+    let outer = Box::into_raw(Box::new(ChainOuter { inner: inner, other: 1 }));
+    if (*outer).inner.n != 7 { panic(45102); };
+}
+
+@test "def_chain pointer local auto deref read"() {
+    let p = chain_mk_inner();
+    if p.flag { panic(45103); };
+    if p.n != 7 { panic(45104); };
+}
+
+@test "def_chain value root pointer field read"() {
+    let inner = chain_mk_inner();
+    let o2 = ChainOuter { inner: inner, other: 1 };
+    if o2.inner.flag { panic(45105); };
+    if o2.inner.n != 7 { panic(45106); };
+}
+
+@test "def_chain three level chain read"() {
+    let inner = chain_mk_inner();
+    let outer = Box::into_raw(Box::new(ChainOuter { inner: inner, other: 1 }));
+    let outer2 = Box::into_raw(Box::new(ChainOuter2 { next: outer, other: 1 }));
+    if (*outer2).next.inner.flag { panic(45107); };
+    if (*outer2).next.inner.n != 7 { panic(45108); };
+}
+
+@test "def_chain chained write lands in pointee"() {
+    let inner = chain_mk_inner();
+    let outer = Box::into_raw(Box::new(ChainOuter { inner: inner, other: 1 }));
+    unsafe { (*outer).inner.flag = true; };
+    unsafe { (*outer).inner.n = 42; };
+    let bound: *ChainInner = (*outer).inner;
+    if !(*bound).flag { panic(45109); };
+    if (*bound).n != 42 { panic(45110); };
+    unsafe { (*bound).flag = false; };
+    if (*outer).inner.flag { panic(45111); };
+}
+
+@test "def_chain string field chain read"() {
+    let inner = Box::into_raw(Box::new(ChainInnerStr { s: chain_mk_str("hello"), n: 9 }));
+    let outer = Box::into_raw(Box::new(ChainOuterStr { inner: inner, other: 1 }));
+    if (*outer).inner.n != 9 { panic(45112); };
+    let sv: String = (*outer).inner.s;
+    if !str_eq(sv, "hello") { panic(45113); };
+}
+
+@test "def_chain explicit deref read GUARD"() {
+    let p = chain_mk_inner();
+    if (*p).flag { panic(45114); };
+    if (*p).n != 7 { panic(45115); };
+}
+
+@test "def_chain value middle chain read GUARD"() {
+    let ov = Box::into_raw(Box::new(ChainOuterV { mid: ChainMid { inner: ChainInner { flag: false, n: 7 }, tag: 3 }, other: 1 }));
+    if (*ov).mid.inner.flag { panic(45116); };
+    if (*ov).mid.tag != 3 { panic(45117); };
+}

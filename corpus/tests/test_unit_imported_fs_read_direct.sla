@@ -1,0 +1,14 @@
+@import "sa_std/string.sa"
+@import "sa_std/fs.sa"
+@import "import_fixtures/pkgjson/fs_helpers.sa"
+
+fn imported_fs_read_missing(path_ptr: ptr, path_len: int) -> int {
+    let buf = SLA_FS_READ_TO_STRING(path_ptr, path_len, 16);
+    let len = SLA_FS_BUFFER_LEN(buf);
+    return len;
+}
+
+@test "imported fs read direct sab"() {
+    let got = imported_fs_read_missing("/tmp/does-not-exist-package.json", 32);
+    if got != 0 { panic(39031); };
+}

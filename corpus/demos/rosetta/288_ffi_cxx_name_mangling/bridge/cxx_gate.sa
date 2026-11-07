@@ -1,0 +1,13 @@
+@import "bridge/cxx_gate.sal"
+@import "bridge/../ffi/cxx_name.sai"
+
+@ffi_wrapper cxx_name_gate(*probe: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow probe
+    tag = load view+CxxProbe_tag as i32
+    suffix = load view+CxxProbe_suffix as i32
+    result = add tag, suffix
+    !suffix
+    !tag
+    !view
+    return result

@@ -1,0 +1,14 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 864_top_iife_nest：嵌套直接调用（((x)=>((y)=>x+y)(10))(5)=15）。
+// 非捕获嵌套字面量双后端正常（#13 口径）；捕获型直接调用见缺口 #26。
+
+fn main() -> i32 {
+    println("{}", (|x: int| (|y: int| x + y)(10))(5));
+    return 0;
+}
+
+@test "basic 206 iife nest"() {
+    if (|x: int| (|y: int| x + y)(10))(5) != 15 { panic(20601); };
+}

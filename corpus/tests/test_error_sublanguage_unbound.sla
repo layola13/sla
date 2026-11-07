@@ -1,0 +1,11 @@
+// expect: SublanguageNotBound
+// J-1 negative: registering a declaration kind the plugin has no
+// sub-parser for is SublanguageNotBound, not a silent no-op.
+// Judged by standalone `sla check` (see plugin_tests.zig
+// registration).
+
+@sublanguage capsule;
+
+fn f() -> i64 {
+    return 0;
+}

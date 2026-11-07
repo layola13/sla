@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/btree_map.sa"
+@import "sa_std/core/option.sa"
+
+// 对标 tsgosa 132_map_count 的 BTree 版（1,2,0）。
+// basic 此前只有 HashMap 覆盖（101/102/105）与 fixture（`btree_get_chain`），
+// 此处为首个 BTreeMap 端到端 demo：插入 + 取值 + 表长 + 缺键取零
+//（`get().copied().unwrap_or_default()` 口径见 #14）。
+
+fn main() -> i32 {
+    let m = BTreeMap::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+    let ga = m.get("a").copied().unwrap_or_default();
+    let gz = m.get("z").copied().unwrap_or_default();
+    println("{},{},{}", ga, len(m), gz);
+    return 0;
+}
+
+@test "basic 191 btree basic"() {
+    let m = BTreeMap::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+    if m.get("a").copied().unwrap_or_default() != 1 { panic(19101); };
+    if m.get("b").copied().unwrap_or_default() != 2 { panic(19102); };
+    if len(m) != 2 { panic(19103); };
+    if m.get("z").copied().unwrap_or_default() != 0 { panic(19104); };
+}

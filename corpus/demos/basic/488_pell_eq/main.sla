@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Pell 方程基本解（x²-Dy²=1：D=2→(3,2)，D=5→(9,4)）。
+// 意对标 329 求根应用的丢番图版（329 互补；494 做对峙）。
+
+fn is_square(n: int) -> int {
+    let y = 1;
+    while y * y < n {
+        y = y + 1;
+    }
+    if y * y == n { return y; };
+    return 0;
+}
+
+fn pell_fund(d: int) -> int {
+    let x = 2;
+    while x <= 1000 {
+        let t = x * x - 1;
+        if t % d == 0 {
+            let q = t / d;
+            let y = is_square(q);
+            if y != 0 { return x * 100 + y; };
+        };
+        x = x + 1;
+    }
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", pell_fund(2), pell_fund(3), pell_fund(5));
+    return 0;
+}
+
+@test "basic 488 pell eq"() {
+    if pell_fund(2) != 302 { panic(48801); };
+    if pell_fund(3) != 201 { panic(48802); };
+    if pell_fund(5) != 904 { panic(48803); };
+}

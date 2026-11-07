@@ -1,0 +1,7 @@
+@import "workspace/members/app/helpers/index.sa"
+
+@app_package_value(shared: i32) -> i32:
+L_ENTRY:
+    value = call @app_helper_value(shared)
+    !shared
+    return value

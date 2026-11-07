@@ -1,0 +1,34 @@
+@import "sa_std/vec.sa"
+
+struct QueueState {
+    values: Vec<i32>,
+    states: Vec<i64>,
+}
+
+fn queue_state_new() -> QueueState {
+    let values: Vec<i32> = Vec::new();
+    let states: Vec<i64> = Vec::new();
+    values.push(0);
+    states.push(0);
+    return QueueState { values: values, states: states };
+}
+
+fn queue_state_len(queue: QueueState) -> i64 {
+    return len(queue.states) as i64;
+}
+
+fn queue_state_complete_pending(queue: QueueState, index: i64) -> QueueState {
+    if index < 0 { return queue; };
+    if index >= queue_state_len(queue) { return queue; };
+    if queue.states[index] == 0 {
+        queue.values[index] = 9;
+        queue.states[index] = 1;
+    };
+    return queue;
+}
+
+@test "direct sab preserves vec aggregate across read-only value call"() {
+    let got = queue_state_complete_pending(queue_state_new(), 0);
+    if got.values[0] != 9 { panic(44301); };
+    if got.states[0] != 1 { panic(44302); };
+}

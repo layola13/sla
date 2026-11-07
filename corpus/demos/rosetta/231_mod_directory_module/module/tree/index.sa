@@ -1,0 +1,8 @@
+@import "module/tree/leaf.sa"
+
+@export module_tree_value() -> i32:
+L_ENTRY:
+    leaf = call @module_leaf_value()
+    value = add leaf, 200
+    !leaf
+    return value

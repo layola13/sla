@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 五边形数定理高位延伸（p(8..10)=22,30,42；528 的高位延续，543 做 DP 对峙）。
+// 意对标 528 pent（低位版互补）。
+
+fn pent_part(n: int) -> int {
+    let p: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        p.push(0);
+        i = i + 1;
+    }
+    p[0] = 1;
+    let m = 1;
+    while m <= n {
+        let acc = 0;
+        let k = 1;
+        while k * (3 * k - 1) / 2 <= m {
+            let g1 = k * (3 * k - 1) / 2;
+            let g2 = k * (3 * k + 1) / 2;
+            let sgn = 0 - 1;
+            if k % 2 == 1 { sgn = 1; };
+            acc = acc + sgn * p[m - g1];
+            if g2 <= m { acc = acc + sgn * p[m - g2]; };
+            k = k + 1;
+        }
+        p[m] = acc;
+        m = m + 1;
+    }
+    return p[n];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", pent_part(8), pent_part(9), pent_part(10));
+    return 0;
+}
+
+@test "basic 542 pentx"() {
+    if pent_part(8) != 22 { panic(54201); };
+    if pent_part(9) != 30 { panic(54202); };
+    if pent_part(10) != 42 { panic(54203); };
+}

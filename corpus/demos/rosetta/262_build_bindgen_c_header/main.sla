@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_bindgen_declarations() -> i32 { let type_decl = 1; let function_decl = 1; return type_decl + function_decl; }
+fn main() -> i32 { let type_decl = 1; let function_decl = 1; let result = type_decl + function_decl; println("{}", result); return result; }
+@test "rosetta 262 build bindgen c header"() { let got = build_bindgen_declarations(); if got != 2 { panic(262); }; }

@@ -1,0 +1,17 @@
+@import "sa_std/core/box.sa"
+
+struct GoDiagBorrowBox {
+    r: &u64,
+}
+
+fn go_diag_borrow_worker(b: *GoDiagBorrowBox) {
+}
+
+fn go_diag_borrow_main() -> i32 {
+    let cell: u64 = 0;
+    let bb = GoDiagBorrowBox { r: &cell };
+    let boxed = Box::new(bb);
+    let raw = Box::into_raw(boxed);
+    let h = go go_diag_borrow_worker(raw);
+    return 0;
+}

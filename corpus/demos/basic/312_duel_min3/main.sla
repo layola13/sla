@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 分支链 vs 嵌套三元三元最小对峙（134×185：1=1，另断言全等）。
+// 双实现一致性锁定（134 为双元分支，185 为嵌套三元）。
+
+fn min3_chain(a: int, b: int, c: int) -> int {
+    if a < b {
+        if a < c { return a; };
+        return c;
+    };
+    if b < c { return b; };
+    return c;
+}
+
+fn min3_tern(a: int, b: int, c: int) -> int {
+    return if a < b { if a < c { a } else { c } } else { if b < c { b } else { c } };
+}
+
+fn main() -> i32 {
+    println("{}", min3_chain(3, 1, 2));
+    return 0;
+}
+
+@test "basic 312 duel min3"() {
+    if min3_chain(3, 1, 2) != min3_tern(3, 1, 2) { panic(31201); };
+    if min3_tern(3, 1, 2) != 1 { panic(31202); };
+    if min3_chain(5, 5, 5) != min3_tern(5, 5, 5) { panic(31203); };
+}

@@ -1,0 +1,3 @@
+pre-compile hook
+prepare source metadata
+emit generated/precompile.sa

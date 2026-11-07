@@ -1,0 +1,49 @@
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_score_math__add_bonus = vtable { call = @sla__score_math__add_bonus }
+@const SLA_FNPTR_VT_score_math__double = vtable { call = @sla__score_math__double }
+@sla__score_math__add_bonus(value: i32, bonus: i32) -> i32:
+L_ENTRY:
+    tmp_0 = add value, bonus
+    return tmp_0
+
+@sla__score_math__double(value: i32) -> i32:
+L_ENTRY:
+    tmp_1 = add value, value
+    return tmp_1
+
+@test "using module turns functions into chainable calls"():
+L_TEST_ENTRY_0:
+    tmp_2 = 10
+    base = tmp_2
+    tmp_3 = 5
+    tmp_4 = call @sla__score_math__add_bonus(base, tmp_3)
+    !tmp_3
+    tmp_5 = call @sla__score_math__double(tmp_4)
+    !tmp_4
+    score = tmp_5
+    tmp_6 = 30
+    tmp_7 = ne score, tmp_6
+    !tmp_6
+    br tmp_7 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_7
+    panic(34000)
+
+L_ELSE_2:
+    !tmp_7
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !score
+    !base
+    return
+

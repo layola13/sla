@@ -1,0 +1,333 @@
+@import "sa_std/icmp.sla"
+@import "sa_std/vec.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/status.sla"
+
+// reg-shard1 coverage: SAB registry declared entries from
+// sa_std/icmp.sla (17): icmp_slice_len / icmp_slice_byte /
+// icmp_slice_copy / icmp_checksum_bytes / icmp_checksum_vec /
+// icmp_build_echo / icmp_build_echo_request / icmp_build_echo_reply /
+// icmp_parse_message / icmp_parse_ipv4_packet /
+// icmp_echo_session_new / icmp_echo_session_build_request /
+// icmp_echo_reply_matches / icmp_echo_session_matches /
+// icmp_empty_message / icmp_ping_outcome / icmp_ping.
+// Checksum vectors are the RFC 1071 worked example (0x220d) plus
+// odd-length and empty edges. icmp_ping's network success path is
+// environment-gated, so it is pinned by (a) its deterministic
+// host-length guard and (b) an outcome-coherence test on loopback
+// whose observed branch is recorded in RESULT.md.
+
+fn reg1_abcd() -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    v.push(97);
+    v.push(98);
+    v.push(99);
+    v.push(100);
+    return v;
+}
+
+fn reg1_wrap_v4(first: u8, proto: u8, pkt: Vec<u8>) -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    out.push(first);
+    out.push(0);
+    let total: u64 = 20 + (len(pkt) as u64);
+    out.push(((total >> 8) & 255) as u8);
+    out.push((total & 255) as u8);
+    out.push(0);
+    out.push(0);
+    out.push(0);
+    out.push(0);
+    out.push(64);
+    out.push(proto);
+    out.push(0);
+    out.push(0);
+    out.push(127);
+    out.push(0);
+    out.push(0);
+    out.push(1);
+    out.push(127);
+    out.push(0);
+    out.push(0);
+    out.push(1);
+    let n: u64 = len(pkt) as u64;
+    let i: u64 = 0;
+    while i < n {
+        out.push(pkt[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+@test "reg1 icmp slice helpers"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    v.push(40);
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    if icmp_slice_len(&sl) != 4 { panic(61401); };
+    if icmp_slice_byte(&sl, 0) != 10 { panic(61402); };
+    if icmp_slice_byte(&sl, 2) != 30 { panic(61403); };
+    if icmp_slice_byte(&sl, 3) != 40 { panic(61404); };
+    let mid = icmp_slice_copy(&sl, 1, 3);
+    if len(mid) != 2 { panic(61405); };
+    if mid[0] != 20 { panic(61406); };
+    if mid[1] != 30 { panic(61407); };
+    let none = icmp_slice_copy(&sl, 2, 2);
+    if len(none) != 0 { panic(61408); };
+    let all = icmp_slice_copy(&sl, 0, 4);
+    if len(all) != 4 { panic(61409); };
+    if all[3] != 40 { panic(61410); };
+}
+
+@test "reg1 icmp checksum vectors"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(0);
+    v.push(1);
+    v.push(242);
+    v.push(3);
+    v.push(244);
+    v.push(245);
+    v.push(246);
+    v.push(247);
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    if icmp_checksum_bytes(&sl) != 8717 { panic(61411); };
+    if icmp_checksum_vec(&v) != 8717 { panic(61412); };
+    let odd: Vec<u8> = Vec::new();
+    odd.push(1);
+    let osl: Slice<u8> = VEC_AS_SLICE(odd);
+    if icmp_checksum_bytes(&osl) != 65279 { panic(61413); };
+    let empty: Vec<u8> = Vec::new();
+    let esl: Slice<u8> = VEC_AS_SLICE(empty);
+    if icmp_checksum_bytes(&esl) != 65535 { panic(61414); };
+    if icmp_checksum_vec(&empty) != 65535 { panic(61415); };
+}
+
+@test "reg1 icmp build echo bytes"() {
+    let req = icmp_build_echo_request(4660, 1, reg1_abcd());
+    if len(req) != 12 { panic(61421); };
+    if req[0] != 8 { panic(61422); };
+    if req[1] != 0 { panic(61423); };
+    if req[4] != 18 { panic(61424); };
+    if req[5] != 52 { panic(61425); };
+    if req[6] != 0 { panic(61426); };
+    if req[7] != 1 { panic(61427); };
+    if req[8] != 97 { panic(61428); };
+    if req[11] != 100 { panic(61429); };
+    if icmp_checksum_vec(&req) != 0 { panic(61430); };
+    let rep = icmp_build_echo_reply(4660, 1, reg1_abcd());
+    if rep[0] != 0 { panic(61431); };
+    if icmp_checksum_vec(&rep) != 0 { panic(61432); };
+    let gen = icmp_build_echo(3, 255, 515, reg1_abcd());
+    if gen[0] != 3 { panic(61433); };
+    if gen[4] != 0 { panic(61434); };
+    if gen[5] != 255 { panic(61435); };
+    if gen[6] != 2 { panic(61436); };
+    if gen[7] != 3 { panic(61437); };
+    if icmp_checksum_vec(&gen) != 0 { panic(61438); };
+    let bare = icmp_build_echo_request(1, 1, Vec::new());
+    if len(bare) != 8 { panic(61439); };
+}
+
+@test "reg1 icmp parse message roundtrip"() {
+    let req = icmp_build_echo_request(4660, 7, reg1_abcd());
+    let r = icmp_parse_message(req);
+    match r {
+        Ok(m) => {
+            if m.message_type != 8 { panic(61441); };
+            if m.code != 0 { panic(61442); };
+            if m.identifier != 4660 { panic(61443); };
+            if m.sequence != 7 { panic(61444); };
+            if m.header_rest != 305397767 { panic(61445); };
+            if len(m.payload) != 4 { panic(61446); };
+            if m.payload[0] != 97 { panic(61447); };
+            if m.payload[3] != 100 { panic(61448); };
+        },
+        Err(e) => { panic(61440); },
+    };
+}
+
+@test "reg1 icmp parse message errors"() {
+    let short: Vec<u8> = Vec::new();
+    short.push(8);
+    short.push(0);
+    short.push(0);
+    short.push(0);
+    short.push(0);
+    let r1 = icmp_parse_message(short);
+    match r1 {
+        Ok(m) => { panic(61451); },
+        Err(e) => { if e != SA_STD_ERR_TRUNCATED { panic(61452); }; },
+    };
+    let good = icmp_build_echo_request(4660, 1, reg1_abcd());
+    let bad: Vec<u8> = Vec::new();
+    let n: u64 = len(good) as u64;
+    let i: u64 = 0;
+    while i < n {
+        if i == 8 {
+            bad.push(88);
+        } else {
+            bad.push(good[i]);
+        };
+        i = i + 1;
+    }
+    let r2 = icmp_parse_message(bad);
+    match r2 {
+        Ok(m) => { panic(61453); },
+        Err(e) => { if e != SA_STD_ERR_INVALID_ARGUMENT { panic(61454); }; },
+    };
+}
+
+@test "reg1 icmp parse ipv4 packet"() {
+    let payload: Vec<u8> = Vec::new();
+    payload.push(9);
+    payload.push(9);
+    let rep = icmp_build_echo_reply(8738, 3, payload);
+    let wrapped = reg1_wrap_v4(69, 1, rep);
+    let r = icmp_parse_ipv4_packet(wrapped);
+    match r {
+        Ok(m) => {
+            if m.message_type != 0 { panic(61461); };
+            if m.identifier != 8738 { panic(61462); };
+            if m.sequence != 3 { panic(61463); };
+            if len(m.payload) != 2 { panic(61464); };
+            if m.payload[1] != 9 { panic(61465); };
+        },
+        Err(e) => { panic(61460); },
+    };
+    let rep2 = icmp_build_echo_reply(8738, 3, Vec::new());
+    let wrong_proto = reg1_wrap_v4(69, 6, rep2);
+    let r2 = icmp_parse_ipv4_packet(wrong_proto);
+    match r2 {
+        Ok(m) => { panic(61466); },
+        Err(e) => { if e != SA_STD_ERR_INVALID_ARGUMENT { panic(61467); }; },
+    };
+    let rep3 = icmp_build_echo_reply(8738, 3, Vec::new());
+    let wrong_ver = reg1_wrap_v4(101, 1, rep3);
+    let r3 = icmp_parse_ipv4_packet(wrong_ver);
+    match r3 {
+        Ok(m) => { panic(61468); },
+        Err(e) => { if e != SA_STD_ERR_INVALID_ARGUMENT { panic(61469); }; },
+    };
+    let tiny: Vec<u8> = Vec::new();
+    tiny.push(69);
+    tiny.push(0);
+    tiny.push(0);
+    let r4 = icmp_parse_ipv4_packet(tiny);
+    match r4 {
+        Ok(m) => { panic(61470); },
+        Err(e) => { if e != SA_STD_ERR_TRUNCATED { panic(61471); }; },
+    };
+    let rep4 = icmp_build_echo_reply(8738, 3, Vec::new());
+    let bad_ihl = reg1_wrap_v4(68, 1, rep4);
+    let r5 = icmp_parse_ipv4_packet(bad_ihl);
+    match r5 {
+        Ok(m) => { panic(61472); },
+        Err(e) => { if e != SA_STD_ERR_INVALID_ARGUMENT { panic(61473); }; },
+    };
+}
+
+@test "reg1 icmp session bookkeeping and matching"() {
+    let s = icmp_echo_session_new(8738);
+    if s.identifier != 8738 { panic(61481); };
+    if s.next_sequence != 1 { panic(61482); };
+    let p1: Vec<u8> = Vec::new();
+    p1.push(55);
+    let b1 = icmp_echo_session_build_request(s, p1);
+    if b1.sequence != 1 { panic(61483); };
+    if b1.session.identifier != 8738 { panic(61484); };
+    if b1.session.next_sequence != 2 { panic(61485); };
+    if len(b1.packet) != 9 { panic(61486); };
+    if b1.packet[0] != 8 { panic(61487); };
+    let b2 = icmp_echo_session_build_request(b1.session, Vec::new());
+    if b2.sequence != 2 { panic(61488); };
+    if b2.session.next_sequence != 3 { panic(61489); };
+    let rep = icmp_build_echo_reply(8738, 1, Vec::new());
+    let r = icmp_parse_message(rep);
+    match r {
+        Ok(m) => {
+            if !icmp_echo_reply_matches(&m, 8738, 1) { panic(61490); };
+            if icmp_echo_reply_matches(&m, 8738, 2) { panic(61491); };
+            if icmp_echo_reply_matches(&m, 4660, 1) { panic(61492); };
+            let s2 = icmp_echo_session_new(8738);
+            if !icmp_echo_session_matches(&s2, &m) { panic(61493); };
+            let s3 = icmp_echo_session_new(4660);
+            if icmp_echo_session_matches(&s3, &m) { panic(61494); };
+        },
+        Err(e) => { panic(61495); },
+    };
+    let req = icmp_build_echo_request(8738, 1, Vec::new());
+    let rq = icmp_parse_message(req);
+    match rq {
+        Ok(m) => {
+            if icmp_echo_reply_matches(&m, 8738, 1) { panic(61496); };
+            let s4 = icmp_echo_session_new(8738);
+            if icmp_echo_session_matches(&s4, &m) { panic(61497); };
+        },
+        Err(e) => { panic(61498); },
+    };
+}
+
+@test "reg1 icmp empty message and ping outcome"() {
+    let m = icmp_empty_message();
+    if m.message_type != 0 { panic(61501); };
+    if m.code != 0 { panic(61502); };
+    if m.checksum != 0 { panic(61503); };
+    if m.header_rest != 0 { panic(61504); };
+    if m.identifier != 0 { panic(61505); };
+    if m.sequence != 0 { panic(61506); };
+    if len(m.payload) != 0 { panic(61507); };
+    let s = icmp_echo_session_new(4369);
+    let oc = icmp_ping_outcome(s, -77);
+    if oc.status != -77 { panic(61508); };
+    if oc.answered { panic(61509); };
+    if oc.rtt_ns != 0 { panic(61510); };
+    if oc.session.identifier != 4369 { panic(61511); };
+    if oc.session.next_sequence != 1 { panic(61512); };
+    if oc.reply.identifier != 0 { panic(61513); };
+    if len(oc.reply.payload) != 0 { panic(61514); };
+}
+
+@test "reg1 icmp ping host length guard"() {
+    let host: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < 513 {
+        host.push(97);
+        i = i + 1;
+    }
+    let s = icmp_echo_session_new(4369);
+    let oc = icmp_ping(s, host, Vec::new(), 1000000);
+    if oc.status != SA_STD_ERR_INVALID_ARGUMENT { panic(61521); };
+    if oc.answered { panic(61522); };
+    if oc.session.next_sequence != 1 { panic(61523); };
+    if oc.session.identifier != 4369 { panic(61524); };
+}
+
+@test "reg1 icmp ping loopback coherence"() {
+    let host: Vec<u8> = Vec::new();
+    host.push(49);
+    host.push(50);
+    host.push(55);
+    host.push(46);
+    host.push(48);
+    host.push(46);
+    host.push(48);
+    host.push(46);
+    host.push(49);
+    let payload: Vec<u8> = Vec::new();
+    payload.push(1);
+    payload.push(2);
+    payload.push(3);
+    let s = icmp_echo_session_new(16962);
+    let oc = icmp_ping(s, host, payload, 2000000000);
+    if oc.session.identifier != 16962 { panic(61531); };
+    if oc.answered {
+        if oc.status != SA_STD_OK { panic(61532); };
+        if oc.reply.identifier != 16962 { panic(61533); };
+        if oc.reply.sequence != 1 { panic(61534); };
+        if oc.rtt_ns == 0 { panic(61535); };
+        if oc.session.next_sequence != 2 { panic(61536); };
+    } else {
+        if oc.status == SA_STD_OK { panic(61537); };
+    };
+}

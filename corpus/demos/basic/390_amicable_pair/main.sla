@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 亲和数对验证（s(220)=284，s(284)=220；335 的函数版）。
+// 意对标 335 亲和版的真因子和版（335 互补）。
+
+fn aliquot(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i < n {
+        if n % i == 0 { s = s + i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn is_amicable(a: int, b: int) -> int {
+    if a == b { return 0; };
+    if aliquot(a) != b { return 0; };
+    if aliquot(b) != a { return 0; };
+    return 1;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", aliquot(220), aliquot(284), is_amicable(220, 284));
+    return 0;
+}
+
+@test "basic 390 amicable pair"() {
+    if aliquot(220) != 284 { panic(39001); };
+    if aliquot(284) != 220 { panic(39002); };
+    if is_amicable(220, 284) != 1 { panic(39003); };
+    if is_amicable(6, 6) != 0 { panic(39004); };
+}

@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 半字节交换（0x12=18 → 0x21=33）。
+// 意对标 509 位反转的半字节版（509 互补）。
+
+fn nibble_swap(n: int) -> int {
+    return n % 16 * 16 + n / 16;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", nibble_swap(18), nibble_swap(171), nibble_swap(255));
+    return 0;
+}
+
+@test "basic 513 nibble swap"() {
+    if nibble_swap(18) != 33 { panic(51301); };
+    if nibble_swap(171) != 186 { panic(51302); };
+    if nibble_swap(255) != 255 { panic(51303); };
+}

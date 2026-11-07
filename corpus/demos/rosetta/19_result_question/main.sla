@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+
+fn triple_ok(x: i32) -> Result<i32, i32> {
+    Ok(x * 3)
+}
+
+fn compute() -> Result<i32, i32> {
+    let value = triple_ok(7)?;
+    Ok(value)
+}
+
+fn main() -> i32 {
+    let result = compute().unwrap_or(-1);
+    println("{}", result);
+    return 0;
+}
+
+@test "rosetta 019 result question"() {
+    let result = compute().unwrap_or(-1);
+    if result != 21 {
+        panic(19);
+    };
+}

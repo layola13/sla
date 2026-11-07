@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1268_while_break：条件 while + 跳过 + 早停（1+2+3+5+6=17）。
+// 与 32（`while true` 版）、147（无 break 版）互补，此处三者同环。
+
+fn main() -> i32 {
+    let s = 0;
+    let i = 0;
+    while i < 10 {
+        i = i + 1;
+        if i == 4 { continue; };
+        if i == 7 { break; };
+        s = s + i;
+    }
+    println("{}", s);
+    return 0;
+}
+
+@test "basic 204 cond break"() {
+    let s = 0;
+    let i = 0;
+    while i < 10 {
+        i = i + 1;
+        if i == 4 { continue; };
+        if i == 7 { break; };
+        s = s + i;
+    }
+    if s != 17 { panic(20401); };
+    if i != 7 { panic(20402); };
+}

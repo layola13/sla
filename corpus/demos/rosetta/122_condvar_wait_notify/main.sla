@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/result.sa"
+@import "sa_std/sync/mutex.sa"
+@import "sa_std/thread.sa"
+
+fn notify_ready(shared: Arc<Mutex<i32> >) -> i32 {
+    let ready = (*shared).lock().unwrap();
+    *ready = 4;
+    return 0;
+}
+
+fn condvar_wait_result() -> i32 {
+    let pair = Arc::new(Mutex::new(0));
+    let notifier = pair.clone();
+    let handle = thread::spawn(^|| notify_ready(notifier));
+
+    handle.join().unwrap();
+
+    let ready = (*pair).lock().unwrap();
+    if *ready == 4 {
+        return *ready;
+    } else {
+        return 0;
+    };
+}
+
+fn main() -> i32 {
+    let result = condvar_wait_result();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 122 122_condvar_wait_notify"() {
+    let got = condvar_wait_result();
+    if got != 4 {
+        panic(122);
+    };
+};

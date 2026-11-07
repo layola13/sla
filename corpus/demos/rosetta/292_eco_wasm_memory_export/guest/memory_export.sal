@@ -1,0 +1,3 @@
+#def MemoryView_SIZE = 8
+#def MemoryView_value = +0
+#def MemoryView_marker = +4

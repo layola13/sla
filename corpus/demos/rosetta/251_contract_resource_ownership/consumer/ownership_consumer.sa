@@ -1,0 +1,16 @@
+@import "consumer/../bridge/ownership_bridge.sa"
+
+@ownership_consumer_value() -> i32:
+L_ENTRY:
+    handle = alloc 4
+    store handle+0, 251 as i32
+    value = call @take_ownership(handle)
+    ok = eq value, 252
+    !value
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 251
+
+L_ERR:
+    return 0

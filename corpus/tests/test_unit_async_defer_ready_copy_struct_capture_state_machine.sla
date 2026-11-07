@@ -1,0 +1,65 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+@derive(copy)
+struct CaptureBump {
+    amount: i32,
+}
+
+async fn await_defer_ready_copy_struct_capture() -> i32 {
+    let bump = CaptureBump { amount: 3 };
+    let value = future::defer_ready(39).await;
+    return value + bump.amount;
+}
+
+async fn await_local_defer_ready_copy_struct_capture() -> i32 {
+    let bump = CaptureBump { amount: 3 };
+    let delayed = future::defer_ready(39);
+    let value = delayed.await;
+    return value + bump.amount;
+}
+
+fn direct_copy_struct_capture_resume_on_second_poll() -> i32 {
+    let fut = await_defer_ready_copy_struct_capture();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9941);
+    };
+    if task::is_ready(task) != false {
+        panic(9942);
+    };
+    if task::poll(task) != true {
+        panic(9943);
+    };
+    if task::is_ready(task) != true {
+        panic(9944);
+    };
+    return task::result(task);
+}
+
+fn local_copy_struct_capture_resume_on_second_poll() -> i32 {
+    let fut = await_local_defer_ready_copy_struct_capture();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9951);
+    };
+    if task::is_ready(task) != false {
+        panic(9952);
+    };
+    if task::poll(task) != true {
+        panic(9953);
+    };
+    if task::is_ready(task) != true {
+        panic(9954);
+    };
+    return task::result(task);
+}
+
+@test "async defer ready copy struct capture resumes"() {
+    if direct_copy_struct_capture_resume_on_second_poll() != 42 {
+        panic(9945);
+    };
+    if local_copy_struct_capture_resume_on_second_poll() != 42 {
+        panic(9955);
+    };
+}

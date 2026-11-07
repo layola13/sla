@@ -1,0 +1,2 @@
+@extern handle_open(id: i32) -> ptr
+@extern handle_close(handle: ptr) -> i32

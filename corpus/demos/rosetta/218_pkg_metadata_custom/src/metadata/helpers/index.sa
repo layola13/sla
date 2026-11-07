@@ -1,0 +1,7 @@
+@import "src/metadata/helpers/metadata.sal"
+
+@metadata_helper_value() -> i32:
+L_ENTRY:
+    value = add METADATA_OFFSET, 0
+    !value
+    return METADATA_OFFSET

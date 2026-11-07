@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 性感素数对（p,p+6 全素；<=30 有 6 对）。
+// 意对标 366 孪生计数的差六版（366/431 互补）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn is_sexy(p: int) -> int {
+    if is_prime(p) != 1 { return 0; };
+    if is_prime(p + 6) != 1 { return 0; };
+    return 1;
+}
+
+fn sexy_count(limit: int) -> int {
+    let c = 0;
+    let k = 2;
+    while k + 6 <= limit {
+        if is_sexy(k) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{}", is_sexy(5), sexy_count(30));
+    return 0;
+}
+
+@test "basic 433 sexy primes"() {
+    if is_sexy(5) != 1 { panic(43301); };
+    if is_sexy(7) != 1 { panic(43302); };
+    if sexy_count(30) != 6 { panic(43303); };
+}

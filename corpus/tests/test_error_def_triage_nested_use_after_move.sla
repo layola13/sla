@@ -1,0 +1,16 @@
+// expect: UseAfterMove
+@import "sa_std/string.sa"
+
+// DEF triage batch 11 guard: a genuine second use of a moved String
+// must still be diagnosed UseAfterMove after the receiver-probe
+// restriction (the probe change must not mask real consumption).
+fn tri_inner(s: String) -> String {
+    return s;
+}
+
+fn tri_bad() -> String {
+    let v = format("hello");
+    let a = tri_inner(v);
+    let b = tri_inner(v);
+    return b;
+}

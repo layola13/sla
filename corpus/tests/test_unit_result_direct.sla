@@ -1,0 +1,14 @@
+@import "sa_std/core/result.sa"
+
+@test "direct result constructors and query methods"() {
+    let ok: Result<i32, i32> = Ok(11);
+    let err: Result<i32, i32> = Err(5);
+
+    if !ok.is_ok() { panic(31301); };
+    if ok.is_err() { panic(31302); };
+    if err.is_ok() { panic(31303); };
+    if !err.is_err() { panic(31304); };
+    if ok.unwrap() != 11 { panic(31305); };
+    if ok.unwrap_or(3) != 11 { panic(31306); };
+    if err.unwrap_or(3) != 3 { panic(31307); };
+};

@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 104_override：基类与派生类同名方法（1, 2）。
+// SLA 的 `impl` 暂无继承语义，用两个独立结构体各自实现 `voice` 表达同一输出。
+
+struct Animal {
+    tag: i32,
+}
+
+impl Animal {
+    fn voice(self) -> i32 {
+        return 1;
+    }
+}
+
+struct Dog {
+    tag: i32,
+}
+
+impl Dog {
+    fn voice(self) -> i32 {
+        return 2;
+    }
+}
+
+fn main() -> i32 {
+    let a = Animal { tag: 0 };
+    let d = Dog { tag: 0 };
+    println("{},{}", a.voice(), d.voice());
+    return 0;
+}
+
+@test "basic 93 override"() {
+    let a = Animal { tag: 0 };
+    let d = Dog { tag: 0 };
+    if a.voice() != 1 { panic(9301); };
+    if d.voice() != 2 { panic(9302); };
+}

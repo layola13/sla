@@ -1,0 +1,5 @@
+@export ns_prefix_beta() -> i32:
+L_ENTRY:
+    value = add 25, 0
+    !value
+    return 25

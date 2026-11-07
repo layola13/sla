@@ -1,0 +1,32 @@
+struct Option<T> {
+    has_value: bool,
+    value: T
+}
+
+struct Result {
+    is_err: bool,
+    value: int,
+    error: int
+}
+
+fn sum_range(limit: int) -> int {
+    let sum = 0;
+    for i in 1..limit {
+        sum = sum + i;
+    }
+    return sum;
+}
+
+fn check_result(res: Result, fallback: int) -> int {
+    let val = res?;
+    return val;
+}
+
+fn process_option(opt: Option<int>) -> int {
+    if opt.has_value {
+        let val = opt.value;
+        return sum_range(val);
+    } else {
+        return 0;
+    };
+}

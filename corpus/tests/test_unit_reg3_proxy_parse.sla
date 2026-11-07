@@ -1,0 +1,339 @@
+@import "sa_std/http_proxy.sla"
+
+// REG-SHARD3 coverage: SAB registry `declared` entries for the
+// http_proxy.sla constructors and URL/authority parsing surface
+// (proxy_empty_authority, proxy_empty_decision, proxy_empty_target,
+// proxy_empty_url, proxy_head, proxy_split_authority,
+// proxy_split_target, proxy_target_host_str,
+// proxy_target_is_loopback, proxy_entry_matches, proxy_env_named,
+// proxy_slice_str, proxy_slice_percent_decode). All were
+// class=declared with zero corpus references at registry stamp
+// ee7b41c3; assertions pin the documented Go-style proxy semantics.
+
+fn reg3_str_eq(s: String, lit: String) -> bool {
+    let sn: u64 = len(s);
+    if sn != len(lit) {
+        return false;
+    };
+    let sp: ptr = STR_PTR(s);
+    let lp: ptr = STR_PTR(lit);
+    let i: u64 = 0;
+    while i < sn {
+        if PTR_BYTE_AT(sp, i) != PTR_BYTE_AT(lp, i) {
+            return false;
+        };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn reg3_ip(lit: String) -> IpAddr {
+    let out: IpAddr = ip_addr_parse(format("0.0.0.0")).unwrap();
+    let r = ip_addr_parse(lit);
+    match r {
+        Some(a) => {
+            out = a;
+        },
+        None => {
+        },
+    };
+    return out;
+}
+
+@test "reg3 proxy empty constructors"() {
+    let a = proxy_empty_authority();
+    if a.host_off != 0 { panic(3301); };
+    if a.host_len != 0 { panic(3302); };
+    if a.port != 0 { panic(3303); };
+    if a.has_user { panic(3304); };
+    if a.has_pass { panic(3305); };
+    if a.end != 0 { panic(3306); };
+    let u = proxy_empty_url();
+    if u.kind != 0 { panic(3307); };
+    if u.port != 0 { panic(3308); };
+    if u.has_user { panic(3309); };
+    if u.has_pass { panic(3310); };
+    if (len(u.raw) as u64) != 0 { panic(3311); };
+    if u.host_len != 0 { panic(3312); };
+    let t = proxy_empty_target();
+    if t.kind != 0 { panic(3313); };
+    if t.port != 0 { panic(3314); };
+    if (len(t.host) as u64) != 0 { panic(3315); };
+    let d = proxy_empty_decision();
+    if d.use_proxy { panic(3316); };
+    if d.reason != 0 { panic(3317); };
+    if d.proxy.kind != 0 { panic(3318); };
+}
+
+@test "reg3 proxy head constructor"() {
+    let h = proxy_head(-5, 200);
+    if h.status != -5 { panic(3321); };
+    if h.http_status != 200 { panic(3322); };
+    let h2 = proxy_head(0, 404);
+    if h2.status != 0 { panic(3323); };
+    if h2.http_status != 404 { panic(3324); };
+}
+
+@test "reg3 proxy split_authority host port"() {
+    let s: String = format("example.com:8080/path");
+    let r = proxy_split_authority(STR_PTR(s), 21, 0, 80);
+    match r {
+        Ok(a) => {
+            if a.host_off != 0 { panic(3331); };
+            if a.host_len != 11 { panic(3332); };
+            if a.port != 8080 { panic(3333); };
+            if a.has_user { panic(3334); };
+            if a.end != 16 { panic(3335); };
+        },
+        Err(e) => { panic(3336); },
+    };
+}
+
+@test "reg3 proxy split_authority userinfo"() {
+    let s: String = format("user:pass@host");
+    let r = proxy_split_authority(STR_PTR(s), 14, 0, 443);
+    match r {
+        Ok(a) => {
+            if !a.has_user { panic(3341); };
+            if a.user_off != 0 { panic(3342); };
+            if a.user_len != 4 { panic(3343); };
+            if !a.has_pass { panic(3344); };
+            if a.pass_off != 5 { panic(3345); };
+            if a.pass_len != 4 { panic(3346); };
+            if a.host_off != 10 { panic(3347); };
+            if a.host_len != 4 { panic(3348); };
+            if a.port != 443 { panic(3349); };
+            if a.end != 14 { panic(3350); };
+        },
+        Err(e) => { panic(3351); },
+    };
+    let s2: String = format("user@host:81");
+    let r2 = proxy_split_authority(STR_PTR(s2), 12, 0, 80);
+    match r2 {
+        Ok(a) => {
+            if !a.has_user { panic(3352); };
+            if a.user_len != 4 { panic(3353); };
+            if a.has_pass { panic(3354); };
+            if a.host_off != 5 { panic(3355); };
+            if a.port != 81 { panic(3356); };
+        },
+        Err(e) => { panic(3357); },
+    };
+}
+
+@test "reg3 proxy split_authority default port and offset"() {
+    let s: String = format("host");
+    let r = proxy_split_authority(STR_PTR(s), 4, 0, 8080);
+    match r {
+        Ok(a) => {
+            if a.port != 8080 { panic(3361); };
+            if a.host_len != 4 { panic(3362); };
+            if a.end != 4 { panic(3363); };
+        },
+        Err(e) => { panic(3364); },
+    };
+    let buf: String = format("xxexample.com");
+    let r2 = proxy_split_authority(STR_PTR(buf), 13, 2, 80);
+    match r2 {
+        Ok(a) => {
+            if a.host_off != 2 { panic(3365); };
+            if a.host_len != 11 { panic(3366); };
+            if a.end != 13 { panic(3367); };
+        },
+        Err(e) => { panic(3368); },
+    };
+}
+
+@test "reg3 proxy split_authority ipv6"() {
+    let s: String = format("[::1]:8080");
+    let r = proxy_split_authority(STR_PTR(s), 10, 0, 80);
+    match r {
+        Ok(a) => {
+            if a.host_off != 1 { panic(3371); };
+            if a.host_len != 3 { panic(3372); };
+            if a.port != 8080 { panic(3373); };
+            if a.end != 10 { panic(3374); };
+        },
+        Err(e) => { panic(3375); },
+    };
+}
+
+@test "reg3 proxy split_authority errors"() {
+    let empty: String = format("");
+    let r = proxy_split_authority(STR_PTR(empty), 0, 0, 80);
+    match r {
+        Ok(a) => { panic(3381); },
+        Err(e) => {
+            if e != SA_STD_ERR_INVALID_ARGUMENT { panic(3382); };
+        },
+    };
+    let s2: String = format("a:b:c");
+    let r2 = proxy_split_authority(STR_PTR(s2), 5, 0, 80);
+    match r2 {
+        Ok(a) => { panic(3383); },
+        Err(e) => {
+            if e != SA_STD_ERR_INVALID_ARGUMENT { panic(3384); };
+        },
+    };
+    let s3: String = format("ho st");
+    let r3 = proxy_split_authority(STR_PTR(s3), 5, 0, 80);
+    match r3 {
+        Ok(a) => { panic(3385); },
+        Err(e) => {
+            if e != SA_STD_ERR_INVALID_ARGUMENT { panic(3386); };
+        },
+    };
+}
+
+@test "reg3 proxy split_target http https"() {
+    let r = proxy_split_target(format("http://example.com/path"));
+    match r {
+        Ok(t) => {
+            if t.kind != SA_HTTP_PROXY_KIND_HTTP { panic(3391); };
+            if t.port != 80 { panic(3392); };
+            if !reg3_str_eq(proxy_target_host_str(t), format("example.com")) { panic(3393); };
+        },
+        Err(e) => { panic(3394); },
+    };
+    let r2 = proxy_split_target(format("https://example.com"));
+    match r2 {
+        Ok(t) => {
+            if t.kind != SA_HTTP_PROXY_KIND_HTTPS { panic(3395); };
+            if t.port != 443 { panic(3396); };
+        },
+        Err(e) => { panic(3397); },
+    };
+    let r3 = proxy_split_target(format("http://user:pass@example.com:8080/x"));
+    match r3 {
+        Ok(t) => {
+            if t.port != 8080 { panic(3398); };
+            if !reg3_str_eq(proxy_target_host_str(t), format("example.com")) { panic(3399); };
+        },
+        Err(e) => { panic(3400); },
+    };
+}
+
+@test "reg3 proxy split_target case and errors"() {
+    let r = proxy_split_target(format("HTTP://EXAMPLE.COM/x"));
+    match r {
+        Ok(t) => {
+            if t.kind != SA_HTTP_PROXY_KIND_HTTP { panic(3411); };
+            if !reg3_str_eq(proxy_target_host_str(t), format("EXAMPLE.COM")) { panic(3412); };
+        },
+        Err(e) => { panic(3413); },
+    };
+    let r2 = proxy_split_target(format("ftp://example.com"));
+    match r2 {
+        Ok(t) => { panic(3414); },
+        Err(e) => {
+            if e != SA_STD_ERR_UNSUPPORTED { panic(3415); };
+        },
+    };
+    let r3 = proxy_split_target(format("example.com"));
+    match r3 {
+        Ok(t) => { panic(3416); },
+        Err(e) => {
+            if e != SA_STD_ERR_INVALID_ARGUMENT { panic(3417); };
+        },
+    };
+}
+
+@test "reg3 proxy target_host_str empty"() {
+    let t = proxy_empty_target();
+    let s: String = proxy_target_host_str(t);
+    if len(s) != 0 { panic(3421); };
+}
+
+@test "reg3 proxy target_is_loopback"() {
+    if !proxy_target_is_loopback(format("localhost")) { panic(3431); };
+    if !proxy_target_is_loopback(format("LOCALHOST")) { panic(3432); };
+    if !proxy_target_is_loopback(format("127.0.0.1")) { panic(3433); };
+    if !proxy_target_is_loopback(format("::1")) { panic(3434); };
+    if proxy_target_is_loopback(format("192.168.1.1")) { panic(3435); };
+    if proxy_target_is_loopback(format("example.com")) { panic(3436); };
+    if proxy_target_is_loopback(format("localhost.")) { panic(3437); };
+}
+
+@test "reg3 proxy entry_matches star and domain"() {
+    let dummy: IpAddr = reg3_ip(format("0.0.0.0"));
+    let h1: String = format("anything.example");
+    if !proxy_entry_matches(format("*"), STR_PTR(h1), 0, 16, false, dummy, 80) { panic(3441); };
+    let h2: String = format("example.com");
+    if !proxy_entry_matches(format("example.com"), STR_PTR(h2), 0, 11, false, dummy, 80) { panic(3442); };
+    let h3: String = format("www.example.com");
+    if !proxy_entry_matches(format("example.com"), STR_PTR(h3), 0, 15, false, dummy, 80) { panic(3443); };
+    let h4: String = format("notexample.com");
+    if proxy_entry_matches(format("example.com"), STR_PTR(h4), 0, 14, false, dummy, 80) { panic(3444); };
+    if !proxy_entry_matches(format(".example.com"), STR_PTR(h3), 0, 15, false, dummy, 80) { panic(3445); };
+    if proxy_entry_matches(format(".example.com"), STR_PTR(h2), 0, 11, false, dummy, 80) { panic(3446); };
+    if !proxy_entry_matches(format("*.example.com"), STR_PTR(h3), 0, 15, false, dummy, 80) { panic(3447); };
+    if proxy_entry_matches(format("*.example.com"), STR_PTR(h2), 0, 11, false, dummy, 80) { panic(3448); };
+}
+
+@test "reg3 proxy entry_matches port"() {
+    let dummy: IpAddr = reg3_ip(format("0.0.0.0"));
+    let h: String = format("example.com");
+    if !proxy_entry_matches(format("example.com:8080"), STR_PTR(h), 0, 11, false, dummy, 8080) { panic(3451); };
+    if proxy_entry_matches(format("example.com:8080"), STR_PTR(h), 0, 11, false, dummy, 9090) { panic(3452); };
+}
+
+@test "reg3 proxy entry_matches ip and cidr"() {
+    let a1: IpAddr = reg3_ip(format("10.1.2.3"));
+    let h1: String = format("10.1.2.3");
+    if !proxy_entry_matches(format("10.0.0.0/8"), STR_PTR(h1), 0, 8, true, a1, 80) { panic(3461); };
+    let a2: IpAddr = reg3_ip(format("11.0.0.1"));
+    let h2: String = format("11.0.0.1");
+    if proxy_entry_matches(format("10.0.0.0/8"), STR_PTR(h2), 0, 8, true, a2, 80) { panic(3462); };
+    if proxy_entry_matches(format("10.0.0.0/8"), STR_PTR(h1), 0, 8, false, a1, 80) { panic(3463); };
+    let a3: IpAddr = reg3_ip(format("192.168.0.1"));
+    let h3: String = format("192.168.0.1");
+    if !proxy_entry_matches(format("192.168.0.1"), STR_PTR(h3), 0, 11, true, a3, 80) { panic(3464); };
+    let a4: IpAddr = reg3_ip(format("192.168.0.2"));
+    if proxy_entry_matches(format("192.168.0.1"), STR_PTR(h3), 0, 11, true, a4, 80) { panic(3465); };
+}
+
+@test "reg3 proxy env_named"() {
+    let p: String = proxy_env_named(format("PATH"));
+    if len(p) == 0 { panic(3471); };
+    let none: String = proxy_env_named(format("REG3_NO_SUCH_ENV_VAR_ZZZ"));
+    if len(none) != 0 { panic(3472); };
+}
+
+@test "reg3 proxy slice_str"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(104);
+    v.push(105);
+    v.push(33);
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let whole: String = proxy_slice_str(&sl, 0, 3);
+    if !reg3_str_eq(whole, format("hi!")) { panic(3481); };
+    let tail: String = proxy_slice_str(&sl, 1, 2);
+    if !reg3_str_eq(tail, format("i!")) { panic(3482); };
+    let none: String = proxy_slice_str(&sl, 0, 0);
+    if len(none) != 0 { panic(3483); };
+}
+
+@test "reg3 proxy slice_percent_decode"() {
+    let raw: String = format("a%20b%41");
+    let v: Vec<u8> = Vec::new();
+    let rp: ptr = STR_PTR(raw);
+    let i: u64 = 0;
+    while i < 8 {
+        v.push(PTR_BYTE_AT(rp, i));
+        i = i + 1;
+    }
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let dec: String = proxy_slice_percent_decode(&sl, 0, 8);
+    if !reg3_str_eq(dec, format("a bA")) { panic(3491); };
+    let raw2: String = format("%2f");
+    let v2: Vec<u8> = Vec::new();
+    let rp2: ptr = STR_PTR(raw2);
+    let j: u64 = 0;
+    while j < 3 {
+        v2.push(PTR_BYTE_AT(rp2, j));
+        j = j + 1;
+    }
+    let sl2: Slice<u8> = VEC_AS_SLICE(v2);
+    let dec2: String = proxy_slice_percent_decode(&sl2, 0, 3);
+    if !reg3_str_eq(dec2, format("/")) { panic(3492); };
+}

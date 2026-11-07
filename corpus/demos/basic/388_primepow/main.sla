@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 素数幂判定（8=2³ 是，12 否）。
+// 意对标 376 半素数的单基版（376 互补）。
+
+fn is_primepow(n: int) -> int {
+    if n < 2 { return 0; };
+    let p = 2;
+    while p * p <= n {
+        if n % p == 0 {
+            let m = n;
+            while m % p == 0 { m = m / p; }
+            if m == 1 { return 1; };
+            return 0;
+        };
+        p = p + 1;
+    }
+    return 1;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", is_primepow(8), is_primepow(9), is_primepow(12), is_primepow(27));
+    return 0;
+}
+
+@test "basic 388 primepow"() {
+    if is_primepow(8) != 1 { panic(38801); };
+    if is_primepow(9) != 1 { panic(38802); };
+    if is_primepow(12) != 0 { panic(38803); };
+    if is_primepow(27) != 1 { panic(38804); };
+    if is_primepow(7) != 1 { panic(38805); };
+}

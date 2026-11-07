@@ -1,0 +1,23 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/vec_packed.sla"
+
+// MINIM V7 (SAB isolation): sa_vec_i32_extend_packed.
+@test "minim vec i32 extend packed"() {
+    let src: [u8; 8] = [0u8; 8];
+    src[0] = 254;
+    src[1] = 255;
+    src[2] = 255;
+    src[3] = 255;
+    src[4] = 112;
+    src[5] = 17;
+    src[6] = 1;
+    src[7] = 0;
+    let sp: ptr = PTR_BYTE_ADD(&src, 0);
+    let v: Vec<i32> = Vec::new();
+    v = sa_vec_i32_extend_packed(v, sp, 2);
+    if (len(v) as u64) != 2 { panic(181); };
+    if v[0] != 0 - 2 { panic(182); };
+    if v[1] != 70000 { panic(183); };
+}

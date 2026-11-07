@@ -1,0 +1,13 @@
+@test "template literal plain degrades to string"() {
+    if !str_eq(`just text`, "just text") { panic(96101); };
+};
+
+@test "template literal interpolates via println path"() {
+    let name = "sa";
+    let n = 3;
+    println(`hi ${name}, n=${n}!`);
+};
+
+@test "template literal bool interpolation"() {
+    println(`flag=${true} end`);
+};

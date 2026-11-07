@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Golomb 双实现对峙（纯递归 vs 外层迭代+内层递归：G(9)=5 双边）。
+// 意对标 453 Trib 对峙的自指版（516 互补）。
+
+fn gol_rec(n: int) -> int {
+    if n == 1 { return 1; };
+    return 1 + gol_rec(n - gol_rec(gol_rec(n - 1)));
+}
+
+fn gol_loop(n: int) -> int {
+    if n == 1 { return 1; };
+    let b = 2;
+    let i = 2;
+    while i <= n {
+        b = 1 + gol_loop(i - gol_loop(gol_loop(i - 1)));
+        i = i + 1;
+    }
+    return b;
+}
+
+fn main() -> i32 {
+    println("{},{}", gol_rec(9), gol_loop(9));
+    return 0;
+}
+
+@test "basic 522 duel golomb"() {
+    if gol_rec(9) != 5 { panic(52201); };
+    if gol_loop(9) != 5 { panic(52202); };
+    if gol_rec(9) != gol_loop(9) { panic(52203); };
+    if gol_loop(10) != 5 { panic(52204); };
+}

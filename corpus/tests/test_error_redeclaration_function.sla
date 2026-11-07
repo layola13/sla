@@ -1,0 +1,9 @@
+// expect: Redeclaration
+fn repeated() -> int {
+    return 1;
+}
+
+fn repeated() -> int {
+    return 2;
+}
+

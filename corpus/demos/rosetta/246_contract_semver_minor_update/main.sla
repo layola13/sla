@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_semver_minor_added_fields() -> i32 {
+    let compatible_added_field = 1;
+    return compatible_added_field;
+}
+
+fn main() -> i32 {
+    let result = contract_semver_minor_added_fields();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 246 contract semver minor update"() {
+    let got = contract_semver_minor_added_fields();
+    if got != 1 { panic(246); };
+}

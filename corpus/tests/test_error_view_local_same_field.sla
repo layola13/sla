@@ -1,0 +1,21 @@
+// expect: BorrowConflict
+// View-types stage 1: two local mutable borrows of the SAME field,
+// written through interleaved. The checker must reject the second
+// borrow with a BorrowConflict diagnostic regardless of field offset
+// (the offset-0 field is covered here; the offset-8 sibling case is
+// test_error_view_local_same_field_offset.sla). Before stage 1 the
+// text backend accepted this silently.
+struct Pair { a: i64, b: i64 }
+
+fn bad_local_same_field() {
+    let s = Pair { a: 1, b: 2 };
+    let x = &s.a;
+    let y = &s.a;
+    *x = 10;
+    *y = 20;
+}
+
+fn main() -> i32 {
+    bad_local_same_field();
+    return 0;
+}

@@ -1,0 +1,9 @@
+// expect: Redeclaration
+struct Repeated {
+    value: i32,
+}
+
+struct Repeated {
+    other: i32,
+}
+

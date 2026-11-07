@@ -1,0 +1,17 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 138_diag：2x2 对角和（主 5，副 5）。
+// SLA 暂无嵌套数组字面量，用扁平 `[int; 4]` 行主序表达（口径见 19/28/58）。
+
+fn main() -> i32 {
+    let m = [1, 2, 3, 4];
+    println("{},{}", m[0] + m[3], m[1] + m[2]);
+    return 0;
+}
+
+@test "basic 72 diag sum"() {
+    let m = [1, 2, 3, 4];
+    if m[0] + m[3] != 5 { panic(7201); };
+    if m[1] + m[2] != 5 { panic(7202); };
+}

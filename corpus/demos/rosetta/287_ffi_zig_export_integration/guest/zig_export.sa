@@ -1,0 +1,5 @@
+@import "guest/zig_export.sal"
+
+@export zig_entry() -> i32:
+L_ENTRY:
+    return ZigExport_VALUE

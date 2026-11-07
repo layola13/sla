@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct AppRequest {
+    authenticated: bool,
+    route_ok: bool,
+    db_ready: bool,
+    rate_limited: bool,
+}
+
+fn handle_request(req: AppRequest) -> i32 {
+    if req.authenticated != true {
+        return 401;
+    } else {
+        if req.route_ok != true {
+            return 404;
+        } else {
+            if req.db_ready != true {
+                return 503;
+            } else {
+                if req.rate_limited == true {
+                    return 429;
+                } else {
+                    return 200;
+                };
+            };
+        };
+    };
+}
+
+fn main() -> i32 {
+    let req = AppRequest { authenticated: true, route_ok: true, db_ready: true, rate_limited: false };
+    let result = handle_request(req);
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 100 100_full_app"() {
+    let req = AppRequest { authenticated: true, route_ok: true, db_ready: true, rate_limited: false };
+    let got = handle_request(req);
+    if got != 200 {
+        panic(100);
+    };
+};

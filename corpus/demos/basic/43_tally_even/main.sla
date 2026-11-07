@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 140_tally：偶数过滤计数求和（[1..6] 偶数 3 个，和 12）。
+
+fn tally_even(a: [int; 6]) -> int {
+    let n = 0;
+    for i in 0..6 {
+        if a[i] % 2 == 0 {
+            n = n + 1;
+        };
+    }
+    return n;
+}
+
+fn sum_even(a: [int; 6]) -> int {
+    let t = 0;
+    for i in 0..6 {
+        if a[i] % 2 == 0 {
+            t = t + a[i];
+        };
+    }
+    return t;
+}
+
+fn main() -> i32 {
+    let a = [1, 2, 3, 4, 5, 6];
+    println("{},{}", tally_even(a), sum_even(a));
+    return 0;
+}
+
+@test "basic 43 tally even"() {
+    let a = [1, 2, 3, 4, 5, 6];
+    if tally_even(a) != 3 { panic(4301); };
+    if sum_even(a) != 12 { panic(4302); };
+}

@@ -1,0 +1,5 @@
+@import "sa_std/core/refcell.sa"
+
+[MACRO] SLA_REFCELL_BORROW_COUNT %out, %cell
+    EXPAND REFCELL_U64_BORROW_COUNT %out, %cell
+[END_MACRO]

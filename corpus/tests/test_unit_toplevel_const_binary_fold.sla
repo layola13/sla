@@ -1,0 +1,14 @@
+const ISSUE010_BINARY_BASE: int = 42;
+const ISSUE010_BINARY_VALUE: int = 0 - ISSUE010_BINARY_BASE;
+const ISSUE010_NEG_ONE: int = 0 - 1;
+const ISSUE010_COMBINED: int = ISSUE010_BINARY_VALUE + ISSUE010_NEG_ONE;
+
+fn issue010_const_binary_value() -> int {
+    return ISSUE010_COMBINED;
+}
+
+@test "top-level const binary expressions fold for codegen"() {
+    if issue010_const_binary_value() != -43 {
+        panic(10011);
+    };
+}

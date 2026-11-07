@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Perrin 数（R(10)=17；R(n)=R(n-2)+R(n-3)，初值 3,0,2）。
+// 意对标 449 Padovan 的异初值版（449 互补）。
+
+fn perrin(n: int) -> int {
+    if n == 0 { return 3; };
+    if n == 1 { return 0; };
+    if n == 2 { return 2; };
+    let a = 3;
+    let b = 0;
+    let c = 2;
+    let i = 2;
+    while i < n {
+        let t = a + b;
+        a = b;
+        b = c;
+        c = t;
+        i = i + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", perrin(10), perrin(5), perrin(1));
+    return 0;
+}
+
+@test "basic 450 perrin"() {
+    if perrin(10) != 17 { panic(45001); };
+    if perrin(5) != 5 { panic(45002); };
+    if perrin(1) != 0 { panic(45003); };
+}

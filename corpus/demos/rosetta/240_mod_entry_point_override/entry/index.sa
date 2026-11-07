@@ -1,0 +1,7 @@
+@import "entry/default/index.sa"
+@import "entry/override/index.sa"
+
+@export entry_value() -> i32:
+L_ENTRY:
+    value = call @override_entry_value()
+    return value

@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/ops.sa"
+
+struct Vec3 {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+fn added_vec3_score() -> i32 {
+    let a = Vec3 { x: 1.0, y: 2.0, z: 3.0 };
+    let b = Vec3 { x: 4.0, y: 5.0, z: 6.0 };
+    let c = a + b;
+    if c.x != 5.0 { return 0; };
+    if c.y != 7.0 { return 0; };
+    if c.z != 9.0 { return 0; };
+    return 579;
+}
+
+fn main() -> i32 {
+    let a = Vec3 { x: 1.0, y: 2.0, z: 3.0 };
+    let b = Vec3 { x: 4.0, y: 5.0, z: 6.0 };
+    let c = a + b;
+    println("({}, {}, {})", c.x, c.y, c.z);
+    if c.x != 5.0 { return 0; };
+    if c.y != 7.0 { return 0; };
+    if c.z != 9.0 { return 0; };
+    return 579;
+}
+
+@test "rosetta 301 operator_overload_add"() {
+    let a = Vec3 { x: 1.0, y: 2.0, z: 3.0 };
+    let b = Vec3 { x: 4.0, y: 5.0, z: 6.0 };
+    let c = a + b;
+    if c.x != 5.0 { panic(301); };
+    if c.y != 7.0 { panic(302); };
+    if c.z != 9.0 { panic(303); };
+}

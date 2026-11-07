@@ -1,0 +1,3 @@
+#def HandleSlot_SIZE = 8
+#def HandleSlot_tag = +0
+#def HandleSlot_refcount = +4

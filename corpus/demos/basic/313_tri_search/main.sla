@@ -1,0 +1,67 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 线性×二分×谓词三向查找对峙（116×17×39：6→2=2=1）。
+// 三实现一致性锁定（302 为双向，此处加谓词版收束三向）。
+
+fn index_of(a: [int; 5], v: int) -> int {
+    let i = 0;
+    while i < 5 {
+        if a[i] == v { return i; };
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn bsearch(a: [int; 5], target: int) -> int {
+    let lo = 0;
+    let hi = 4;
+    while lo <= hi {
+        let mid = (lo + hi) / 2;
+        if a[mid] == target { return mid; };
+        if a[mid] < target {
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        };
+    }
+    return -1;
+}
+
+fn vec_contains(values: Vec<i32>, target: i32) -> bool {
+    let i: i32 = 0;
+    while i < len(values) as i32 {
+        if values[i] == target {
+            return true;
+        };
+        i = i + 1;
+    }
+    return false;
+}
+
+fn main() -> i32 {
+    let a = [2, 4, 6, 8, 10];
+    let v: Vec<i32> = Vec::new();
+    v.push(2);
+    v.push(4);
+    v.push(6);
+    v.push(8);
+    v.push(10);
+    println("{},{},{}", index_of(a, 6), bsearch(a, 6), if vec_contains(v, 6) { 1 } else { 0 });
+    return 0;
+}
+
+@test "basic 313 tri search"() {
+    let a = [2, 4, 6, 8, 10];
+    let v: Vec<i32> = Vec::new();
+    v.push(2);
+    v.push(4);
+    v.push(6);
+    v.push(8);
+    v.push(10);
+    if index_of(a, 6) != bsearch(a, 6) { panic(31301); };
+    if bsearch(a, 6) != 2 { panic(31302); };
+    if !vec_contains(v, 6) { panic(31303); };
+    if index_of(a, 7) != bsearch(a, 7) { panic(31304); };
+}

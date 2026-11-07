@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 939_sw_member：结构体字段作 switch 判别式（v=2→2）。
+// 与 151（调用结果判别）、207（三元判别）互补，此处为字段路径判别。
+
+struct P { v: i32 }
+
+fn main() -> i32 {
+    let o = P { v: 2 };
+    let r = 0;
+    switch o.v {
+        1 => {
+            r = 1;
+        },
+        2 => {
+            r = 2;
+        },
+        default => {},
+    };
+    println("{}", r);
+    return 0;
+}
+
+@test "basic 210 sw field"() {
+    let o = P { v: 2 };
+    let r = 0;
+    switch o.v {
+        1 => {
+            r = 1;
+        },
+        2 => {
+            r = 2;
+        },
+        default => {},
+    };
+    if r != 2 { panic(21001); };
+}

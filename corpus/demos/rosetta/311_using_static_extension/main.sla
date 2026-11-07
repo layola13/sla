@@ -1,0 +1,38 @@
+mod math {
+    pub fn double(value: i32) -> i32 {
+        return value + value;
+    }
+
+    pub fn scale(value: i32, factor: i32) -> i32 {
+        return value * factor;
+    }
+}
+
+using math;
+
+struct Meter {
+    value: i32,
+}
+
+impl Meter {
+    fn double(self) -> i32 {
+        return self.value.double();
+    }
+
+    fn scale(self, factor: i32) -> i32 {
+        return self.value.scale(factor);
+    }
+}
+
+fn main() -> i32 {
+    let m = Meter { value: 7 };
+    println("{}", m.double());
+    println("{}", m.scale(3));
+    return 0;
+}
+
+@test "using demo"() {
+    let m = Meter { value: 7 };
+    if m.double() != 14 { panic(32000); };
+    if m.scale(3) != 21 { panic(32001); };
+}

@@ -1,0 +1,23 @@
+@import "sa_std/vec.sa"
+
+struct MoveCleanupBag {
+    values: Vec<u64>,
+}
+
+fn move_cleanup_bag_new() -> MoveCleanupBag {
+    let values: Vec<u64> = Vec::new();
+    values.push(31);
+    return MoveCleanupBag { values: values };
+}
+
+fn move_cleanup_take_bag(bag: MoveCleanupBag) -> u64 {
+    return len(bag.values);
+}
+
+@test "sa lexical cleanup skips moved call argument"() {
+    let bag = move_cleanup_bag_new();
+    let count = move_cleanup_take_bag(bag);
+    if count != 1 {
+        panic(43201);
+    };
+}

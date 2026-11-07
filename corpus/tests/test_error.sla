@@ -1,0 +1,3 @@
+fn bad_func() {
+    let x = 100 // missing semicolon!
+}

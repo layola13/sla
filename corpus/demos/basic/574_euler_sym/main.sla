@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian 对称性 A(n,d)==A(n,n-1-d)（A(5,1)=26 对 A(5,3)=26；A(4,1)=11 对 A(4,2)=11）。
+// 意对标 569 euler（单实现见源；553 对称体例）。
+
+fn euler(n: int, d: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let nn = 1;
+    while nn <= n {
+        let dd = 0;
+        while dd <= nn - 1 {
+            let a = 0;
+            if dd > 0 { a = (nn - dd) * t[(nn - 1) * w + dd - 1]; };
+            let b = (dd + 1) * t[(nn - 1) * w + dd];
+            t[nn * w + dd] = a + b;
+            dd = dd + 1;
+        }
+        nn = nn + 1;
+    }
+    return t[n * w + d];
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", euler(5, 1), euler(5, 3), euler(4, 1), euler(4, 2));
+    return 0;
+}
+
+@test "basic 574 euler sym"() {
+    if euler(5, 1) != 26 { panic(57401); };
+    if euler(5, 3) != 26 { panic(57402); };
+    if euler(4, 1) != 11 { panic(57403); };
+    if euler(4, 2) != 11 { panic(57404); };
+    if euler(5, 1) != euler(5, 3) { panic(57405); };
+}

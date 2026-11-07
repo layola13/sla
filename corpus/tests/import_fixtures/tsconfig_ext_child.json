@@ -1,0 +1,1 @@
+{"extends":"./tsconfig_ext_base.json","compilerOptions":{"module":"commonjs"}}

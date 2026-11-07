@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 星形数（S(n)=6n(n-1)+1：S(4)=73）。
+// 意对标 466 五边形的星形版（466 互补；474 做对峙，475 做三向）。
+
+fn star(n: int) -> int {
+    return 6 * n * (n - 1) + 1;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", star(4), star(3), star(1));
+    return 0;
+}
+
+@test "basic 472 star"() {
+    if star(4) != 73 { panic(47201); };
+    if star(3) != 37 { panic(47202); };
+    if star(1) != 1 { panic(47203); };
+}

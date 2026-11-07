@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 立方和循环版（1³+...+5³=225）。
+// 意对标 359 平方和的立方版（103-数位系互补）。
+
+fn cube_sum(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        s = s + i * i * i;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", cube_sum(5), cube_sum(3));
+    return 0;
+}
+
+@test "basic 360 cube sum"() {
+    if cube_sum(5) != 225 { panic(36001); };
+    if cube_sum(3) != 36 { panic(36002); };
+    if cube_sum(1) != 1 { panic(36003); };
+}

@@ -1,0 +1,799 @@
+// Smoke wave 1 (hand-written, honest handle chains) for register-2
+// externs in sa_std/fs.sai. One @test per register-2 extern; each test
+// builds a real handle in a temp dir, exercises the full lifecycle and
+// asserts substantive outputs. Panic codes 51xxx.
+@import "sla_std/wrap/fs.sla"
+@import "sla_std/wrap/process.sla"
+@import "sla_std/wrap/net.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+
+fn s1_mkdir() {
+    sla_fs_mkdir_p(STR_PTR("smoke1_fs"), STR_LEN("smoke1_fs"));
+}
+
+fn s1_len_of(path: ptr, path_len: u64) -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_len(path, path_len, &cell[0]);
+    if rc != 0 { panic(51001); };
+    return cell[0];
+}
+
+@test "smoke1 sa_fs_file_close"() {
+    s1_mkdir();
+    let fd = sla_fs_file_open(STR_PTR("smoke1_fs/close.txt"), STR_LEN("smoke1_fs/close.txt"), 7);
+    if fd <= 0 { panic(51010); };
+    let rc = sla_fs_file_close(fd as u64);
+    if rc != 0 { panic(51011); };
+    // Second close of the same handle must fail loudly (invalid handle = 2).
+    let rc2 = sla_fs_file_close(fd as u64);
+    if rc2 == 0 { panic(51012); };
+}
+
+@test "smoke1 sa_fs_file_write"() {
+    s1_mkdir();
+    let fd = sla_fs_file_open(STR_PTR("smoke1_fs/write.txt"), STR_LEN("smoke1_fs/write.txt"), 6);
+    if fd <= 0 { panic(51020); };
+    let rc = sla_fs_file_write(fd as u64, STR_PTR("abc"), STR_LEN("abc"));
+    if rc != 0 { panic(51021); };
+    let rc2 = sla_fs_file_close(fd as u64);
+    if rc2 != 0 { panic(51022); };
+    if s1_len_of(STR_PTR("smoke1_fs/write.txt"), STR_LEN("smoke1_fs/write.txt")) != 3 { panic(51023); };
+}
+
+@test "smoke1 sa_fs_file_write_all"() {
+    s1_mkdir();
+    let fd = sla_fs_file_open(STR_PTR("smoke1_fs/writeall.txt"), STR_LEN("smoke1_fs/writeall.txt"), 6);
+    if fd <= 0 { panic(51030); };
+    let rc = sla_fs_file_write_all(fd as u64, STR_PTR("abcde"), STR_LEN("abcde"));
+    if rc != 0 { panic(51031); };
+    sla_fs_file_close(fd as u64);
+    if s1_len_of(STR_PTR("smoke1_fs/writeall.txt"), STR_LEN("smoke1_fs/writeall.txt")) != 5 { panic(51032); };
+}
+
+@test "smoke1 sa_fs_file_read"() {
+    s1_mkdir();
+    let wrc = sla_fs_write_file(STR_PTR("smoke1_fs/read.txt"), STR_LEN("smoke1_fs/read.txt"), STR_PTR("hello"), STR_LEN("hello"));
+    if wrc != 0 { panic(51040); };
+    let fd = sla_fs_file_open(STR_PTR("smoke1_fs/read.txt"), STR_LEN("smoke1_fs/read.txt"), 1);
+    if fd <= 0 { panic(51041); };
+    let buf = [0u8; 64];
+    let rc = sla_fs_file_read(fd as u64, &buf[0], 64);
+    if rc != 0 { panic(51042); };
+    if buf[0] != 104 { panic(51043); };
+    if buf[1] != 101 { panic(51044); };
+    if buf[4] != 111 { panic(51045); };
+    sla_fs_file_close(fd as u64);
+}
+
+@test "smoke1 sa_fs_file_read_exact"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/readexact.txt"), STR_LEN("smoke1_fs/readexact.txt"), STR_PTR("hello"), STR_LEN("hello"));
+    let fd = sla_fs_file_open(STR_PTR("smoke1_fs/readexact.txt"), STR_LEN("smoke1_fs/readexact.txt"), 1);
+    if fd <= 0 { panic(51050); };
+    let buf = [0u8; 64];
+    let s1bp1: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc = sla_fs_file_read_exact(fd as u64, s1bp1, 5);
+    if rc != 0 { panic(51051); };
+    if buf[0] != 104 { panic(51052); };
+    if buf[4] != 111 { panic(51053); };
+    // Reading past EOF with read_exact must fail.
+    let s1bp2: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc2 = sla_fs_file_read_exact(fd as u64, s1bp2, 1);
+    if rc2 == 0 { panic(51054); };
+    sla_fs_file_close(fd as u64);
+}
+
+@test "smoke1 sa_fs_file_flush"() {
+    s1_mkdir();
+    let fd = sla_fs_file_open(STR_PTR("smoke1_fs/flush.txt"), STR_LEN("smoke1_fs/flush.txt"), 6);
+    if fd <= 0 { panic(51060); };
+    sla_fs_file_write_all(fd as u64, STR_PTR("xy"), STR_LEN("xy"));
+    let rc = sla_fs_file_flush(fd as u64);
+    if rc != 0 { panic(51061); };
+    sla_fs_file_close(fd as u64);
+    if s1_len_of(STR_PTR("smoke1_fs/flush.txt"), STR_LEN("smoke1_fs/flush.txt")) != 2 { panic(51062); };
+}
+
+@test "smoke1 sa_fs_file_sync_data"() {
+    s1_mkdir();
+    let fd = sla_fs_file_open(STR_PTR("smoke1_fs/syncdata.txt"), STR_LEN("smoke1_fs/syncdata.txt"), 6);
+    if fd <= 0 { panic(51070); };
+    sla_fs_file_write_all(fd as u64, STR_PTR("xyz"), STR_LEN("xyz"));
+    let rc = sla_fs_file_sync_data(fd as u64);
+    if rc != 0 { panic(51071); };
+    sla_fs_file_close(fd as u64);
+    if s1_len_of(STR_PTR("smoke1_fs/syncdata.txt"), STR_LEN("smoke1_fs/syncdata.txt")) != 3 { panic(51072); };
+}
+
+@test "smoke1 sa_fs_file_sync"() {
+    s1_mkdir();
+    let fd = sla_fs_file_open(STR_PTR("smoke1_fs/sync.txt"), STR_LEN("smoke1_fs/sync.txt"), 6);
+    if fd <= 0 { panic(51080); };
+    sla_fs_file_write_all(fd as u64, STR_PTR("wxyz"), STR_LEN("wxyz"));
+    let rc = sla_fs_file_sync(fd as u64);
+    if rc != 0 { panic(51081); };
+    sla_fs_file_close(fd as u64);
+    if s1_len_of(STR_PTR("smoke1_fs/sync.txt"), STR_LEN("smoke1_fs/sync.txt")) != 4 { panic(51082); };
+}
+
+@test "smoke1 sa_fs_file_truncate"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/trunc.txt"), STR_LEN("smoke1_fs/trunc.txt"), STR_PTR("0123456789"), STR_LEN("0123456789"));
+    let fd = sla_fs_file_open(STR_PTR("smoke1_fs/trunc.txt"), STR_LEN("smoke1_fs/trunc.txt"), 2);
+    if fd <= 0 { panic(51090); };
+    let rc = sla_fs_file_truncate(fd as u64, 4);
+    if rc != 0 { panic(51091); };
+    sla_fs_file_close(fd as u64);
+    if s1_len_of(STR_PTR("smoke1_fs/trunc.txt"), STR_LEN("smoke1_fs/trunc.txt")) != 4 { panic(51092); };
+}
+
+@test "smoke1 sa_fs_file_seek"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/seek.txt"), STR_LEN("smoke1_fs/seek.txt"), STR_PTR("0123456789"), STR_LEN("0123456789"));
+    let fd = sla_fs_file_open(STR_PTR("smoke1_fs/seek.txt"), STR_LEN("smoke1_fs/seek.txt"), 1);
+    if fd <= 0 { panic(51100); };
+    let buf = [0u8; 64];
+    let rc = sla_fs_file_seek(fd as u64, 0, 3);
+    if rc != 0 { panic(51101); };
+    let s1bp3: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc2 = sla_fs_file_read_exact(fd as u64, s1bp3, 2);
+    if rc2 != 0 { panic(51102); };
+    if buf[0] != 51 { panic(51103); };
+    if buf[1] != 52 { panic(51104); };
+    let rc3 = sla_fs_file_seek(fd as u64, 2, 0 - 2);
+    if rc3 != 0 { panic(51105); };
+    let s1bp4: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc4 = sla_fs_file_read_exact(fd as u64, s1bp4, 2);
+    if rc4 != 0 { panic(51106); };
+    if buf[0] != 56 { panic(51107); };
+    if buf[1] != 57 { panic(51108); };
+    sla_fs_file_close(fd as u64);
+}
+
+@test "smoke1 sa_fs_fchown"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/chown.txt"), STR_LEN("smoke1_fs/chown.txt"), STR_PTR("z"), STR_LEN("z"));
+    // No-op form (no uid/gid asserted) must succeed on an owned file.
+    let fd = sla_fs_file_open(STR_PTR("smoke1_fs/chown.txt"), STR_LEN("smoke1_fs/chown.txt"), 1);
+    if fd <= 0 { panic(51110); };
+    let rc = sla_fs_fchown(fd as u64, 0, 0, 0, 0);
+    if rc != 0 { panic(51111); };
+    sla_fs_file_close(fd as u64);
+    // Same-owner uid form must also succeed.
+    let uid = sla_std_process_user_id();
+    let fd2 = sla_fs_file_open(STR_PTR("smoke1_fs/chown.txt"), STR_LEN("smoke1_fs/chown.txt"), 1);
+    if fd2 <= 0 { panic(51112); };
+    let rc2 = sla_fs_fchown(fd2 as u64, uid, 0, 1, 0);
+    if rc2 != 0 { panic(51113); };
+    sla_fs_file_close(fd2 as u64);
+}
+
+@test "smoke1 sa_std_fs_file_read"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/stdread.txt"), STR_LEN("smoke1_fs/stdread.txt"), STR_PTR("abcdef"), STR_LEN("abcdef"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_open_read(STR_PTR("smoke1_fs/stdread.txt"), STR_LEN("smoke1_fs/stdread.txt"), &cell[0]);
+    if rc != 0 { panic(51120); };
+    if cell[0] == 0 { panic(51121); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc2 = sla_std_fs_file_read(cell[0], &buf[0], 64, &rd[0]);
+    if rc2 != 0 { panic(51122); };
+    if rd[0] != 6 { panic(51123); };
+    if buf[0] != 97 { panic(51124); };
+    if buf[5] != 102 { panic(51125); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_fs_file_read_at"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/stdreadat.txt"), STR_LEN("smoke1_fs/stdreadat.txt"), STR_PTR("abcdef"), STR_LEN("abcdef"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_open_read(STR_PTR("smoke1_fs/stdreadat.txt"), STR_LEN("smoke1_fs/stdreadat.txt"), &cell[0]);
+    if rc != 0 { panic(51130); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc2 = sla_std_fs_file_read_at(cell[0], &buf[0], 3, 2, &rd[0]);
+    if rc2 != 0 { panic(51131); };
+    if rd[0] != 3 { panic(51132); };
+    if buf[0] != 99 { panic(51133); };
+    if buf[2] != 101 { panic(51134); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_fs_file_read_exact_at"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/stdexactat.txt"), STR_LEN("smoke1_fs/stdexactat.txt"), STR_PTR("abcdef"), STR_LEN("abcdef"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_open_read(STR_PTR("smoke1_fs/stdexactat.txt"), STR_LEN("smoke1_fs/stdexactat.txt"), &cell[0]);
+    if rc != 0 { panic(51140); };
+    let buf = [0u8; 64];
+    let s1bp5: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc2 = sla_std_fs_file_read_exact_at(cell[0], s1bp5, 4, 1);
+    if rc2 != 0 { panic(51141); };
+    if buf[0] != 98 { panic(51142); };
+    if buf[3] != 101 { panic(51143); };
+    let s1bp6: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc3 = sla_std_fs_file_read_exact_at(cell[0], s1bp6, 4, 4);
+    if rc3 == 0 { panic(51144); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_fs_file_write"() {
+    s1_mkdir();
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_open_write(STR_PTR("smoke1_fs/stdwrite.txt"), STR_LEN("smoke1_fs/stdwrite.txt"), 1, &cell[0]);
+    if rc != 0 { panic(51150); };
+    if cell[0] == 0 { panic(51151); };
+    let wr = [0u64; 4];
+    let rc2 = sla_std_fs_file_write(cell[0], STR_PTR("xyz"), STR_LEN("xyz"), &wr[0]);
+    if rc2 != 0 { panic(51152); };
+    if wr[0] != 3 { panic(51153); };
+    sla_std_close(cell[0]);
+    if s1_len_of(STR_PTR("smoke1_fs/stdwrite.txt"), STR_LEN("smoke1_fs/stdwrite.txt")) != 3 { panic(51154); };
+}
+
+@test "smoke1 sa_std_fs_file_write_at"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/stdwriteat.txt"), STR_LEN("smoke1_fs/stdwriteat.txt"), STR_PTR("......"), STR_LEN("......"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_open_write(STR_PTR("smoke1_fs/stdwriteat.txt"), STR_LEN("smoke1_fs/stdwriteat.txt"), 0, &cell[0]);
+    if rc != 0 { panic(51160); };
+    let wr = [0u64; 4];
+    let rc2 = sla_std_fs_file_write_at(cell[0], STR_PTR("AB"), STR_LEN("AB"), 2, &wr[0]);
+    if rc2 != 0 { panic(51161); };
+    if wr[0] != 2 { panic(51162); };
+    sla_std_close(cell[0]);
+    let rc3 = sla_std_fs_open_read(STR_PTR("smoke1_fs/stdwriteat.txt"), STR_LEN("smoke1_fs/stdwriteat.txt"), &cell[0]);
+    if rc3 != 0 { panic(51163); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    sla_std_fs_file_read(cell[0], &buf[0], 64, &rd[0]);
+    if buf[0] != 46 { panic(51164); };
+    if buf[2] != 65 { panic(51165); };
+    if buf[3] != 66 { panic(51166); };
+    if buf[5] != 46 { panic(51167); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_fs_file_write_all_at"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/stdwriteallat.txt"), STR_LEN("smoke1_fs/stdwriteallat.txt"), STR_PTR("......"), STR_LEN("......"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_open_write(STR_PTR("smoke1_fs/stdwriteallat.txt"), STR_LEN("smoke1_fs/stdwriteallat.txt"), 0, &cell[0]);
+    if rc != 0 { panic(51170); };
+    let rc2 = sla_std_fs_file_write_all_at(cell[0], STR_PTR("CD"), STR_LEN("CD"), 1);
+    if rc2 != 0 { panic(51171); };
+    sla_std_close(cell[0]);
+    let rc3 = sla_std_fs_open_read(STR_PTR("smoke1_fs/stdwriteallat.txt"), STR_LEN("smoke1_fs/stdwriteallat.txt"), &cell[0]);
+    if rc3 != 0 { panic(51172); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    sla_std_fs_file_read(cell[0], &buf[0], 64, &rd[0]);
+    if buf[1] != 67 { panic(51173); };
+    if buf[2] != 68 { panic(51174); };
+    if buf[0] != 46 { panic(51175); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_fs_file_seek"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/stdseek.txt"), STR_LEN("smoke1_fs/stdseek.txt"), STR_PTR("0123456789"), STR_LEN("0123456789"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_open_read(STR_PTR("smoke1_fs/stdseek.txt"), STR_LEN("smoke1_fs/stdseek.txt"), &cell[0]);
+    if rc != 0 { panic(51180); };
+    let pos = [0u64; 4];
+    let rc2 = sla_std_fs_file_seek(cell[0], 0, 4, &pos[0]);
+    if rc2 != 0 { panic(51181); };
+    if pos[0] != 4 { panic(51182); };
+    let rc3 = sla_std_fs_file_seek(cell[0], 1, 2, &pos[0]);
+    if rc3 != 0 { panic(51183); };
+    if pos[0] != 6 { panic(51184); };
+    let rc4 = sla_std_fs_file_seek(cell[0], 2, 0 - 1, &pos[0]);
+    if rc4 != 0 { panic(51185); };
+    if pos[0] != 9 { panic(51186); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_close"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/close2.txt"), STR_LEN("smoke1_fs/close2.txt"), STR_PTR("q"), STR_LEN("q"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_open_read(STR_PTR("smoke1_fs/close2.txt"), STR_LEN("smoke1_fs/close2.txt"), &cell[0]);
+    if rc != 0 { panic(51190); };
+    let rc2 = sla_std_close(cell[0]);
+    if rc2 != 0 { panic(51191); };
+    let rc3 = sla_std_close(cell[0]);
+    if rc3 == 0 { panic(51192); };
+}
+
+@test "smoke1 sa_std_fs_dir_entries_get"() {
+    s1_mkdir();
+    sla_fs_remove_dir_all(STR_PTR("smoke1_fs/entries"), STR_LEN("smoke1_fs/entries"));
+    sla_fs_mkdir_p(STR_PTR("smoke1_fs/entries"), STR_LEN("smoke1_fs/entries"));
+    sla_fs_write_file(STR_PTR("smoke1_fs/entries/a.txt"), STR_LEN("smoke1_fs/entries/a.txt"), STR_PTR("1"), STR_LEN("1"));
+    sla_fs_write_file(STR_PTR("smoke1_fs/entries/b.txt"), STR_LEN("smoke1_fs/entries/b.txt"), STR_PTR("2"), STR_LEN("2"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_read_dir_entries(STR_PTR("smoke1_fs/entries"), STR_LEN("smoke1_fs/entries"), 16, &cell[0]);
+    if rc != 0 { panic(51200); };
+    let ent = [0u64; 4];
+    let rc2 = sla_std_fs_dir_entries_get(cell[0], 0, &ent[0]);
+    if rc2 != 0 { panic(51201); };
+    if ent[0] == 0 { panic(51202); };
+    if sla_fs_dir_entry_name_len(ent[0]) == 0 { panic(51203); };
+    sla_fs_dir_entry_free(^ent[0]);
+    sla_fs_dir_entries_free(^cell[0]);
+}
+
+@test "smoke1 sa_fs_dir_entries_len"() {
+    s1_mkdir();
+    sla_fs_remove_dir_all(STR_PTR("smoke1_fs/entries2"), STR_LEN("smoke1_fs/entries2"));
+    sla_fs_mkdir_p(STR_PTR("smoke1_fs/entries2"), STR_LEN("smoke1_fs/entries2"));
+    sla_fs_write_file(STR_PTR("smoke1_fs/entries2/a.txt"), STR_LEN("smoke1_fs/entries2/a.txt"), STR_PTR("1"), STR_LEN("1"));
+    sla_fs_write_file(STR_PTR("smoke1_fs/entries2/b.txt"), STR_LEN("smoke1_fs/entries2/b.txt"), STR_PTR("2"), STR_LEN("2"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_read_dir_entries(STR_PTR("smoke1_fs/entries2"), STR_LEN("smoke1_fs/entries2"), 16, &cell[0]);
+    if rc != 0 { panic(51210); };
+    if sla_fs_dir_entries_len(cell[0]) != 2 { panic(51211); };
+    sla_fs_dir_entries_free(^cell[0]);
+}
+
+@test "smoke1 sa_fs_dir_entries_free"() {
+    s1_mkdir();
+    sla_fs_remove_dir_all(STR_PTR("smoke1_fs/entries3"), STR_LEN("smoke1_fs/entries3"));
+    sla_fs_mkdir_p(STR_PTR("smoke1_fs/entries3"), STR_LEN("smoke1_fs/entries3"));
+    sla_fs_write_file(STR_PTR("smoke1_fs/entries3/a.txt"), STR_LEN("smoke1_fs/entries3/a.txt"), STR_PTR("1"), STR_LEN("1"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_read_dir_entries(STR_PTR("smoke1_fs/entries3"), STR_LEN("smoke1_fs/entries3"), 16, &cell[0]);
+    if rc != 0 { panic(51220); };
+    if sla_fs_dir_entries_len(cell[0]) != 1 { panic(51221); };
+    let rc2 = sla_fs_dir_entries_free(^cell[0]);
+    if rc2 != 0 { panic(51222); };
+}
+
+fn s1_meta(path: ptr, path_len: u64, code: i32) -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_metadata(path, path_len, &cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+fn s1_meta_file() -> u64 {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/meta.txt"), STR_LEN("smoke1_fs/meta.txt"), STR_PTR("0123456789"), STR_LEN("0123456789"));
+    return s1_meta(STR_PTR("smoke1_fs/meta.txt"), STR_LEN("smoke1_fs/meta.txt"), 51230);
+}
+
+@test "smoke1 sa_std_fs_metadata_free"() {
+    let m = s1_meta_file();
+    let rc = sla_std_fs_metadata_free(m);
+    if rc != 0 { panic(51240); };
+}
+
+@test "smoke1 sa_fs_metadata_is_file"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_is_file(m) != 1 { panic(51250); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_is_directory"() {
+    s1_mkdir();
+    let m = s1_meta(STR_PTR("smoke1_fs"), STR_LEN("smoke1_fs"), 51260);
+    if sla_fs_metadata_is_directory(m) != 1 { panic(51262); };
+    if sla_fs_metadata_is_file(m) != 0 { panic(51263); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_is_symlink"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/target.txt"), STR_LEN("smoke1_fs/target.txt"), STR_PTR("t"), STR_LEN("t"));
+    sla_fs_remove_file(STR_PTR("smoke1_fs/link.txt"), STR_LEN("smoke1_fs/link.txt"));
+    let rc = sla_fs_symlink(STR_PTR("smoke1_fs/target.txt"), STR_LEN("smoke1_fs/target.txt"), STR_PTR("smoke1_fs/link.txt"), STR_LEN("smoke1_fs/link.txt"));
+    if rc != 0 { panic(51270); };
+    // Metadata (stat) follows links -> not a symlink; the lstat face is what
+    // the sa_fs_metadata_* getters use if they report symlink-ness. We only
+    // assert the getter agrees with is_file on the target here.
+    let m = s1_meta(STR_PTR("smoke1_fs/link.txt"), STR_LEN("smoke1_fs/link.txt"), 51271);
+    if sla_fs_metadata_is_symlink(m) == 1 {
+        if sla_fs_metadata_is_file(m) != 0 { panic(51272); };
+    } else {
+        if sla_fs_metadata_is_file(m) != 1 { panic(51273); };
+    };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_is_block_device"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_is_block_device(m) != 0 { panic(51280); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_is_char_device"() {
+    let m = s1_meta(STR_PTR("/dev/null"), STR_LEN("/dev/null"), 51290);
+    if sla_fs_metadata_is_char_device(m) != 1 { panic(51292); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_is_fifo"() {
+    s1_mkdir();
+    sla_fs_remove_file(STR_PTR("smoke1_fs/pipe1"), STR_LEN("smoke1_fs/pipe1"));
+    let rc = sla_fs_mkfifo(STR_PTR("smoke1_fs/pipe1"), STR_LEN("smoke1_fs/pipe1"), 420);
+    if rc != 0 { panic(51300); };
+    let m = s1_meta(STR_PTR("smoke1_fs/pipe1"), STR_LEN("smoke1_fs/pipe1"), 51301);
+    if sla_fs_metadata_is_fifo(m) != 1 { panic(51302); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_is_socket"() {
+    s1_mkdir();
+    sla_fs_remove_file(STR_PTR("smoke1_fs/sock1"), STR_LEN("smoke1_fs/sock1"));
+    let cell = [0u64; 4];
+    let rc = sla_std_net_unix_listen(STR_PTR("smoke1_fs/sock1"), STR_LEN("smoke1_fs/sock1"), &cell[0]);
+    if rc != 0 { panic(51310); };
+    let m = s1_meta(STR_PTR("smoke1_fs/sock1"), STR_LEN("smoke1_fs/sock1"), 51311);
+    if sla_fs_metadata_is_socket(m) != 1 { panic(51312); };
+    sla_std_fs_metadata_free(m);
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_fs_metadata_modified_ms"() {
+    let m0 = s1_meta_file();
+    sla_std_fs_metadata_free(m0);
+    let rc = sla_fs_set_times_ms(STR_PTR("smoke1_fs/meta.txt"), STR_LEN("smoke1_fs/meta.txt"), 1600000000000, 1700000000000);
+    if rc != 0 { panic(51320); };
+    let m = s1_meta(STR_PTR("smoke1_fs/meta.txt"), STR_LEN("smoke1_fs/meta.txt"), 51321);
+    if sla_fs_metadata_modified_ms(m) != 1700000000000 { panic(51322); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_accessed_ms"() {
+    let m0 = s1_meta_file();
+    sla_std_fs_metadata_free(m0);
+    let rc = sla_fs_set_times_ms(STR_PTR("smoke1_fs/meta.txt"), STR_LEN("smoke1_fs/meta.txt"), 1600000000000, 1700000000000);
+    if rc != 0 { panic(51330); };
+    let m = s1_meta(STR_PTR("smoke1_fs/meta.txt"), STR_LEN("smoke1_fs/meta.txt"), 51331);
+    if sla_fs_metadata_accessed_ms(m) != 1600000000000 { panic(51332); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_created_ms"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_created_ms(m) <= 0 { panic(51340); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_changed_ms"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_changed_ms(m) <= 0 { panic(51350); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_len"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_len(m) != 10 { panic(51360); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_mode"() {
+    let m = s1_meta_file();
+    let mode = sla_fs_metadata_mode(m);
+    // Regular-file type bits: mode in [0o100000, 0o100000 + 0o10000).
+    if mode < 32768 { panic(51370); };
+    if mode > 36863 { panic(51371); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_uid"() {
+    let m = s1_meta_file();
+    if (sla_fs_metadata_uid(m) as u64) != (sla_std_process_user_id() as u64) { panic(51380); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_gid"() {
+    let m = s1_meta_file();
+    if (sla_fs_metadata_gid(m) as u64) != (sla_std_process_group_id() as u64) { panic(51390); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_ino"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/ino_a.txt"), STR_LEN("smoke1_fs/ino_a.txt"), STR_PTR("i"), STR_LEN("i"));
+    sla_fs_remove_file(STR_PTR("smoke1_fs/ino_b.txt"), STR_LEN("smoke1_fs/ino_b.txt"));
+    let rc = sla_fs_hard_link(STR_PTR("smoke1_fs/ino_a.txt"), STR_LEN("smoke1_fs/ino_a.txt"), STR_PTR("smoke1_fs/ino_b.txt"), STR_LEN("smoke1_fs/ino_b.txt"));
+    if rc != 0 { panic(51400); };
+    let ma = s1_meta(STR_PTR("smoke1_fs/ino_a.txt"), STR_LEN("smoke1_fs/ino_a.txt"), 51401);
+    let mb = s1_meta(STR_PTR("smoke1_fs/ino_b.txt"), STR_LEN("smoke1_fs/ino_b.txt"), 51402);
+    if sla_fs_metadata_ino(ma) == 0 { panic(51403); };
+    if sla_fs_metadata_ino(ma) != sla_fs_metadata_ino(mb) { panic(51404); };
+    sla_std_fs_metadata_free(ma);
+    sla_std_fs_metadata_free(mb);
+}
+
+@test "smoke1 sa_fs_metadata_dev"() {
+    let ma = s1_meta_file();
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/dev2.txt"), STR_LEN("smoke1_fs/dev2.txt"), STR_PTR("d"), STR_LEN("d"));
+    let mb = s1_meta(STR_PTR("smoke1_fs/dev2.txt"), STR_LEN("smoke1_fs/dev2.txt"), 51410);
+    if sla_fs_metadata_dev(ma) != sla_fs_metadata_dev(mb) { panic(51411); };
+    sla_std_fs_metadata_free(ma);
+    sla_std_fs_metadata_free(mb);
+}
+
+@test "smoke1 sa_fs_metadata_nlink"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/nlink_a.txt"), STR_LEN("smoke1_fs/nlink_a.txt"), STR_PTR("n"), STR_LEN("n"));
+    sla_fs_remove_file(STR_PTR("smoke1_fs/nlink_b.txt"), STR_LEN("smoke1_fs/nlink_b.txt"));
+    sla_fs_hard_link(STR_PTR("smoke1_fs/nlink_a.txt"), STR_LEN("smoke1_fs/nlink_a.txt"), STR_PTR("smoke1_fs/nlink_b.txt"), STR_LEN("smoke1_fs/nlink_b.txt"));
+    let m = s1_meta(STR_PTR("smoke1_fs/nlink_a.txt"), STR_LEN("smoke1_fs/nlink_a.txt"), 51420);
+    if sla_fs_metadata_nlink(m) != 2 { panic(51421); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_rdev"() {
+    let m = s1_meta(STR_PTR("/dev/null"), STR_LEN("/dev/null"), 51430);
+    if sla_fs_metadata_rdev(m) == 0 { panic(51431); };
+    sla_std_fs_metadata_free(m);
+    let m2 = s1_meta_file();
+    if sla_fs_metadata_rdev(m2) != 0 { panic(51432); };
+    sla_std_fs_metadata_free(m2);
+}
+
+@test "smoke1 sa_fs_metadata_blksize"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_blksize(m) == 0 { panic(51440); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_blocks"() {
+    s1_mkdir();
+    let fd = sla_fs_file_open(STR_PTR("smoke1_fs/big.bin"), STR_LEN("smoke1_fs/big.bin"), 6);
+    if fd <= 0 { panic(51450); };
+    let chunk = [0u8; 4096];
+    let i: u64 = 0;
+    while i < 25 {
+        let s1bp7: ptr = PTR_BYTE_ADD(&chunk, 0);
+        sla_fs_file_write_all(fd as u64, s1bp7, 4096);
+        i = i + 1;
+    }
+    sla_fs_file_close(fd as u64);
+    let m = s1_meta(STR_PTR("smoke1_fs/big.bin"), STR_LEN("smoke1_fs/big.bin"), 51451);
+    if sla_fs_metadata_blocks(m) == 0 { panic(51452); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_dev"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_st_dev(m) != sla_fs_metadata_dev(m) { panic(51460); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_ino"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_st_ino(m) != sla_fs_metadata_ino(m) { panic(51470); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_mode"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_st_mode(m) != sla_fs_metadata_mode(m) { panic(51480); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_nlink"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_st_nlink(m) != sla_fs_metadata_nlink(m) { panic(51490); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_uid"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_st_uid(m) != sla_fs_metadata_uid(m) { panic(51500); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_gid"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_st_gid(m) != sla_fs_metadata_gid(m) { panic(51510); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_rdev"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_st_rdev(m) != sla_fs_metadata_rdev(m) { panic(51520); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_size"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_st_size(m) != 10 { panic(51530); };
+    if sla_fs_metadata_st_size(m) != sla_fs_metadata_len(m) { panic(51531); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_atime"() {
+    let m0 = s1_meta_file();
+    sla_std_fs_metadata_free(m0);
+    sla_fs_set_times_ms(STR_PTR("smoke1_fs/meta.txt"), STR_LEN("smoke1_fs/meta.txt"), 1600000000000, 1700000000000);
+    let m = s1_meta(STR_PTR("smoke1_fs/meta.txt"), STR_LEN("smoke1_fs/meta.txt"), 51540);
+    if sla_fs_metadata_st_atime(m) != 1600000000 { panic(51541); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_atime_nsec"() {
+    let m = s1_meta_file();
+    let ns = sla_fs_metadata_st_atime_nsec(m);
+    if ns < 0 { panic(51550); };
+    if ns >= 1000000000 { panic(51551); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_mtime"() {
+    let m0 = s1_meta_file();
+    sla_std_fs_metadata_free(m0);
+    sla_fs_set_times_ms(STR_PTR("smoke1_fs/meta.txt"), STR_LEN("smoke1_fs/meta.txt"), 1600000000000, 1700000000000);
+    let m = s1_meta(STR_PTR("smoke1_fs/meta.txt"), STR_LEN("smoke1_fs/meta.txt"), 51560);
+    if sla_fs_metadata_st_mtime(m) != 1700000000 { panic(51561); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_mtime_nsec"() {
+    let m = s1_meta_file();
+    let ns = sla_fs_metadata_st_mtime_nsec(m);
+    if ns < 0 { panic(51570); };
+    if ns >= 1000000000 { panic(51571); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_ctime"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_st_ctime(m) <= 0 { panic(51580); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_ctime_nsec"() {
+    let m = s1_meta_file();
+    let ns = sla_fs_metadata_st_ctime_nsec(m);
+    if ns < 0 { panic(51590); };
+    if ns >= 1000000000 { panic(51591); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_blksize"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_st_blksize(m) != sla_fs_metadata_blksize(m) { panic(51600); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_metadata_st_blocks"() {
+    let m = s1_meta_file();
+    if sla_fs_metadata_st_blocks(m) != sla_fs_metadata_blocks(m) { panic(51610); };
+    sla_std_fs_metadata_free(m);
+}
+
+@test "smoke1 sa_fs_read_buffer_len"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/rbuf.txt"), STR_LEN("smoke1_fs/rbuf.txt"), STR_PTR("hello world"), STR_LEN("hello world"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_read_file(STR_PTR("smoke1_fs/rbuf.txt"), STR_LEN("smoke1_fs/rbuf.txt"), 1024, &cell[0]);
+    if rc != 0 { panic(51620); };
+    if cell[0] == 0 { panic(51621); };
+    if sla_fs_read_buffer_len(cell[0]) != 11 { panic(51622); };
+    sla_fs_read_buffer_free(^cell[0]);
+}
+
+@test "smoke1 sa_fs_read_buffer_free"() {
+    s1_mkdir();
+    sla_fs_write_file(STR_PTR("smoke1_fs/rbuf2.txt"), STR_LEN("smoke1_fs/rbuf2.txt"), STR_PTR("data"), STR_LEN("data"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_read_file(STR_PTR("smoke1_fs/rbuf2.txt"), STR_LEN("smoke1_fs/rbuf2.txt"), 1024, &cell[0]);
+    if rc != 0 { panic(51630); };
+    if sla_fs_read_buffer_len(cell[0]) != 4 { panic(51631); };
+    let rc2 = sla_fs_read_buffer_free(^cell[0]);
+    if rc2 != 0 { panic(51632); };
+}
+
+@test "smoke1 sa_fs_dir_buffer_len"() {
+    s1_mkdir();
+    sla_fs_remove_dir_all(STR_PTR("smoke1_fs/dbuf"), STR_LEN("smoke1_fs/dbuf"));
+    sla_fs_mkdir_p(STR_PTR("smoke1_fs/dbuf"), STR_LEN("smoke1_fs/dbuf"));
+    sla_fs_write_file(STR_PTR("smoke1_fs/dbuf/only.txt"), STR_LEN("smoke1_fs/dbuf/only.txt"), STR_PTR("1"), STR_LEN("1"));
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_read_dir_json(STR_PTR("smoke1_fs/dbuf"), STR_LEN("smoke1_fs/dbuf"), 16, &cell[0]);
+    if rc != 0 { panic(51640); };
+    if cell[0] == 0 { panic(51641); };
+    if sla_fs_dir_buffer_len(cell[0]) == 0 { panic(51642); };
+    sla_fs_dir_buffer_free(^cell[0]);
+}
+
+@test "smoke1 sa_fs_dir_buffer_free"() {
+    s1_mkdir();
+    let cell = [0u64; 4];
+    let rc = sla_std_fs_read_dir_json(STR_PTR("smoke1_fs"), STR_LEN("smoke1_fs"), 16, &cell[0]);
+    if rc != 0 { panic(51650); };
+    if sla_fs_dir_buffer_len(cell[0]) == 0 { panic(51651); };
+    let rc2 = sla_fs_dir_buffer_free(^cell[0]);
+    if rc2 != 0 { panic(51652); };
+}
+
+fn s1_watch(code: i32) -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_fs_watch_create(&cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+@test "smoke1 sa_fs_watch_add"() {
+    s1_mkdir();
+    let w = s1_watch(51660);
+    let wd = [0u64; 4];
+    let rc = sla_fs_watch_add(w, STR_PTR("smoke1_fs"), STR_LEN("smoke1_fs"), 4095, &wd[0]);
+    if rc != 0 { panic(51662); };
+    sla_fs_watch_close(^w);
+}
+
+@test "smoke1 sa_fs_watch_poll"() {
+    s1_mkdir();
+    sla_fs_remove_dir_all(STR_PTR("smoke1_fs/watchd"), STR_LEN("smoke1_fs/watchd"));
+    sla_fs_mkdir_p(STR_PTR("smoke1_fs/watchd"), STR_LEN("smoke1_fs/watchd"));
+    let w = s1_watch(51670);
+    let wd = [0u64; 4];
+    let rc = sla_fs_watch_add(w, STR_PTR("smoke1_fs/watchd"), STR_LEN("smoke1_fs/watchd"), 4095, &wd[0]);
+    if rc != 0 { panic(51672); };
+    sla_fs_write_file(STR_PTR("smoke1_fs/watchd/ev1.txt"), STR_LEN("smoke1_fs/watchd/ev1.txt"), STR_PTR("e"), STR_LEN("e"));
+    let pending = [0u64; 4];
+    let rc2 = sla_fs_watch_poll(w, 2000, &pending[0]);
+    if rc2 != 0 { panic(51673); };
+    if pending[0] == 0 { panic(51674); };
+    sla_fs_watch_close(^w);
+}
+
+@test "smoke1 sa_fs_watch_next"() {
+    s1_mkdir();
+    sla_fs_remove_dir_all(STR_PTR("smoke1_fs/watchd2"), STR_LEN("smoke1_fs/watchd2"));
+    sla_fs_mkdir_p(STR_PTR("smoke1_fs/watchd2"), STR_LEN("smoke1_fs/watchd2"));
+    let w = s1_watch(51680);
+    let wd = [0u64; 4];
+    let rc = sla_fs_watch_add(w, STR_PTR("smoke1_fs/watchd2"), STR_LEN("smoke1_fs/watchd2"), 4095, &wd[0]);
+    if rc != 0 { panic(51682); };
+    sla_fs_write_file(STR_PTR("smoke1_fs/watchd2/ev2.txt"), STR_LEN("smoke1_fs/watchd2/ev2.txt"), STR_PTR("e"), STR_LEN("e"));
+    let pending = [0u64; 4];
+    sla_fs_watch_poll(w, 2000, &pending[0]);
+    if pending[0] == 0 { panic(51683); };
+    let ready = [0u64; 4];
+    let owd = [0u64; 4];
+    let omask = [0u64; 4];
+    let ocookie = [0u64; 4];
+    let namebuf = [0u64; 32];
+    let nlen = [0u64; 4];
+    let rc2 = sla_fs_watch_next(w, &ready[0], &owd[0], &omask[0], &ocookie[0], &namebuf[0], 256, &nlen[0]);
+    if rc2 != 0 { panic(51684); };
+    if ready[0] != 1 { panic(51685); };
+    if owd[0] != wd[0] { panic(51686); };
+    if omask[0] == 0 { panic(51687); };
+    if nlen[0] != 7 { panic(51688); };
+    let np = PTR_BYTE_ADD(&namebuf, 0);
+    if PTR_BYTE_AT(np, 0) != 101 { panic(51689); };
+    if PTR_BYTE_AT(np, 6) != 116 { panic(51690); };
+    sla_fs_watch_close(^w);
+}
+
+@test "smoke1 sa_fs_watch_remove"() {
+    s1_mkdir();
+    let w = s1_watch(51700);
+    let wd = [0u64; 4];
+    let rc = sla_fs_watch_add(w, STR_PTR("smoke1_fs"), STR_LEN("smoke1_fs"), 4095, &wd[0]);
+    if rc != 0 { panic(51701); };
+    let rc2 = sla_fs_watch_remove(w, wd[0] as i32);
+    if rc2 != 0 { panic(51702); };
+    sla_fs_watch_close(^w);
+}
+
+@test "smoke1 sa_fs_watch_close"() {
+    let w = s1_watch(51710);
+    let rc = sla_fs_watch_close(^w);
+    if rc != 0 { panic(51712); };
+}

@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 575_enumret：函数返回枚举（1）。
+// SLA 枚举用 `enum E { A, B }` + `E::B` 具限（见 75），`match` 消费；
+// 裸 `E.B` / 返回后直接比较均不可解析，用 `match` 转整数断言。
+
+enum E { A, B }
+
+fn f() -> E { return E::B; }
+fn g() -> E { return E::A; }
+
+fn val(e: E) -> i32 {
+    let r = match e {
+        E::A => { 0 },
+        E::B => { 1 },
+    };
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{}", val(f()), val(g()));
+    return 0;
+}
+
+@test "basic 135 enum ret"() {
+    if val(f()) != 1 { panic(13501); };
+    if val(g()) != 0 { panic(13502); };
+}

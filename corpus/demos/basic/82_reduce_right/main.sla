@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 107_reduce_right：右折减法（0-4-3-2-1=-10）。
+// 与 81（左折求和 + 右折求积）互补，此处为右折减法语义。
+
+fn main() -> i32 {
+    let a = [1, 2, 3, 4];
+    let t = 0;
+    let j = 4;
+    while j > 0 {
+        j = j - 1;
+        t = t - a[j];
+    }
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 82 reduce right"() {
+    let a = [1, 2, 3, 4];
+    let t = 0;
+    let j = 4;
+    while j > 0 {
+        j = j - 1;
+        t = t - a[j];
+    }
+    if t != -10 { panic(8201); };
+}

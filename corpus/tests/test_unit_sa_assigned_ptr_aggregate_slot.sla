@@ -1,0 +1,111 @@
+@import "sa_std/string.sa"
+
+struct RebindScanner {
+    text: ptr,
+    text_len: int,
+    pos: int,
+    token_kind: int,
+}
+
+struct RebindParser {
+    scanner: RebindScanner,
+    current_kind: int,
+    nodes: int,
+    errors: int,
+}
+
+fn rebind_scanner_new(text: ptr, text_len: int) -> RebindScanner {
+    return RebindScanner { text: text, text_len: text_len, pos: 0, token_kind: 10 };
+}
+
+fn rebind_scanner_next(state: RebindScanner) -> RebindScanner {
+    let next_kind = if state.pos == 0 { 20 } else { 30 };
+    return RebindScanner { text: state.text, text_len: state.text_len, pos: state.pos + 1, token_kind: next_kind };
+}
+
+fn rebind_token_kind(state: RebindScanner) -> int {
+    return state.token_kind;
+}
+
+fn rebind_parser_new(scanner: RebindScanner, current_kind: int, nodes: int, errors: int) -> RebindParser {
+    return RebindParser { scanner: scanner, current_kind: current_kind, nodes: nodes, errors: errors };
+}
+
+fn rebind_advance(parser: RebindParser) -> RebindParser {
+    let s2 = rebind_scanner_next(parser.scanner);
+    return rebind_parser_new(s2, rebind_token_kind(s2), parser.nodes + 1, parser.errors);
+}
+
+fn rebind_add_err(parser: RebindParser) -> RebindParser {
+    return rebind_parser_new(parser.scanner, parser.current_kind, parser.nodes, parser.errors + 1);
+}
+
+fn rebind_parse_like_function_expression(parser: RebindParser) -> RebindParser {
+    let p2 = rebind_advance(parser);
+    if p2.current_kind == 20 { p2 = rebind_advance(p2); };
+    let depth = 1;
+    let ii = 0;
+    while ii < 3 {
+        if p2.current_kind == 99 { return rebind_add_err(p2); };
+        if p2.current_kind == 30 {
+            depth = depth - 1;
+            if depth == 0 { p2 = rebind_advance(p2); break; };
+        };
+        p2 = rebind_advance(p2);
+        ii = ii + 1;
+    }
+    if p2.current_kind == 40 {
+        p2 = rebind_advance(p2);
+    };
+    return p2;
+}
+
+fn rebind_parse_redeclared_return(parser: RebindParser) -> RebindParser {
+    let p2 = rebind_advance(parser);
+    if p2.current_kind == 20 {
+        let p2 = rebind_advance(parser);
+        p2 = rebind_advance(p2);
+        return p2;
+    };
+    return p2;
+}
+
+fn rebind_repeated_aggregate_field_reuse(parser: RebindParser) -> RebindParser {
+    if parser.current_kind == 10 {
+        let after_lt = rebind_advance(parser);
+        if after_lt.current_kind == 20 {
+            return rebind_advance(after_lt);
+        };
+    };
+    if parser.current_kind == 30 {
+        let after_lt = rebind_advance(parser);
+        if after_lt.current_kind == 20 {
+            return rebind_advance(after_lt);
+        };
+    };
+    return parser;
+}
+
+@test "sa text assigned ptr aggregate rebinds through slot"() {
+    let parser = rebind_parser_new(rebind_scanner_new(STR_PTR("abc"), STR_LEN("abc")), 10, 7, 0);
+    let got = rebind_parse_like_function_expression(parser);
+    if got.scanner.pos != 3 { panic(44201); };
+    if got.nodes != 10 { panic(44202); };
+    if got.errors != 0 { panic(44203); };
+}
+
+@test "sa text redeclared assigned ptr aggregate return loads slot value"() {
+    let parser = rebind_parser_new(rebind_scanner_new(STR_PTR("abc"), STR_LEN("abc")), 10, 7, 0);
+    let got = rebind_parse_redeclared_return(parser);
+    if got.scanner.pos != 2 { panic(44211); };
+    if got.nodes != 9 { panic(44212); };
+    if got.errors != 0 { panic(44213); };
+}
+
+@test "sa text repeated aggregate alias survives field read"() {
+    let parser = rebind_parser_new(rebind_scanner_new(STR_PTR("abc"), STR_LEN("abc")), 10, 7, 0);
+    let got = rebind_repeated_aggregate_field_reuse(parser);
+    if got.scanner.pos != 2 { panic(44221); };
+    if got.nodes != 9 { panic(44222); };
+    if got.errors != 0 { panic(44223); };
+}

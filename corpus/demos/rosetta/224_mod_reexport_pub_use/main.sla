@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn mod_reexported_item_count() -> i32 { let public_reexport = 1; return public_reexport; }
+fn main() -> i32 { let result = mod_reexported_item_count(); println("{}", result); return result; }
+@test "rosetta 224 mod reexport pub use"() { let got = mod_reexported_item_count(); if got != 1 { panic(224); }; }

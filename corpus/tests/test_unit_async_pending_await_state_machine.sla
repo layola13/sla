@@ -1,0 +1,23 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn wait_on_pending() -> i32 {
+    let value = future::pending::<i32>().await;
+    return value + 1;
+}
+
+fn pending_await_task_stays_pending() -> bool {
+    let fut = wait_on_pending();
+    let task = task::new(fut);
+    let ready = task::poll(task);
+    if ready == true {
+        return false;
+    };
+    return task::is_ready(task) == false;
+}
+
+@test "async pending await task stays pending"() {
+    if pending_await_task_stays_pending() != true {
+        panic(9511);
+    };
+}

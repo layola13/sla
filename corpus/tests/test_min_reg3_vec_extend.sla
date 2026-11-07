@@ -1,0 +1,17 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/vec_packed.sla"
+
+// MINIM V1: one direct call to sa_vec_u8_extend_packed.
+@test "minim vec u8 extend packed"() {
+    let src: [u8; 2] = [0u8; 2];
+    src[0] = 10;
+    src[1] = 20;
+    let sp: ptr = PTR_BYTE_ADD(&src, 0);
+    let v: Vec<u8> = Vec::new();
+    v = sa_vec_u8_extend_packed(v, sp, 2);
+    if (len(v) as u64) != 2 { panic(121); };
+    if v[0] != 10 { panic(122); };
+    if v[1] != 20 { panic(123); };
+}

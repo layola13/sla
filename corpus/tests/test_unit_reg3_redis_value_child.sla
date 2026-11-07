@@ -1,0 +1,21 @@
+@import "sa_std/redis.sla"
+
+// BISECT C: by-value child extraction only.
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+@test "bisect c child by value"() {
+    let items: Vec<RedisValue> = Vec::new();
+    items.push(redis_int_value(42));
+    items.push(redis_bulk_value(reg3_bytes(STR_PTR("foo"), STR_LEN("foo"))));
+    items.push(redis_null_value());
+    let agg = redis_empty_value();
+    agg.kind = SA_REDIS_KIND_ARRAY;
+    agg.items = items;
+    let c0 = redis_value_child(&agg, 0);
+    if redis_value_int(&c0) != 42 { panic(217); };
+    let c9 = redis_value_child(&agg, 9);
+    if redis_value_kind(&c9) != SA_REDIS_KIND_INVALID { panic(218); };
+}

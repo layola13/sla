@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Bell 奇偶续 Touchard 同余 B(11) mod 2=0，B(12) mod 2=1（周期 3 续两位）。
+// 意对标 784_bell_parity（n=8/9/10 版互补；数论性质单锁）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn bell(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let k = 0;
+    while k <= n - 1 {
+        s = s + binom_mul(n - 1, k) * bell(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", bell(11) - bell(11) / 2 * 2, bell(12) - bell(12) / 2 * 2, bell(10) - bell(10) / 2 * 2);
+    return 0;
+}
+
+@test "basic 914 bell parity11"() {
+    if bell(11) - bell(11) / 2 * 2 != 0 { panic(91401); };
+    if bell(12) - bell(12) / 2 * 2 != 1 { panic(91402); };
+    if bell(10) - bell(10) / 2 * 2 != 1 { panic(91403); };
+    if bell(9) - bell(9) / 2 * 2 != 1 { panic(91404); };
+}

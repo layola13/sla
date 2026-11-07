@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 497_math_floor_neg + 545_f64round：下/上取整与截断
+//（7,-8,3,-7,8,2,3；100 覆盖正数 abs + 截断，此处主覆盖负数分支）。
+// SLA 尚无 `Math.floor/ceil/trunc/round`，用分支 + `as i32` 截断表达。
+
+fn trunc(x: f64) -> i32 {
+    return x as i32;
+}
+
+fn floor(x: f64) -> i32 {
+    let t = x as i32;
+    if x < 0.0 && x != t as f64 { return t - 1; };
+    return t;
+}
+
+fn ceil(x: f64) -> i32 {
+    let t = x as i32;
+    if x > 0.0 && x != t as f64 { return t + 1; };
+    return t;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{},{}", floor(7.8), floor(-7.2), ceil(2.5), trunc(-7.9), ceil(2.9));
+    return 0;
+}
+
+@test "basic 130 floor neg"() {
+    if floor(7.8) != 7 { panic(13001); };
+    if floor(-7.2) != -8 { panic(13002); };
+    if ceil(2.5) != 3 { panic(13003); };
+    if trunc(-7.9) != -7 { panic(13004); };
+    if floor(-7.0) != -7 { panic(13005); };
+    if ceil(7.0) != 7 { panic(13006); };
+}

@@ -1,0 +1,97 @@
+@import "sa_std/vec.sa"
+
+// Next-dimension fixture for docs/sab_parallel_runner_whole_file_memoryleak_issue_cn.md:
+// multiple Vec<fn> lanes with independent order-position vectors, merged in a loop.
+// Keep this under the 10s local SA/SAB smoke budget.
+
+struct ParallelRunnerMultiLaneHolder {
+    runs: Vec<fn(i32) -> i32>,
+    on_scope_runs: Vec<fn(i32) -> i32>,
+    run_order_positions: Vec<i64>,
+    on_scope_order_positions: Vec<i64>,
+}
+
+fn parallel_runner_multi_lane_inc(value: i32) -> i32 {
+    return value + 1;
+}
+
+fn parallel_runner_multi_lane_double(value: i32) -> i32 {
+    return value + value;
+}
+
+fn parallel_runner_multi_lane_holder_new() -> ParallelRunnerMultiLaneHolder {
+    let runs: Vec<fn(i32) -> i32> = Vec::new();
+    let on_scope_runs: Vec<fn(i32) -> i32> = Vec::new();
+    let run_order_positions: Vec<i64> = Vec::new();
+    let on_scope_order_positions: Vec<i64> = Vec::new();
+    return ParallelRunnerMultiLaneHolder {
+        runs: runs,
+        on_scope_runs: on_scope_runs,
+        run_order_positions: run_order_positions,
+        on_scope_order_positions: on_scope_order_positions,
+    };
+}
+
+fn parallel_runner_multi_lane_len(holder: ParallelRunnerMultiLaneHolder) -> i64 {
+    return (len(holder.runs) + len(holder.on_scope_runs)) as i64;
+}
+
+fn parallel_runner_multi_lane_find_order(positions: Vec<i64>, order_pos: i64) -> i64 {
+    let i: i64 = 0;
+    let n = len(positions) as i64;
+    while i < n {
+        if positions[i] == order_pos {
+            return i;
+        };
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn parallel_runner_multi_lane_spawn(holder: ParallelRunnerMultiLaneHolder, run: fn(i32) -> i32) -> ParallelRunnerMultiLaneHolder {
+    let order_pos = parallel_runner_multi_lane_len(holder);
+    holder.runs.push(run);
+    holder.run_order_positions.push(order_pos);
+    return holder;
+}
+
+fn parallel_runner_multi_lane_spawn_on_scope(holder: ParallelRunnerMultiLaneHolder, run: fn(i32) -> i32) -> ParallelRunnerMultiLaneHolder {
+    let order_pos = parallel_runner_multi_lane_len(holder);
+    holder.on_scope_runs.push(run);
+    holder.on_scope_order_positions.push(order_pos);
+    return holder;
+}
+
+fn parallel_runner_multi_lane_extend(parent: ParallelRunnerMultiLaneHolder, child: ParallelRunnerMultiLaneHolder) -> ParallelRunnerMultiLaneHolder {
+    let order_pos: i64 = 0;
+    let total = parallel_runner_multi_lane_len(child);
+    while order_pos < total {
+        let threaded_slot = parallel_runner_multi_lane_find_order(child.run_order_positions, order_pos);
+        if threaded_slot >= 0 {
+            parent = parallel_runner_multi_lane_spawn(parent, child.runs[threaded_slot]);
+        } else {
+            let local_slot = parallel_runner_multi_lane_find_order(child.on_scope_order_positions, order_pos);
+            if local_slot >= 0 {
+                parent = parallel_runner_multi_lane_spawn_on_scope(parent, child.on_scope_runs[local_slot]);
+            };
+        };
+        order_pos = order_pos + 1;
+    }
+    return parent;
+}
+
+@test "parallel runner multi fnptr lane extend"() {
+    let parent = parallel_runner_multi_lane_holder_new();
+    let child0 = parallel_runner_multi_lane_holder_new();
+    let child1 = parallel_runner_multi_lane_spawn(child0, parallel_runner_multi_lane_inc);
+    let child2 = parallel_runner_multi_lane_spawn_on_scope(child1, parallel_runner_multi_lane_double);
+    let out = parallel_runner_multi_lane_extend(parent, child2);
+    if len(out.runs) as i64 != 1 { panic(52301); };
+    if len(out.on_scope_runs) as i64 != 1 { panic(52302); };
+    if out.run_order_positions[0] != 0 { panic(52303); };
+    if out.on_scope_order_positions[0] != 1 { panic(52304); };
+    let run = out.runs[0];
+    let on_scope = out.on_scope_runs[0];
+    if run(10) != 11 { panic(52305); };
+    if on_scope(10) != 20 { panic(52306); };
+}

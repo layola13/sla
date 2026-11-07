@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/box.sa"
+@import "sa_std/mem.sa"
+
+fn mem_forget_observable_value() -> i32 {
+    let value = Box::new(9);
+    let result = *value;
+    mem::forget(value);
+    return result;
+}
+
+fn main() -> i32 {
+    let value = Box::new(9);
+    let result = *value;
+    mem::forget(value);
+    println("{}", result);
+    return result;
+}
+@test "rosetta 159 159_mem_forget_leak"() { let got = mem_forget_observable_value(); if got != 9 { panic(159); }; }

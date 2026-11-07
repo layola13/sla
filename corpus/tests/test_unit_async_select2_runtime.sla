@@ -1,0 +1,69 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+fn select2_left_ready_value() -> i32 {
+    let left = future::ready(13);
+    let right = future::pending::<i32>();
+    let selected = future::select2(left, right);
+    let task = task::new(selected);
+    if task::poll(task) != true {
+        panic(9601);
+    };
+    let either = task::result(task);
+    if future::either_side(either) != 1 {
+        panic(9602);
+    };
+    let value = future::either_left(either);
+    if value != 13 {
+        panic(9603);
+    };
+    return value;
+}
+
+fn select2_right_ready_value() -> i32 {
+    let left = future::pending::<i32>();
+    let right = future::ready(29);
+    let selected = future::select2(left, right);
+    let task = task::new(selected);
+    if task::poll(task) != true {
+        panic(9604);
+    };
+    let either = task::result(task);
+    if future::either_side(either) != 2 {
+        panic(9605);
+    };
+    let value = future::either_right(either);
+    if value != 29 {
+        panic(9606);
+    };
+    return value;
+}
+
+fn select2_waits_for_pending() -> bool {
+    let left = future::pending::<i32>();
+    let right = future::pending::<i32>();
+    let selected = future::select2(left, right);
+    let task = task::new(selected);
+    if task::poll(task) == true {
+        return false;
+    };
+    return task::is_ready(task) == false;
+}
+
+@test "future select2 left ready runtime"() {
+    if select2_left_ready_value() != 13 {
+        panic(9607);
+    };
+}
+
+@test "future select2 right ready runtime"() {
+    if select2_right_ready_value() != 29 {
+        panic(9608);
+    };
+}
+
+@test "future select2 pending runtime"() {
+    if select2_waits_for_pending() != true {
+        panic(9609);
+    };
+}

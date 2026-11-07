@@ -1,0 +1,14 @@
+#def Button_SIZE = 4
+#def Button_id = +0
+#def DynDraw_SIZE = 16
+#def DynDraw_DATA = +0
+#def DynDraw_VTABLE = +8
+#def VTable_draw = +0
+
+@export button_draw(&self: ptr) -> i32:
+L_ENTRY:
+    id = load self+Button_id as i32
+    !self
+    return id
+
+@const BUTTON_VT = vtable { draw = @button_draw }

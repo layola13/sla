@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 递归 vs 迭代阶乘对峙（120×230：5→120=120）。
+// 双实现一致性锁定（单实现见 120/230）。
+
+fn fact_rec(n: int) -> int {
+    if n <= 1 { return 1; };
+    return n * fact_rec(n - 1);
+}
+
+fn fact_iter(n: int) -> int {
+    let p = 1;
+    let i = 1;
+    while i <= n {
+        p = p * i;
+        i = i + 1;
+    }
+    return p;
+}
+
+fn main() -> i32 {
+    println("{},{}", fact_rec(5), fact_iter(5));
+    return 0;
+}
+
+@test "basic 292 duel fact"() {
+    if fact_rec(5) != fact_iter(5) { panic(29201); };
+    if fact_iter(5) != 120 { panic(29202); };
+}

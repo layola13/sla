@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1262_nested_ternary：嵌套三元分档（1,2,3）。
+// 与 06 的单层三元互补：右嵌套多档（括号分组，探针已验证三线）。
+
+fn grade(s: i32) -> i32 {
+    return s >= 90 ? 1 : (s >= 60 ? 2 : 3);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", grade(95), grade(70), grade(30));
+    return 0;
+}
+
+@test "basic 185 nested ternary"() {
+    if grade(95) != 1 { panic(18501); };
+    if grade(70) != 2 { panic(18502); };
+    if grade(30) != 3 { panic(18503); };
+    if grade(90) != 1 { panic(18504); };
+    if grade(60) != 2 { panic(18505); };
+}

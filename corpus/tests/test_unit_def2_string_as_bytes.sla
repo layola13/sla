@@ -1,0 +1,46 @@
+// DEF-2 regression corpus: String.as_bytes() / String.bytes() on an
+// owned String borrowed as &String (heng found-corpus shape). On the
+// 6004af4 basepoint the SAB backend emits a call to an undeclared
+// @sla__as_bytes symbol (UnknownRegister, trap 1007) because sab_codegen
+// has no lowering for these methods while the text backend expands
+// STR_AS_BYTES / STRING_BUF_AS_BYTES. Expected on BOTH backends: byte
+// length 5 and byte sum of "hello" = 532.
+fn sum_as_bytes(s: &String) -> u64 {
+    let bs = s.as_bytes();
+    let n = len(bs);
+    let t: u64 = 0;
+    let i: u64 = 0;
+    while i < n {
+        t = t + (bs[i] as u64);
+        i = i + 1;
+    }
+    return t;
+}
+
+fn sum_bytes(s: &String) -> u64 {
+    let bs = s.bytes();
+    let n = len(bs);
+    let t: u64 = 0;
+    let i: u64 = 0;
+    while i < n {
+        t = t + (bs[i] as u64);
+        i = i + 1;
+    }
+    return t;
+}
+
+fn len_as_bytes(s: &String) -> u64 {
+    let bs = s.as_bytes();
+    return len(bs);
+}
+
+@test "def2 as_bytes length and sum"() {
+    let s: String = format("hello");
+    if len_as_bytes(&s) != 5 { panic(1201); };
+    if sum_as_bytes(&s) != 532 { panic(1202); };
+}
+
+@test "def2 bytes length and sum"() {
+    let s: String = format("hello");
+    if sum_bytes(&s) != 532 { panic(1203); };
+}

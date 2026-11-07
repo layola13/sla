@@ -1,0 +1,50 @@
+@import "sa_std/core/option.sa"
+
+struct OptionMethodPayload {
+    value: i32,
+}
+
+@test "option is_some and is_none"() {
+    let some: Option<i32> = Some(7);
+    let none: Option<i32> = None;
+
+    if !some.is_some() { panic(1); };
+    if some.is_none() { panic(2); };
+    if none.is_some() { panic(3); };
+    if !none.is_none() { panic(4); };
+}
+
+@test "option is_some is_none with struct payload"() {
+    let some: Option<OptionMethodPayload> = Some(OptionMethodPayload { value: 11 });
+    let none: Option<OptionMethodPayload> = None;
+
+    if !some.is_some() { panic(1); };
+    if !none.is_none() { panic(2); };
+}
+
+@test "option unwrap and map"() {
+    let some: Option<i32> = Some(4);
+    let mapped: Option<i32> = some.map(|value: i32| value + 3);
+
+    if !mapped.is_some() { panic(1); };
+    if mapped.unwrap() != 7 { panic(2); };
+}
+
+@test "option and_then"() {
+    let some: Option<i32> = Some(4);
+    let chained: Option<i32> = some.and_then(|value: i32| Some(value + 6));
+    if !chained.is_some() { panic(1); };
+    if chained.unwrap() != 10 { panic(2); };
+
+    let none: Option<i32> = None;
+    let skipped: Option<i32> = none.and_then(|value: i32| Some(value + 1));
+    if skipped.is_some() { panic(3); };
+}
+
+@test "option unwrap_or_else"() {
+    let some: Option<i32> = Some(5);
+    let none: Option<i32> = None;
+
+    if some.unwrap_or_else(|| 9) != 5 { panic(1); };
+    if none.unwrap_or_else(|| 9) != 9 { panic(2); };
+}

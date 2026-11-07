@@ -1,0 +1,40 @@
+struct Slots {
+    active: [bool; 2],
+    values: [i32; 2],
+    delta: [i32; 2],
+}
+
+fn fill_first(slots: Slots) -> Slots {
+    let i = 0;
+    while i < 2 {
+        if slots.active[i] == false {
+            slots.active[i] = true;
+            slots.values[i] = 7;
+            slots.values[i] = slots.values[i] + slots.delta[i];
+            return slots;
+        };
+        i = i + 1;
+    }
+    return slots;
+}
+
+fn demo() -> i32 {
+    let slots = Slots {
+        active: [false, false],
+        values: [0, 0],
+        delta: [5, 0],
+    };
+    let out = fill_first(slots);
+    return out.values[0];
+}
+
+fn main() -> i32 {
+    return demo();
+}
+
+@test "field array cleanup across while"() {
+    let got = demo();
+    if got != 12 {
+        panic(1200);
+    };
+}

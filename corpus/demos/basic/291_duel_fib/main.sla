@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 递归 vs 迭代 fib 对峙（120×143：10→55=55）。
+// 双实现一致性锁定（单实现见 120/143）。
+
+fn fib_rec(n: int) -> int {
+    if n <= 1 { return n; };
+    return fib_rec(n - 1) + fib_rec(n - 2);
+}
+
+fn fib_iter(n: int) -> int {
+    let a = 0;
+    let b = 1;
+    let i = 0;
+    while i < n {
+        let t = a + b;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    return a;
+}
+
+fn main() -> i32 {
+    println("{},{}", fib_rec(10), fib_iter(10));
+    return 0;
+}
+
+@test "basic 291 duel fib"() {
+    if fib_rec(10) != fib_iter(10) { panic(29101); };
+    if fib_iter(10) != 55 { panic(29102); };
+}

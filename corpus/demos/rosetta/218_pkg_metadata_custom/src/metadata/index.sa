@@ -1,0 +1,6 @@
+@import "src/metadata/helpers/index.sa"
+
+@metadata_package_value() -> i32:
+L_ENTRY:
+    value = call @metadata_helper_value()
+    return value

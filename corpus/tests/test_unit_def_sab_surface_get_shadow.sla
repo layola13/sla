@@ -1,0 +1,17 @@
+@import "sa_std/core/arc.sa"
+
+// DEF-SAB-SURFACE-GET-SHADOW regression: a user function whose name matches
+// a std-surface method (Arc `get`) must be called as written. The SAB
+// std-surface dispatch keyed on (first-arg type, name) only and silently
+// substituted the surface projection (ARC_GET), so the function body never
+// ran. The SA-text backend was immune.
+
+fn get(a: Arc<i32>) -> i32 {
+    let v = *a;
+    return v + 1;
+}
+
+@test "user fn get shadows arc surface get"() {
+    let a = Arc::new(41);
+    if get(a) != 42 { panic(75301); };
+}

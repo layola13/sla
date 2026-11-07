@@ -1,0 +1,153 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/core/trait_object.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@import "sa_std/core/box.sa"
+@import "sa_std/vec.sa"
+@import "sa_std/core/trait_object.sa"
+@const VT_AddOne_Score = vtable { score = @sla__AddOne__Score_score }
+@const VT_AddTwo_Score = vtable { score = @sla__AddTwo__Score_score }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__AddOne__Score_score(&self: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load self+0 as i32
+    tmp_1 = 1
+    tmp_2 = add tmp_0, tmp_1
+    !tmp_0
+    !tmp_1
+    return tmp_2
+
+@sla__AddTwo__Score_score(&self: ptr) -> i32:
+L_ENTRY:
+    tmp_3 = load self+0 as i32
+    tmp_4 = 2
+    tmp_5 = add tmp_3, tmp_4
+    !tmp_3
+    !tmp_4
+    return tmp_5
+
+@main() -> i32:
+L_ENTRY:
+    tmp_6 = alloc 4
+    tmp_7 = 4
+    store tmp_6+0, tmp_7 as i32
+    !tmp_7
+    EXPAND BOX_NEW tmp_8, tmp_6
+    !tmp_6
+    tmp_9 = load tmp_8+Box_value as ptr
+    tmp_10 = alloc Dyn_SIZE
+    store tmp_10+Dyn_data, tmp_9 as ptr
+    store tmp_10+Dyn_vtable, &VT_AddOne_Score as ptr
+    !tmp_9
+    !tmp_8
+    left = tmp_10
+    tmp_11 = alloc 4
+    tmp_12 = 5
+    store tmp_11+0, tmp_12 as i32
+    !tmp_12
+    EXPAND BOX_NEW tmp_13, tmp_11
+    !tmp_11
+    tmp_14 = load tmp_13+Box_value as ptr
+    tmp_15 = alloc Dyn_SIZE
+    store tmp_15+Dyn_data, tmp_14 as ptr
+    store tmp_15+Dyn_vtable, &VT_AddTwo_Score as ptr
+    !tmp_14
+    !tmp_13
+    right = tmp_15
+    EXPAND VEC_NEW tmp_16
+    EXPAND VEC_PUSH tmp_16, left, 8
+    EXPAND VEC_PUSH tmp_16, right, 8
+    values = tmp_16
+    tmp_17 = call @sa_vec_len(&values)
+    tmp_18 = load values+Vec_ptr as ptr
+    tmp_19 = stack_alloc 8
+    store tmp_19+0, 0 as i32
+    tmp_20 = stack_alloc 8
+    store tmp_20+0, 0 as u64
+    jmp L_VEC_SUM_HEAD_0
+
+L_VEC_SUM_HEAD_0:
+    tmp_21 = load tmp_20+0 as u64
+    tmp_22 = ult tmp_21, tmp_17
+    br tmp_22 -> L_VEC_SUM_BODY_1, L_VEC_SUM_END_2
+
+L_VEC_SUM_BODY_1:
+    !tmp_22
+    tmp_23 = load tmp_19+0 as i32
+    tmp_24 = mul tmp_21, 8
+    tmp_25 = ptr_add tmp_18, tmp_24
+    tmp_26 = load tmp_25+0 as ptr
+    tmp_27 = load tmp_26+Dyn_data as ptr
+    tmp_28 = load tmp_26+Dyn_vtable as ptr
+    tmp_29 = load tmp_28+0 as ptr
+    tmp_30 = call_indirect tmp_29(&tmp_27)
+    !tmp_29
+    !tmp_28
+    !tmp_27
+    tmp_31 = add tmp_23, tmp_30
+    store tmp_19+0, tmp_31 as i32
+    !tmp_24
+    !tmp_25
+    !tmp_26
+    !tmp_23
+    !tmp_31
+    !tmp_30
+    tmp_32 = add tmp_21, 1
+    store tmp_20+0, tmp_32 as u64
+    !tmp_32
+    !tmp_21
+    jmp L_VEC_SUM_HEAD_0
+
+L_VEC_SUM_END_2:
+    !tmp_22
+    !tmp_17
+    !tmp_18
+    tmp_33 = load tmp_19+0 as i32
+    total = tmp_33
+    tmp_34 = call @sa_fmt_u64(total, 10)
+    tmp_35 = call @sa_fmt_buffer_data(tmp_34)
+    tmp_36 = call @sa_fmt_buffer_len(tmp_34)
+    tmp_37 = tmp_35
+    call @sa_print_bytes(&tmp_37, tmp_36)
+    call @sa_fmt_buffer_free(^tmp_34)
+    !tmp_37
+    !tmp_36
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_38 = 0
+    !right
+    !left
+    !values
+    !total
+    return tmp_38
+
+@test "rosetta 032 trait object vector"():
+L_TEST_ENTRY_3:
+    tmp_39 = call @main()
+    tmp_40 = 0
+    tmp_41 = ne tmp_39, tmp_40
+    !tmp_39
+    !tmp_40
+    br tmp_41 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_41
+    panic(32)
+
+L_ELSE_5:
+    !tmp_41
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    return
+

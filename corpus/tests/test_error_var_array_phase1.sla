@@ -1,0 +1,9 @@
+fn bad_var_array_phase1() -> i32 {
+    var values: [i32; 2];
+    values = [1, 2];
+    return values[0];
+}
+
+fn main() -> i32 {
+    return bad_var_array_phase1();
+}

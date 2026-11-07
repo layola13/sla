@@ -1,0 +1,365 @@
+// Smoke wave 1: register-2 externs in sa_std/net.sai, plain (net_)
+// family. These wrappers return values directly: producers return
+// the handle as i32 (>0), send/recv return byte counts, setters
+// return status (0 = OK). Loopback only. Panic codes 63xxx.
+@import "sla_std/wrap/net.sla"
+@import "sla_std/wrap/fs.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+fn s1_np_udp(code: i32) -> u64 {
+    let h = sla_net_udp_bind(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 0);
+    if h <= 0 { panic(code); };
+    return (h as u64);
+}
+
+fn s1_np_port(sock: u64, code: i32) -> u32 {
+    let a = sla_net_udp_local_addr(sock);
+    if a <= 0 { panic(code); };
+    return sla_net_addr_port((a as u64));
+}
+
+// Builds a connected TCP pair via the std_ family; returns nothing,
+// handles are produced through the caller's cells by convention:
+// this helper instead returns the server stream and stashes the
+// client+listener in static-free way -- tests build pairs inline.
+fn s1_np_pair_srv(code: i32) -> u64 {
+    let lh = [0u64; 4];
+    let port = [0u64; 4];
+    let rc = sla_std_net_tcp_listen(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 0, &lh[0], &port[0]);
+    if rc != 0 { panic(code); };
+    let cli = [0u64; 4];
+    let rc2 = sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port[0] as u32), &cli[0]);
+    if rc2 != 0 { panic(code + 1); };
+    let srv = [0u64; 4];
+    let rc3 = sla_std_net_tcp_accept(lh[0], &srv[0]);
+    if rc3 != 0 { panic(code + 2); };
+    return srv[0];
+}
+
+@test "smoke1 sa_net_udp_bind"() {
+    let h = sla_net_udp_bind(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 0);
+    if h <= 0 { panic(63010); };
+    let rc = sla_net_udp_close((h as u64));
+    if rc != 0 { panic(63011); };
+}
+
+@test "smoke1 sa_net_udp_local_addr"() {
+    let s = s1_np_udp(63020);
+    let a = sla_net_udp_local_addr((s as i32));
+    if a <= 0 { panic(63021); };
+    if sla_net_addr_port((a as u64)) == 0 { panic(63022); };
+    sla_net_udp_close(s);
+}
+
+@test "smoke1 sa_net_udp_connect"() {
+    let a = s1_np_udp(63030);
+    let b = s1_np_udp(63031);
+    let bport = s1_np_port(b, 63032);
+    let rc = sla_net_udp_connect(a, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (bport as u16));
+    if rc != 0 { panic(63033); };
+    sla_net_udp_close(a);
+    sla_net_udp_close(b);
+}
+
+@test "smoke1 sa_net_udp_send"() {
+    let a = s1_np_udp(63040);
+    let b = s1_np_udp(63041);
+    let bport = s1_np_port(b, 63042);
+    sla_net_udp_connect(a, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (bport as u16));
+    let n = sla_net_udp_send(a, STR_PTR("xy"), STR_LEN("xy"));
+    if n != 2 { panic(63043); };
+    let buf = [0u8; 64];
+    let m = sla_net_udp_recv(b, &buf[0], 64);
+    if m != 2 { panic(63044); };
+    if buf[0] != 120 { panic(63045); };
+    sla_net_udp_close(a);
+    sla_net_udp_close(b);
+}
+
+@test "smoke1 sa_net_udp_recv"() {
+    let a = s1_np_udp(63050);
+    let b = s1_np_udp(63051);
+    let aport = s1_np_port(a, 63052);
+    sla_net_udp_connect(b, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u16));
+    sla_net_udp_send(b, STR_PTR("zz"), STR_LEN("zz"));
+    let buf = [0u8; 64];
+    let m = sla_net_udp_recv(a, &buf[0], 64);
+    if m != 2 { panic(63053); };
+    if buf[1] != 122 { panic(63054); };
+    sla_net_udp_close(a);
+    sla_net_udp_close(b);
+}
+
+@test "smoke1 sa_net_udp_peek"() {
+    let a = s1_np_udp(63060);
+    let b = s1_np_udp(63061);
+    let aport = s1_np_port(a, 63062);
+    sla_net_udp_connect(b, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u16));
+    sla_net_udp_send(b, STR_PTR("pk"), STR_LEN("pk"));
+    let buf = [0u8; 64];
+    let m = sla_net_udp_peek(a, &buf[0], 64);
+    if m != 2 { panic(63063); };
+    let m2 = sla_net_udp_recv(a, &buf[0], 64);
+    if m2 != 2 { panic(63064); };
+    sla_net_udp_close(a);
+    sla_net_udp_close(b);
+}
+
+@test "smoke1 sa_net_udp_send_to"() {
+    let a = s1_np_udp(63070);
+    let b = s1_np_udp(63071);
+    let bport = s1_np_port(b, 63072);
+    let n = sla_net_udp_send_to(a, STR_PTR("to"), STR_LEN("to"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (bport as u16));
+    if n != 2 { panic(63073); };
+    let buf = [0u8; 64];
+    let from = [0u64; 4];
+    let m = sla_net_udp_recv_from(b, &buf[0], 64, &from[0]);
+    if m != 2 { panic(63074); };
+    if buf[0] != 116 { panic(63075); };
+    sla_net_udp_close(a);
+    sla_net_udp_close(b);
+}
+
+@test "smoke1 sa_net_udp_recv_from"() {
+    let a = s1_np_udp(63080);
+    let b = s1_np_udp(63081);
+    let aport = s1_np_port(a, 63082);
+    let bport = s1_np_port(b, 63083);
+    sla_net_udp_send_to(b, STR_PTR("rf"), STR_LEN("rf"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u16));
+    let buf = [0u8; 64];
+    let from = [0u64; 4];
+    let m = sla_net_udp_recv_from(a, &buf[0], 64, &from[0]);
+    if m != 2 { panic(63084); };
+    if from[0] == 0 { panic(63085); };
+    if sla_net_addr_port(from[0]) != bport { panic(63086); };
+    sla_net_udp_close(a);
+    sla_net_udp_close(b);
+}
+
+@test "smoke1 sa_net_udp_peek_from"() {
+    let a = s1_np_udp(63090);
+    let b = s1_np_udp(63091);
+    let aport = s1_np_port(a, 63092);
+    let bport = s1_np_port(b, 63093);
+    sla_net_udp_send_to(b, STR_PTR("pf"), STR_LEN("pf"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u16));
+    let buf = [0u8; 64];
+    let from = [0u64; 4];
+    let m = sla_net_udp_peek_from(a, &buf[0], 64, &from[0]);
+    if m != 2 { panic(63094); };
+    if sla_net_addr_port(from[0]) != bport { panic(63095); };
+    let m2 = sla_net_udp_recv_from(a, &buf[0], 64, &from[0]);
+    if m2 != 2 { panic(63096); };
+    sla_net_udp_close(a);
+    sla_net_udp_close(b);
+}
+
+@test "smoke1 sa_net_udp_set_read_timeout"() {
+    let a = s1_np_udp(63100);
+    let rc = sla_net_udp_set_read_timeout(a, 2000000000);
+    if rc != 0 { panic(63101); };
+    sla_net_udp_close(a);
+}
+
+@test "smoke1 sa_net_udp_set_write_timeout"() {
+    let a = s1_np_udp(63110);
+    let rc = sla_net_udp_set_write_timeout(a, 2000000000);
+    if rc != 0 { panic(63111); };
+    sla_net_udp_close(a);
+}
+
+@test "smoke1 sa_net_udp_set_nonblocking"() {
+    let a = s1_np_udp(63120);
+    let b = s1_np_udp(63124);
+    let aport = s1_np_port(a, 63125);
+    let rc = sla_net_udp_set_nonblocking(a, 1);
+    if rc != 0 { panic(63121); };
+    // With data ready, a nonblocking recv still delivers it.
+    sla_net_udp_send_to(b, STR_PTR("nb"), STR_LEN("nb"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u16));
+    let buf = [0u8; 64];
+    let m = sla_net_udp_recv(a, &buf[0], 64);
+    if m != 2 { panic(63122); };
+    if buf[0] != 110 { panic(63126); };
+    let rc2 = sla_net_udp_set_nonblocking(a, 0);
+    if rc2 != 0 { panic(63123); };
+    sla_net_udp_close(a);
+    sla_net_udp_close(b);
+}
+
+@test "smoke1 sa_net_udp_set_broadcast"() {
+    let a = s1_np_udp(63130);
+    let rc = sla_net_udp_set_broadcast(a, 1);
+    if rc != 0 { panic(63131); };
+    let rc2 = sla_net_udp_set_broadcast(a, 0);
+    if rc2 != 0 { panic(63132); };
+    sla_net_udp_close(a);
+}
+
+@test "smoke1 sa_net_udp_set_ttl"() {
+    let a = s1_np_udp(63140);
+    let rc = sla_net_udp_set_ttl(a, 33);
+    if rc != 0 { panic(63141); };
+    sla_net_udp_close(a);
+}
+
+@test "smoke1 sa_net_udp_set_multicast_loop_v4"() {
+    let a = s1_np_udp(63150);
+    let rc = sla_net_udp_set_multicast_loop_v4(a, 0);
+    if rc != 0 { panic(63151); };
+    sla_net_udp_close(a);
+}
+
+@test "smoke1 sa_net_udp_set_multicast_ttl_v4"() {
+    let a = s1_np_udp(63160);
+    let rc = sla_net_udp_set_multicast_ttl_v4(a, 7);
+    if rc != 0 { panic(63161); };
+    sla_net_udp_close(a);
+}
+
+@test "smoke1 sa_net_udp_join_multicast_v4"() {
+    let a = s1_np_udp(63170);
+    let rc = sla_net_udp_join_multicast_v4(a, STR_PTR("233.1.1.3"), STR_LEN("233.1.1.3"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"));
+    if rc != 0 { panic(63171); };
+    let rc2 = sla_net_udp_leave_multicast_v4(a, STR_PTR("233.1.1.3"), STR_LEN("233.1.1.3"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"));
+    if rc2 != 0 { panic(63172); };
+    sla_net_udp_close(a);
+}
+
+@test "smoke1 sa_net_udp_leave_multicast_v4"() {
+    let a = s1_np_udp(63180);
+    sla_net_udp_join_multicast_v4(a, STR_PTR("233.1.1.4"), STR_LEN("233.1.1.4"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"));
+    let rc = sla_net_udp_leave_multicast_v4(a, STR_PTR("233.1.1.4"), STR_LEN("233.1.1.4"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"));
+    if rc != 0 { panic(63181); };
+    sla_net_udp_close(a);
+}
+
+@test "smoke1 sa_net_udp_join_multicast_v6"() {
+    let h = sla_net_udp_bind(STR_PTR("::1"), STR_LEN("::1"), 0);
+    if h <= 0 { panic(63190); };
+    let rc = sla_net_udp_join_multicast_v6((h as u64), STR_PTR("ff02::3"), STR_LEN("ff02::3"), 1);
+    if rc != 0 { panic(63191); };
+    let rc2 = sla_net_udp_leave_multicast_v6((h as u64), STR_PTR("ff02::3"), STR_LEN("ff02::3"), 1);
+    if rc2 != 0 { panic(63192); };
+    sla_net_udp_close((h as u64));
+}
+
+@test "smoke1 sa_net_udp_leave_multicast_v6"() {
+    let h = sla_net_udp_bind(STR_PTR("::1"), STR_LEN("::1"), 0);
+    if h <= 0 { panic(63200); };
+    sla_net_udp_join_multicast_v6((h as u64), STR_PTR("ff02::4"), STR_LEN("ff02::4"), 1);
+    let rc = sla_net_udp_leave_multicast_v6((h as u64), STR_PTR("ff02::4"), STR_LEN("ff02::4"), 1);
+    if rc != 0 { panic(63201); };
+    sla_net_udp_close((h as u64));
+}
+
+@test "smoke1 sa_net_udp_close"() {
+    let a = s1_np_udp(63210);
+    let rc = sla_net_udp_close(a);
+    if rc != 0 { panic(63211); };
+    let rc2 = sla_net_udp_close(a);
+    if rc2 == 0 { panic(63212); };
+}
+
+@test "smoke1 sa_net_tcp_stream_write"() {
+    let srv = s1_np_pair_srv(63220);
+    let lh = [0u64; 4];
+    // The pair helper leaks its listener/client by design of this
+    // helper; write is judged on the server stream via a fresh pair:
+    let n = sla_net_tcp_stream_write(srv, STR_PTR("hi"), STR_LEN("hi"));
+    if n != 2 { panic(63223); };
+    sla_std_close(srv);
+}
+
+@test "smoke1 sa_net_tcp_stream_peek"() {
+    let lh = [0u64; 4];
+    let port = [0u64; 4];
+    sla_std_net_tcp_listen(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 0, &lh[0], &port[0]);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port[0] as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh[0], &srv[0]);
+    let wr = [0u64; 4];
+    sla_std_net_tcp_stream_write(cli[0], STR_PTR("peek"), STR_LEN("peek"), &wr[0]);
+    let buf = [0u8; 64];
+    let n = sla_net_tcp_stream_peek(srv[0], &buf[0], 64);
+    if n != 4 { panic(63230); };
+    if buf[0] != 112 { panic(63231); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh[0]);
+}
+
+@test "smoke1 sa_net_tcp_stream_peer_addr"() {
+    let lh = [0u64; 4];
+    let port = [0u64; 4];
+    sla_std_net_tcp_listen(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 0, &lh[0], &port[0]);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port[0] as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh[0], &srv[0]);
+    let a = sla_net_tcp_stream_peer_addr(srv[0]);
+    if a <= 0 { panic(63240); };
+    let laddr = [0u64; 4];
+    sla_std_net_tcp_stream_local_addr(cli[0], &laddr[0]);
+    if sla_net_addr_port((a as u64)) != sla_net_addr_port(laddr[0]) { panic(63241); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh[0]);
+}
+
+@test "smoke1 sa_net_tcp_stream_set_read_timeout"() {
+    let srv = s1_np_pair_srv(63250);
+    let rc = sla_net_tcp_stream_set_read_timeout(srv, 2000000000);
+    if rc != 0 { panic(63251); };
+    sla_std_close(srv);
+}
+
+@test "smoke1 sa_net_tcp_stream_set_write_timeout"() {
+    let srv = s1_np_pair_srv(63260);
+    let rc = sla_net_tcp_stream_set_write_timeout(srv, 2000000000);
+    if rc != 0 { panic(63261); };
+    sla_std_close(srv);
+}
+
+@test "smoke1 sa_net_tcp_stream_set_nonblocking"() {
+    let srv = s1_np_pair_srv(63270);
+    let rc = sla_net_tcp_stream_set_nonblocking(srv, 1);
+    if rc != 0 { panic(63271); };
+    let rc2 = sla_net_tcp_stream_set_nonblocking(srv, 0);
+    if rc2 != 0 { panic(63272); };
+    sla_std_close(srv);
+}
+
+@test "smoke1 sa_net_tcp_stream_set_nodelay"() {
+    let srv = s1_np_pair_srv(63280);
+    let rc = sla_net_tcp_stream_set_nodelay(srv, 1);
+    if rc != 0 { panic(63281); };
+    sla_std_close(srv);
+}
+
+@test "smoke1 sa_net_tcp_stream_set_ttl"() {
+    let srv = s1_np_pair_srv(63290);
+    let rc = sla_net_tcp_stream_set_ttl(srv, 33);
+    if rc != 0 { panic(63291); };
+    sla_std_close(srv);
+}
+
+@test "smoke1 sa_net_tcp_stream_flush"() {
+    let srv = s1_np_pair_srv(63300);
+    sla_net_tcp_stream_write(srv, STR_PTR("hi"), STR_LEN("hi"));
+    let rc = sla_net_tcp_stream_flush(srv);
+    if rc != 0 { panic(63301); };
+    sla_std_close(srv);
+}
+
+@test "smoke1 sa_net_tcp_stream_shutdown"() {
+    let srv = s1_np_pair_srv(63310);
+    let rc = sla_net_tcp_stream_shutdown(srv, 1);
+    if rc != 0 { panic(63311); };
+    let rc2 = sla_net_tcp_stream_shutdown(srv, 2);
+    if rc2 != 0 { panic(63313); };
+    // NOTE: writing after a full shutdown still reports success --
+    // registered as W1-DEF-NET-WRITE-AFTER-SHUTDOWN with its own
+    // minim (test_smoke1_defect_net_shutdown.sla); not asserted here.
+    sla_std_close(srv);
+}

@@ -1,0 +1,21 @@
+@import "kernel/module.sal"
+
+@ffi_wrapper kernel_gate(*record: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow record
+    major = load view+KernelRecord_major as i32
+    minor = load view+KernelRecord_minor as i32
+    value = add major, minor
+    !minor
+    !major
+    !view
+    return value
+
+@export kernel_module_entry() -> i32:
+L_ENTRY:
+    record = alloc KernelRecord_SIZE
+    store record+KernelRecord_major, 294 as i32
+    store record+KernelRecord_minor, 0 as i32
+    value = call @kernel_gate(*record)
+    !record
+    return value

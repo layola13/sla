@@ -1,0 +1,13 @@
+// expect: UseBeforeInit
+fn accepts_i32(value: i32) -> i32 {
+    return value;
+}
+
+fn bad_var_call_arg_before_init() -> i32 {
+    var x: i32;
+    return accepts_i32(x);
+}
+
+fn main() -> i32 {
+    return bad_var_call_arg_before_init();
+}

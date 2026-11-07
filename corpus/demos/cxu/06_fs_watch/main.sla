@@ -1,0 +1,85 @@
+// D6: fs watch — the CXU fs.watch surface distilled.
+// sa_fs_watch_* (sa_std, fs.sai, inotify): watch the work directory,
+// mutate it through the std fs surface, and drain parsed events.
+@import "sa_std/fs.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/io/print.sai"
+@import "byteseq.sa"
+
+// Drains pending events for note.txt and returns a bitmask of what was
+// seen: 1 = IN_CREATE (256), 2 = IN_CLOSE_WRITE (8), 4 = IN_DELETE (512).
+fn scan_events(h: u64, want: u64) -> u32 {
+    let fc: u64 = 0;
+    let fw: u64 = 0;
+    let fd: u64 = 0;
+    let eq_slot = [0u64; 1];
+    let rounds: u64 = 0;
+    while rounds < 200 {
+        rounds = rounds + 1;
+        let pending: u32 = 0;
+        sa_fs_watch_poll(h, 50, &pending);
+        let ready: u32 = 0;
+        let wd: i32 = 0;
+        let mask: u32 = 0;
+        let cookie: u32 = 0;
+        let name_buf = [0u8; 256];
+        let name_len: u64 = 0;
+        let rc = sa_fs_watch_next(h, &ready, &wd, &mask, &cookie, &name_buf, 256, &name_len);
+        if rc == 0 && ready == 1 && name_len == 8 {
+            BYTES_EQ(&eq_slot, &name_buf, name_len, STR_PTR("note.txt"), STR_LEN("note.txt"));
+            if eq_slot[0] == 1 {
+                if mask == 256 {
+                    fc = 1;
+                };
+                if mask == 8 {
+                    fw = 1;
+                };
+                if mask == 512 {
+                    fd = 1;
+                };
+            };
+        };
+        if fc + fw + fd >= want {
+            rounds = 1000;
+        };
+    }
+    return (fc + fw * 2 + fd * 4) as u32;
+}
+
+fn main() -> i32 {
+    let h: u64 = 0;
+    if sa_fs_watch_create(&h) != 0 {
+        return 2;
+    };
+    let wd: i32 = -1;
+    // IN_CREATE | IN_MODIFY | IN_CLOSE_WRITE | IN_DELETE = 256|2|8|512 = 778
+    if sa_fs_watch_add(h, STR_PTR("work"), STR_LEN("work"), 778, &wd) != 0 {
+        return 3;
+    };
+    if wd < 0 {
+        return 4;
+    };
+    if sa_fs_write_file(STR_PTR("work/note.txt"), STR_LEN("work/note.txt"), STR_PTR("hello watch"), STR_LEN("hello watch")) != 0 {
+        return 5;
+    };
+    let first = scan_events(h, 2);
+    if first != 3 {
+        return 6;
+    };
+    if sa_fs_remove_file(STR_PTR("work/note.txt"), STR_LEN("work/note.txt")) != 0 {
+        return 7;
+    };
+    let second = scan_events(h, 1);
+    if second != 4 {
+        return 8;
+    };
+    if sa_fs_watch_remove(h, wd) != 0 {
+        return 9;
+    };
+    if sa_fs_watch_close(h) != 0 {
+        return 10;
+    };
+    println("d6 fs watch ok");
+    return 0;
+}

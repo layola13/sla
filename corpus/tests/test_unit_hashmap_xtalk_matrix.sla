@@ -1,0 +1,105 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+// DEF-HASHMAP-XTALK regression (A-form): key x value type matrix in
+// loop form with frame churn before the post-hoc recheck. Every
+// combination must return its own value for every key.
+
+fn churn(seed: i32) -> i32 {
+    let v: Vec<i32> = Vec::new();
+    let s: String = format("churn-{}-0123456789abcdef", seed);
+    let i: i32 = 0;
+    let acc: i32 = seed;
+    while i < 64 {
+        v.push(i * 5 + seed);
+        acc = acc + len(v);
+        i = i + 1;
+    }
+    return acc + len(s);
+}
+
+@test "xtalk matrix i64 i64"() {
+    let m: HashMap<i64, i64> = HashMap::new();
+    let i: i64 = 0;
+    while i < 24 {
+        m.insert(i, i * 1000000 + 17);
+        i = i + 1;
+    }
+    if len(m) != 24 { panic(77100); };
+    let c = churn(1);
+    if c == 424242 { panic(77109); };
+    let j: i64 = 0;
+    while j < 24 {
+        if m.get(j).copied().unwrap_or(0) != j * 1000000 + 17 { panic(77101); };
+        j = j + 1;
+    }
+}
+
+@test "xtalk matrix u32 u32"() {
+    let m: HashMap<u32, u32> = HashMap::new();
+    let i: u32 = 0;
+    while i < 24 {
+        m.insert(i, i * 7 + 3);
+        i = i + 1;
+    }
+    if len(m) != 24 { panic(77200); };
+    let c = churn(2);
+    if c == 424242 { panic(77209); };
+    let j: u32 = 0;
+    while j < 24 {
+        if m.get(j).copied().unwrap_or(0) != j * 7 + 3 { panic(77201); };
+        j = j + 1;
+    }
+}
+
+@test "xtalk matrix i64 u32"() {
+    let m: HashMap<i64, u32> = HashMap::new();
+    let i: i64 = 0;
+    while i < 24 {
+        m.insert(i, (i * 11 + 5) as u32);
+        i = i + 1;
+    }
+    if len(m) != 24 { panic(77300); };
+    let c = churn(3);
+    if c == 424242 { panic(77309); };
+    let j: i64 = 0;
+    while j < 24 {
+        if m.get(j).copied().unwrap_or(0) != (j * 11 + 5) as u32 { panic(77301); };
+        j = j + 1;
+    }
+}
+
+@test "xtalk matrix u32 i64"() {
+    let m: HashMap<u32, i64> = HashMap::new();
+    let i: u32 = 0;
+    while i < 24 {
+        m.insert(i, (i * 13 + 9) as i64);
+        i = i + 1;
+    }
+    if len(m) != 24 { panic(77400); };
+    let c = churn(4);
+    if c == 424242 { panic(77409); };
+    let j: u32 = 0;
+    while j < 24 {
+        if m.get(j).copied().unwrap_or(0) != (j * 13 + 9) as i64 { panic(77401); };
+        j = j + 1;
+    }
+}
+
+@test "xtalk matrix i32 u32"() {
+    let m: HashMap<i32, u32> = HashMap::new();
+    let i: i32 = 0;
+    while i < 24 {
+        m.insert(i, (i * 3 + 100) as u32);
+        i = i + 1;
+    }
+    if len(m) != 24 { panic(77500); };
+    let c = churn(5);
+    if c == 424242 { panic(77509); };
+    let j: i32 = 0;
+    while j < 24 {
+        if m.get(j).copied().unwrap_or(0) != (j * 3 + 100) as u32 { panic(77501); };
+        j = j + 1;
+    }
+}

@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 137_tri / 141_sum_sq 的公式版（71/27 为循环版：55/55）。
+// 闭式求和（整除恰好整除：10*11/2=55，5*6*11/6=55；45 口径）。
+
+fn tri_form(n: int) -> int {
+    return n * (n + 1) / 2;
+}
+
+fn sqsum_form(n: int) -> int {
+    return n * (n + 1) * (2 * n + 1) / 6;
+}
+
+fn main() -> i32 {
+    println("{},{}", tri_form(10), sqsum_form(5));
+    return 0;
+}
+
+@test "basic 245 formula"() {
+    if tri_form(10) != 55 { panic(24501); };
+    if sqsum_form(5) != 55 { panic(24502); };
+    if tri_form(0) != 0 { panic(24503); };
+    if sqsum_form(1) != 1 { panic(24504); };
+}

@@ -1,0 +1,10 @@
+// expect: Overflow
+// neg: shader int literal beyond i64 range (shader sub-parser parseInt)
+@sublanguage shader;
+
+shader Bad {
+    var n: i32;
+    init {
+        n = 99999999999999999999999999;
+    }
+}

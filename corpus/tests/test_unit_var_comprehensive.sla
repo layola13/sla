@@ -1,0 +1,292 @@
+fn var_add_one(value: i32) -> i32 {
+    return value + 1;
+}
+
+fn var_i32_expression() -> i32 {
+    var x: i32;
+    x = 10;
+    x += 5;
+    return x * 2;
+}
+
+fn var_i64_slot() -> i64 {
+    var x: i64;
+    x = 9000000000i64;
+    return x + 7i64;
+}
+
+fn var_bool_condition(flag: bool) -> i32 {
+    var ok: bool;
+    ok = flag;
+    if ok {
+        return 11;
+    } else {
+        return 22;
+    };
+}
+
+fn var_bool_condition_remains_copy(flag: bool) -> i32 {
+    var ok: bool;
+    ok = flag;
+    if ok {
+        if ok != true { panic(17530); };
+    } else {
+        if ok != false { panic(17531); };
+    };
+    if ok == flag {
+        return 1;
+    };
+    return 0;
+}
+
+fn var_int_condition_remains_copy(value: i32) -> i32 {
+    var x: i32;
+    x = value;
+    if x != 0 {
+        return x + 1;
+    };
+    return x;
+}
+
+fn var_f64_slot() -> f64 {
+    var value: f64;
+    value = 1.5;
+    value = value + 0.75;
+    return value;
+}
+
+fn var_function_argument() -> i32 {
+    var x: i32;
+    x = 41;
+    return var_add_one(x);
+}
+
+fn var_assignment_from_initialized_slot() -> i32 {
+    var a: i32;
+    var b: i32;
+    a = 12;
+    b = a + 8;
+    a = b - 5;
+    return a + b;
+}
+
+fn var_assignment_from_nested_branches(cond: bool) -> i32 {
+    var x: i32;
+    if cond {
+        x = 8;
+    } else {
+        x = 9;
+    };
+    return x;
+}
+
+fn var_nested_branch_assignment(a: bool, b: bool) -> i32 {
+    var x: i32;
+    if a {
+        if b {
+            x = 1;
+        } else {
+            x = 2;
+        };
+    } else {
+        if b {
+            x = 3;
+        } else {
+            x = 4;
+        };
+    };
+    return x;
+}
+
+fn var_tuple_expression_after_init() -> i32 {
+    var x: i32;
+    x = 6;
+    let pair = (x, x + 1);
+    return pair.0 * 10 + pair.1;
+}
+
+fn var_nested_block_initializes_outer() -> i32 {
+    var x: i32;
+    {
+        x = 33;
+    }
+    return x;
+}
+
+fn var_shadow_does_not_confuse_outer() -> i32 {
+    var x: i32;
+    x = 5;
+    {
+        var x: i32;
+        x = 9;
+        if x != 9 { panic(17520); };
+    }
+    return x;
+}
+
+fn var_repeated_scoped_slots() -> i32 {
+    {
+        var x: i32;
+        x = 1;
+        if x != 1 { panic(17521); };
+    }
+    {
+        var x: i32;
+        x = 2;
+        if x != 2 { panic(17522); };
+    }
+    return 3;
+}
+
+fn var_if_else_nested_blocks(cond: bool) -> i32 {
+    var x: i32;
+    if cond {
+        {
+            x = 3;
+        }
+    } else {
+        {
+            x = 4;
+        }
+    };
+    return x;
+}
+
+fn var_initialized_before_for_loop() -> i32 {
+    var total: i32;
+    total = 0;
+    for i in 0..4 {
+        total = total + i;
+    }
+    return total;
+}
+
+fn var_loop_break_after_init() -> i32 {
+    var x: i32;
+    x = 0;
+    for i in 0..5 {
+        x = x + i;
+        if i == 3 {
+            break;
+        };
+    }
+    return x;
+}
+
+fn var_loop_continue_after_init() -> i32 {
+    var total: i32;
+    total = 0;
+    for i in 0..5 {
+        if i == 2 {
+            continue;
+        };
+        total = total + i;
+    }
+    return total;
+}
+
+fn var_initialized_before_while_loop() -> i32 {
+    var total: i32;
+    total = 1;
+    let i: i32 = 0;
+    while i < 4 {
+        total = total + 2;
+        i = i + 1;
+    }
+    return total;
+}
+
+fn var_release_after_init() -> i32 {
+    var x: i32;
+    x = 1;
+    !x;
+    return 0;
+}
+
+fn var_shadow_redeclare_after_outer_init() -> i32 {
+    var x: i32;
+    x = 10;
+    {
+        var x: i32;
+        x = 20;
+        if x != 20 { panic(17532); };
+    }
+    return x;
+}
+
+@test "var supports i32 expression and compound assignment"() {
+    if var_i32_expression() != 30 { panic(17500); };
+}
+
+@test "var supports i64 slots"() {
+    if var_i64_slot() != 9000000007i64 { panic(17501); };
+}
+
+@test "var supports bool control flow"() {
+    if var_bool_condition(true) != 11 { panic(17502); };
+    if var_bool_condition(false) != 22 { panic(17503); };
+}
+
+@test "var copy scalar conditions remain readable"() {
+    if var_bool_condition_remains_copy(true) != 1 { panic(17533); };
+    if var_bool_condition_remains_copy(false) != 1 { panic(17534); };
+    if var_int_condition_remains_copy(7) != 8 { panic(17535); };
+    if var_int_condition_remains_copy(0) != 0 { panic(17536); };
+}
+
+@test "var supports f64 slots"() {
+    if var_f64_slot() != 2.25 { panic(17504); };
+}
+
+@test "var can be passed after initialization"() {
+    if var_function_argument() != 42 { panic(17505); };
+}
+
+@test "var can initialize another var slot after read is legal"() {
+    if var_assignment_from_initialized_slot() != 35 { panic(17506); };
+}
+
+@test "var nested branch assignment merges correctly"() {
+    if var_assignment_from_nested_branches(true) != 8 { panic(17537); };
+    if var_assignment_from_nested_branches(false) != 9 { panic(17538); };
+    if var_nested_branch_assignment(true, true) != 1 { panic(17539); };
+    if var_nested_branch_assignment(true, false) != 2 { panic(17540); };
+    if var_nested_branch_assignment(false, true) != 3 { panic(17541); };
+    if var_nested_branch_assignment(false, false) != 4 { panic(17542); };
+}
+
+@test "var can participate in tuple expressions after initialization"() {
+    if var_tuple_expression_after_init() != 67 { panic(17507); };
+}
+
+@test "var initialized inside nested block is readable outside"() {
+    if var_nested_block_initializes_outer() != 33 { panic(17508); };
+}
+
+@test "var shadowing stays scoped"() {
+    if var_shadow_does_not_confuse_outer() != 5 { panic(17509); };
+}
+
+@test "var repeated scoped slots use unique storage"() {
+    if var_repeated_scoped_slots() != 3 { panic(17515); };
+}
+
+@test "var if else merge accepts both branches initialized"() {
+    if var_if_else_nested_blocks(true) != 3 { panic(17510); };
+    if var_if_else_nested_blocks(false) != 4 { panic(17511); };
+}
+
+@test "var initialized before loops remains writable"() {
+    if var_initialized_before_for_loop() != 6 { panic(17512); };
+    if var_initialized_before_while_loop() != 9 { panic(17513); };
+    if var_loop_break_after_init() != 6 { panic(17543); };
+    if var_loop_continue_after_init() != 8 { panic(17544); };
+}
+
+@test "var can be released after initialization"() {
+    if var_release_after_init() != 0 { panic(17514); };
+}
+
+@test "var shadow redeclare preserves initialized outer"() {
+    if var_shadow_redeclare_after_outer_init() != 10 { panic(17545); };
+}

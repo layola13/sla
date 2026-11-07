@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Mertens 和（M(10)=-1，M(5)=-2）。
+// 意对标 387 莫比乌斯的累和版（387 互补；424 做对峙）。
+
+fn mobius(n: int) -> int {
+    if n == 1 { return 1; };
+    let c = 0;
+    let m = n;
+    let d = 2;
+    while d * d <= m {
+        if m % d == 0 {
+            c = c + 1;
+            m = m / d;
+            if m % d == 0 { return 0; };
+        };
+        d = d + 1;
+    }
+    if m > 1 { c = c + 1; };
+    if c % 2 == 0 { return 1; };
+    return 0 - 1;
+}
+
+fn mertens(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + mobius(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", mertens(10), mertens(5), mertens(1));
+    return 0;
+}
+
+@test "basic 421 mertens"() {
+    if mertens(10) != 0 - 1 { panic(42101); };
+    if mertens(5) != 0 - 2 { panic(42102); };
+    if mertens(1) != 1 { panic(42103); };
+}

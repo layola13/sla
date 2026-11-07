@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+fn emit_sum(a: i32, b: i32) -> i32 { return a + b; }
+fn macro_rules_ast_sum() -> i32 { let left = 1; let right = 2; let emitted_total = emit_sum(left, right); return emitted_total + left + right; }
+fn main() -> i32 { let left = 1; let right = 2; let emitted_total = emit_sum(left, right); let result = emitted_total + left + right; println("{}", result); return result; }
+@test "rosetta 191 191_macro_rules_ast_emit"() { let got = macro_rules_ast_sum(); if got != 6 { panic(191); }; }

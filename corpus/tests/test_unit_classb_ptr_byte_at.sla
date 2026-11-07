@@ -1,0 +1,46 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+
+// CLASS-B defect regression (segment 1c): PTR_BYTE_AT with a nonzero
+// LITERAL offset on a function-parameter pointer failed with a
+// detail-free CodegenError, while variable offsets and literal
+// offsets 0..3 (after an explicit PTR_BYTE_ADD) worked. Oracle: all
+// literal offsets read the right bytes.
+// Probe origin: goose-bench pg7a (offset 4) / pg7b (0..3 OK).
+
+fn cb_read4(p: ptr) -> u64 {
+    let c0 = PTR_BYTE_AT(p, 4);
+    return c0 as u64;
+}
+
+fn cb_read7(p: ptr) -> u64 {
+    let c0 = PTR_BYTE_AT(p, 7);
+    return c0 as u64;
+}
+
+@test "classb ptr byte at literal offsets"() {
+    let v: Vec<u64> = Vec::new();
+    let i: u64 = 0;
+    while i < 10 {
+        v.push(i * 11 + 5);
+        i = i + 1;
+    }
+    let base: ptr = VEC_AS_PTR(v);
+    let p: ptr = PTR_BYTE_ADD(base, 24);
+    // v[3] = 38 = 0x26 at bytes 24..31; byte 4 of the word = 0,
+    // byte 0 = 0x26. p+4 reads byte 28 (0), p points at byte 24.
+    if cb_read4(p) != 0 { panic(301); };
+    let p2: ptr = PTR_BYTE_ADD(base, 16);
+    // v[2] = 27 = 0x1B at bytes 16..23; byte 7 = 0, byte 0 = 0x1B.
+    if cb_read7(p2) != 0 { panic(302); };
+    let c0 = PTR_BYTE_AT(p2, 0);
+    if c0 as u64 != 27 { panic(303); };
+    let w: Vec<u64> = Vec::new();
+    w.push(578437695752307201 as u64);
+    let wp: ptr = VEC_AS_PTR(w);
+    let b4 = PTR_BYTE_AT(wp, 4);
+    if b4 as u64 != 5 { panic(304); };
+    let b7 = PTR_BYTE_AT(wp, 7);
+    if b7 as u64 != 8 { panic(305); };
+}

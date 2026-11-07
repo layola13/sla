@@ -1,0 +1,23 @@
+// expect: BorrowOriginMerge
+// A binding must not merge views of two different owners.
+@import "sa_std/fs.sai"
+
+struct FsReadBuffer {
+    raw: u64,
+}
+
+fn sla_fs_read_buffer_data(buffer: &FsReadBuffer) -> &[u8][buffer] {
+    return __slice_view(sa_fs_read_buffer_data(buffer.raw), sa_fs_read_buffer_len(buffer.raw));
+}
+
+fn bad(flag: bool) -> u64 {
+    let a = FsReadBuffer { raw: 7 };
+    let b = FsReadBuffer { raw: 9 };
+    let va = sla_fs_read_buffer_data(&a);
+    let vb = sla_fs_read_buffer_data(&b);
+    let v = va;
+    if flag {
+        v = vb;
+    };
+    return v.len();
+}

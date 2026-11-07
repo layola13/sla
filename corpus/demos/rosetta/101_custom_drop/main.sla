@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn custom_drop_tally() -> i32 {
+    let tally = 0;
+    let outer_value = 1;
+    let inner_value = 10;
+    let result = 2 + 3;
+
+    tally = tally + inner_value;
+    tally = tally + outer_value;
+    return tally + result;
+}
+
+fn main() -> i32 {
+    let result = custom_drop_tally();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 101 101_custom_drop"() {
+    let got = custom_drop_tally();
+    if got != 16 {
+        panic(101);
+    };
+}

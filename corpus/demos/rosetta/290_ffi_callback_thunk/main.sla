@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn ffi_callback_thunk_count() -> i32 { let c_to_rust_thunk = 1; return c_to_rust_thunk; }
+fn main() -> i32 { let c_to_rust_thunk = 1; println("{}", c_to_rust_thunk); return c_to_rust_thunk; }
+@test "rosetta 290 ffi callback thunk"() { let got = ffi_callback_thunk_count(); if got != 1 { panic(290); }; }

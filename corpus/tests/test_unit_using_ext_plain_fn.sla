@@ -1,0 +1,17 @@
+// DEF-E0 regression: extension call inside a PLAIN fn (not a @test
+// body); the @test only calls the plain fn.
+mod math3 {
+    pub fn double(value: i32) -> i32 {
+        return value + value;
+    }
+}
+
+using math3;
+
+fn use_it(x: i32) -> i32 {
+    return x.double();
+}
+
+@test "using ext: extension call in plain fn"() {
+    if use_it(21) != 42 { panic(35600); };
+}

@@ -1,0 +1,80 @@
+@import "sa_std/string.sa"
+@import "sa_std/fs.sa"
+@import "sa_std/encoding/json.sa"
+@import "import_fixtures/pkgjson/fs_helpers.sa"
+@import "import_fixtures/pkgjson/json_helpers.sa"
+
+const PKG_JSON_KIND_OBJECT: int = 7;
+const PKG_JSON_KIND_STRING: int = 5;
+
+struct PackageJsonTypesEntry {
+    present: bool,
+    entry_ptr: ptr,
+    entry_len: int,
+}
+
+fn package_json_pick_condition(cond: ptr) -> PackageJsonTypesEntry {
+    let t = SLA_JSON_OBJECT_GET(cond, STR_PTR("types"), STR_LEN("types"));
+    if JSON_KIND(t) == PKG_JSON_KIND_STRING {
+        return PackageJsonTypesEntry { present: true, entry_ptr: SLA_JSON_STRING_PTR(t), entry_len: SLA_JSON_STRING_LEN(t) };
+    };
+    let d = SLA_JSON_OBJECT_GET(cond, STR_PTR("default"), STR_LEN("default"));
+    if JSON_KIND(d) == PKG_JSON_KIND_STRING {
+        return PackageJsonTypesEntry { present: true, entry_ptr: SLA_JSON_STRING_PTR(d), entry_len: SLA_JSON_STRING_LEN(d) };
+    };
+    return PackageJsonTypesEntry { present: false, entry_ptr: "", entry_len: 0 };
+}
+
+fn package_json_exports_entry_from_text(data: ptr, data_len: int) -> PackageJsonTypesEntry {
+    if data_len == 0 {
+        return PackageJsonTypesEntry { present: false, entry_ptr: "", entry_len: 0 };
+    };
+    let root = JSON_PARSE(data, data_len);
+    if JSON_KIND(root) != PKG_JSON_KIND_OBJECT {
+        return PackageJsonTypesEntry { present: false, entry_ptr: "", entry_len: 0 };
+    };
+    let exp = SLA_JSON_OBJECT_GET(root, STR_PTR("exports"), STR_LEN("exports"));
+    let ek = JSON_KIND(exp);
+    if ek == PKG_JSON_KIND_STRING {
+        return PackageJsonTypesEntry { present: true, entry_ptr: SLA_JSON_STRING_PTR(exp), entry_len: SLA_JSON_STRING_LEN(exp) };
+    };
+    if ek != PKG_JSON_KIND_OBJECT {
+        return PackageJsonTypesEntry { present: false, entry_ptr: "", entry_len: 0 };
+    };
+    let dot = SLA_JSON_OBJECT_GET(exp, STR_PTR("."), STR_LEN("."));
+    let dk = JSON_KIND(dot);
+    if dk == PKG_JSON_KIND_STRING {
+        return PackageJsonTypesEntry { present: true, entry_ptr: SLA_JSON_STRING_PTR(dot), entry_len: SLA_JSON_STRING_LEN(dot) };
+    };
+    if dk == PKG_JSON_KIND_OBJECT {
+        return package_json_pick_condition(dot);
+    };
+    return package_json_pick_condition(exp);
+}
+
+fn package_json_exports_entry_from_path(path_ptr: ptr, path_len: int) -> PackageJsonTypesEntry {
+    let exists = SLA_FS_EXISTS(path_ptr, path_len);
+    if exists != 1 {
+        return PackageJsonTypesEntry { present: false, entry_ptr: "", entry_len: 0 };
+    };
+    let buf = SLA_FS_READ_TO_STRING(path_ptr, path_len, 1048576);
+    let data = SLA_FS_BUFFER_DATA(buf);
+    let data_len = SLA_FS_BUFFER_LEN(buf);
+    if data_len == 0 {
+        return PackageJsonTypesEntry { present: false, entry_ptr: "", entry_len: 0 };
+    };
+    return package_json_exports_entry_from_text(data, data_len);
+}
+
+fn package_json_resolver_entry_len(path_ptr: ptr, path_len: int) -> int {
+    let entry = package_json_exports_entry_from_path(path_ptr, path_len);
+    if entry.present != true {
+        return -1;
+    };
+    return entry.entry_len;
+}
+
+@test "package json exports resolver codegen"() {
+    let got = package_json_resolver_entry_len("/tmp/does-not-exist-package.json", 32);
+    if got != -1 { panic(39001); };
+}

@@ -1,0 +1,114 @@
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_move_to_next_layer = vtable { call = @sla__move_to_next_layer }
+@sla__move_to_next_layer(config: ptr) -> ptr:
+L_ENTRY:
+    tmp_0 = alloc 13
+    tmp_1 = load config+0 as i32
+    store tmp_0+0, tmp_1 as i32
+    tmp_2 = load config+4 as i32
+    store tmp_0+4, tmp_2 as i32
+    tmp_3 = load config+12 as u8
+    store tmp_0+12, tmp_3 as u8
+    tmp_4 = load config+8 as i32
+    tmp_5 = 1
+    tmp_6 = add tmp_4, tmp_5
+    !tmp_4
+    !tmp_5
+    store tmp_0+8, tmp_6 as i32
+    !tmp_6
+    !config
+    return tmp_0
+
+@test "struct update preserves fields not explicitly replaced"():
+L_TEST_ENTRY_0:
+    base = alloc 13
+    tmp_7 = 8
+    store base+0, tmp_7 as i32
+    !tmp_7
+    tmp_8 = 13
+    store base+4, tmp_8 as i32
+    !tmp_8
+    tmp_9 = 2
+    store base+8, tmp_9 as i32
+    !tmp_9
+    tmp_10 = 1
+    store base+12, tmp_10 as u8
+    !tmp_10
+    tmp_11 = call @sla__move_to_next_layer(base)
+    next = tmp_11
+    tmp_12 = load next+0 as i32
+    tmp_13 = 8
+    tmp_14 = ne tmp_12, tmp_13
+    !tmp_12
+    !tmp_13
+    br tmp_14 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_14
+    panic(34100)
+
+L_ELSE_2:
+    !tmp_14
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    tmp_17 = load next+4 as i32
+    tmp_18 = 13
+    tmp_19 = ne tmp_17, tmp_18
+    !tmp_17
+    !tmp_18
+    br tmp_19 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_19
+    panic(34101)
+
+L_ELSE_5:
+    !tmp_19
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    tmp_22 = load next+8 as i32
+    tmp_23 = 3
+    tmp_24 = ne tmp_22, tmp_23
+    !tmp_22
+    !tmp_23
+    br tmp_24 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_24
+    panic(34102)
+
+L_ELSE_8:
+    !tmp_24
+    jmp L_MERGE_9
+
+L_MERGE_9:
+    tmp_27 = load next+12 as u8
+    tmp_28 = 1
+    tmp_29 = ne tmp_27, tmp_28
+    !tmp_27
+    !tmp_28
+    br tmp_29 -> L_THEN_10, L_ELSE_11
+
+L_THEN_10:
+    !tmp_29
+    panic(34103)
+
+L_ELSE_11:
+    !tmp_29
+    jmp L_MERGE_12
+
+L_MERGE_12:
+    !base
+    !next
+    return
+

@@ -1,0 +1,9 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: BTreeMap is a self-managed container; Jev
+// U2 = A bans it from arenas in v1.
+fn neg_btreemap() -> i32 {
+    arena {
+        let m: BTreeMap<String, i32> = BTreeMap::new();
+    }
+    return 0;
+}

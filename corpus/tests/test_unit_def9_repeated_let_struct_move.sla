@@ -1,0 +1,194 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+@import "sa_std/core/slice.sa"
+
+// DEF-9 (SSEFEED-1) isolated minimal form: a by-value function whose
+// sibling branches each redeclare the same field-extraction locals
+// (repeated `let` bindings) and return a struct literal moving those
+// locals into the result. The text backend emitted the branch locals
+// under alias registers but recorded the struct-literal moves under
+// the source names, so the return cleanup freed the Vec fields that
+// had just been stored into the returned struct (dangling fields,
+// segfault on first read). SAB was unaffected.
+struct D9Ev { data: Vec<u8> }
+struct D9Parser {
+    pending: Vec<u8>,
+    data_buf: Vec<u8>,
+    type_buf: Vec<u8>,
+    last_id: Vec<u8>,
+    has_id: bool,
+    retry_ms: i64,
+    bom_pending: bool,
+    events: Vec<D9Ev>,
+}
+
+fn d9_sl_byte(sl: &Slice<u8>, off: u64) -> u8 {
+    let b: u8 = 0;
+    SLICE_GET(b, sl, off);
+    return b;
+}
+
+fn d9_field_is(sl: &Slice<u8>, begin: u64, end: u64, name: &Slice<u8>) -> bool {
+    let n: u64 = 0;
+    SLICE_GET_LEN(n, name);
+    if end - begin != n {
+        return false;
+    };
+    let i: u64 = 0;
+    while i < n {
+        if d9_sl_byte(sl, begin + i) != d9_sl_byte(name, i) {
+            return false;
+        };
+        i = i + 1;
+    }
+    return true;
+}
+
+// Two sibling branches redeclare pending/data_buf/type_buf/last_id/
+// events and rebuild the parser by struct literal, mirroring
+// sse_process_line's data/event branches.
+fn d9_process(p: D9Parser, sl: &Slice<u8>, begin: u64, end: u64) -> D9Parser {
+    let colon: u64 = end;
+    let i: u64 = begin;
+    while i < end {
+        if d9_sl_byte(sl, i) == 58 {
+            colon = i;
+            i = end;
+        } else {
+            i = i + 1;
+        };
+    }
+    let field_end: u64 = colon;
+    let value_begin: u64 = end;
+    let value_end: u64 = end;
+    if colon < end {
+        value_begin = colon + 1;
+        if value_begin < end {
+            if d9_sl_byte(sl, value_begin) == 32 {
+                value_begin = value_begin + 1;
+            };
+        };
+        value_end = end;
+    };
+    let name_data: Vec<u8> = Vec::new();
+    name_data.push(100);
+    name_data.push(97);
+    name_data.push(116);
+    name_data.push(97);
+    let name_event: Vec<u8> = Vec::new();
+    name_event.push(101);
+    name_event.push(118);
+    name_event.push(101);
+    name_event.push(110);
+    name_event.push(116);
+    let dsl_name: Slice<u8> = VEC_AS_SLICE(name_data);
+    let esl_name: Slice<u8> = VEC_AS_SLICE(name_event);
+    if d9_field_is(sl, begin, field_end, &dsl_name) {
+        let data_buf: Vec<u8> = p.data_buf;
+        let j: u64 = value_begin;
+        while j < value_end {
+            data_buf.push(d9_sl_byte(sl, j));
+            j = j + 1;
+        }
+        data_buf.push(10);
+        let pending: Vec<u8> = p.pending;
+        let type_buf: Vec<u8> = p.type_buf;
+        let last_id: Vec<u8> = p.last_id;
+        let events: Vec<D9Ev> = p.events;
+        return D9Parser {
+            pending: pending,
+            data_buf: data_buf,
+            type_buf: type_buf,
+            last_id: last_id,
+            has_id: p.has_id,
+            retry_ms: p.retry_ms,
+            bom_pending: p.bom_pending,
+            events: events,
+        };
+    };
+    if d9_field_is(sl, begin, field_end, &esl_name) {
+        let type_buf: Vec<u8> = d9_copy(sl, value_begin, value_end);
+        let pending: Vec<u8> = p.pending;
+        let data_buf: Vec<u8> = p.data_buf;
+        let last_id: Vec<u8> = p.last_id;
+        let events: Vec<D9Ev> = p.events;
+        return D9Parser {
+            pending: pending,
+            data_buf: data_buf,
+            type_buf: type_buf,
+            last_id: last_id,
+            has_id: p.has_id,
+            retry_ms: p.retry_ms,
+            bom_pending: p.bom_pending,
+            events: events,
+        };
+    };
+    return p;
+}
+
+fn d9_copy(sl: &Slice<u8>, begin: u64, end: u64) -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    let i: u64 = begin;
+    while i < end {
+        out.push(d9_sl_byte(sl, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn d9_new() -> D9Parser {
+    return D9Parser { pending: Vec::new(), data_buf: Vec::new(), type_buf: Vec::new(), last_id: Vec::new(), has_id: false, retry_ms: -1, bom_pending: false, events: Vec::new() };
+}
+
+fn d9_lit(v: Vec<u8>, lit: ptr, n: u64) -> Vec<u8> {
+    let o: Vec<u8> = v;
+    let i: u64 = 0;
+    while i < n {
+        o.push(PTR_BYTE_AT(lit, i));
+        i = i + 1;
+    }
+    return o;
+}
+
+@test "def9 data branch fields survive return"() {
+    let b: Vec<u8> = Vec::new();
+    b = d9_lit(b, STR_PTR("data: hi"), STR_LEN("data: hi"));
+    let sl: Slice<u8> = VEC_AS_SLICE(b);
+    let p = d9_process(d9_new(), &sl, 0, 8);
+    if len(p.data_buf) != 3 { panic(901); };
+    if p.data_buf[0] != 104 { panic(902); };
+    if p.data_buf[1] != 105 { panic(903); };
+    if p.data_buf[2] != 10 { panic(904); };
+    if len(p.pending) != 0 { panic(905); };
+    if p.retry_ms != -1 { panic(906); };
+}
+
+@test "def9 event branch fields survive return"() {
+    let b: Vec<u8> = Vec::new();
+    b = d9_lit(b, STR_PTR("event: msg"), STR_LEN("event: msg"));
+    let sl: Slice<u8> = VEC_AS_SLICE(b);
+    let p = d9_process(d9_new(), &sl, 0, 10);
+    if len(p.type_buf) != 3 { panic(907); };
+    if p.type_buf[0] != 109 { panic(908); };
+    if p.type_buf[2] != 103 { panic(909); };
+    if len(p.data_buf) != 0 { panic(910); };
+}
+
+@test "def9 chained branches 100 rounds"() {
+    let round: u64 = 0;
+    while round < 100 {
+        let b: Vec<u8> = Vec::new();
+        b = d9_lit(b, STR_PTR("data: hi"), STR_LEN("data: hi"));
+        let sl: Slice<u8> = VEC_AS_SLICE(b);
+        let p = d9_process(d9_new(), &sl, 0, 8);
+        let b2: Vec<u8> = Vec::new();
+        b2 = d9_lit(b2, STR_PTR("event: msg"), STR_LEN("event: msg"));
+        let sl2: Slice<u8> = VEC_AS_SLICE(b2);
+        let p2 = d9_process(p, &sl2, 0, 10);
+        if len(p2.data_buf) != 3 { panic(911); };
+        if p2.data_buf[0] != 104 { panic(912); };
+        if len(p2.type_buf) != 3 { panic(913); };
+        round = round + 1;
+    }
+}

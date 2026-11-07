@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Edge {
+    from: i32,
+    to: i32,
+    weight: i32,
+}
+
+fn walk_cost(graph: [Edge; 2]) -> i32 {
+    let first = graph[0];
+    let second = graph[1];
+    let left = first.from + first.to + first.weight;
+    let right = second.to + second.weight;
+    return left + right;
+}
+
+fn main() -> i32 {
+    let graph = [
+        Edge { from: 0, to: 1, weight: 3 },
+        Edge { from: 1, to: 2, weight: 5 },
+    ];
+    let total = walk_cost(graph);
+    println("{}", total);
+    return total;
+}
+
+@test "rosetta 072 72_graph_walk"() {
+    if main() != 11 {
+        panic(72);
+    };
+}

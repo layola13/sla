@@ -1,0 +1,414 @@
+// Smoke wave 1: register-2 externs in sa_std/process.sai.
+// Children are /bin/true, /bin/sh, /bin/sleep, /bin/echo on the local
+// box; argv is an array of {ptr,len} records. Panic codes 57xxx.
+@import "sla_std/wrap/process.sla"
+@import "sla_std/wrap/task.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+fn s1_spawn1(a0: ptr, a0l: u64, code: i32) -> u64 {
+    let rec = [0u64; 2];
+    let x: u64 = 0;
+    PTR_ADDR(x, a0);
+    rec[0] = x;
+    rec[1] = a0l;
+    let cell = [0u64; 4];
+    let s1bp1: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn(s1bp1, 1, &cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+fn s1_spawn2(a0: ptr, a0l: u64, a1: ptr, a1l: u64, code: i32) -> u64 {
+    let rec = [0u64; 4];
+    let x: u64 = 0;
+    PTR_ADDR(x, a0);
+    rec[0] = x;
+    rec[1] = a0l;
+    let y: u64 = 0;
+    PTR_ADDR(y, a1);
+    rec[2] = y;
+    rec[3] = a1l;
+    let cell = [0u64; 4];
+    let s1bp2: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn(s1bp2, 2, &cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+fn s1_spawn3(a0: ptr, a0l: u64, a1: ptr, a1l: u64, a2: ptr, a2l: u64, code: i32) -> u64 {
+    let rec = [0u64; 6];
+    let x: u64 = 0;
+    PTR_ADDR(x, a0);
+    rec[0] = x;
+    rec[1] = a0l;
+    let y: u64 = 0;
+    PTR_ADDR(y, a1);
+    rec[2] = y;
+    rec[3] = a1l;
+    let z: u64 = 0;
+    PTR_ADDR(z, a2);
+    rec[4] = z;
+    rec[5] = a2l;
+    let cell = [0u64; 4];
+    let s1bp3: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn(s1bp3, 3, &cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+fn s1_spawn_pidfd(a0: ptr, a0l: u64, a1: ptr, a1l: u64, code: i32) -> u64 {
+    let rec = [0u64; 4];
+    let x: u64 = 0;
+    PTR_ADDR(x, a0);
+    rec[0] = x;
+    rec[1] = a0l;
+    let y: u64 = 0;
+    PTR_ADDR(y, a1);
+    rec[2] = y;
+    rec[3] = a1l;
+    let cell = [0u64; 4];
+    let s1bp4: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn_command_ext_pidfd(s1bp4, 2, STR_PTR(""), 0, 0, STR_PTR(""), 0, 0, 0, 0, 0, 1, &cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+fn s1_wait_code(h: u64, code: i32) -> u64 {
+    let out = [0u64; 4];
+    let rc = sla_std_process_wait(h, &out[0]);
+    if rc != 0 { panic(code); };
+    return out[0];
+}
+
+@test "smoke1 sa_std_process_child_id"() {
+    let h = s1_spawn1(STR_PTR("/bin/true"), STR_LEN("/bin/true"), 57010);
+    let pid = [0u64; 4];
+    let rc = sla_std_process_child_id(h, &pid[0]);
+    if rc != 0 { panic(57012); };
+    if pid[0] <= 1 { panic(57013); };
+    s1_wait_code(h, 57014);
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_process_pidfd"() {
+    let h = s1_spawn_pidfd(STR_PTR("/bin/true"), STR_LEN("/bin/true"), STR_PTR(""), 0, 57020);
+    let fd = [0u64; 4];
+    let rc = sla_std_process_pidfd(h, &fd[0]);
+    if rc != 0 { panic(57022); };
+    if fd[0] == 0 { panic(57023); };
+    s1_wait_code(h, 57024);
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_process_into_pidfd"() {
+    let h = s1_spawn_pidfd(STR_PTR("/bin/true"), STR_LEN("/bin/true"), STR_PTR(""), 0, 57030);
+    let fd = [0u64; 4];
+    let rc = sla_std_process_into_pidfd(h, &fd[0]);
+    if rc != 0 { panic(57031); };
+    if fd[0] == 0 { panic(57032); };
+    // into_pidfd moves the pidfd out of the process resource; the
+    // pidfd becomes the waitable handle for the child.
+    let out = [0u64; 4];
+    let rc3 = sla_std_pidfd_wait(fd[0], &out[0]);
+    if rc3 != 0 { panic(57034); };
+    if out[0] != 0 { panic(57035); };
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_process_wait"() {
+    let h = s1_spawn3(STR_PTR("/bin/sh"), STR_LEN("/bin/sh"), STR_PTR("-c"), STR_LEN("-c"), STR_PTR("exit 3"), STR_LEN("exit 3"), 57040);
+    let code = s1_wait_code(h, 57041);
+    if code != 3 { panic(57042); };
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_process_wait_raw"() {
+    let h = s1_spawn3(STR_PTR("/bin/sh"), STR_LEN("/bin/sh"), STR_PTR("-c"), STR_LEN("-c"), STR_PTR("exit 3"), STR_LEN("exit 3"), 57050);
+    let raw = [0u64; 4];
+    let rc = sla_std_process_wait_raw(h, &raw[0]);
+    if rc != 0 { panic(57051); };
+    // Linux wait status for exit(3) is 3 << 8 = 768.
+    if raw[0] != 768 { panic(57052); };
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_process_try_wait"() {
+    let h = s1_spawn1(STR_PTR("/bin/true"), STR_LEN("/bin/true"), 57060);
+    let ready = [0u64; 4];
+    let code = [0u64; 4];
+    let tries: u64 = 0;
+    while ready[0] == 0 {
+        let rc = sla_std_process_try_wait(h, &ready[0], &code[0]);
+        if rc != 0 { panic(57061); };
+        if ready[0] == 0 {
+            sla_task_sleep_ms(5);
+            tries = tries + 1;
+            if tries > 400 { panic(57062); };
+        };
+    }
+    if code[0] != 0 { panic(57063); };
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_process_try_wait_raw"() {
+    let h = s1_spawn1(STR_PTR("/bin/true"), STR_LEN("/bin/true"), 57070);
+    let ready = [0u64; 4];
+    let raw = [0u64; 4];
+    let tries: u64 = 0;
+    while ready[0] == 0 {
+        let rc = sla_std_process_try_wait_raw(h, &ready[0], &raw[0]);
+        if rc != 0 { panic(57071); };
+        if ready[0] == 0 {
+            sla_task_sleep_ms(5);
+            tries = tries + 1;
+            if tries > 400 { panic(57072); };
+        };
+    }
+    if raw[0] != 0 { panic(57073); };
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_process_kill"() {
+    let h2 = s1_spawn2(STR_PTR("/bin/sleep"), STR_LEN("/bin/sleep"), STR_PTR("30"), STR_LEN("30"), 57082);
+    let rc = sla_std_process_kill(h2);
+    if rc != 0 { panic(57083); };
+    let code = s1_wait_code(h2, 57084);
+    if code == 0 { panic(57085); };
+    sla_std_process_close(h2);
+}
+
+@test "smoke1 sa_std_process_send_signal"() {
+    let h = s1_spawn2(STR_PTR("/bin/sleep"), STR_LEN("/bin/sleep"), STR_PTR("30"), STR_LEN("30"), 57090);
+    let rc = sla_std_process_send_signal(h, 15);
+    if rc != 0 { panic(57091); };
+    let code = s1_wait_code(h, 57092);
+    if code == 0 { panic(57093); };
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_process_send_process_group_signal"() {
+    // The child must lead its own process group (setsid) for the
+    // group signal to address it; without setsid the group id does
+    // not exist and the call reports INVALID_HANDLE (observed).
+    let rec = [0u64; 4];
+    let a0: u64 = 0;
+    PTR_ADDR(a0, STR_PTR("/bin/sleep"));
+    rec[0] = a0;
+    rec[1] = STR_LEN("/bin/sleep");
+    let a1: u64 = 0;
+    PTR_ADDR(a1, STR_PTR("30"));
+    rec[2] = a1;
+    rec[3] = STR_LEN("30");
+    let proc = [0u64; 4];
+    let gbp: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc0 = sla_std_process_spawn_command_ext(gbp, 2, STR_PTR(""), 0, 0, STR_PTR(""), 0, 0, 0, 0, 1, &proc[0]);
+    if rc0 != 0 { panic(57100); };
+    if proc[0] == 0 { panic(57103); };
+    // Signal 0 is the existence probe: nothing is delivered.
+    let rc = sla_std_process_send_process_group_signal(proc[0], 0);
+    if rc != 0 { panic(57101); };
+    sla_std_process_kill(proc[0]);
+    s1_wait_code(proc[0], 57102);
+    sla_std_process_close(proc[0]);
+}
+
+@test "smoke1 sa_std_process_kill_process_group"() {
+    // Child in its own session/group via the ext spawn (setsid=1), so
+    // killing its group cannot touch the test process.
+    let rec = [0u64; 4];
+    let x: u64 = 0;
+    PTR_ADDR(x, STR_PTR("/bin/sleep"));
+    rec[0] = x;
+    rec[1] = STR_LEN("/bin/sleep");
+    let y: u64 = 0;
+    PTR_ADDR(y, STR_PTR("30"));
+    rec[2] = y;
+    rec[3] = STR_LEN("30");
+    let cell = [0u64; 4];
+    let s1bp5: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn_command_ext(s1bp5, 2, STR_PTR(""), 0, 0, STR_PTR(""), 0, 0, 0, 0, 1, &cell[0]);
+    if rc != 0 { panic(57110); };
+    let rc2 = sla_std_process_kill_process_group(cell[0]);
+    if rc2 != 0 { panic(57111); };
+    let code = s1_wait_code(cell[0], 57112);
+    if code == 0 { panic(57113); };
+    sla_std_process_close(cell[0]);
+}
+
+@test "smoke1 sa_std_pidfd_kill"() {
+    let h = s1_spawn_pidfd(STR_PTR("/bin/sleep"), STR_LEN("/bin/sleep"), STR_PTR("30"), STR_LEN("30"), 57120);
+    let fd = [0u64; 4];
+    sla_std_process_pidfd(h, &fd[0]);
+    let rc = sla_std_pidfd_kill(fd[0]);
+    if rc != 0 { panic(57121); };
+    let code = s1_wait_code(h, 57122);
+    if code == 0 { panic(57123); };
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_pidfd_send_signal"() {
+    let h = s1_spawn_pidfd(STR_PTR("/bin/sleep"), STR_LEN("/bin/sleep"), STR_PTR("30"), STR_LEN("30"), 57130);
+    let fd = [0u64; 4];
+    sla_std_process_pidfd(h, &fd[0]);
+    let rc = sla_std_pidfd_send_signal(fd[0], 15);
+    if rc != 0 { panic(57131); };
+    let code = s1_wait_code(h, 57132);
+    if code == 0 { panic(57133); };
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_pidfd_wait"() {
+    let h = s1_spawn_pidfd(STR_PTR("/bin/true"), STR_LEN("/bin/true"), STR_PTR(""), 0, 57140);
+    let fd = [0u64; 4];
+    sla_std_process_pidfd(h, &fd[0]);
+    let out = [0u64; 4];
+    let rc = sla_std_pidfd_wait(fd[0], &out[0]);
+    if rc != 0 { panic(57141); };
+    if out[0] != 0 { panic(57142); };
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_pidfd_wait_raw"() {
+    let rec = [0u64; 6];
+    let x: u64 = 0;
+    PTR_ADDR(x, STR_PTR("/bin/sh"));
+    rec[0] = x;
+    rec[1] = STR_LEN("/bin/sh");
+    let y: u64 = 0;
+    PTR_ADDR(y, STR_PTR("-c"));
+    rec[2] = y;
+    rec[3] = STR_LEN("-c");
+    let z: u64 = 0;
+    PTR_ADDR(z, STR_PTR("exit 3"));
+    rec[4] = z;
+    rec[5] = STR_LEN("exit 3");
+    let cell = [0u64; 4];
+    let s1bp6: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn_command_ext_pidfd(s1bp6, 3, STR_PTR(""), 0, 0, STR_PTR(""), 0, 0, 0, 0, 0, 1, &cell[0]);
+    if rc != 0 { panic(57150); };
+    let fd = [0u64; 4];
+    sla_std_process_pidfd(cell[0], &fd[0]);
+    let raw = [0u64; 4];
+    let rc2 = sla_std_pidfd_wait_raw(fd[0], &raw[0]);
+    if rc2 != 0 { panic(57151); };
+    if raw[0] != 768 { panic(57152); };
+    sla_std_process_close(cell[0]);
+}
+
+@test "smoke1 sa_std_pidfd_try_wait"() {
+    let h = s1_spawn_pidfd(STR_PTR("/bin/true"), STR_LEN("/bin/true"), STR_PTR(""), 0, 57160);
+    let fd = [0u64; 4];
+    sla_std_process_pidfd(h, &fd[0]);
+    let ready = [0u64; 4];
+    let code = [0u64; 4];
+    let tries: u64 = 0;
+    while ready[0] == 0 {
+        let rc = sla_std_pidfd_try_wait(fd[0], &ready[0], &code[0]);
+        if rc != 0 { panic(57161); };
+        if ready[0] == 0 {
+            sla_task_sleep_ms(5);
+            tries = tries + 1;
+            if tries > 400 { panic(57162); };
+        };
+    }
+    if code[0] != 0 { panic(57163); };
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_pidfd_try_wait_raw"() {
+    let h = s1_spawn_pidfd(STR_PTR("/bin/true"), STR_LEN("/bin/true"), STR_PTR(""), 0, 57170);
+    let fd = [0u64; 4];
+    sla_std_process_pidfd(h, &fd[0]);
+    let ready = [0u64; 4];
+    let raw = [0u64; 4];
+    let tries: u64 = 0;
+    while ready[0] == 0 {
+        let rc = sla_std_pidfd_try_wait_raw(fd[0], &ready[0], &raw[0]);
+        if rc != 0 { panic(57171); };
+        if ready[0] == 0 {
+            sla_task_sleep_ms(5);
+            tries = tries + 1;
+            if tries > 400 { panic(57172); };
+        };
+    }
+    if raw[0] != 0 { panic(57173); };
+    sla_std_process_close(h);
+}
+
+@test "smoke1 sa_std_process_read_stdout"() {
+    // read_stdout belongs to capture mode: run() the echo, then drain
+    // the captured stdout from the process handle. (In stream mode the
+    // pipes are separate io handles; read_stdout after wait fails --
+    // probe evidence, WAVE1_REPORT.)
+    let rec = [0u64; 4];
+    let x: u64 = 0;
+    PTR_ADDR(x, STR_PTR("/bin/echo"));
+    rec[0] = x;
+    rec[1] = STR_LEN("/bin/echo");
+    let y: u64 = 0;
+    PTR_ADDR(y, STR_PTR("hi"));
+    rec[2] = y;
+    rec[3] = STR_LEN("hi");
+    let proc = [0u64; 4];
+    let s1bp7: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_run(s1bp7, 2, &proc[0]);
+    if rc != 0 { panic(57180); };
+    let wcode = [0u64; 4];
+    let wrc = sla_std_process_wait(proc[0], &wcode[0]);
+    if wrc != 0 { panic(57186); };
+    if wcode[0] != 0 { panic(57187); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc2 = sla_std_process_read_stdout(proc[0], &buf[0], 64, &rd[0]);
+    if rc2 != 0 { panic(57182); };
+    if rd[0] != 3 { panic(57183); };
+    if buf[0] != 104 { panic(57184); };
+    if buf[2] != 10 { panic(57185); };
+    sla_std_process_close(proc[0]);
+}
+
+@test "smoke1 sa_std_process_read_stderr"() {
+    // run = capture mode: the handle carries the captured streams.
+    let rec = [0u64; 6];
+    let x: u64 = 0;
+    PTR_ADDR(x, STR_PTR("/bin/sh"));
+    rec[0] = x;
+    rec[1] = STR_LEN("/bin/sh");
+    let y: u64 = 0;
+    PTR_ADDR(y, STR_PTR("-c"));
+    rec[2] = y;
+    rec[3] = STR_LEN("-c");
+    let z: u64 = 0;
+    PTR_ADDR(z, STR_PTR("echo err 1>&2"));
+    rec[4] = z;
+    rec[5] = STR_LEN("echo err 1>&2");
+    let cell = [0u64; 4];
+    let s1bp8: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_run(s1bp8, 3, &cell[0]);
+    if rc != 0 { panic(57192); };
+    let wcode = [0u64; 4];
+    let wrc = sla_std_process_wait(cell[0], &wcode[0]);
+    if wrc != 0 { panic(57197); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc2 = sla_std_process_read_stderr(cell[0], &buf[0], 64, &rd[0]);
+    if rc2 != 0 { panic(57193); };
+    if rd[0] != 4 { panic(57194); };
+    if buf[0] != 101 { panic(57195); };
+    if buf[3] != 10 { panic(57196); };
+    sla_std_process_close(cell[0]);
+}
+
+@test "smoke1 sa_std_process_close"() {
+    let h = s1_spawn1(STR_PTR("/bin/true"), STR_LEN("/bin/true"), 57200);
+    s1_wait_code(h, 57201);
+    let rc = sla_std_process_close(h);
+    if rc != 0 { panic(57202); };
+    let rc2 = sla_std_process_close(h);
+    if rc2 == 0 { panic(57203); };
+}

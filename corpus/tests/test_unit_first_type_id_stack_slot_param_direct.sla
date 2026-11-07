@@ -1,0 +1,25 @@
+// Regression for sab_anyof9_table_erased_memoryleak_issue_cn:
+// by-value Copy scalar params that are address-taken get entry stack-slot
+// materialization. After the slot is filled, the original ABI param register
+// must emit a SAB-visible move_ so exit does not report MemoryLeak
+// (register: first_type_id).
+
+fn first_type_id_uses_borrow(first_type_id: i32) -> i32 {
+    let p = &first_type_id;
+    let v = *p;
+    return v + 1;
+}
+
+fn first_type_id_wrapper(first_type_id: i32, flag: i32) -> i32 {
+    if flag == 0 {
+        return first_type_id_uses_borrow(first_type_id);
+    } else {
+        return first_type_id + 2;
+    };
+}
+
+@test "stack-slotized first_type_id scalar param is consumed at exit"() {
+    if first_type_id_uses_borrow(10) != 11 { panic(52001); };
+    if first_type_id_wrapper(7, 0) != 8 { panic(52002); };
+    if first_type_id_wrapper(7, 1) != 9 { panic(52003); };
+}

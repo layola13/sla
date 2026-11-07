@@ -1,0 +1,55 @@
+@import "sa_std/jwt.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Coverage shard 2 (round 2 split B of test_unit_reg2_jwt_slice):
+// jwt_sl_len / jwt_get / jwt_range. Round 1: text all green; SAB run
+// trapped UseAfterMove (1009) with no per-test attribution, so the
+// file was split to attribute the trap. Original preserved in ../repro/.
+
+fn vb(p: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return v;
+}
+
+fn vec_byte(v: &Vec<u8>, i: u64) -> u8 {
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let b: u8 = 0;
+    SLICE_GET(b, sl, i);
+    return b;
+}
+
+@test "reg2 jwt_sl_len"() {
+    let v = vb(STR_PTR("hello-jwt"), 9);
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    if jwt_sl_len(&sl) != 9 { panic(24710); };
+    let e: Vec<u8> = Vec::new();
+    let esl: Slice<u8> = VEC_AS_SLICE(e);
+    if jwt_sl_len(&esl) != 0 { panic(24711); };
+}
+
+@test "reg2 jwt_get"() {
+    let v = vb(STR_PTR("hello-jwt"), 9);
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    if jwt_get(&sl, 0) != 104 { panic(24712); };
+    if jwt_get(&sl, 4) != 111 { panic(24713); };
+    if jwt_get(&sl, 8) != 116 { panic(24714); };
+}
+
+@test "reg2 jwt_range"() {
+    let v = vb(STR_PTR("hello-jwt"), 9);
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let tail = jwt_range(&sl, 6, 9);
+    if len(tail) != 3 { panic(24715); };
+    if vec_byte(&tail, 0) != 106 || vec_byte(&tail, 2) != 116 { panic(24716); }; // jwt
+    let head = jwt_range(&sl, 0, 5);
+    if len(head) != 5 { panic(24717); };
+    if vec_byte(&head, 0) != 104 || vec_byte(&head, 4) != 111 { panic(24718); }; // hello
+    let none = jwt_range(&sl, 3, 3);
+    if len(none) != 0 { panic(24719); };
+}

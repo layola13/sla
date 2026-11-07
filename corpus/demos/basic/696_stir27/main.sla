@@ -1,0 +1,42 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Stirling 二类续高位建表 S(n,k)=S(n-1,k-1)+k*S(n-1,k)（上三角守卫，646 范式）。
+// S(7,2)=63，S(7,3)=301，S(7,4)=350（699 做建表/递归对峙）。
+// 意对标 531_stirling2（低位建表版互补；此处为 n=7 高位行）。
+
+fn svt(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + nn * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", svt(7, 2), svt(7, 3), svt(7, 4));
+    return 0;
+}
+
+@test "basic 696 stir27"() {
+    if svt(7, 2) != 63 { panic(69601); };
+    if svt(7, 3) != 301 { panic(69602); };
+    if svt(7, 4) != 350 { panic(69603); };
+    if svt(6, 3) != 90 { panic(69604); };
+}

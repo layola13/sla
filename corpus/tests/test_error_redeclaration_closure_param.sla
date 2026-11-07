@@ -1,0 +1,6 @@
+// expect: Redeclaration
+fn duplicate_closure_param() -> int {
+    let add = |value: int, value: int| value + 1;
+    return add(1, 2);
+}
+

@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 循环 vs 公式三角数对峙（71×245：10→55=55）。
+// 双实现一致性锁定（单实现见 71/245）。
+
+fn tri_loop(n: int) -> int {
+    let t = 0;
+    for i in 1..(n + 1) {
+        t = t + i;
+    }
+    return t;
+}
+
+fn tri_form(n: int) -> int {
+    return n * (n + 1) / 2;
+}
+
+fn main() -> i32 {
+    println("{}", tri_loop(10));
+    return 0;
+}
+
+@test "basic 295 duel tri"() {
+    if tri_loop(10) != tri_form(10) { panic(29501); };
+    if tri_form(10) != 55 { panic(29502); };
+}

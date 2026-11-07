@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 643_logic_short：逻辑运算符求值（0,3，且两侧各执行一次）。
+// SLA `&&`/`||` 为急求值（eager）：`false && eff()` 与 `true || eff()`
+// 仍执行右侧（exe 打印两次 EFF，与 TS 短路语义不同，见缺口 #21）；
+
+fn eff() -> bool {
+    println("EFF");
+    return true;
+}
+
+fn main() -> i32 {
+    let e = false;
+    let s = true;
+    let r1 = 0;
+    if e && eff() { r1 = 1; };
+    let r2 = 4;
+    if s || eff() { r2 = 3; };
+    println("{},{}", r1, r2);
+    return 0;
+}
+
+@test "basic 138 eager logic"() {
+    let e = false;
+    let s = true;
+    let r1 = 0;
+    if e && eff() { r1 = 1; };
+    if r1 != 0 { panic(13801); };
+    let r2 = 4;
+    if s || eff() { r2 = 3; };
+    if r2 != 3 { panic(13802); };
+}

@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct BlobRange {
+    bytes: i32,
+    chunk_size: i32,
+}
+
+fn chunk_layout(blob: BlobRange) -> i32 {
+    let chunks = (blob.bytes + blob.chunk_size - 1) / blob.chunk_size;
+    let tail = blob.bytes % blob.chunk_size;
+    return chunks * 10 + tail;
+}
+
+fn main() -> i32 {
+    let result = chunk_layout(BlobRange { bytes: 10, chunk_size: 4 });
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 083 83_blob_chunk"() {
+    let got = chunk_layout(BlobRange { bytes: 10, chunk_size: 4 });
+    if got != 32 {
+        panic(83);
+    };
+};

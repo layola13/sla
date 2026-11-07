@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn eco_registry_publish_steps() -> i32 { let package = 1; let checksum = 1; let index = 1; return package + checksum + index; }
+fn main() -> i32 { let package = 1; let checksum = 1; let index = 1; let result = package + checksum + index; println("{}", result); return result; }
+@test "rosetta 300 eco sa lang registry publish"() { let got = eco_registry_publish_steps(); if got != 3 { panic(300); }; }

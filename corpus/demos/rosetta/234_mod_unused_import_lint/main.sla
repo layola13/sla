@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn unused_import_lint_count() -> i32 {
+    let imported_symbols = 2;
+    let referenced_symbols = 1;
+    return imported_symbols - referenced_symbols;
+}
+
+fn main() -> i32 {
+    let imported_symbols = 2;
+    let referenced_symbols = 1;
+    let result = imported_symbols - referenced_symbols;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 234 mod unused import lint"() {
+    let got = unused_import_lint_count();
+    if got != 1 {
+        panic(234);
+    };
+}

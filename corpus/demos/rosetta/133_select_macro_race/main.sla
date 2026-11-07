@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/future.sa"
+
+fn select_first_ready_value() -> i32 {
+    let left = branch_a().await;
+    let right = branch_b().await;
+    return select_first_ready(left, right);
+}
+
+async fn branch_a() -> i32 {
+    11
+}
+
+async fn branch_b() -> i32 {
+    22
+}
+
+fn select_first_ready(left: i32, right: i32) -> i32 {
+    if left != 0 {
+        return left;
+    } else {
+        return right;
+    };
+}
+
+fn main() -> i32 {
+    let left = branch_a().await;
+    let right = branch_b().await;
+    let result = select_first_ready(left, right);
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 133 133_select_macro_race"() {
+    let got = select_first_ready_value();
+    if got != 11 {
+        panic(133);
+    };
+};

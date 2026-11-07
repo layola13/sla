@@ -1,0 +1,96 @@
+struct Query<T> {
+    value: T,
+}
+
+struct Pos {
+    x: i64,
+}
+
+struct Vel {
+    x: i64,
+}
+
+struct Marker {
+    x: i64,
+}
+
+struct WriteLog {
+    first: i64,
+    second: i64,
+    third: i64,
+}
+
+@expand_tuple(1, 3, P) {
+struct ExpandedParamSet$N<@join(P, ", ") { $P }> {
+@each(P) {
+    p$I: Query<$P>,
+}
+}
+
+fn expanded_param_set$N<@join(P, ", ") { $P }>(@join(P, ", ") { p$I: Query<$P> }) -> ExpandedParamSet$N<@join(P, ", ") { $P }> {
+    return ExpandedParamSet$N<@join(P, ", ") { $P }> {
+@each(P) {
+        p$I: p$I,
+}
+    };
+}
+
+fn run_expanded_param_set$N<@join(P, ", ") { $P }>(param: ExpandedParamSet$N<@join(P, ", ") { $P }>, run: fn(ExpandedParamSet$N<@join(P, ", ") { $P }>) -> ExpandedParamSet$N<@join(P, ", ") { $P }>) -> ExpandedParamSet$N<@join(P, ", ") { $P }> {
+    return run(param);
+}
+}
+
+fn bump_two(param: ExpandedParamSet2<Pos, Vel>) -> ExpandedParamSet2<Pos, Vel> {
+    param.p0.value.x = param.p0.value.x + 1;
+    param.p1.value.x = param.p1.value.x + 2;
+    return expanded_param_set2<Pos, Vel>(param.p0, param.p1);
+}
+
+fn write_slot(log: WriteLog, index: i64, value: i64) -> WriteLog {
+    if index == 0 {
+        log.first = value;
+        return log;
+    };
+    if index == 1 {
+        log.second = value;
+        return log;
+    };
+    log.third = value;
+    return log;
+}
+
+fn write_three(log: WriteLog, param: ExpandedParamSet3<Pos, Vel, Marker>) -> WriteLog {
+    log = write_slot(log, 0, param.p0.value.x);
+    log = write_slot(log, 1, param.p1.value.x);
+    log = write_slot(log, 2, param.p2.value.x);
+    return log;
+}
+
+@test "expand tuple paramset widths"() {
+    let one = expanded_param_set1<Pos>(Query<Pos> { value: Pos { x: 10 } });
+    if one.p0.value.x != 10 { panic(19001); };
+
+    let two = expanded_param_set2<Pos, Vel>(Query<Pos> { value: Pos { x: 11 } }, Query<Vel> { value: Vel { x: 22 } });
+    if two.p0.value.x != 11 { panic(19002); };
+    if two.p1.value.x != 22 { panic(19003); };
+
+    let three = expanded_param_set3<Pos, Vel, Marker>(Query<Pos> { value: Pos { x: 1 } }, Query<Vel> { value: Vel { x: 2 } }, Query<Marker> { value: Marker { x: 3 } });
+    if three.p0.value.x != 1 { panic(19004); };
+    if three.p1.value.x != 2 { panic(19005); };
+    if three.p2.value.x != 3 { panic(19006); };
+}
+
+@test "expand tuple paramset fn pointer runner"() {
+    let param = expanded_param_set2<Pos, Vel>(Query<Pos> { value: Pos { x: 40 } }, Query<Vel> { value: Vel { x: 50 } });
+    let out = run_expanded_param_set2<Pos, Vel>(param, bump_two);
+    if out.p0.value.x != 41 { panic(19010); };
+    if out.p1.value.x != 52 { panic(19011); };
+}
+
+@test "expand tuple paramset writeback order"() {
+    let param = expanded_param_set3<Pos, Vel, Marker>(Query<Pos> { value: Pos { x: 7 } }, Query<Vel> { value: Vel { x: 8 } }, Query<Marker> { value: Marker { x: 9 } });
+    let log = write_three(WriteLog { first: 0, second: 0, third: 0 }, param);
+    if log.first != 7 { panic(19020); };
+    if log.second != 8 { panic(19021); };
+    if log.third != 9 { panic(19022); };
+}

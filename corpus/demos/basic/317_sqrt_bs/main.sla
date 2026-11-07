@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 347_math_sqrt 的二分版（117 试乘/257 牛顿之第三实现：3,4）。
+// 半开收敛（263 的下界口径之开方版）。
+
+fn bs_sqrt(n: int) -> int {
+    let lo = 0;
+    let hi = n;
+    while lo <= hi {
+        let mid = (lo + hi) / 2;
+        if mid * mid == n { return mid; };
+        if mid * mid < n {
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        };
+    }
+    return hi;
+}
+
+fn main() -> i32 {
+    println("{},{}", bs_sqrt(15), bs_sqrt(16));
+    return 0;
+}
+
+@test "basic 317 sqrt bs"() {
+    if bs_sqrt(15) != 3 { panic(31701); };
+    if bs_sqrt(16) != 4 { panic(31702); };
+    if bs_sqrt(1) != 1 { panic(31703); };
+    if bs_sqrt(100) != 10 { panic(31704); };
+}

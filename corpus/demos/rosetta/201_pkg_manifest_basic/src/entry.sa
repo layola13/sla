@@ -1,0 +1,11 @@
+@import "src/../pkg/manifest.sa"
+
+#def Entry_SIZE = 4
+#def Entry_value = +0
+
+@entry_value() -> i32:
+L_ENTRY:
+    manifest = call @manifest_value()
+    value = add manifest, 0
+    !manifest
+    return value

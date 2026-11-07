@@ -1,0 +1,33 @@
+@import "sa_std/redis.sla"
+
+// MINIM R3 (isolation): every redis_value / session / client entry
+// whose call graph does NOT reach redis_parse_value, in one file
+// with no parser call anywhere. Green here proves the shard's red
+// files fail only through parser reachability, and clears these
+// entries individually.
+
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+@test "minim noparse connect and io leaves"() {
+    let st = redis_connect(reg3_bytes(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1")), 1);
+    if st.status == SA_STD_OK { panic(251); };
+    if st.client.open { panic(252); };
+    let big: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < 600 {
+        big.push(97);
+        i = i + 1;
+    }
+    let st2 = redis_connect(big, 6379);
+    if st2.status != SA_STD_ERR_INVALID_ARGUMENT { panic(253); };
+    let chunk = redis_read_chunk(0);
+    if chunk.status == SA_STD_OK { panic(254); };
+    if (len(chunk.data) as u64) != 0 { panic(255); };
+    let empty: Vec<u8> = Vec::new();
+    if redis_write_all(0, empty) != SA_STD_OK { panic(256); };
+    let payload = reg3_bytes(STR_PTR("v"), STR_LEN("v"));
+    if redis_write_all(0, payload) == SA_STD_OK { panic(257); };
+}

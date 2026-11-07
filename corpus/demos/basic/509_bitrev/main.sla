@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 字节位反转（0x12=18 → 0x48=72）。
+// 意对标 409 整数反转的位版（409 互补）。
+
+fn bitrev8(n: int) -> int {
+    let r = 0;
+    let m = n;
+    let i = 0;
+    while i < 8 {
+        r = r * 2 + m % 2;
+        m = m / 2;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", bitrev8(18), bitrev8(1), bitrev8(255));
+    return 0;
+}
+
+@test "basic 509 bitrev"() {
+    if bitrev8(18) != 72 { panic(50901); };
+    if bitrev8(1) != 128 { panic(50902); };
+    if bitrev8(255) != 255 { panic(50903); };
+}

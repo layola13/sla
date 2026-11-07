@@ -1,0 +1,15 @@
+// Positive control for the return-diagnostic fix: returning a real
+// value from a value-returning function, and a bare return from a
+// void function, must check cleanly (rc=0).
+fn compute() -> i32 {
+    return 41 + 1;
+}
+
+fn run() {
+    return;
+}
+
+fn main() -> i32 {
+    run();
+    return compute();
+}

@@ -1,0 +1,341 @@
+// Sla 单元测试 - 复杂数学表达式（含括号、嵌套、取模、一元负号）
+// Run with: sa sla test tests/test_unit_math.sla
+
+// ─── Helper: assert equals ────────────────────────────────────
+// 由于 Sla 目前无内置 assert_eq 宏，使用内联写法：
+//   let ok = expr == expected; if ok { } else { panic(1); };
+
+// ─── 基础四则运算 ─────────────────────────────────────────────
+
+fn abs(x: int) -> int {
+    let neg = x < 0;
+    if neg {
+        return 0 - x;
+    } else {
+        return x;
+    };
+}
+
+fn max(a: int, b: int) -> int {
+    let gt = a > b;
+    if gt {
+        return a;
+    } else {
+        return b;
+    };
+}
+
+fn min(a: int, b: int) -> int {
+    let lt = a < b;
+    if lt {
+        return a;
+    } else {
+        return b;
+    };
+}
+
+fn gcd(a: int, b: int) -> int {
+    let is_zero = b == 0;
+    if is_zero {
+        return a;
+    } else {
+        let rem = a % b;
+        let result = gcd(b, rem);
+        return result;
+    };
+}
+
+fn lcm(a: int, b: int) -> int {
+    let g = gcd(a, b);
+    let result = (a / g) * b;
+    return result;
+}
+
+fn power(base: int, exp: int) -> int {
+    let is_zero = exp == 0;
+    if is_zero {
+        return 1;
+    } else {
+        let half = exp / 2;
+        let sub_result = power(base, half);
+        let even = (exp % 2) == 0;
+        if even {
+            let result = sub_result * sub_result;
+            return result;
+        } else {
+            let result = sub_result * sub_result * base;
+            return result;
+        };
+    };
+}
+
+fn clamp(val: int, lo: int, hi: int) -> int {
+    let below = val < lo;
+    if below {
+        return lo;
+    } else {
+        let above = val > hi;
+        if above {
+            return hi;
+        } else {
+            return val;
+        };
+    };
+}
+
+// ─── @test blocks ─────────────────────────────────────────────
+
+@test "括号改变优先级 (2+3)*4 == 20"() {
+    let result = (2 + 3) * 4;
+    let ok = result == 20;
+    if ok { } else { panic(1); };
+}
+
+@test "不带括号 2+3*4 == 14"() {
+    let result = 2 + 3 * 4;
+    let ok = result == 14;
+    if ok { } else { panic(1); };
+}
+
+@test "多层嵌套括号 ((3+2)*(4-1))/5 == 3"() {
+    let result = ((3 + 2) * (4 - 1)) / 5;
+    let ok = result == 3;
+    if ok { } else { panic(1); };
+}
+
+@test "一元负号 -(5+3) == -8"() {
+    let result = -(5 + 3);
+    let ok = result == -8;
+    if ok { } else { panic(1); };
+}
+
+@test "嵌套一元负 -(-10) == 10"() {
+    let result = -(-10);
+    let ok = result == 10;
+    if ok { } else { panic(1); };
+}
+
+@test "取模运算 17 % 5 == 2"() {
+    let result = 17 % 5;
+    let ok = result == 2;
+    if ok { } else { panic(1); };
+}
+
+@test "取模带括号 (100 + 7) % (3 * 4) == 11"() {
+    let result = (100 + 7) % (3 * 4);
+    let ok = result == 11;
+    if ok { } else { panic(1); };
+}
+
+@test "绝对值 abs(-42) == 42"() {
+    let result = abs(-42);
+    let ok = result == 42;
+    if ok { } else { panic(1); };
+}
+
+@test "绝对值 abs(7) == 7"() {
+    let result = abs(7);
+    let ok = result == 7;
+    if ok { } else { panic(1); };
+}
+
+@test "max(3, 7) == 7"() {
+    let result = max(3, 7);
+    let ok = result == 7;
+    if ok { } else { panic(1); };
+}
+
+@test "min(3, 7) == 3"() {
+    let result = min(3, 7);
+    let ok = result == 3;
+    if ok { } else { panic(1); };
+}
+
+@test "gcd(48, 18) == 6"() {
+    let result = gcd(48, 18);
+    let ok = result == 6;
+    if ok { } else { panic(1); };
+}
+
+@test "gcd(100, 75) == 25"() {
+    let result = gcd(100, 75);
+    let ok = result == 25;
+    if ok { } else { panic(1); };
+}
+
+@test "lcm(4, 6) == 12"() {
+    let result = lcm(4, 6);
+    let ok = result == 12;
+    if ok { } else { panic(1); };
+}
+
+@test "2^10 == 1024"() {
+    let result = power(2, 10);
+    let ok = result == 1024;
+    if ok { } else { panic(1); };
+}
+
+@test "3^5 == 243"() {
+    let result = power(3, 5);
+    let ok = result == 243;
+    if ok { } else { panic(1); };
+}
+
+@test "clamp(15, 0, 10) == 10（上限）"() {
+    let result = clamp(15, 0, 10);
+    let ok = result == 10;
+    if ok { } else { panic(1); };
+}
+
+@test "clamp(-5, 0, 10) == 0（下限）"() {
+    let result = clamp(-5, 0, 10);
+    let ok = result == 0;
+    if ok { } else { panic(1); };
+}
+
+@test "clamp(7, 0, 10) == 7（范围内）"() {
+    let result = clamp(7, 0, 10);
+    let ok = result == 7;
+    if ok { } else { panic(1); };
+}
+
+@test "复合表达式 (a*a + b*b) == c*c 勾股定理 3-4-5"() {
+    let a = 3;
+    let b = 4;
+    let c = 5;
+    let lhs = (a * a) + (b * b);
+    let rhs = c * c;
+    let ok = lhs == rhs;
+    if ok { } else { panic(1); };
+}
+
+@test "复合表达式 (a*a + b*b) 勾股 5-12-13"() {
+    let a = 5;
+    let b = 12;
+    let c = 13;
+    let lhs = (a * a) + (b * b);
+    let rhs = c * c;
+    let ok = lhs == rhs;
+    if ok { } else { panic(1); };
+}
+
+@test "判别式 b*b - 4*a*c (a=1,b=5,c=6) == 1"() {
+    let a = 1;
+    let b = 5;
+    let c = 6;
+    let disc = (b * b) - (4 * a * c);
+    let ok = disc == 1;
+    if ok { } else { panic(1); };
+}
+
+@test "等差数列求和 sum(1..10) == 55"() {
+    // sum = n*(n+1)/2
+    let n = 10;
+    let result = n * (n + 1) / 2;
+    let ok = result == 55;
+    if ok { } else { panic(1); };
+}
+
+@test "等比数列 (公比r=2, n=8项) 总和 == 255"() {
+    // sum = r^n - 1 = 2^8 - 1 = 255 for r=2, first=1
+    let r8 = power(2, 8);
+    let result = r8 - 1;
+    let ok = result == 255;
+    if ok { } else { panic(1); };
+}
+
+@test "整除性测试 120 % 6 == 0"() {
+    let result = 120 % 6;
+    let ok = result == 0;
+    if ok { } else { panic(1); };
+}
+
+@test "混合运算 (10 - 3) * (8 + 2) / 5 % 7 == 0"() {
+    let result = (10 - 3) * (8 + 2) / 5 % 7;
+    let ok = result == 0;
+    if ok { } else { panic(1); };
+}
+
+@test "凯撒密码偏移 (ch + shift) % 26 (e=4, shift=3 → h=7)"() {
+    let ch = 4;
+    let shift = 3;
+    let result = (ch + shift) % 26;
+    let ok = result == 7;
+    if ok { } else { panic(1); };
+}
+
+@test "华氏转摄氏 F=32 → C=0: (F-32)*5/9"() {
+    let f = 32;
+    let c = (f - 32) * 5 / 9;
+    let ok = c == 0;
+    if ok { } else { panic(1); };
+}
+
+@test "华氏转摄氏 F=212 → C=100"() {
+    let f = 212;
+    let c = (f - 32) * 5 / 9;
+    let ok = c == 100;
+    if ok { } else { panic(1); };
+}
+
+@test "位运算模拟: 奇偶性 (n % 2 == 0) for n=42"() {
+    let n = 42;
+    let rem = n % 2;
+    let ok = rem == 0;
+    if ok { } else { panic(1); };
+}
+
+@test "位运算模拟: 奇偶性 (n % 2 != 0) for n=17"() {
+    let n = 17;
+    let rem = n % 2;
+    let ok = rem == 1;
+    if ok { } else { panic(1); };
+}
+
+@test "三元线性表达式 3x + 2y - z (x=4,y=3,z=1) == 17"() {
+    let x = 4;
+    let y = 3;
+    let z = 1;
+    let result = (3 * x) + (2 * y) - z;
+    let ok = result == 17;
+    if ok { } else { panic(1); };
+}
+
+@test "整数对数下界 log2(64) == 6 via 2^6==64"() {
+    let p = power(2, 6);
+    let ok = p == 64;
+    if ok { } else { panic(1); };
+}
+
+@test "梯形面积 (a+b)*h/2 (a=3,b=7,h=4) == 20"() {
+    let a = 3;
+    let b = 7;
+    let h = 4;
+    let area = (a + b) * h / 2;
+    let ok = area == 20;
+    if ok { } else { panic(1); };
+}
+
+@test "距离平方公式 d^2=(x2-x1)^2+(y2-y1)^2 (0,0)-(3,4) == 25"() {
+    let x1 = 0;
+    let y1 = 0;
+    let x2 = 3;
+    let y2 = 4;
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+    let d2 = (dx * dx) + (dy * dy);
+    let ok = d2 == 25;
+    if ok { } else { panic(1); };
+}
+
+@test "浮点加法 1.5 + 2.25 == 3.75"() {
+    let sum = 1.5 + 2.25;
+    let ok = sum == 3.75;
+    if ok { } else { panic(1); };
+}
+
+@test "浮点复合表达式 (1.5+2.5)*2.0/4.0 == 2.0"() {
+    let result = (1.5 + 2.5) * 2.0 / 4.0;
+    let ok = result == 2.0;
+    if ok { } else { panic(1); };
+}

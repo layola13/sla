@@ -1,0 +1,13 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: a borrow field is a view into memory owned
+// elsewhere; an arena root may not contain one (design 2.2).
+struct BorrowWrap { r: &Vec<u8> }
+
+fn id_borrow_wrap(w: BorrowWrap) -> BorrowWrap { return w; }
+
+fn neg_borrow_field(p: BorrowWrap) -> i32 {
+    arena {
+        let w = id_borrow_wrap(p);
+    }
+    return 0;
+}

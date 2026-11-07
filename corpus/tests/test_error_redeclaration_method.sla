@@ -1,0 +1,17 @@
+// expect: Redeclaration
+struct RepeatedMethod {
+    value: i32,
+}
+
+impl RepeatedMethod {
+    fn score(self) -> i32 {
+        return self.value;
+    }
+}
+
+impl RepeatedMethod {
+    fn score(self) -> i32 {
+        return self.value + 1;
+    }
+}
+

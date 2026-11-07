@@ -1,0 +1,26 @@
+// expect: LoopConditionalConsume
+@import "sa_std/hashmap.sa"
+@import "sa_std/string.sa"
+
+// DEF insert-consume (loop form): consuming a loop-external String
+// key binding by an insert inside the loop body is a loop-carried
+// consumption. Before the fix the checker accepted the shape and the
+// failure only surfaced downstream (assembler referee / runtime).
+// The checker must report LoopConditionalConsume naming the binding
+// and the insert argument, exactly as it does for a plain consuming
+// call or a Vec push in a loop body.
+
+fn bad_insert_loop(k: String) -> HashMap<String, i32> {
+    let m: HashMap<String, i32> = HashMap::new();
+    let i = 0;
+    while i < 2 {
+        m.insert(k, i);
+        i = i + 1;
+    }
+    return m;
+}
+
+fn main() -> i32 {
+    let r = bad_insert_loop(format("ab"));
+    return len(r) as i32;
+}

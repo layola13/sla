@@ -1,0 +1,47 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// totient 累和（S(10)=32）。
+// 意对标 336 欧拉函数的累和版（381 互素和互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn phi(n: int) -> int {
+    if n <= 1 { return 1; };
+    let c = 0;
+    let k = 1;
+    while k < n {
+        if gcd(k, n) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn phi_sum(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        s = s + phi(i);
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", phi_sum(10), phi_sum(5));
+    return 0;
+}
+
+@test "basic 382 phi sum"() {
+    if phi_sum(10) != 32 { panic(38201); };
+    if phi_sum(5) != 10 { panic(38202); };
+}

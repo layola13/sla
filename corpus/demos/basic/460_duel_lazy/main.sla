@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 懒人厨师双实现对峙（闭式 vs 逐刀累加：5 刀 16 双边）。
+// 意对标 288 平方和对峙的切分版（458 互补）。
+
+fn lazy_form(n: int) -> int {
+    return (n * n + n + 2) / 2;
+}
+
+fn lazy_loop(n: int) -> int {
+    let s = 1;
+    let i = 1;
+    while i <= n {
+        s = s + i;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", lazy_form(5), lazy_loop(5));
+    return 0;
+}
+
+@test "basic 460 duel lazy"() {
+    if lazy_form(5) != 16 { panic(46001); };
+    if lazy_loop(5) != 16 { panic(46002); };
+    if lazy_form(5) != lazy_loop(5) { panic(46003); };
+    if lazy_loop(10) != 56 { panic(46004); };
+}

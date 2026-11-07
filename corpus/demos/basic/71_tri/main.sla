@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 137_tri：1+…+10=55（三角数）。
+// 与 04/05/61（累加系列）互补，此处为 `for` 正序版。
+
+fn main() -> i32 {
+    let t = 0;
+    for i in 1..11 {
+        t = t + i;
+    }
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 71 triangular"() {
+    let t = 0;
+    for i in 1..11 {
+        t = t + i;
+    }
+    if t != 55 { panic(7101); };
+}

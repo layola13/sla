@@ -1,0 +1,17 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct UserId(u32);
+
+fn main() -> i32 {
+    let user = UserId(42);
+    println("{}", user.0);
+    return 0;
+}
+
+@test "rosetta 037 newtype"() {
+    let user = UserId(42);
+    if user.0 != 42 {
+        panic(37);
+    };
+}

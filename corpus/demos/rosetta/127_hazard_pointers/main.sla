@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/sync/atomic.sa"
+@import "sa_std/core/box.sa"
+
+fn hazard_pointer_result() -> i32 {
+    let raw = Box::into_raw(Box::new(9));
+    let shared = AtomicPtr::new(raw);
+    let loaded = shared.load(Ordering::Acquire);
+    let hazard = AtomicPtr::new(loaded);
+    let still_protected = hazard.load(Ordering::Acquire) == loaded;
+    let protected = if still_protected == true { 1 } else { 0 };
+    let result = unsafe { *loaded } + protected;
+    let boxed = unsafe { Box::from_raw(shared.load(Ordering::Acquire)) };
+    return result;
+}
+
+fn main() -> i32 {
+    let raw = Box::into_raw(Box::new(9));
+    let shared = AtomicPtr::new(raw);
+    let loaded = shared.load(Ordering::Acquire);
+    let hazard = AtomicPtr::new(loaded);
+    let still_protected = hazard.load(Ordering::Acquire) == loaded;
+    let protected = if still_protected == true { 1 } else { 0 };
+    let result = unsafe { *loaded } + protected;
+    let boxed = unsafe { Box::from_raw(shared.load(Ordering::Acquire)) };
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 127 127_hazard_pointers"() {
+    let got = hazard_pointer_result();
+    if got != 10 {
+        panic(127);
+    };
+};

@@ -1,0 +1,37 @@
+// DEF-12 (view-types stage-1 accounting refinement): the kb shape.
+// Callee span_eq takes &Doc (shared borrow) plus by-value scalars;
+// the call site passes doc (borrow-param forwarding) together with
+// doc.soff[i] / doc.slen[i] — by-value Copy reads of Vec<u64>
+// elements. Evaluating those reads produces independent u64 copies;
+// no evaluation order can invalidate the shared borrow, and the
+// "bind the reads to locals first" form of the same call was always
+// accepted. Baseline fc46620a rejects this with:
+//   BorrowConflict: call to span_eq borrows `doc` while also passing
+//   overlapping place `doc.soff[_]` in the same call
+// Distilled from slaheng kb (json.sla j_str_eq / j_obj_get call
+// sites) by the borrow-corner triage line; judged by standalone
+// `sla check` (RC=1 on baseline, RC=0 with the DEF-12 fix).
+
+struct Doc {
+    soff: Vec<u64>,
+    slen: Vec<u64>,
+    pool: Vec<u8>,
+}
+
+fn pool_byte(doc: &Doc, off: u64) -> u8 {
+    return doc.pool[off];
+}
+
+fn span_eq(doc: &Doc, off: u64, len: u64, tp: ptr, tn: u64) -> bool {
+    if len != tn { return false; };
+    let i: u64 = 0;
+    while i < len {
+        if pool_byte(doc, off + i) != 0 { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn str_eq(doc: &Doc, node: i64, tp: ptr, tn: u64) -> bool {
+    return span_eq(doc, doc.soff[node as u64], doc.slen[node as u64], tp, tn);
+}

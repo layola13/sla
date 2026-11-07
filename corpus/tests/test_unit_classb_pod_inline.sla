@@ -1,0 +1,127 @@
+// CLASSB segment 3 regression: Vec/GrowVec of an inline-POD struct
+// (all-primitive fields, 8-byte record image) stores elements as
+// their packed record image in the buffer, not as record pointers.
+// Covers: literal push (direct slot construction), identifier push
+// (packed-word copy; the binding stays live and independent),
+// temp push, whole-value and field index reads, index assignment,
+// field assignment through the index, element borrows, pop, remove,
+// and GrowVec. Pre-fix (record-pointer storage for these elements)
+// the value oracles still pass on most arms -- the discriminating
+// pre-fix failure is the field-assignment and borrow arms combined
+// with the packed-image layout: they are pinned together with the
+// push/read arms so any storage-model inconsistency (one path
+// storing pointers while another reads images) fails loudly.
+
+struct CbPod {
+    key: i32,
+    val: i32,
+}
+
+fn cb_pod_make(k: i32, v: i32) -> CbPod {
+    return CbPod { key: k, val: v };
+}
+
+@test "classb pod inline literal push and field reads"() {
+    let v: Vec<CbPod> = Vec::new();
+    let i: i32 = 0;
+    while i < 10 {
+        v.push(CbPod { key: i + 100, val: i + 200 });
+        i = i + 1;
+    }
+    if len(v) != 10 { panic(33101); };
+    let j: i32 = 0;
+    while j < 10 {
+        if v[j].key != j + 100 { panic(33102); };
+        if v[j].val != j + 200 { panic(33103); };
+        j = j + 1;
+    }
+};
+
+@test "classb pod inline identifier push copies"() {
+    let v: Vec<CbPod> = Vec::new();
+    let it = CbPod { key: 7, val: 8 };
+    v.push(it);
+    // The binding stays live after the push (copy consumer) and is
+    // independent of the stored element.
+    if it.key != 7 { panic(33111); };
+    it.key = 70;
+    if v[0].key != 7 { panic(33112); };
+    if v[0].val != 8 { panic(33113); };
+    v.push(it);
+    if v[1].key != 70 { panic(33114); };
+    if len(v) != 2 { panic(33115); };
+};
+
+@test "classb pod inline temp push and whole reads"() {
+    let v: Vec<CbPod> = Vec::new();
+    v.push(cb_pod_make(1, 2));
+    v.push(cb_pod_make(3, 4));
+    let a = v[0];
+    let b = v[1];
+    if a.key + a.val != 3 { panic(33121); };
+    if b.key + b.val != 7 { panic(33122); };
+};
+
+@test "classb pod inline index and field assignment"() {
+    let v: Vec<CbPod> = Vec::new();
+    v.push(CbPod { key: 1, val: 2 });
+    v.push(CbPod { key: 3, val: 4 });
+    v[0] = CbPod { key: 10, val: 20 };
+    if v[0].key != 10 { panic(33131); };
+    if v[0].val != 20 { panic(33132); };
+    let repl = CbPod { key: 30, val: 40 };
+    v[1] = repl;
+    if v[1].key != 30 { panic(33133); };
+    if v[1].val != 40 { panic(33134); };
+    v[1].key = 31;
+    if v[1].key != 31 { panic(33135); };
+    if v[1].val != 40 { panic(33136); };
+    if v[0].key != 10 { panic(33137); };
+};
+
+@test "classb pod inline borrow read and write through"() {
+    let v: Vec<CbPod> = Vec::new();
+    v.push(CbPod { key: 5, val: 6 });
+    v.push(CbPod { key: 7, val: 8 });
+    let b = &v[1];
+    if b.key != 7 { panic(33141); };
+    if b.val != 8 { panic(33142); };
+    b.val = 80;
+    if v[1].val != 80 { panic(33143); };
+    if v[0].val != 6 { panic(33144); };
+};
+
+@test "classb pod inline pop and remove"() {
+    let v: Vec<CbPod> = Vec::new();
+    v.push(CbPod { key: 1, val: 10 });
+    v.push(CbPod { key: 2, val: 20 });
+    v.push(CbPod { key: 3, val: 30 });
+    let removed = v.remove(0);
+    if removed.key != 1 { panic(33151); };
+    if removed.val != 10 { panic(33152); };
+    if len(v) != 2 { panic(33153); };
+    if v[0].key != 2 { panic(33154); };
+    if v[1].key != 3 { panic(33155); };
+    while let Some(x) = v.pop() {
+        if x.key == 3 {
+            if x.val != 30 { panic(33156); };
+        } else {
+            if x.key != 2 { panic(33157); };
+            if x.val != 20 { panic(33158); };
+        }
+    }
+    if len(v) != 0 { panic(33159); };
+};
+
+@test "classb pod inline growvec"() {
+    let g: GrowVec<CbPod> = GrowVec::with_max(1024);
+    g.push(CbPod { key: 11, val: 12 });
+    let it = CbPod { key: 13, val: 14 };
+    g.push(it);
+    if g[0].key != 11 { panic(33161); };
+    if g[0].val != 12 { panic(33162); };
+    if g[1].key != 13 { panic(33163); };
+    if g[1].val != 14 { panic(33164); };
+    g[0].val = 120;
+    if g[0].val != 120 { panic(33165); };
+};

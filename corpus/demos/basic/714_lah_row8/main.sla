@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 第 8 行 40320,141120,141120,58800,11760,1176,56,1（行和 394353；循环求和）。
+// 意对标 707_lah_row7（低位行互补；同式高位行复算）。
+
+fn ltb(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn lsum(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + ltb(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", ltb(8, 1), ltb(8, 2), lsum(8));
+    return 0;
+}
+
+@test "basic 714 lah row8"() {
+    if ltb(8, 1) != 40320 { panic(71401); };
+    if ltb(8, 2) != 141120 { panic(71402); };
+    if lsum(8) != 394353 { panic(71403); };
+    if ltb(8, 8) != 1 { panic(71404); };
+}

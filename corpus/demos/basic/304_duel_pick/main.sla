@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 语句 vs 三元取大对峙（03×06：7=7；297 的取大版）。
+// 双实现一致性锁定（单实现见 03/06）。
+
+fn pick_if(a: int, b: int) -> int {
+    if a > b {
+        return a;
+    };
+    return b;
+}
+
+fn pick_tern(a: int, b: int) -> int {
+    return if a > b { a } else { b };
+}
+
+fn main() -> i32 {
+    println("{}", pick_if(3, 7));
+    return 0;
+}
+
+@test "basic 304 duel pick"() {
+    if pick_if(3, 7) != pick_tern(3, 7) { panic(30401); };
+    if pick_tern(3, 7) != 7 { panic(30402); };
+}

@@ -1,0 +1,10 @@
+// DEF-E0 fixture: types consumed by the cross-file extension test.
+// The extension module (using_ext_geo_ext.sla) does not own Circle; it
+// only uses its public shape.
+struct Circle {
+    r: i32,
+}
+
+fn circle_new(r: i32) -> Circle {
+    return Circle { r: r };
+}

@@ -1,0 +1,7 @@
+@import "lint/used/index.sa"
+@import "lint/unused/index.sa"
+
+@export lint_value() -> i32:
+L_ENTRY:
+    value = call @lint_used_value()
+    return value

@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_deprecated_warning_count() -> i32 {
+    let deprecated_entry = 1;
+    return deprecated_entry;
+}
+
+fn main() -> i32 {
+    let result = contract_deprecated_warning_count();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 260 contract deprecated warning"() {
+    let got = contract_deprecated_warning_count();
+    if got != 1 { panic(260); };
+}

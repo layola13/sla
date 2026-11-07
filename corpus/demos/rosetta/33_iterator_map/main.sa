@@ -1,0 +1,145 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@main() -> i32:
+L_ENTRY:
+    tmp_0 = alloc 24
+    tmp_1 = 1
+    store tmp_0+0, tmp_1 as i64
+    !tmp_1
+    tmp_2 = 2
+    store tmp_0+8, tmp_2 as i64
+    !tmp_2
+    tmp_3 = 3
+    store tmp_0+16, tmp_3 as i64
+    !tmp_3
+    tmp_4 = 0
+    tmp_5 = 0
+    tmp_6 = ptr_add tmp_0, tmp_5
+    tmp_7 = load tmp_6+0 as i64
+    tmp_8 = 2
+    tmp_9 = mul tmp_7, tmp_8
+    !tmp_8
+    tmp_10 = add tmp_4, tmp_9
+    !tmp_5
+    !tmp_6
+    !tmp_7
+    !tmp_9
+    !tmp_4
+    tmp_11 = 8
+    tmp_12 = ptr_add tmp_0, tmp_11
+    tmp_13 = load tmp_12+0 as i64
+    tmp_14 = 2
+    tmp_15 = mul tmp_13, tmp_14
+    !tmp_14
+    tmp_16 = add tmp_10, tmp_15
+    !tmp_11
+    !tmp_12
+    !tmp_13
+    !tmp_15
+    !tmp_10
+    tmp_17 = 16
+    tmp_18 = ptr_add tmp_0, tmp_17
+    tmp_19 = load tmp_18+0 as i64
+    tmp_20 = 2
+    tmp_21 = mul tmp_19, tmp_20
+    !tmp_20
+    tmp_22 = add tmp_16, tmp_21
+    !tmp_17
+    !tmp_18
+    !tmp_19
+    !tmp_21
+    !tmp_16
+    !tmp_0
+    total = tmp_22
+    tmp_23 = call @sa_fmt_u64(total, 10)
+    tmp_24 = call @sa_fmt_buffer_data(tmp_23)
+    tmp_25 = call @sa_fmt_buffer_len(tmp_23)
+    tmp_26 = tmp_24
+    call @sa_print_bytes(&tmp_26, tmp_25)
+    call @sa_fmt_buffer_free(^tmp_23)
+    !tmp_26
+    !tmp_25
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_27 = 0
+    !total
+    return tmp_27
+
+@test "rosetta 033 iterator map"():
+L_TEST_ENTRY_0:
+    tmp_28 = alloc 24
+    tmp_29 = 1
+    store tmp_28+0, tmp_29 as i64
+    !tmp_29
+    tmp_30 = 2
+    store tmp_28+8, tmp_30 as i64
+    !tmp_30
+    tmp_31 = 3
+    store tmp_28+16, tmp_31 as i64
+    !tmp_31
+    tmp_32 = 0
+    tmp_33 = 0
+    tmp_34 = ptr_add tmp_28, tmp_33
+    tmp_35 = load tmp_34+0 as i64
+    tmp_36 = 2
+    tmp_37 = mul tmp_35, tmp_36
+    !tmp_36
+    tmp_38 = add tmp_32, tmp_37
+    !tmp_33
+    !tmp_34
+    !tmp_35
+    !tmp_37
+    !tmp_32
+    tmp_39 = 8
+    tmp_40 = ptr_add tmp_28, tmp_39
+    tmp_41 = load tmp_40+0 as i64
+    tmp_42 = 2
+    tmp_43 = mul tmp_41, tmp_42
+    !tmp_42
+    tmp_44 = add tmp_38, tmp_43
+    !tmp_39
+    !tmp_40
+    !tmp_41
+    !tmp_43
+    !tmp_38
+    tmp_45 = 16
+    tmp_46 = ptr_add tmp_28, tmp_45
+    tmp_47 = load tmp_46+0 as i64
+    tmp_48 = 2
+    tmp_49 = mul tmp_47, tmp_48
+    !tmp_48
+    tmp_50 = add tmp_44, tmp_49
+    !tmp_45
+    !tmp_46
+    !tmp_47
+    !tmp_49
+    !tmp_44
+    !tmp_28
+    total = tmp_50
+    tmp_51 = 12
+    tmp_52 = ne total, tmp_51
+    !tmp_51
+    br tmp_52 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_52
+    panic(33)
+
+L_ELSE_2:
+    !tmp_52
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !total
+    return
+

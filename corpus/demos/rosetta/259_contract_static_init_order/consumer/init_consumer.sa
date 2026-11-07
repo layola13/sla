@@ -1,0 +1,26 @@
+@import "consumer/../layout/init_order.sal"
+@import "consumer/../bridge/init_bridge.sa"
+
+@init_consumer_value() -> i32:
+L_ENTRY:
+    state = alloc Init_SIZE
+    first = call @init_first()
+    store state+Init_first, first as i32
+    second = call @init_second()
+    store state+Init_second, second as i32
+    left = load state+Init_first as i32
+    right = load state+Init_second as i32
+    value = add left, right
+    ok = eq value, 259
+    !right
+    !left
+    !second
+    !first
+    !state
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 259
+
+L_ERR:
+    return 0

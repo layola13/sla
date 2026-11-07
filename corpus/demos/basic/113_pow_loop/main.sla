@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 273_pow_assign：幂赋值语义（8,1）。
+// SLA 尚无 `**` / `**=`（`**` 解析为非法解引用），此处用循环连乘
+// 表达（与 49_pow2/52_pow2_series 的幂主题互补）。
+
+fn pow(base: i32, exp: i32) -> i32 {
+    let r = 1;
+    let i = 0;
+    while i < exp {
+        r = r * base;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    let x = pow(2, 3);
+    let y = pow(2, 0);
+    println("{},{}", x, y);
+    return 0;
+}
+
+@test "basic 113 pow loop"() {
+    if pow(2, 3) != 8 { panic(11301); };
+    if pow(2, 0) != 1 { panic(11302); };
+    if pow(3, 2) != 9 { panic(11303); };
+}

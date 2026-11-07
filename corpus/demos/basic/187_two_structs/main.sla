@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 791_top_obj_multi：双结构体交叉读（5）。
+// 原用例为顶层常量（顶层结构体常量不可用，见 #19），此处用局部绑定
+// 表达（与 144 的单结构体互补）。
+
+struct P { x: i32, y: i32 }
+
+fn main() -> i32 {
+    let a = P { x: 1, y: 2 };
+    let b = P { x: 3, y: 4 };
+    println("{}", a.x + b.y);
+    return 0;
+}
+
+@test "basic 187 two structs"() {
+    let a = P { x: 1, y: 2 };
+    let b = P { x: 3, y: 4 };
+    if a.x + b.y != 5 { panic(18701); };
+    if a.y + b.x != 5 { panic(18702); };
+}

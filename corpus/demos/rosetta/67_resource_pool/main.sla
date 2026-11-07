@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Resource {
+    id: i32,
+    busy: bool,
+}
+
+fn available_id(pool: [Resource; 3]) -> i32 {
+    if pool[0].busy == false {
+        return pool[0].id;
+    };
+    if pool[1].busy == false {
+        return pool[1].id;
+    };
+    return pool[2].id;
+}
+
+fn main() -> i32 {
+    let pool = [
+        Resource { id: 10, busy: true },
+        Resource { id: 20, busy: false },
+        Resource { id: 30, busy: true },
+    ];
+    let value = available_id(pool);
+    println("{}", value);
+    return value;
+}
+
+@test "rosetta 067 67_resource_pool"() {
+    if main() != 20 {
+        panic(67);
+    };
+}

@@ -1,0 +1,32 @@
+@import "sa_std/time.sla"
+
+// Registry shard 4 coverage: SystemTime::unix_epoch from
+// sa_std/time.sla (SAB registry entry `unix_epoch`,
+// class=declared, never probed, zero corpus references
+// at census 2026-11-06).
+
+@test "reg4 systemtime unix_epoch is the zero point"() {
+    let e = SystemTime::unix_epoch();
+    let r = e.duration_since(e);
+    match r {
+        Ok(d) => {
+            if d.as_millis() != 0 { panic(41401); };
+        },
+        Err(code) => { panic(41402); },
+    }
+}
+
+@test "reg4 systemtime now is after unix_epoch"() {
+    let e = SystemTime::unix_epoch();
+    let now = SystemTime::now();
+    let r = now.duration_since(e);
+    match r {
+        Ok(d) => {
+            let ms: u64 = d.as_millis();
+            // 2026-11 sits between 2023-11 (1.7e12 ms) and 2033 (2e12 ms).
+            if ms < 1700000000000 { panic(41411); };
+            if ms > 2000000000000 { panic(41412); };
+        },
+        Err(code) => { panic(41413); },
+    }
+}

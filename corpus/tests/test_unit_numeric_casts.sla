@@ -1,0 +1,33 @@
+fn widen_signed(x: i32) -> i64 {
+    return x as i64;
+};
+
+fn narrow_signed(x: i64) -> i32 {
+    return x as i32;
+};
+
+fn widen_unsigned(x: u8) -> u64 {
+    return x as u64;
+};
+
+fn int_to_float(x: i32) -> f64 {
+    return x as f64;
+};
+
+fn float_to_int(x: f64) -> i32 {
+    return x as i32;
+};
+
+fn round_float(x: f64) -> f64 {
+    let narrowed = x as f32;
+    return narrowed as f64;
+};
+
+@test "numeric casts direct"() {
+    if widen_signed(7) != 7 { panic(30601); };
+    if narrow_signed(257) != 257 { panic(30602); };
+    if widen_unsigned(9) != 9 { panic(30603); };
+    if int_to_float(7) != 7.0 { panic(30604); };
+    if float_to_int(8.75) != 8 { panic(30605); };
+    if round_float(1.5) != 1.5 { panic(30606); };
+};

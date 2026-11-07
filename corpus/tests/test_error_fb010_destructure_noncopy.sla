@@ -1,0 +1,10 @@
+// expect: UseAfterMove
+// FB-010 negative control: destructuring a NON-Copy tuple still consumes
+// the root binding; reusing it afterwards must stay rejected.
+fn g() -> i64 {
+    let v: Vec<i64> = Vec::new();
+    let t = (v, 5);
+    let (a, b) = t;
+    let c = t;
+    return b;
+}

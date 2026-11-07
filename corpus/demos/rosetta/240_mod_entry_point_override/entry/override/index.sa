@@ -1,0 +1,8 @@
+@import "entry/override/detail/seed.sa"
+
+@export override_entry_value() -> i32:
+L_ENTRY:
+    seed = call @override_seed()
+    value = add seed, 200
+    !seed
+    return value

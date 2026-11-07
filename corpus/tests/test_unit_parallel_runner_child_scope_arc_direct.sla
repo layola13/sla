@@ -1,0 +1,132 @@
+@import "sa_std/vec.sa"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/box.sa"
+
+// Next-dimension fixture for docs/sab_parallel_runner_whole_file_memoryleak_issue_cn.md:
+// child-scope returns combined with Arc<*World> parameters.
+// Mirrors EcsParallelScopedTaskSet child_scope_runs shape:
+//   Vec<fn(Arc<*World>) -> Holder> producing holders with Vec<fn(Arc<*World>) -> i32>
+// Keep under the local SA/SAB smoke budget (no thread::spawn in this file).
+
+struct ParallelRunnerChildArcWorld {
+    value: i32,
+}
+
+struct ParallelRunnerChildArcHolder {
+    runs: Vec<fn(Arc<*ParallelRunnerChildArcWorld>) -> i32>,
+    child_scope_runs: Vec<fn(Arc<*ParallelRunnerChildArcWorld>) -> ParallelRunnerChildArcHolder>,
+    run_order_positions: Vec<i64>,
+    child_scope_order_positions: Vec<i64>,
+}
+
+fn parallel_runner_child_arc_add_one(world: Arc<*ParallelRunnerChildArcWorld>) -> i32 {
+    return 11;
+}
+
+fn parallel_runner_child_arc_add_two(world: Arc<*ParallelRunnerChildArcWorld>) -> i32 {
+    return 12;
+}
+
+fn parallel_runner_child_arc_holder_new() -> ParallelRunnerChildArcHolder {
+    let runs: Vec<fn(Arc<*ParallelRunnerChildArcWorld>) -> i32> = Vec::new();
+    let child_scope_runs: Vec<fn(Arc<*ParallelRunnerChildArcWorld>) -> ParallelRunnerChildArcHolder> = Vec::new();
+    let run_order_positions: Vec<i64> = Vec::new();
+    let child_scope_order_positions: Vec<i64> = Vec::new();
+    return ParallelRunnerChildArcHolder {
+        runs: runs,
+        child_scope_runs: child_scope_runs,
+        run_order_positions: run_order_positions,
+        child_scope_order_positions: child_scope_order_positions,
+    };
+}
+
+fn parallel_runner_child_arc_spawn(holder: ParallelRunnerChildArcHolder, run: fn(Arc<*ParallelRunnerChildArcWorld>) -> i32) -> ParallelRunnerChildArcHolder {
+    let order_pos = len(holder.runs) as i64;
+    holder.runs.push(run);
+    holder.run_order_positions.push(order_pos);
+    return holder;
+}
+
+fn parallel_runner_child_arc_spawn_child(holder: ParallelRunnerChildArcHolder, run: fn(Arc<*ParallelRunnerChildArcWorld>) -> ParallelRunnerChildArcHolder) -> ParallelRunnerChildArcHolder {
+    let order_pos = len(holder.child_scope_runs) as i64;
+    holder.child_scope_runs.push(run);
+    holder.child_scope_order_positions.push(order_pos);
+    return holder;
+}
+
+fn parallel_runner_child_arc_make_nested(world: Arc<*ParallelRunnerChildArcWorld>) -> ParallelRunnerChildArcHolder {
+    let nested0 = parallel_runner_child_arc_holder_new();
+    let nested1 = parallel_runner_child_arc_spawn(nested0, parallel_runner_child_arc_add_one);
+    return parallel_runner_child_arc_spawn(nested1, parallel_runner_child_arc_add_two);
+}
+
+fn parallel_runner_child_arc_extend_runs(parent: ParallelRunnerChildArcHolder, child: ParallelRunnerChildArcHolder) -> ParallelRunnerChildArcHolder {
+    let order_pos: i64 = 0;
+    let total = len(child.runs) as i64;
+    while order_pos < total {
+        parent = parallel_runner_child_arc_spawn(parent, child.runs[order_pos]);
+        order_pos = order_pos + 1;
+    }
+    return parent;
+}
+
+fn parallel_runner_child_arc_world_shared(value: i32) -> Arc<*ParallelRunnerChildArcWorld> {
+    let world = ParallelRunnerChildArcWorld { value: value };
+    let boxed = Box::new(world);
+    let raw = Box::into_raw(boxed);
+    return Arc::new(raw);
+}
+
+fn parallel_runner_child_arc_call_returned(holder: ParallelRunnerChildArcHolder, seed: i32) -> i32 {
+    let make_child = holder.child_scope_runs[0];
+    let shared = parallel_runner_child_arc_world_shared(seed);
+    let generated = make_child(shared);
+    let run0 = generated.runs[0];
+    let run1 = generated.runs[1];
+    let first_ptr = parallel_runner_child_arc_world_shared(seed + 1);
+    let second_ptr = parallel_runner_child_arc_world_shared(seed + 2);
+    let a = run0(first_ptr);
+    let b = run1(second_ptr);
+    return a + b;
+}
+
+fn parallel_runner_child_arc_extend_returned(parent: ParallelRunnerChildArcHolder, child: ParallelRunnerChildArcHolder, seed: i32) -> i32 {
+    let make_child = child.child_scope_runs[0];
+    let shared = parallel_runner_child_arc_world_shared(seed);
+    let generated = make_child(shared);
+    let out = parallel_runner_child_arc_extend_runs(parent, generated);
+    if len(out.runs) as i64 != 2 { panic(52721); };
+    if out.run_order_positions[0] != 0 { panic(52722); };
+    if out.run_order_positions[1] != 1 { panic(52723); };
+    let run0 = out.runs[0];
+    let run1 = out.runs[1];
+    let first_ptr = parallel_runner_child_arc_world_shared(seed + 1);
+    let second_ptr = parallel_runner_child_arc_world_shared(seed + 2);
+    let a = run0(first_ptr);
+    let b = run1(second_ptr);
+    return a + b;
+}
+
+@test "parallel runner child scope arc store only"() {
+    let holder0 = parallel_runner_child_arc_holder_new();
+    let holder1 = parallel_runner_child_arc_spawn(holder0, parallel_runner_child_arc_add_one);
+    let holder2 = parallel_runner_child_arc_spawn_child(holder1, parallel_runner_child_arc_make_nested);
+    if len(holder2.runs) as i64 != 1 { panic(52701); };
+    if len(holder2.child_scope_runs) as i64 != 1 { panic(52702); };
+    if holder2.run_order_positions[0] != 0 { panic(52703); };
+    if holder2.child_scope_order_positions[0] != 0 { panic(52704); };
+}
+
+@test "parallel runner child scope arc call returned holder"() {
+    let holder0 = parallel_runner_child_arc_holder_new();
+    let holder1 = parallel_runner_child_arc_spawn_child(holder0, parallel_runner_child_arc_make_nested);
+    // 11 + 12 from nested Arc world callbacks after child-scope return.
+    if parallel_runner_child_arc_call_returned(holder1, 9) != 23 { panic(52712); };
+}
+
+@test "parallel runner child scope arc extend returned holder"() {
+    let parent = parallel_runner_child_arc_holder_new();
+    let child0 = parallel_runner_child_arc_holder_new();
+    let child1 = parallel_runner_child_arc_spawn_child(child0, parallel_runner_child_arc_make_nested);
+    if parallel_runner_child_arc_extend_returned(parent, child1, 4) != 23 { panic(52724); };
+}

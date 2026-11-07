@@ -1,0 +1,22 @@
+@import "sa_std/core/option.sa"
+
+@test "null coalescing Some keeps value"() {
+    let some: Option<i32> = Some(7);
+    if (some ?? 9) != 7 { panic(93101); };
+};
+
+@test "null coalescing None falls back"() {
+    let none: Option<i32> = None;
+    if (none ?? 9) != 9 { panic(93102); };
+};
+
+@test "null coalescing rhs takes full expression"() {
+    let none: Option<i32> = None;
+    let v = 1;
+    if (none ?? v + 8) != 9 { panic(93103); };
+};
+
+@test "postfix bang unwraps Some"() {
+    let some: Option<i32> = Some(7);
+    if some! != 7 { panic(93201); };
+};

@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 315_float_arr：f64 数组存取（长 4，和 4.5）。
+// 定长数组元素类型一致即放行（#1：错配才拦截）；函数返回数组值语义
+// 另见缺口 #17，此处只做局部存取。
+
+fn main() -> i32 {
+    let a = [1.5, -2.5, 1.5, 4.0];
+    println("{},{}", len(a), a[0] + a[1] + a[2] + a[3]);
+    return 0;
+}
+
+@test "basic 110 f64 array"() {
+    let a = [1.5, -2.5, 1.5, 4.0];
+    if len(a) != 4 { panic(11001); };
+    if a[0] + a[1] + a[2] + a[3] != 4.5 { panic(11002); };
+    if a[1] != -2.5 { panic(11003); };
+}

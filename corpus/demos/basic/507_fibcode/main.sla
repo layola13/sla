@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 斐波那契编码长（100 的码长 11，10 的码长 6；F₂=1 起）。
+// 意对标 506 项数的编码版（506 互补）。
+
+fn fib_idx(n: int) -> int {
+    if n == 1 { return 2; };
+    let a = 1;
+    let b = 2;
+    let idx = 3;
+    while b <= n {
+        let t = a + b;
+        a = b;
+        b = t;
+        idx = idx + 1;
+    }
+    return idx - 1;
+}
+
+fn fibcode_len(n: int) -> int {
+    return fib_idx(n);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", fibcode_len(100), fibcode_len(10), fibcode_len(1));
+    return 0;
+}
+
+@test "basic 507 fibcode"() {
+    if fibcode_len(100) != 11 { panic(50701); };
+    if fibcode_len(10) != 6 { panic(50702); };
+    if fibcode_len(1) != 2 { panic(50703); };
+}

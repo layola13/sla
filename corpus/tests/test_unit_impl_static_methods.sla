@@ -1,0 +1,73 @@
+struct StaticRot2 {
+    sin: f32,
+    cos: f32,
+}
+
+impl StaticRot2 {
+    fn from_sin_cos(sin: f32, cos: f32) -> Self {
+        return Self { sin: sin, cos: cos };
+    }
+
+    fn normalize(self) -> Self {
+        return Self { sin: self.sin, cos: self.cos };
+    }
+
+    fn angle_to(self, other: Self) -> f32 {
+        return other.sin - self.sin + other.cos - self.cos;
+    }
+}
+
+struct StaticTriple {
+    a: i32,
+    b: i32,
+    c: i32,
+}
+
+impl StaticTriple {
+    fn from_parts(a: i32, b: i32, c: i32) -> Self {
+        return Self { a: a, b: b, c: c };
+    }
+
+    fn sum(self) -> i32 {
+        return self.a + self.b + self.c;
+    }
+}
+
+trait StaticFactoryShape {
+    fn build(left: i32, right: i32) -> Self;
+}
+
+struct StaticFactoryPair {
+    left: i32,
+    right: i32,
+}
+
+impl StaticFactoryShape for StaticFactoryPair {
+    fn build(left: i32, right: i32) -> Self {
+        return Self { left: left, right: right };
+    }
+}
+
+impl StaticFactoryPair {
+    fn sum(self) -> i32 {
+        return self.left + self.right;
+    }
+}
+
+@test "impl static method accepts multiple parameters"() {
+    let r = StaticRot2::from_sin_cos(0.5, 1.5).normalize();
+    if r.sin != 0.5 { panic(18101); };
+    if r.cos != 1.5 { panic(18102); };
+    let other = StaticRot2::from_sin_cos(1.0, 3.0);
+    if r.angle_to(other) != 2.0 { panic(18103); };
+}
+
+@test "impl static method accepts three parameters and Self return"() {
+    let triple = StaticTriple::from_parts(2, 3, 5);
+    if triple.sum() != 10 { panic(18104); };
+}
+
+@test "trait static associated function is implemented and callable"() {
+    let pair = StaticFactoryPair::build(13, 21);
+    if pair.sum() != 34 { panic(18105); };
+}

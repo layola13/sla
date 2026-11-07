@@ -1,0 +1,77 @@
+@import "sa_std/ip.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Coverage shard 2: IpPrefix algebra entries from sa_std/ip.sla
+// (registry "declared, never probed"). Value model pinned by the file
+// header: IpPrefix { addr, len }, addr stored as given (host bits may
+// be set); masked() produces the canonical network form. Values are
+// built with the file's own constructors (ip_addr_from_ipv4 /
+// ip_prefix_from): imported structs are not literal-constructible
+// from another file (round-1 parse evidence in RESULT.md).
+// ip_prefix_parse is called with direct literals (the ipv4_value
+// form): binding the literal to a local first fails the checker
+// (round-3 TypeMismatch evidence in RESULT.md).
+
+fn v4a(lo: u64) -> IpAddr {
+    return ip_addr_from_ipv4(lo as u32);
+}
+
+fn v4prefix(lo: u64, len: u32) -> IpPrefix {
+    return ip_prefix_from(ip_addr_from_ipv4(lo as u32), len);
+}
+
+fn expect_str(got: String, want: ptr, want_len: u64, code: i32) {
+    if len(got) != want_len { panic(code); };
+    let gp: ptr = STR_PTR(got);
+    let i: u64 = 0;
+    while i < want_len {
+        if PTR_BYTE_AT(gp, i) != PTR_BYTE_AT(want, i) { panic(code); };
+        i = i + 1;
+    }
+}
+
+
+@test "reg2 ip_prefix_contains_prefix"() {
+    let wide = v4prefix(167772160, 8); // 10.0.0.0/8
+    let inner = v4prefix(167837696, 16); // 10.1.0.0/16
+    if !ip_prefix_contains_prefix(wide, inner) { panic(24538); };
+    if !ip_prefix_contains_prefix(wide, wide) { panic(24539); };
+    if ip_prefix_contains_prefix(inner, wide) { panic(24540); };
+    let other = v4prefix(3232235520, 16); // 192.168.0.0/16
+    if ip_prefix_contains_prefix(wide, other) { panic(24541); };
+}
+
+@test "reg2 ip_prefix_overlaps"() {
+    let a = v4prefix(167772160, 8); // 10.0.0.0/8
+    let b = v4prefix(176160768, 9); // 10.128.0.0/9
+    if !ip_prefix_overlaps(a, b) { panic(24542); };
+    if !ip_prefix_overlaps(b, a) { panic(24543); };
+    let c = v4prefix(3232235776, 24); // 192.168.1.0/24
+    let d = v4prefix(3232236032, 24); // 192.168.2.0/24
+    if ip_prefix_overlaps(c, d) { panic(24544); };
+    let e = v4prefix(3232235776, 25); // 192.168.1.0/25
+    let f = v4prefix(3232235904, 25); // 192.168.1.128/25 (adjacent, disjoint)
+    if ip_prefix_overlaps(e, f) { panic(24545); };
+}
+
+@test "reg2 ip_prefix_are_siblings"() {
+    let a = v4prefix(167772160, 25); // 10.0.0.0/25
+    let b = v4prefix(167772288, 25); // 10.0.0.128/25
+    if !ip_prefix_are_siblings(a, b) { panic(24546); };
+    if !ip_prefix_are_siblings(b, a) { panic(24547); };
+    let c = v4prefix(167837696, 25); // 10.1.0.0/25 (different parent)
+    if ip_prefix_are_siblings(a, c) { panic(24548); };
+    if ip_prefix_are_siblings(a, a) { panic(24549); }; // equal prefixes are not siblings
+    let d = v4prefix(167772160, 24);
+    if ip_prefix_are_siblings(a, d) { panic(24550); }; // different lens
+    if ip_prefix_are_siblings(v4prefix(0, 0), v4prefix(0, 0)) { panic(24551); }; // len 0 never
+}
+
+@test "reg2 ip_prefix_parent"() {
+    let p = ip_prefix_parent(v4prefix(3232235776, 24)); // 192.168.1.0/24
+    if p.len != 23 { panic(24552); };
+    if p.addr.lo != 3232235520 { panic(24553); }; // 192.168.0.0/23
+    let q = ip_prefix_parent(v4prefix(167772288, 25)); // 10.0.0.128/25
+    if q.len != 24 || q.addr.lo != 167772160 { panic(24554); }; // 10.0.0.0/24
+}

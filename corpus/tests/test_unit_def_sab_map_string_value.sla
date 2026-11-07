@@ -1,0 +1,29 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/string.sa"
+@import "sa_std/core/option.sa"
+
+// DEF-SAB-AUDIT item 2: HashMap with a heap-typed VALUE (String) must
+// lower on the SAB backend. genMapInsertCall / the map index-load path
+// convert the value through opKindForCast(.ptr <-> .u64), which had no
+// pointer<->integer case and died as UnsupportedSabDirectFeature, while
+// the SA-text backend emitted the ptrtoint/inttoptr bitcast. A pointer
+// is a 64-bit value in this IR, so the conversion is a bit copy.
+
+@test "sab map string value insert only"() {
+    let m: HashMap<String, String> = HashMap::new();
+    let k: String = format("the-key");
+    let v: String = format("the-value");
+    m.insert(k, v);
+    let k2: String = format("other-key");
+    let v2: String = format("other-value");
+    m.insert(k2, v2);
+    if len(m) != 2 { panic(74651); };
+}
+
+@test "sab map int key string value get"() {
+    let m: HashMap<i32, String> = HashMap::new();
+    let v: String = format("the-value");
+    m.insert(7, v);
+    let got = m.get(7);
+    if got.is_none() { panic(74653); };
+}

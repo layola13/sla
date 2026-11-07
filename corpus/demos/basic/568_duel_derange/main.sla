@@ -1,0 +1,52 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 错排对峙：双项递推 == 容斥和式（n=5：44 对 44；n=6：265 对 265）。
+// 意对标 566 derange × 567 derange_sum（两源单实现见各源；286 系对峙体例）。
+
+fn derange(n: int) -> int {
+    if n == 0 { return 1; };
+    if n == 1 { return 0; };
+    let a = 1;
+    let b = 0;
+    let i = 2;
+    let cur = 0;
+    while i <= n {
+        cur = (i - 1) * (b + a);
+        a = b;
+        b = cur;
+        i = i + 1;
+    }
+    return cur;
+}
+
+fn derange_sum(n: int) -> int {
+    let acc = 0;
+    let k = 0;
+    while k <= n {
+        let f = 1;
+        let j = 0;
+        while j < n - k {
+            f = f * (n - j);
+            j = j + 1;
+        }
+        let sgn = 0 - 1;
+        if k % 2 == 0 { sgn = 1; };
+        acc = acc + sgn * f;
+        k = k + 1;
+    }
+    return acc;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", derange(5), derange_sum(5), derange(6), derange_sum(6));
+    return 0;
+}
+
+@test "basic 568 duel derange"() {
+    if derange(5) != 44 { panic(56801); };
+    if derange_sum(5) != 44 { panic(56802); };
+    if derange(6) != 265 { panic(56803); };
+    if derange_sum(6) != 265 { panic(56804); };
+    if derange(6) != derange_sum(6) { panic(56805); };
+}

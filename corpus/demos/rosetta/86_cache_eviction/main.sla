@@ -1,0 +1,47 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct CacheEntry {
+    key: i32,
+    last_used: i32,
+}
+
+fn evict_key(a: CacheEntry, b: CacheEntry, c: CacheEntry) -> i32 {
+    let a_last = a.last_used;
+    let b_last = b.last_used;
+    let c_last = c.last_used;
+    if a_last < b_last {
+        if a_last < c_last {
+            return a.key;
+        } else {
+            return c.key;
+        };
+    } else {
+        if b_last < c_last {
+            return b.key;
+        } else {
+            return c.key;
+        };
+    };
+}
+
+fn main() -> i32 {
+    let value = evict_key(
+        CacheEntry { key: 10, last_used: 4 },
+        CacheEntry { key: 20, last_used: 9 },
+        CacheEntry { key: 30, last_used: 1 },
+    );
+    println("{}", value);
+    return value;
+}
+
+@test "rosetta 086 86_cache_eviction"() {
+    let got = evict_key(
+        CacheEntry { key: 10, last_used: 4 },
+        CacheEntry { key: 20, last_used: 9 },
+        CacheEntry { key: 30, last_used: 1 },
+    );
+    if got != 30 {
+        panic(86);
+    };
+}

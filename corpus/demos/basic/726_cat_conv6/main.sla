@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Catalan 卷积 C(n+1)=sum C(i)C(n-i)（C(5)=42，C(6)=132；556 体例续高位）。
+// 意对标 556_cat_conv（低位卷积版互补；728 做卷积/商式对峙）。
+
+fn catc(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let i = 0;
+    while i < n {
+        s = s + catc(i) * catc(n - 1 - i);
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", catc(5), catc(6));
+    return 0;
+}
+
+@test "basic 726 cat conv6"() {
+    if catc(5) != 42 { panic(72601); };
+    if catc(6) != 132 { panic(72602); };
+    if catc(4) != 14 { panic(72603); };
+}

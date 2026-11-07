@@ -1,0 +1,49 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 弱哥德巴赫分拆计数（奇数表三奇素数之和：15 有 (3,5,7)/(5,5,5) 共 2 种）。
+// 意对标 380 强分拆的奇三元版（380 互补）。
+
+fn is_odd_prime(n: int) -> int {
+    if n == 2 { return 0; };
+    if n < 2 { return 0; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn weak_gb(n: int) -> int {
+    let c = 0;
+    let p = 3;
+    while p <= n {
+        if is_odd_prime(p) == 1 {
+            let q = p;
+            while q <= n {
+                if is_odd_prime(q) == 1 {
+                    let r = n - p - q;
+                    if r >= q {
+                        if is_odd_prime(r) == 1 { c = c + 1; };
+                    };
+                };
+                q = q + 1;
+            }
+        };
+        p = p + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", weak_gb(9), weak_gb(11), weak_gb(15));
+    return 0;
+}
+
+@test "basic 418 weak goldbach"() {
+    if weak_gb(9) != 1 { panic(41801); };
+    if weak_gb(11) != 1 { panic(41802); };
+    if weak_gb(15) != 2 { panic(41803); };
+}

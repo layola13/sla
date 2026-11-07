@@ -1,0 +1,34 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/option.sa"
+@import "sa_std/vec.sa"
+
+async fn queue_task_one() -> i32 {
+    1
+}
+
+async fn queue_task_two() -> i32 {
+    2
+}
+
+async fn queue_task_three() -> i32 {
+    3
+}
+
+fn sum_future_queue_with_while_let() -> i32 {
+    let queue = vec(queue_task_one(), queue_task_two(), queue_task_three());
+    let total = 0;
+
+    while let Some(task) = queue.pop() {
+        let resolved = task.await;
+        total = total + resolved;
+    }
+
+    return total;
+}
+
+@test "direct async while let future queue"() {
+    let got = sum_future_queue_with_while_let();
+    if got != 6 {
+        panic(13601);
+    };
+}

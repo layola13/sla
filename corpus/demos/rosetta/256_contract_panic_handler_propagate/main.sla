@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_panic_handler_hops() -> i32 {
+    let local_handler = 1;
+    let host_handler = 1;
+    return local_handler + host_handler;
+}
+
+fn main() -> i32 {
+    let local_handler = 1;
+    let host_handler = 1;
+    let result = local_handler + host_handler;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 256 contract panic handler propagate"() {
+    let got = contract_panic_handler_hops();
+    if got != 2 { panic(256); };
+}

@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/ops.sa"
+
+struct Vec3 {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+fn negated_vec3_score() -> i32 {
+    let a = Vec3 { x: 1.0, y: -2.0, z: 3.0 };
+    let b = -a;
+    if b.x != -1.0 { return 0; };
+    if b.y != 2.0 { return 0; };
+    if b.z != -3.0 { return 0; };
+    return 123;
+}
+
+fn main() -> i32 {
+    let a = Vec3 { x: 1.0, y: -2.0, z: 3.0 };
+    let b = -a;
+    println("({}, {}, {})", b.x, b.y, b.z);
+    if b.x != -1.0 { return 0; };
+    if b.y != 2.0 { return 0; };
+    if b.z != -3.0 { return 0; };
+    return 123;
+}
+
+@test "rosetta 302 operator_overload_neg"() {
+    let a = Vec3 { x: 1.0, y: -2.0, z: 3.0 };
+    let b = -a;
+    if b.x != -1.0 { panic(302); };
+    if b.y != 2.0 { panic(303); };
+    if b.z != -3.0 { panic(304); };
+}

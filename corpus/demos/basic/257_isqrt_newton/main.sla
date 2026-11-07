@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 347_math_sqrt 的牛顿版（117 为试乘版：4,3,1,10）。
+// 牛顿迭代（整除收敛）；347 的 TS 为浮点 sqrt，此处皆取整。
+
+fn isqrt_newton(n: int) -> int {
+    if n <= 1 { return n; };
+    let x = n;
+    let y = (x + n / x) / 2;
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    return x;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", isqrt_newton(16), isqrt_newton(15), isqrt_newton(100));
+    return 0;
+}
+
+@test "basic 257 isqrt newton"() {
+    if isqrt_newton(16) != 4 { panic(25701); };
+    if isqrt_newton(15) != 3 { panic(25702); };
+    if isqrt_newton(1) != 1 { panic(25703); };
+    if isqrt_newton(100) != 10 { panic(25704); };
+}

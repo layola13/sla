@@ -1,0 +1,26 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+fn defer_ready_task_second_poll() -> i32 {
+    let fut = future::defer_ready(37);
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9731);
+    };
+    if task::is_ready(task) != false {
+        panic(9732);
+    };
+    if task::poll(task) != true {
+        panic(9733);
+    };
+    if task::is_ready(task) != true {
+        panic(9734);
+    };
+    return task::result(task);
+}
+
+@test "future defer ready task runtime"() {
+    if defer_ready_task_second_poll() != 37 {
+        panic(9735);
+    };
+}

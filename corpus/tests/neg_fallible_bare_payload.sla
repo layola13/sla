@@ -1,0 +1,11 @@
+// expect: TypeMismatch
+@import "sa_std/testing/assert.sai"
+
+// A_min: a fallible (`T!`) extern no longer yields the bare payload
+// type. Binding the call straight into an `i32` (the pre-A_min
+// payload-only reading, under which a failed call's zeroed payload
+// was indistinguishable from success) must fail the type check.
+fn bare_payload_binding() -> i32 {
+    let n: i32 = sa_test_fallible_i32_value(1);
+    return n;
+}

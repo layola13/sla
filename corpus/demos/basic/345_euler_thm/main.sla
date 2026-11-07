@@ -1,0 +1,48 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 欧拉定理验证（2^φ(5) mod 5=1）。
+// 模幂（328 口径）×欧拉函数（336 口径）对峙合取。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn phi(n: int) -> int {
+    let c = 0;
+    let k = 1;
+    while k < n {
+        if gcd(k, n) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn powmod(base: int, exp: int, m: int) -> int {
+    let r = 1;
+    let b = base % m;
+    let e = exp;
+    while e > 0 {
+        if e % 2 == 1 { r = r * b % m; };
+        b = b * b % m;
+        e = e / 2;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{}", powmod(2, phi(5), 5));
+    return 0;
+}
+
+@test "basic 345 euler thm"() {
+    if powmod(2, phi(5), 5) != 1 { panic(34501); };
+    if powmod(3, phi(7), 7) != 1 { panic(34502); };
+}

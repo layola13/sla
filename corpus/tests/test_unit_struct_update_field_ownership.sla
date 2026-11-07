@@ -1,0 +1,207 @@
+@import "sa_std/vec.sa"
+
+// Struct update (`{ ...base, field: v }`) moves the untouched fields
+// out of the source place. The source's own cleanup must not drop the
+// moved fields a second time. Regression corpus for the
+// struct_update_pointer_backed defect family: every "moves untouched
+// X field" shape below terminated by signal 11 on both backends
+// before the fix (the source cleanup freed the just-moved value);
+// the override and Rc controls were already green and pin the
+// opposite directions (overridden old values still drop exactly
+// once, compensated Rc read-outs keep their count).
+
+struct VecHolder {
+    id: i32,
+    items: Vec<i32>,
+}
+
+struct StrHolder {
+    id: i32,
+    name: String,
+}
+
+struct Inner {
+    items: Vec<i32>,
+}
+
+struct Outer {
+    id: i32,
+    inner: Inner,
+}
+
+struct VecStrHolder {
+    id: i32,
+    names: Vec<String>,
+}
+
+struct BoxHolder {
+    id: i32,
+    cell: Box<i64>,
+}
+
+struct Counter {
+    n: i32,
+}
+
+struct RcHolder {
+    id: i32,
+    // NOTE: this field is deliberately not named `cell` (BoxHolder's
+    // field name). Place-taint keys are untyped place names published
+    // to a whole-program union, so two update functions whose source
+    // places share a param and field name collide: the Box update's
+    // `base.cell` taint would over-suppress this Rc update's
+    // compensating drop and leak the strong count. That union-key
+    // collision is a registered residual of the taint design, tracked
+    // outside this file; the rename keeps this regression file about
+    // update-expression field ownership only.
+    rc_cell: Rc<Counter>,
+}
+
+fn bump_id(base: VecHolder) -> VecHolder {
+    return VecHolder { id: 8, ..base };
+}
+
+fn move_all(base: VecHolder) -> VecHolder {
+    return VecHolder { ..base };
+}
+
+fn replace_items(base: VecHolder, fresh: Vec<i32>) -> VecHolder {
+    return VecHolder { items: fresh, ..base };
+}
+
+fn bump_str_id(base: StrHolder) -> StrHolder {
+    return StrHolder { id: 8, ..base };
+}
+
+fn bump_outer_id(base: Outer) -> Outer {
+    return Outer { id: 8, ..base };
+}
+
+fn bump_vecstr_id(base: VecStrHolder) -> VecStrHolder {
+    return VecStrHolder { id: 8, ..base };
+}
+
+fn bump_box_id(base: BoxHolder) -> BoxHolder {
+    return BoxHolder { id: 8, ..base };
+}
+
+fn bump_rc_id(base: RcHolder) -> RcHolder {
+    return RcHolder { id: 8, ..base };
+}
+
+fn make_items() -> Vec<i32> {
+    let items: Vec<i32> = Vec::new();
+    items.push(10);
+    items.push(20);
+    return items;
+}
+
+@test "plain struct literal moving a vec field"() {
+    let next = VecHolder { id: 8, items: make_items() };
+
+    if next.id != 8 { panic(22101); };
+    if len(next.items) != 2 { panic(22102); };
+    if next.items[1] != 20 { panic(22103); };
+}
+
+@test "struct update local base moves untouched vec field"() {
+    let base = VecHolder { id: 7, items: make_items() };
+    let next = VecHolder { id: 8, ..base };
+
+    if next.id != 8 { panic(22100); };
+    if len(next.items) != 2 { panic(22101); };
+    if next.items[0] != 10 { panic(22102); };
+    if next.items[1] != 20 { panic(22103); };
+}
+
+@test "struct update param base moves untouched vec field"() {
+    let base = VecHolder { id: 7, items: make_items() };
+    let next = bump_id(base);
+
+    if next.id != 8 { panic(22110); };
+    if len(next.items) != 2 { panic(22111); };
+    if next.items[0] != 10 { panic(22112); };
+    if next.items[1] != 20 { panic(22113); };
+}
+
+@test "struct update without overrides moves vec field"() {
+    let base = VecHolder { id: 7, items: make_items() };
+    let next = move_all(base);
+
+    if next.id != 7 { panic(22120); };
+    if len(next.items) != 2 { panic(22121); };
+    if next.items[0] != 10 { panic(22122); };
+    if next.items[1] != 20 { panic(22123); };
+}
+
+@test "struct update chained moves untouched vec field"() {
+    let base = VecHolder { id: 7, items: make_items() };
+    let mid = VecHolder { id: 8, ..base };
+    let next = VecHolder { id: 9, ..mid };
+
+    if next.id != 9 { panic(22130); };
+    if len(next.items) != 2 { panic(22131); };
+    if next.items[0] != 10 { panic(22132); };
+    if next.items[1] != 20 { panic(22133); };
+}
+
+@test "struct update moves untouched string field"() {
+    let base = StrHolder { id: 7, name: format("hello") };
+    let next = bump_str_id(base);
+
+    if next.id != 8 { panic(22140); };
+    if len(next.name) != 5 { panic(22141); };
+}
+
+@test "struct update moves untouched nested struct field"() {
+    let base = Outer { id: 7, inner: Inner { items: make_items() } };
+    let next = bump_outer_id(base);
+
+    if next.id != 8 { panic(22150); };
+    if len(next.inner.items) != 2 { panic(22151); };
+    if next.inner.items[0] != 10 { panic(22152); };
+    if next.inner.items[1] != 20 { panic(22153); };
+}
+
+@test "struct update moves untouched vec string field"() {
+    let names: Vec<String> = Vec::new();
+    names.push(format("aa"));
+    names.push(format("bbb"));
+
+    let base = VecStrHolder { id: 7, names: names };
+    let next = bump_vecstr_id(base);
+
+    if next.id != 8 { panic(22160); };
+    if len(next.names) != 2 { panic(22161); };
+    if len(next.names[0]) != 2 { panic(22162); };
+    if len(next.names[1]) != 3 { panic(22163); };
+}
+
+@test "struct update moves untouched box field"() {
+    let base = BoxHolder { id: 7, cell: Box::new(4242) };
+    let next = bump_box_id(base);
+
+    if next.id != 8 { panic(22170); };
+    if *next.cell != 4242 { panic(22171); };
+}
+
+@test "struct update overrides vec field drops old value once"() {
+    let fresh: Vec<i32> = Vec::new();
+    fresh.push(99);
+
+    let base = VecHolder { id: 7, items: make_items() };
+    let next = replace_items(base, fresh);
+
+    if next.id != 7 { panic(22180); };
+    if len(next.items) != 1 { panic(22181); };
+    if next.items[0] != 99 { panic(22182); };
+}
+
+@test "struct update moves untouched rc field keeps count"() {
+    let base = RcHolder { id: 7, rc_cell: Rc::new(Counter { n: 42 }) };
+    let next = bump_rc_id(base);
+
+    if next.id != 8 { panic(22190); };
+    if next.rc_cell.strong_count() != 1 { panic(22191); };
+    if (*next.rc_cell).n != 42 { panic(22192); };
+}

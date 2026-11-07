@@ -1,0 +1,14 @@
+// DEF-E0 regression: `using` declared INSIDE a function body scopes
+// the extension to that function (the checker collects using modules
+// per scope; the SAB emitter treats the statement as a no-op).
+mod scoped_ext {
+    pub fn triple(value: i32) -> i32 {
+        return value * 3;
+    }
+}
+
+@test "using ext: scoped using inside fn"() {
+    using scoped_ext;
+    let base: i32 = 14;
+    if base.triple() != 42 { panic(35200); };
+}

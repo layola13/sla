@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn factorial(n: i32) -> i32 {
+    if n <= 1 {
+        1
+    } else {
+        let prev = factorial(n - 1);
+        n * prev
+    }
+}
+
+fn main() -> i32 {
+    let value = factorial(5);
+    println("{}", value);
+    return 0;
+};
+
+@test "rosetta 024 factorial"() {
+    let value = factorial(5);
+    if value != 120 {
+        panic(24);
+    };
+};

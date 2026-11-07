@@ -1,0 +1,6 @@
+@import "src/profiles/debug/helpers/index.sa"
+
+@debug_package_value() -> i32:
+L_ENTRY:
+    value = call @debug_helper_value()
+    return value

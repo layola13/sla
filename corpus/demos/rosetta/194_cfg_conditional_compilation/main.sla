@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn cfg_target_arch_len() -> usize {
+    let arch = "x86";
+    return arch.len();
+}
+
+fn main() -> i32 {
+    let arch = "x86";
+    println("{}", arch);
+    return arch.len();
+}
+
+@test "rosetta 194 194_cfg_conditional_compilation"() {
+    let got = cfg_target_arch_len();
+    if got != 3 {
+        panic(194);
+    };
+}

@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn ffi_zig_exported_symbols() -> i32 { let exported_entry = 1; return exported_entry; }
+fn main() -> i32 { let exported_entry = 1; println("{}", exported_entry); return exported_entry; }
+@test "rosetta 287 ffi zig export integration"() { let got = ffi_zig_exported_symbols(); if got != 1 { panic(287); }; }

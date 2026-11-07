@@ -1,0 +1,46 @@
+// REG2-D3 regression: a match whose scrutinee is a call-result temporary
+// must retire the scrutinee shell at the match merge. Before the fix the
+// text backend left the shell Active and the @test exit scan trapped
+// with error[MemoryLeak] (1012); the SAB backend was already correct.
+
+fn d3_make_vec() -> Result<Vec<u8>, i32> {
+    let v: Vec<u8> = Vec::new();
+    v.push(1u8);
+    return Result::Ok(v);
+}
+
+fn d3_make_opt() -> Option<Vec<u8>> {
+    let v: Vec<u8> = Vec::new();
+    v.push(1u8);
+    return Option::Some(v);
+}
+
+fn d3_make_i() -> Result<i32, i32> {
+    return Result::Ok(7i32);
+}
+
+@test "reg2d3 match temp scrutinee result vec"() {
+    match d3_make_vec() {
+        Ok(v) => {
+            if v.len() != 1 { panic(11); };
+        },
+        Err(e) => { panic(12); },
+    }
+}
+
+@test "reg2d3 match temp scrutinee option vec"() {
+    match d3_make_opt() {
+        Some(v) => {
+            if v.len() != 1 { panic(21); };
+        },
+        None => { panic(22); },
+    }
+}
+
+@test "reg2d3 match temp scrutinee pod value form"() {
+    let n = match d3_make_i() {
+        Ok(v) => { v },
+        Err(e) => { 0 },
+    };
+    if n != 7 { panic(31); };
+}

@@ -1,0 +1,19 @@
+@import "sa_std/fs.sa"
+
+[MACRO] SLA_FS_EXISTS %out_exists, %path, %path_len
+    EXPAND FS_EXISTS %out_exists, %path, %path_len
+[END_MACRO]
+
+[MACRO] SLA_FS_READ_TO_STRING %out_buffer, %path, %path_len, %max_bytes
+    __sla_fs_read_status_%out_buffer = 0
+    EXPAND FS_READ_TO_STRING __sla_fs_read_status_%out_buffer, %out_buffer, %path, %path_len, %max_bytes
+    !__sla_fs_read_status_%out_buffer
+[END_MACRO]
+
+[MACRO] SLA_FS_BUFFER_DATA %out_ptr, %buffer
+    EXPAND FS_READ_BUFFER_DATA %out_ptr, %buffer
+[END_MACRO]
+
+[MACRO] SLA_FS_BUFFER_LEN %out_len, %buffer
+    EXPAND FS_READ_BUFFER_LEN %out_len, %buffer
+[END_MACRO]

@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 亲和数判定（220,284→1；220,285→0）。
+// 334 的亲和版：互为真因子和（divsum 复用 334 口径）。
+
+fn divsum(n: int) -> int {
+    let s = 0;
+    let d = 1;
+    while d < n {
+        if n % d == 0 { s = s + d; };
+        d = d + 1;
+    }
+    return s;
+}
+
+fn is_amic(a: int, b: int) -> int {
+    return if divsum(a) == b && divsum(b) == a { 1 } else { 0 };
+}
+
+fn main() -> i32 {
+    println("{},{}", is_amic(220, 284), is_amic(220, 285));
+    return 0;
+}
+
+@test "basic 335 amicable"() {
+    if is_amic(220, 284) != 1 { panic(33501); };
+    if is_amic(220, 285) != 0 { panic(33502); };
+}

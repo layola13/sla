@@ -1,0 +1,27 @@
+// expect: LoopConditionalConsume
+@import "sa_std/vec.sa"
+@import "sa_std/string.sa"
+
+// DEF-deep-copy follow-up (push consume, loop form): consuming a
+// loop-external String binding by a push inside the loop body is a
+// loop-carried consumption. Before the fix the checker accepted the
+// shape: the text route then failed in the SA referee with
+// PhiStateConflict (masking the real cause) and the SAB route
+// aborted at runtime. The checker must report LoopConditionalConsume
+// naming the binding and the push, exactly as it does for a plain
+// consuming call in a loop body.
+
+fn bad_push_loop(x: String) -> Vec<String> {
+    let out: Vec<String> = Vec::new();
+    let i = 0;
+    while i < 2 {
+        out.push(x);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn main() -> i32 {
+    let r = bad_push_loop(format("ab"));
+    return len(r) as i32;
+}

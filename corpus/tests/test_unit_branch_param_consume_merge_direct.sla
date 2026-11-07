@@ -1,0 +1,41 @@
+@import "sa_std/vec.sa"
+
+// Minimal repro for task_pool_builder get_or_init PhiStateConflict:
+// by-value non-Copy param consumed on then-branch only; else-branch must agree.
+
+struct BranchParamBag {
+    values: Vec<i32>,
+}
+
+fn branch_param_bag_new() -> BranchParamBag {
+    let values: Vec<i32> = Vec::new();
+    return BranchParamBag { values: values };
+}
+
+fn branch_param_get_or_init(holder: BranchParamBag, bag: BranchParamBag, initialized: bool) -> BranchParamBag {
+    if initialized != true {
+        holder = bag;
+    } else {
+        let _ = bag;
+    };
+    return holder;
+}
+
+@test "branch param consume merge then takes ownership"() {
+    let holder0 = branch_param_bag_new();
+    let bag0 = branch_param_bag_new();
+    bag0.values.push(7);
+    let out = branch_param_get_or_init(holder0, bag0, false);
+    if len(out.values) as i64 != 1 { panic(52701); };
+    if out.values[0] != 7 { panic(52702); };
+}
+
+@test "branch param consume merge else discards ownership"() {
+    let holder0 = branch_param_bag_new();
+    holder0.values.push(3);
+    let bag0 = branch_param_bag_new();
+    bag0.values.push(9);
+    let out = branch_param_get_or_init(holder0, bag0, true);
+    if len(out.values) as i64 != 1 { panic(52711); };
+    if out.values[0] != 3 { panic(52712); };
+}

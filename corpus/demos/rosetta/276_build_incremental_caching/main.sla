@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_incremental_cache_hits() -> i32 { let unchanged_module = 1; return unchanged_module; }
+fn main() -> i32 { let unchanged_module = 1; println("{}", unchanged_module); return unchanged_module; }
+@test "rosetta 276 build incremental caching"() { let got = build_incremental_cache_hits(); if got != 1 { panic(276); }; }

@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_sanitizer_flag_count() -> i32 { let address = 1; let undefined = 1; return address + undefined; }
+fn main() -> i32 { let address = 1; let undefined = 1; let result = address + undefined; println("{}", result); return result; }
+@test "rosetta 272 build sanitizer flags"() { let got = build_sanitizer_flag_count(); if got != 2 { panic(272); }; }

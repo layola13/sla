@@ -1,0 +1,53 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_thiserror_message_len = vtable { call = @sla__thiserror_message_len }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__thiserror_message_len() -> u64:
+L_ENTRY:
+    tmp_0 = 4
+    error_message_len = tmp_0
+    return error_message_len
+
+@main() -> i32:
+L_ENTRY:
+    tmp_1 = call @sla__thiserror_message_len()
+    result = tmp_1
+    tmp_2 = call @sa_fmt_u64(result, 10)
+    tmp_3 = call @sa_fmt_buffer_data(tmp_2)
+    tmp_4 = call @sa_fmt_buffer_len(tmp_2)
+    tmp_5 = tmp_3
+    call @sa_print_bytes(&tmp_5, tmp_4)
+    call @sa_fmt_buffer_free(^tmp_2)
+    !tmp_5
+    !tmp_4
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_6 = 0
+    !result
+    return tmp_6
+
+@test "rosetta 175 175_thiserror_macro_derive"():
+L_TEST_ENTRY_0:
+    tmp_7 = call @sla__thiserror_message_len()
+    got = tmp_7
+    tmp_8 = 4
+    tmp_9 = ne got, tmp_8
+    !tmp_8
+    br tmp_9 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_9
+    panic(175)
+
+L_ELSE_2:
+    !tmp_9
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

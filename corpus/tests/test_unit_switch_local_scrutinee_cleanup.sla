@@ -1,0 +1,33 @@
+fn switch_local_scrutinee_return(value: u8) -> int {
+    let first: u8 = value;
+    switch first {
+        1 => {
+            return 10;
+        },
+        default => {},
+    };
+    return 0;
+}
+
+fn switch_temp_scrutinee_fallthrough(value: u8) -> int {
+    switch value + 1 {
+        2 => {},
+        default => {},
+    };
+    return 7;
+}
+
+@test "switch local scrutinee is not double released"() {
+    if switch_local_scrutinee_return(1) != 10 {
+        panic(41001);
+    };
+    if switch_local_scrutinee_return(3) != 0 {
+        panic(41002);
+    };
+}
+
+@test "switch temporary scrutinee releases at merge"() {
+    if switch_temp_scrutinee_fallthrough(1) != 7 {
+        panic(41003);
+    };
+}

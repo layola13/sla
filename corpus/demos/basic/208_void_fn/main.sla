@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 915_void_call：无返回值函数声明与调用（打印 9）。
+// `void` 算子不可解析，直接以语句调用；`@test` 内仅验证不 trap
+//（副作用断言见 213/214 的输出核对）。
+
+fn hit() {
+    println("{}", 9);
+}
+
+fn main() -> i32 {
+    hit();
+    return 0;
+}
+
+@test "basic 208 void fn"() {
+    hit();
+}

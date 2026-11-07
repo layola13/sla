@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn path_resolution_selected_scope() -> i32 {
+    let local_module_priority = 1;
+    let root_item_priority = 2;
+    return root_item_priority - local_module_priority;
+}
+
+fn main() -> i32 {
+    let local_module_priority = 1;
+    let root_item_priority = 2;
+    let result = root_item_priority - local_module_priority;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 238 mod path resolution order"() {
+    let got = path_resolution_selected_scope();
+    if got != 1 {
+        panic(238);
+    };
+}

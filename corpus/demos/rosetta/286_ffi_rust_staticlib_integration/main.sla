@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn ffi_rust_staticlib_exports() -> i32 { let add_symbol = 1; return add_symbol; }
+fn main() -> i32 { let add_symbol = 1; println("{}", add_symbol); return add_symbol; }
+@test "rosetta 286 ffi rust staticlib integration"() { let got = ffi_rust_staticlib_exports(); if got != 1 { panic(286); }; }

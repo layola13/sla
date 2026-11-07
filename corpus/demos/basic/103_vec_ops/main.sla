@@ -1,0 +1,63 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 28_push_unshift：首插（2, 3）+ 填充（18）+ 写时拷贝（7）。
+// 原用例为字符串数组，此处取整数核；`unshift/fill/with` 暂无方法，
+// 均用显式循环 + `push` 表达（迭代器协议见 Phase 6，写法见 39/53）。
+
+fn main() -> i32 {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    let n0 = len(a) as i32;
+    let b: Vec<i32> = Vec::new();
+    b.push(0);
+    for i in 0..2 {
+        b.push(a[i]);
+    }
+    let n1 = len(b) as i32;
+    let c: Vec<i32> = Vec::new();
+    c.push(1);
+    c.push(2);
+    c.push(3);
+    for i in 0..3 {
+        c[i] = 9;
+    }
+    let d: Vec<i32> = Vec::new();
+    for i in 0..3 {
+        d.push(c[i]);
+    }
+    d[1] = 7;
+    println("{},{},{},{}", n0, n1, c[0] + c[2], d[1]);
+    return 0;
+}
+
+@test "basic 103 vec ops"() {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    if len(a) != 2 { panic(10301); };
+    let b: Vec<i32> = Vec::new();
+    b.push(0);
+    for i in 0..2 {
+        b.push(a[i]);
+    }
+    if len(b) != 3 { panic(10302); };
+    if b[0] != 0 { panic(10303); };
+    let c: Vec<i32> = Vec::new();
+    c.push(1);
+    c.push(2);
+    c.push(3);
+    for i in 0..3 {
+        c[i] = 9;
+    }
+    if c[0] + c[2] != 18 { panic(10304); };
+    let d: Vec<i32> = Vec::new();
+    for i in 0..3 {
+        d.push(c[i]);
+    }
+    d[1] = 7;
+    if d[1] != 7 { panic(10305); };
+    if c[1] != 9 { panic(10306); };
+}

@@ -1,0 +1,61 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@import "sa_std/ffi.sa"
+@const SLA_FNPTR_VT_config_error_message = vtable { call = @sla__config_error_message }
+@sla__config_error_message(path: ptr) -> ptr:
+L_ENTRY:
+    EXPAND FORMAT_BEGIN tmp_0, 42
+    @const SLA_STR_0 = utf8:"invalid config: "
+    tmp_1 = &SLA_STR_0
+    EXPAND FORMAT_PUSH_BYTES tmp_2, tmp_0, tmp_1, 16
+    !tmp_1
+    EXPAND CSTR_LEN tmp_4, path
+    EXPAND FORMAT_PUSH_BYTES tmp_3, tmp_0, path, tmp_4
+    !tmp_4
+    !path
+    return tmp_0
+
+@test "rosetta 175 175_thiserror_macro_derive"():
+L_TEST_ENTRY_0:
+    @const SLA_STR_1 = utf8:"oops\0"
+    tmp_5 = &SLA_STR_1
+    tmp_6 = call @sla__config_error_message(tmp_5)
+    !tmp_5
+    err = tmp_6
+    @const SLA_STR_2 = utf8:"invalid config: oops\0"
+    tmp_8 = 20
+    tmp_7 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_7, &SLA_STR_2, tmp_8
+    !tmp_8
+    EXPAND STRING_BUF_AS_STR tmp_9, err
+    EXPAND STR_EQ tmp_10, tmp_9, tmp_7
+    !tmp_9
+    tmp_11 = 1
+    tmp_12 = ne tmp_10, tmp_11
+    !tmp_10
+    !tmp_11
+    br tmp_12 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_12
+    panic(175)
+
+L_ELSE_2:
+    !tmp_12
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    EXPAND STRING_BUF_FREE err
+    return
+

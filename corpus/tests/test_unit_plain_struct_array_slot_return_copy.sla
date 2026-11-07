@@ -1,0 +1,39 @@
+struct PlainSlotValue {
+    tag: int,
+    int_value: int,
+    float_value: float,
+    handle: int,
+}
+
+struct PlainSlotHolder {
+    stack: [PlainSlotValue; 4],
+}
+
+fn plain_slot_nil() -> PlainSlotValue {
+    return PlainSlotValue { tag: 0, int_value: 0, float_value: 0.0, handle: 0 };
+}
+
+fn plain_slot_value(tag: int, int_value: int, float_value: float, handle: int) -> PlainSlotValue {
+    return PlainSlotValue { tag: tag, int_value: int_value, float_value: float_value, handle: handle };
+}
+
+fn plain_slot_get(holder: &PlainSlotHolder, idx: int) -> PlainSlotValue {
+    return holder.stack[idx];
+}
+
+@test "plain struct array slot return copies value"() {
+    let holder = PlainSlotHolder { stack: [plain_slot_nil(); 4] };
+    holder.stack[1] = plain_slot_value(7, 11, 13.0, 17);
+    {
+        let got = plain_slot_get(&holder, 1);
+        if got.tag != 7 { panic(44501); };
+        if got.int_value != 11 { panic(44502); };
+        if got.float_value != 13.0 { panic(44503); };
+        if got.handle != 17 { panic(44504); };
+    }
+    let again = plain_slot_get(&holder, 1);
+    if again.tag != 7 { panic(44505); };
+    if again.int_value != 11 { panic(44506); };
+    if again.float_value != 13.0 { panic(44507); };
+    if again.handle != 17 { panic(44508); };
+}

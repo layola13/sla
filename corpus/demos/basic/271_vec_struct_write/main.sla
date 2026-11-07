@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Vec 内结构体写（223 为读版：9）。
+// 下标穿透赋值（248 的下标写口径 × 223 的结构口径）。
+
+struct Pt { x: i32, y: i32 }
+
+fn main() -> i32 {
+    let v: Vec<Pt> = Vec::new();
+    v.push(Pt { x: 1, y: 2 });
+    v[0].x = 9;
+    println("{}", v[0].x);
+    return 0;
+}
+
+@test "basic 271 vec struct write"() {
+    let v: Vec<Pt> = Vec::new();
+    v.push(Pt { x: 1, y: 2 });
+    v[0].x = 9;
+    if v[0].x != 9 { panic(27101); };
+    if v[0].y != 2 { panic(27102); };
+}

@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Pell 通解生成（x²-2y²=1：(3,2)→(17,12)→(99,70)；百位打包）。
+// 意对标 488 基本解的幂版（488 互补）。
+
+fn pell_nth(n: int) -> int {
+    let x = 3;
+    let y = 2;
+    let i = 1;
+    while i < n {
+        let nx = 3 * x + 4 * y;
+        let ny = 2 * x + 3 * y;
+        x = nx;
+        y = ny;
+        i = i + 1;
+    }
+    return x * 100 + y;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", pell_nth(1), pell_nth(2), pell_nth(3));
+    return 0;
+}
+
+@test "basic 498 pell gen"() {
+    if pell_nth(1) != 302 { panic(49801); };
+    if pell_nth(2) != 1712 { panic(49802); };
+    if pell_nth(3) != 9970 { panic(49803); };
+}

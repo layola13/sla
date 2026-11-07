@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 数根（38→2，9→9）。
+// 意对标 tsgosa 103_palindrome 的数位版（234 为回文版）：反复数位和至个位。
+
+fn droot(n: int) -> int {
+    let m = n;
+    while m >= 10 {
+        let s = 0;
+        let k = m;
+        while k > 0 {
+            s = s + k % 10;
+            k = k / 10;
+        }
+        m = s;
+    }
+    return m;
+}
+
+fn main() -> i32 {
+    println("{},{}", droot(38), droot(9));
+    return 0;
+}
+
+@test "basic 342 droot"() {
+    if droot(38) != 2 { panic(34201); };
+    if droot(9) != 9 { panic(34202); };
+    if droot(100) != 1 { panic(34203); };
+}

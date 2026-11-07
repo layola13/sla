@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 162_at_neg / 169_neg_idx：`at(-1)` 取尾。
+// SLA 暂无 `at(-1)`（负索引），用 `a[len(a) - 1]` 表达，语义等价。
+
+fn main() -> i32 {
+    let a = [1, 2, 3];
+    println("{},{}", a[len(a) - 1], a[0]);
+    return 0;
+}
+
+@test "basic 54 neg index"() {
+    let a = [1, 2, 3];
+    if a[len(a) - 1] != 3 { panic(5401); };
+    if a[0] != 1 { panic(5402); };
+    let b = [1, 2, 3, 4];
+    if b[len(b) - 1] != 4 { panic(5403); };
+    if b[0] != 1 { panic(5404); };
+}

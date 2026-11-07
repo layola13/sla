@@ -1,0 +1,6 @@
+@export tls_write(&slot: ptr) -> i32:
+L_ENTRY:
+    current = load slot+0 as i32
+    next = add current, 258
+    store slot+0, next as i32
+    return next

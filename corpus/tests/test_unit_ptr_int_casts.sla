@@ -1,0 +1,43 @@
+// ZOZI-2 regression corpus: address reinterpretation casts.
+// Before the fix the checker rejected every one of these with
+// "unsupported cast: only numeric primitive casts are currently
+// allowed": pointer -> integer, integer -> pointer, and fn values
+// cast to a typed pointer (fn -> u64 / raw ptr already worked).
+// C FFI surfaces need all three (callback slots in C structs such as
+// JSClassDefinition, handle tables keyed by address).
+
+@import "sa_std/ptr.sa"
+@import "sa_std/core/box.sa"
+
+struct Handle { tag: i32 }
+
+extern "C" fn zozi_cb(x: i32) -> i32 {
+    return x + 5;
+}
+
+@test "pointer integer round trip"() {
+    let ha = Box::into_raw(Box::new(Handle { tag: 9 }));
+    let bits = ha as u64;
+    if bits == 0 { panic(201); };
+    let back = bits as *Handle;
+    if back != ha { panic(202); };
+    if (*back).tag != 9 { panic(203); };
+    let zero: u64 = 0;
+    let np = zero as *Handle;
+    if np != ptr::null::<Handle>() { panic(204); };
+    let nb = ptr::null::<Handle>() as u64;
+    if nb != 0 { panic(205); };
+    let _reclaim = unsafe { Box::from_raw(ha) };
+}
+
+struct FnSlot { p: *u8 }
+
+@test "fn value stored through pointer slot"() {
+    let slot = Box::into_raw(Box::new(FnSlot { p: ptr::null::<u8>() }));
+    (*slot).p = zozi_cb as *u8;
+    let back = (*slot).p;
+    if back != (zozi_cb as *u8) { panic(206); };
+    if (back as u64) != (zozi_cb as u64) { panic(207); };
+    if back == ptr::null::<u8>() { panic(208); };
+    let _reclaim = unsafe { Box::from_raw(slot) };
+}

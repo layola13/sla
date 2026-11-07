@@ -1,0 +1,224 @@
+// DEF-DEREF-BORROW-WRITE regression corpus.
+// Explicit dereference `*p` of a borrow/pointer whose value IS the
+// pointee object address must not be lowered as a load through a cell
+// handle (nor materialized as a copy): every place/value path rooted
+// in an explicit deref crashed with signal 11 on both backends (and
+// d8 silently wrote into a temporary). Ladder of 18 shapes固化 from
+// the layering probes (d0..d13, e1, e2); implicit-access controls
+// (d3/d5/d7) passed even before the fix and guard the shared paths.
+
+struct Pair {
+    x: u64,
+    y: u64,
+}
+
+struct Outer {
+    inner: Pair,
+    z: u64,
+}
+
+struct WithArr {
+    a: [u64; 4],
+    n: u64,
+}
+
+struct Holder {
+    p: &Pair,
+    tag: u64,
+}
+
+fn set_y_d0(f: &Pair, n: u64) {
+    (*f).y = n;
+}
+
+fn one_level_d0() -> u64 {
+    let p = Pair { x: 0, y: 0 };
+    set_y_d0(&p, 7);
+    return p.y;
+}
+
+@test "d0 orig param deref field write"() {
+    if one_level_d0() != 7 { panic(3515); };
+}
+
+@test "d0b sentinel x=4096 param deref field write"() {
+    let p = Pair { x: 4096, y: 0 };
+    set_y_d0(&p, 7);
+    if p.y != 7 { panic(3520); };
+    if p.x != 4096 { panic(3521); };
+}
+
+fn get_y_d1(f: &Pair) -> u64 {
+    return (*f).y;
+}
+
+@test "d1 param deref field read"() {
+    let p = Pair { x: 3, y: 41 };
+    if get_y_d1(&p) != 41 { panic(3522); };
+}
+
+fn set_x_d2(f: &Pair, n: u64) {
+    (*f).x = n;
+}
+
+@test "d2 param deref write offset0 field"() {
+    let p = Pair { x: 0, y: 5 };
+    set_x_d2(&p, 7);
+    if p.x != 7 { panic(3523); };
+    if p.y != 5 { panic(3524); };
+}
+
+fn set_y_direct_d3(f: &Pair, n: u64) {
+    f.y = n;
+}
+
+@test "d3 param direct field write no explicit deref"() {
+    let p = Pair { x: 0, y: 0 };
+    set_y_direct_d3(&p, 7);
+    if p.y != 7 { panic(3525); };
+}
+
+@test "d4 local borrow deref field write"() {
+    let p = Pair { x: 0, y: 0 };
+    let r = &p;
+    (*r).y = 7;
+    if p.y != 7 { panic(3526); };
+}
+
+@test "d5 local borrow direct field write"() {
+    let p = Pair { x: 0, y: 0 };
+    let r = &p;
+    r.y = 7;
+    if p.y != 7 { panic(3529); };
+}
+
+fn set_y_re_d6(f: &Pair, n: u64) {
+    let g = &(*f);
+    (*g).y = n;
+}
+
+@test "d6 reborrow of deref then deref write"() {
+    let p = Pair { x: 0, y: 0 };
+    set_y_re_d6(&p, 7);
+    if p.y != 7 { panic(3528); };
+}
+
+fn set_y_re_direct_d7(f: &Pair, n: u64) {
+    let g = &(*f);
+    g.y = n;
+}
+
+@test "d7 reborrow of deref then direct field write"() {
+    let p = Pair { x: 0, y: 0 };
+    set_y_re_direct_d7(&p, 7);
+    if p.y != 7 { panic(3529); };
+}
+
+fn set_inner_d8(o: &Outer, v: u64) {
+    (*o).inner = Pair { x: 1, y: v };
+}
+
+@test "d8 param deref whole aggregate field write"() {
+    let o = Outer { inner: Pair { x: 0, y: 0 }, z: 77 };
+    set_inner_d8(&o, 9);
+    if o.inner.y != 9 { panic(3530); };
+    if o.inner.x != 1 { panic(3531); };
+    if o.z != 77 { panic(3532); };
+}
+
+fn set_inner_y_d9(o: &Outer, n: u64) {
+    (*o).inner.y = n;
+}
+
+@test "d9 param deref nested field write"() {
+    let o = Outer { inner: Pair { x: 0, y: 0 }, z: 77 };
+    set_inner_y_d9(&o, 9);
+    if o.inner.y != 9 { panic(3533); };
+    if o.z != 77 { panic(3534); };
+}
+
+fn set_a2_d10(w: &WithArr, v: u64) {
+    (*w).a[2] = v;
+}
+
+@test "d10 param deref array field elem write"() {
+    let w = WithArr { a: [0u64; 4], n: 55 };
+    set_a2_d10(&w, 9);
+    if w.a[2] != 9 { panic(3535); };
+    if w.a[1] != 0 { panic(3536); };
+    if w.n != 55 { panic(3537); };
+}
+
+fn set_y_fa_d11(f: &Pair, n: u64) {
+    let py = &(*f).y;
+    *py = n;
+}
+
+@test "d11 field addr of deref then scalar deref write"() {
+    let p = Pair { x: 0, y: 0 };
+    set_y_fa_d11(&p, 7);
+    if p.y != 7 { panic(3538); };
+}
+
+fn set_y_fa2_d11b(f: &Pair, n: u64) {
+    let py = &((*f).y);
+    *py = n;
+}
+
+@test "d11b field addr of deref paren form"() {
+    let p = Pair { x: 0, y: 0 };
+    set_y_fa2_d11b(&p, 7);
+    if p.y != 7 { panic(3539); };
+}
+
+fn get_inner_y_d12(o: &Outer) -> u64 {
+    return (*o).inner.y;
+}
+
+@test "d12 param deref nested field read"() {
+    let o = Outer { inner: Pair { x: 0, y: 33 }, z: 77 };
+    if get_inner_y_d12(&o) != 33 { panic(3540); };
+}
+
+fn set_and_get_d13(f: &Pair, n: u64) -> u64 {
+    (*f).y = n;
+    return (*f).y;
+}
+
+@test "d13 param deref write then readback in callee"() {
+    let p = Pair { x: 0, y: 0 };
+    if set_and_get_d13(&p, 7) != 7 { panic(3541); };
+    if p.y != 7 { panic(3542); };
+}
+
+fn get_all_y_e1(f: &Pair) -> u64 {
+    let q = *f;
+    return q.y;
+}
+
+@test "e1 deref as rvalue copy read"() {
+    let p = Pair { x: 1, y: 43 };
+    if get_all_y_e1(&p) != 43 { panic(3543); };
+}
+
+fn set_hp_e2(h: &Holder, n: u64) {
+    (*h.p).y = n;
+}
+
+@test "e2 deref of borrow field then deref write"() {
+    let p = Pair { x: 0, y: 0 };
+    let h = Holder { p: &p, tag: 1 };
+    set_hp_e2(&h, 7);
+    if p.y != 7 { panic(3544); };
+}
+
+fn set_hp_implicit_e2b(h: &Holder, n: u64) {
+    h.p.y = n;
+}
+
+@test "e2b implicit field write through borrow field"() {
+    let p = Pair { x: 0, y: 0 };
+    let h = Holder { p: &p, tag: 1 };
+    set_hp_implicit_e2b(&h, 7);
+    if p.y != 7 { panic(3545); };
+}

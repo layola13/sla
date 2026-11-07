@@ -1,0 +1,48 @@
+struct Option<T> {
+    has_value: bool,
+    value: T
+}
+
+struct Result {
+    is_err: bool,
+    value: int,
+    error: int
+}
+
+fn nested_loops(outer_lim: int, inner_lim: int) -> int {
+    let sum = 0;
+    for i in 1..outer_lim {
+        let temp = stack_alloc();
+        for j in 1..inner_lim {
+            sum = sum + i + j;
+        }
+    }
+    return sum;
+}
+
+fn nested_conditionals(a: int, b: int) -> int {
+    if a > b {
+        if a > 10 {
+            return a;
+        } else {
+            return 10;
+        };
+    } else {
+        if b > 20 {
+            return b;
+        } else {
+            return 20;
+        };
+    };
+}
+
+macro add_one_macro(var_ref) {
+    let temp = 1;
+    var_ref = var_ref + temp;
+}
+
+fn test_macro_hygiene(val: int) -> int {
+    let temp = val;
+    add_one_macro(temp);
+    return temp;
+}

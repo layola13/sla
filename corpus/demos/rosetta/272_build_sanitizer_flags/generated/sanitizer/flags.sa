@@ -1,0 +1,14 @@
+// Generated from build/sanitizer.toml and config/sanitizer/flags.toml.
+#def SANITIZER_FLAG_COUNT = 2
+
+@sanitizer_flags_value() -> i32:
+L_ENTRY:
+    value = add 271, 1
+    !value
+    return 272
+
+@sanitizer_flags_count() -> i32:
+L_ENTRY:
+    count = add 1, 1
+    !count
+    return SANITIZER_FLAG_COUNT

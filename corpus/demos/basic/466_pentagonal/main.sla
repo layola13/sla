@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 五边形数（P(n)=n(3n-1)/2：P(5)=35）。
+// 意对标 137 三角数的高边版（137 互补；473 做对峙）。
+
+fn pent(n: int) -> int {
+    return n * (3 * n - 1) / 2;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", pent(5), pent(4), pent(1));
+    return 0;
+}
+
+@test "basic 466 pentagonal"() {
+    if pent(5) != 35 { panic(46601); };
+    if pent(4) != 22 { panic(46602); };
+    if pent(1) != 1 { panic(46603); };
+}

@@ -1,0 +1,49 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/future.sa"
+@import "sa_std/core/option.sa"
+@import "sa_std/vec.sa"
+
+async fn task_one() -> i32 {
+    1
+}
+
+async fn task_two() -> i32 {
+    2
+}
+
+async fn task_three() -> i32 {
+    3
+}
+
+fn executor_task_queue_sum() -> i32 {
+    let queue = vec(task_one(), task_two(), task_three());
+    let total = 0;
+
+    while let Some(task) = queue.pop() {
+        let resolved = task.await;
+        total = total + resolved;
+    }
+
+    return total;
+}
+
+fn main() -> i32 {
+    let queue = vec(task_one(), task_two(), task_three());
+    let total = 0;
+
+    while let Some(task) = queue.pop() {
+        let resolved = task.await;
+        total = total + resolved;
+    }
+
+    println("{}", total);
+    return total;
+}
+
+@test "rosetta 136 136_executor_task_queue"() {
+    let got = executor_task_queue_sum();
+    if got != 6 {
+        panic(136);
+    };
+}

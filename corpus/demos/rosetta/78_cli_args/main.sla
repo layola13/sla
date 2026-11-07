@@ -1,0 +1,37 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+struct CliCommand {
+    command: ptr,
+    release: bool,
+}
+
+fn exit_code(cmd: CliCommand) -> i32 {
+    if str_eq(cmd.command, "build") {
+        if cmd.release {
+            return 0;
+        };
+    };
+    return 2;
+}
+
+fn main() -> i32 {
+    let cmd = CliCommand {
+        command: "build",
+        release: true,
+    };
+    let code = exit_code(cmd);
+    println("{}", code);
+    return code;
+};
+
+@test "rosetta 078 78_cli_args"() {
+    let cmd = CliCommand {
+        command: "build",
+        release: true,
+    };
+    if exit_code(cmd) != 0 {
+        panic(78);
+    };
+};

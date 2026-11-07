@@ -1,0 +1,23 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/core/option.sa"
+
+// P1/P0 coverage: HashMap.len() method form — SAB audit registry
+// entry HashMap.len was ok on both backends at registry stamp
+// ee7b41c3, but no unit corpus file calls the .len() method on a
+// HashMap (corpus uses the len(m) free function instead).
+
+@test "p1 hashmap len method"() {
+    let m = HashMap::new();
+    if m.len() != 0 { panic(206); };
+    m.insert("a", 1);
+    m.insert("b", 2);
+    if m.len() != 2 { panic(207); };
+}
+
+@test "p1 hashmap len method overwrite keeps len"() {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    m.insert("a", 42);
+    if m.len() != 1 { panic(208); };
+    if m.get("a").copied().unwrap_or_default() != 42 { panic(209); };
+}

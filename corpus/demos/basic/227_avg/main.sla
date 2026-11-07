@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 76_sum_avg：整平均（20/4=5）。
+// 求和（27 口径）+ 整除（45 口径）组合；`for-of` 用索引改写。
+
+fn main() -> i32 {
+    let a = [2, 4, 6, 8];
+    let s = 0;
+    for i in 0..4 {
+        s = s + a[i];
+    }
+    println("{}", s / 4);
+    return 0;
+}
+
+@test "basic 227 avg"() {
+    let a = [2, 4, 6, 8];
+    let s = 0;
+    for i in 0..4 {
+        s = s + a[i];
+    }
+    if s != 20 { panic(22701); };
+    if s / 4 != 5 { panic(22702); };
+}

@@ -1,0 +1,60 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Euler 定理高位对峙：q(n) == p_odd(n)（n=8：6 对 6；n=9：8 对 8；n=10：10 对 10）。
+// 意对标 534 euler_duel（低位版互补；539/540 双源单实现见各源）。
+
+fn distinct_part(n: int) -> int {
+    let dp: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        dp.push(0);
+        i = i + 1;
+    }
+    dp[0] = 1;
+    let k = 1;
+    while k <= n {
+        let s = n;
+        while s >= k {
+            dp[s] = dp[s] + dp[s - k];
+            s = s - 1;
+        }
+        k = k + 1;
+    }
+    return dp[n];
+}
+
+fn odd_part(n: int) -> int {
+    let dp: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        dp.push(0);
+        i = i + 1;
+    }
+    dp[0] = 1;
+    let k = 1;
+    while k <= n {
+        let s = k;
+        while s <= n {
+            dp[s] = dp[s] + dp[s - k];
+            s = s + 1;
+        }
+        k = k + 2;
+    }
+    return dp[n];
+}
+
+fn main() -> i32 {
+    println("{},{},{},{},{},{}", distinct_part(8), odd_part(8), distinct_part(9), odd_part(9), distinct_part(10), odd_part(10));
+    return 0;
+}
+
+@test "basic 541 euler2"() {
+    if distinct_part(8) != 6 { panic(54101); };
+    if odd_part(8) != 6 { panic(54102); };
+    if distinct_part(9) != 8 { panic(54103); };
+    if odd_part(9) != 8 { panic(54104); };
+    if distinct_part(10) != 10 { panic(54105); };
+    if odd_part(10) != 10 { panic(54106); };
+}

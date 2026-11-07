@@ -1,0 +1,58 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/result.sa"
+@import "sa_std/sync/rwlock.sa"
+@import "sa_std/thread.sa"
+
+fn read_shared(shared: Arc<RwLock<i32> >) -> i32 {
+    let reader = (*shared).read().unwrap();
+    let value = *reader;
+    return value;
+}
+
+fn rwlock_reader_writer_total() -> i32 {
+    let shared = Arc::new(RwLock::new(1));
+    let cloned = shared.clone();
+    let first_reader = thread::spawn(^|| read_shared(cloned));
+
+    let first = first_reader.join().unwrap();
+    {
+        let writer = (*shared).write().unwrap();
+        let current = *writer;
+        let updated = current + 2;
+        *writer = updated;
+    }
+
+    let reader = (*shared).read().unwrap();
+    let second = *reader;
+    return first + second;
+}
+
+fn main() -> i32 {
+    let shared = Arc::new(RwLock::new(1));
+
+    let cloned = shared.clone();
+    let first_reader = thread::spawn(^|| read_shared(cloned));
+
+    let first = first_reader.join().unwrap();
+    {
+        let writer = (*shared).write().unwrap();
+        let current = *writer;
+        let updated = current + 2;
+        *writer = updated;
+    }
+
+    let reader = (*shared).read().unwrap();
+    let second = *reader;
+    let result = first + second;
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 121 121_rwlock_reader_writer"() {
+    let got = rwlock_reader_writer_total();
+    if got != 4 {
+        panic(121);
+    };
+};

@@ -1,0 +1,20 @@
+@import "consumer/../macros/store.sa"
+@import "consumer/../bridge/macro_bridge.sa"
+
+@macro_consumer_value() -> i32:
+L_ENTRY:
+    cell = alloc 4
+    EXPAND STORE_I32 cell, 249
+    value = load cell+0 as i32
+    helper = call @macro_value()
+    ok = eq value, 249
+    !helper
+    !value
+    !cell
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 249
+
+L_ERR:
+    return 0

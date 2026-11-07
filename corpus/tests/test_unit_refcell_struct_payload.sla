@@ -1,0 +1,197 @@
+@import "sa_std/core/box.sa"
+@import "sa_std/core/refcell.sa"
+@import "sa_std/core/rc.sa"
+@import "import_fixtures/imported_refcell_helpers.sa"
+
+struct RefCellPayload {
+    value: int,
+    flag: bool,
+}
+
+fn refcell_payload_read(cell: &RefCell<RefCellPayload>) -> int {
+    let borrowed: &RefCellPayload = cell.borrow();
+    return borrowed.value;
+}
+
+fn refcell_payload_write(cell: &RefCell<RefCellPayload>, value: int) -> void {
+    let borrowed: &RefCellPayload = cell.borrow_mut();
+    borrowed.value = value;
+}
+
+fn refcell_box_payload_read(cell: &RefCell<Box<RefCellPayload>>) -> int {
+    let borrowed: &Box<RefCellPayload> = cell.borrow();
+    let payload: &RefCellPayload = &*borrowed;
+    return payload.value;
+}
+
+fn refcell_box_payload_write(cell: &RefCell<Box<RefCellPayload>>, value: int) -> void {
+    let borrowed: &Box<RefCellPayload> = cell.borrow_mut();
+    let payload: &RefCellPayload = &*borrowed;
+    payload.value = value;
+}
+
+fn refcell_payload_borrow_count(cell: &RefCell<RefCellPayload>) -> i64 {
+    SLA_REFCELL_BORROW_COUNT(cell)
+}
+
+fn refcell_if_expr_shared_borrow_count(flag: bool) -> i64 {
+    let left = RefCell::new(RefCellPayload { value: 71, flag: false });
+    let right = RefCell::new(RefCellPayload { value: 83, flag: true });
+    let picked: &RefCellPayload = if flag {
+        left.borrow()
+    } else {
+        right.borrow()
+    };
+    if picked.value == 0 {
+        panic(12);
+    };
+    if flag {
+        return refcell_payload_borrow_count(&left);
+    };
+    return refcell_payload_borrow_count(&right);
+}
+
+fn refcell_if_expr_mut_borrow_count(flag: bool) -> i64 {
+    let left = RefCell::new(RefCellPayload { value: 19, flag: false });
+    let right = RefCell::new(RefCellPayload { value: 23, flag: true });
+    let picked: &RefCellPayload = if flag {
+        left.borrow_mut()
+    } else {
+        right.borrow_mut()
+    };
+    picked.value = picked.value + 1;
+    if flag {
+        return refcell_payload_borrow_count(&left);
+    };
+    return refcell_payload_borrow_count(&right);
+}
+
+fn refcell_if_expr_box_value(flag: bool) -> int {
+    let picked: Box<RefCellPayload> = if flag {
+        Box::new(RefCellPayload { value: 33, flag: false })
+    } else {
+        Box::new(RefCellPayload { value: 44, flag: true })
+    };
+    let payload: &RefCellPayload = &*picked;
+    return payload.value;
+}
+
+fn refcell_early_return_value(cell: &RefCell<RefCellPayload>, flag: bool) -> int {
+    let borrowed: &RefCellPayload = cell.borrow();
+    if flag {
+        return borrowed.value;
+    };
+    return borrowed.value + 1;
+}
+
+fn refcell_loop_local_borrows_release(cell: &RefCell<RefCellPayload>) -> int {
+    let i = 0;
+    while i < 2 {
+        let borrowed: &RefCellPayload = cell.borrow();
+        if borrowed.value != 90 {
+            panic(17);
+        };
+        !borrowed;
+        i = i + 1;
+    }
+    for n in 0..2 {
+        let borrowed: &RefCellPayload = cell.borrow();
+        if borrowed.value + n < 90 {
+            panic(18);
+        };
+        !borrowed;
+    }
+    let after: &RefCellPayload = cell.borrow();
+    return after.value;
+}
+
+@test "refcell struct payload borrow"() {
+    let refcell = RefCell::new(RefCellPayload { value: 50, flag: false });
+    if refcell_payload_read(&refcell) != 50 {
+        panic(1);
+    };
+
+    refcell_payload_write(&refcell, 60);
+    if refcell_payload_read(&refcell) != 60 {
+        panic(2);
+    };
+}
+
+@test "rc refcell struct payload shared mutation"() {
+    let rc1 = Rc::new(RefCell::new(RefCellPayload { value: 10, flag: true }));
+    let rc2 = Rc::clone(&rc1);
+
+    let borrowed1: &RefCell<RefCellPayload> = &*rc1;
+    refcell_payload_write(borrowed1, 25);
+
+    let borrowed2: &RefCell<RefCellPayload> = &*rc2;
+    if refcell_payload_read(borrowed2) != 25 {
+        panic(3);
+    };
+}
+
+@test "refcell boxed struct payload borrow"() {
+    let refcell = RefCell::new(Box::new(RefCellPayload { value: 40, flag: false }));
+    if refcell_box_payload_read(&refcell) != 40 {
+        panic(4);
+    };
+
+    refcell_box_payload_write(&refcell, 52);
+    if refcell_box_payload_read(&refcell) != 52 {
+        panic(5);
+    };
+}
+
+@test "refcell if-expression borrow preserves active borrow count"() {
+    if refcell_if_expr_shared_borrow_count(true) != 1 {
+        panic(6);
+    };
+    if refcell_if_expr_shared_borrow_count(false) != 1 {
+        panic(7);
+    };
+}
+
+@test "refcell if-expression borrow_mut preserves active borrow count"() {
+    if refcell_if_expr_mut_borrow_count(true) != -1 {
+        panic(8);
+    };
+    if refcell_if_expr_mut_borrow_count(false) != -1 {
+        panic(9);
+    };
+}
+
+@test "pointer-backed if-expression result keeps ownership"() {
+    if refcell_if_expr_box_value(true) != 33 {
+        panic(10);
+    };
+    if refcell_if_expr_box_value(false) != 44 {
+        panic(11);
+    };
+}
+
+@test "refcell early return releases borrow handle"() {
+    let refcell = RefCell::new(RefCellPayload { value: 90, flag: false });
+    if refcell_early_return_value(&refcell, true) != 90 {
+        panic(13);
+    };
+    if refcell_payload_borrow_count(&refcell) != 0 {
+        panic(14);
+    };
+    refcell_payload_write(&refcell, 91);
+    if refcell_early_return_value(&refcell, false) != 92 {
+        panic(15);
+    };
+    if refcell_payload_borrow_count(&refcell) != 0 {
+        panic(16);
+    };
+}
+
+@test "refcell loop local borrow state does not escape"() {
+    let refcell = RefCell::new(RefCellPayload { value: 90, flag: false });
+    if refcell_loop_local_borrows_release(&refcell) != 90 {
+        panic(19);
+    };
+    if refcell_payload_borrow_count(&refcell) != 0 {
+        panic(20);
+    };
+}

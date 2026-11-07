@@ -1,0 +1,12 @@
+// DEF-E0 regression: cross-file foreign extension — types from
+// import_fixtures/using_ext_geo_types.sla, extensions from
+// import_fixtures/using_ext_geo_ext.sla, consumed here via `using`.
+@import "import_fixtures/using_ext_geo_types.sla"
+@import "import_fixtures/using_ext_geo_ext.sla"
+
+using geo_ext;
+
+@test "using ext: cross-file foreign extension"() {
+    let c = circle_new(21);
+    if c.diameter() != 42 { panic(34210); };
+}

@@ -1,0 +1,38 @@
+// P0 coverage (census 2026-11-06): panic builtin. Probe-verified in
+// the never-taken-path form (tools/sab_audit/probes/builtin_panic.sla)
+// but no unit test named the surface. These tests compile panic
+// lowerings on never-taken and conditionally-taken paths on both
+// backends; passing means none of them fired.
+
+@test "panic builtin never taken path"() {
+    let armed = false;
+    if armed { panic(88301); };
+    let v: i32 = 6 * 7;
+    if v != 42 { panic(88302); };
+}
+
+@test "panic builtin guards hold"() {
+    let a: i32 = 100;
+    let b: i32 = a / 4;
+    if b != 25 { panic(88311); };
+    if a < b { panic(88312); };
+    let s: i32 = 0;
+    let i: i32 = 0;
+    while i < 5 {
+        s = s + i;
+        i = i + 1;
+    }
+    if s != 10 { panic(88313); };
+}
+
+@test "panic builtin nested conditions"() {
+    let flag = true;
+    let other = false;
+    if flag && other { panic(88321); };
+    if !flag { panic(88322); };
+    if flag {
+        if other { panic(88323); };
+    } else {
+        panic(88324);
+    }
+}

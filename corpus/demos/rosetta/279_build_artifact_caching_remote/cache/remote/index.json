@@ -1,0 +1,4 @@
+{
+  "backend": "sccache",
+  "bucket": "sa-asm-builds"
+}

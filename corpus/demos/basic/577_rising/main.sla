@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 上升阶乘 rise(n,x)=x·(x+1)…(x+n-1)
+//（rise(4,1)=24，rise(3,2)=24，rise(5,1)=120；579 做下降对峙）。
+// 意对标 572 perm（下降版互补；此处为上升连乘）。
+
+fn rising(n: int, x: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < n {
+        r = r * (x + i);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", rising(4, 1), rising(3, 2), rising(5, 1));
+    return 0;
+}
+
+@test "basic 577 rising"() {
+    if rising(4, 1) != 24 { panic(57701); };
+    if rising(3, 2) != 24 { panic(57702); };
+    if rising(5, 1) != 120 { panic(57703); };
+    if rising(2, 0) != 0 { panic(57704); };
+}

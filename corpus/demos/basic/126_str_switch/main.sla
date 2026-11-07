@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 498_str_switch：字符串 switch（1,0）。
+// 字面量 scrutinee + 字面量臂，探针已验证双后端 + exe；
+// 绑定 scrutinee 的比较语义见缺口 #18，此处只用字面量。
+
+fn pick() -> i32 {
+    let r: i32 = 0;
+    switch "a" {
+        "a" => { r = 1; },
+        "b" => { r = 2; },
+        default => {},
+    };
+    return r;
+}
+
+fn pick_z() -> i32 {
+    let r: i32 = 0;
+    switch "z" {
+        "a" => { r = 1; },
+        "b" => { r = 2; },
+        default => {},
+    };
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{}", pick(), pick_z());
+    return 0;
+}
+
+@test "basic 126 str switch"() {
+    if pick() != 1 { panic(12601); };
+    if pick_z() != 0 { panic(12602); };
+}

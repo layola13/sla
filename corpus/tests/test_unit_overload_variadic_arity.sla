@@ -1,0 +1,132 @@
+// Integration-wave recheck (a): variadic x overload arity.
+//
+// A variadic member's arity is its fixed parameter count plus the
+// variadic marker: it must be selectable with zero, one, or many
+// trailing arguments, and a set may mix fixed and variadic members
+// (including a pair whose fixed parameters are identical). Before
+// the integration fix, overload candidate matching required an exact
+// argument count for every member, extern registration treated a
+// fixed/variadic pair with identical fixed parameters as one
+// declaration, and a variadic prototype was grouped apart from its
+// definition — so the trailing-argument calls below failed with
+// "no overload matches" and the set-4 pair collapsed. Baseline
+// (pristine tree without overloading): Redeclaration.
+
+// Set 1: plain definitions — a variadic definition and a fixed
+// definition whose fixed signatures differ.
+
+extern "C" fn vsum(tag: ptr, args: ...) -> i64 {
+    let a = va_next_i32(args);
+    let b = va_next_i32(args);
+    return a as i64 + b as i64;
+}
+
+fn vsum(code: i32, extra: i32) -> i64 {
+    return 1000 + (code + extra) as i64;
+}
+
+// Set 2: a variadic definition whose fixed parameter is an i32, plus
+// a fixed definition taking a pointer — the floor call (zero
+// trailing arguments) must select the variadic member by type.
+
+extern "C" fn vsum2(tag: i32, args: ...) -> i64 {
+    return 2000 + tag as i64;
+}
+
+fn vsum2(cell: ptr) -> i64 {
+    return 3000;
+}
+
+// Set 3: extern "C" prototypes + paired definitions, mirroring
+// test_unit_overload_extern_by_type, with a variadic member.
+
+extern "C" {
+    fn emit(code: i32) -> i64;
+    fn emit(tag: ptr, ...) -> i64;
+}
+
+@no_mangle pub extern "C" fn emit(code: i32) -> i64 {
+    return 500 + code as i64;
+}
+
+extern "C" fn emit(tag: ptr, args: ...) -> i64 {
+    let a = va_next_i32(args);
+    return 900 + a as i64;
+}
+
+// Set 4: identical fixed parameters on both members — the pair is
+// two distinct members only because one is variadic (arity = fixed
+// count + is_variadic). Registration must not collapse them.
+
+extern "C" {
+    fn pick(x: ptr) -> i64;
+    fn pick(x: ptr, ...) -> i64;
+}
+
+@no_mangle pub extern "C" fn pick(x: ptr) -> i64 {
+    return 77;
+}
+
+extern "C" fn pick(x: ptr, args: ...) -> i64 {
+    let a = va_next_i32(args);
+    return 600 + a as i64;
+}
+
+// Set 5: a variadic prototype paired with its own definition and
+// nothing else — the pair must follow the singleton legacy path
+// (plain symbol), not become a two-member set of prototype and
+// definition.
+
+extern "C" {
+    fn solo(tag: ptr, ...) -> i64;
+}
+
+extern "C" fn solo(tag: ptr, args: ...) -> i64 {
+    let a = va_next_i32(args);
+    let b = va_next_i32(args);
+    return a as i64 + b as i64;
+}
+
+@test "variadic member selected with trailing args"() {
+    let p = stack_alloc(8);
+    let a: i32 = 1;
+    let b: i32 = 2;
+    let r = unsafe { vsum(p, 10, 20) };
+    if r != 30 { panic(8801); };
+    let r2 = unsafe { vsum(a, b) };
+    if r2 != 1003 { panic(8802); };
+}
+
+@test "variadic member selected at floor by type"() {
+    let p = stack_alloc(8);
+    let seven: i32 = 7;
+    let r = unsafe { vsum2(seven) };
+    if r != 2007 { panic(8803); };
+    let r2 = unsafe { vsum2(p) };
+    if r2 != 3000 { panic(8804); };
+    let r3 = unsafe { vsum2(seven, 100, 200) };
+    if r3 != 2007 { panic(8805); };
+}
+
+@test "extern set variadic member with trailing args"() {
+    let p = stack_alloc(8);
+    let three: i32 = 3;
+    let r = unsafe { emit(p, 41) };
+    if r != 941 { panic(8806); };
+    let r2 = unsafe { emit(three) };
+    if r2 != 503 { panic(8807); };
+}
+
+@test "same fixed params fixed and variadic members coexist"() {
+    let p = stack_alloc(8);
+    let r = unsafe { pick(p, 5) };
+    if r != 605 { panic(8808); };
+    let r2 = unsafe { pick(p, 5, 6) };
+    if r2 != 605 { panic(8809); };
+}
+
+@test "variadic prototype pairs with its definition"() {
+    let p = stack_alloc(8);
+    let r = unsafe { solo(p, 10, 20) };
+    if r != 30 { panic(8810); };
+}

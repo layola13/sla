@@ -1,0 +1,42 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Row {
+    active: bool,
+    age: i32,
+}
+
+fn qualifies(row: Row) -> bool {
+    if row.active == true {
+        if row.age >= 18 {
+            return true;
+        } else {
+            return false;
+        };
+    } else {
+        return false;
+    };
+}
+
+fn scan_count() -> i32 {
+    let a = Row { active: true, age: 21 };
+    let b = Row { active: false, age: 40 };
+    let c = Row { active: true, age: 17 };
+    let av = if qualifies(a) == true { a.age } else { 0 };
+    let bv = if qualifies(b) == true { b.age } else { 0 };
+    let cv = if qualifies(c) == true { c.age } else { 0 };
+    return av + bv + cv;
+}
+
+fn main() -> i32 {
+    let result = scan_count();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 082 82_sql_scan"() {
+    let got = scan_count();
+    if got != 21 {
+        panic(82);
+    };
+};

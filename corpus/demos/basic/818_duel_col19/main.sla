@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Stirling 一类首列续 c(9,1)=40320（fact(8) 陪锁；692 体例续高位）。
+// 意对标 691_stir1_col1（n≤8 版互补；同式首列复算）。
+
+fn cst(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn fact(n: int) -> int {
+    let r = 1;
+    let i = 1;
+    while i <= n {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", cst(8, 1), fact(7), cst(9, 1), fact(8));
+    return 0;
+}
+
+@test "basic 818 duel col19"() {
+    if cst(8, 1) != 5040 { panic(81801); };
+    if fact(7) != 5040 { panic(81802); };
+    if cst(9, 1) != 40320 { panic(81803); };
+    if fact(8) != 40320 { panic(81804); };
+}

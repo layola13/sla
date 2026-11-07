@@ -1,0 +1,109 @@
+// Goroutine syntax batch P3: defer semantics. The log cell packs
+// event codes in base 10 (single-threaded tests, deterministic):
+// every mark(v) appends digit v to the log.
+
+@import "sa_std/globals.sai"
+
+fn dlog(v: i64) {
+    let cur: u64 = 0;
+    let rc1 = sa_global_u64_get("deferlog", 8, &cur);
+    if rc1 != 0 { panic(9601); };
+    let rc2 = sa_global_u64_set("deferlog", 8, cur * 10 + (v as u64));
+    if rc2 != 0 { panic(9602); };
+}
+
+fn dlog_read() -> u64 {
+    let cur: u64 = 0;
+    let rc = sa_global_u64_get("deferlog", 8, &cur);
+    if rc != 0 { panic(9603); };
+    return cur;
+}
+
+fn dlog_reset() {
+    let rc = sa_global_u64_set("deferlog", 8, 0);
+    if rc != 0 { panic(9604); };
+}
+
+fn order_fn() {
+    defer dlog(1);
+    defer dlog(2);
+    {
+        defer dlog(3);
+    }
+    dlog(4);
+}
+
+@test "defer runs lifo at block exits"() {
+    dlog_reset();
+    order_fn();
+    // execution: 3 (inner block exit, before the next statement),
+    // 4 (statement), 2, 1 (fn exit, lifo) — block-scoped defers run
+    // at their own block's exit (DESIGN section 5).
+    if dlog_read() != 3421 { panic(9605); };
+}
+
+fn snapshot_fn() {
+    let x: i64 = 5;
+    defer dlog(x);
+    x = 9;
+}
+
+@test "defer arguments snapshot at the defer statement"() {
+    dlog_reset();
+    snapshot_fn();
+    if dlog_read() != 5 { panic(9606); };
+}
+
+fn early_return_fn(cond: bool) -> i64 {
+    defer dlog(7);
+    if cond {
+        defer dlog(8);
+        return 1;
+    };
+    return 2;
+}
+
+@test "defer runs on early return innermost first"() {
+    dlog_reset();
+    let r = early_return_fn(true);
+    if r != 1 { panic(9607); };
+    if dlog_read() != 87 { panic(9608); };
+    dlog_reset();
+    let r2 = early_return_fn(false);
+    if r2 != 2 { panic(9609); };
+    if dlog_read() != 7 { panic(9610); };
+}
+
+fn loop_fn() {
+    let i: i64 = 0;
+    while i < 10 {
+        defer dlog(1);
+        dlog(2);
+        if i == 2 {
+            break;
+        };
+        i = i + 1;
+    }
+    dlog(9);
+}
+
+@test "defer in loop body is block scoped and runs on break"() {
+    dlog_reset();
+    loop_fn();
+    // Block-scoped defer: each iteration logs 2 (statement) then 1
+    // (body-exit defer); the break iteration also runs its defer
+    // before leaving, then 9. Sequence: 2 1 2 1 2 1 9.
+    if dlog_read() != 2121219 { panic(9611); };
+}
+
+fn return_value_fn() -> u64 {
+    defer dlog(6);
+    return dlog_read();
+}
+
+@test "return value evaluates before defers run"() {
+    dlog_reset();
+    let v = return_value_fn();
+    if v != 0 { panic(9612); };
+    if dlog_read() != 6 { panic(9613); };
+}

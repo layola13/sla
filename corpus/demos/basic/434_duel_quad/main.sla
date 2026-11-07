@@ -1,0 +1,58 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 四元组双实现对峙（直接四点判定 vs 重叠三元组合：5 皆判是）。
+// 意对标 423 楔形对峙的素串版（430 互补）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn quad_a(p: int) -> int {
+    if is_prime(p) != 1 { return 0; };
+    if is_prime(p + 2) != 1 { return 0; };
+    if is_prime(p + 6) != 1 { return 0; };
+    if is_prime(p + 8) != 1 { return 0; };
+    return 1;
+}
+
+fn trip_a(p: int) -> int {
+    if is_prime(p) != 1 { return 0; };
+    if is_prime(p + 2) != 1 { return 0; };
+    if is_prime(p + 6) != 1 { return 0; };
+    return 1;
+}
+
+fn trip_b(p: int) -> int {
+    if is_prime(p) != 1 { return 0; };
+    if is_prime(p + 4) != 1 { return 0; };
+    if is_prime(p + 6) != 1 { return 0; };
+    return 1;
+}
+
+fn quad_b(p: int) -> int {
+    if trip_a(p) != 1 { return 0; };
+    if trip_b(p + 2) != 1 { return 0; };
+    return 1;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", quad_a(5), quad_b(5), quad_a(11));
+    return 0;
+}
+
+@test "basic 434 duel quad"() {
+    if quad_a(5) != 1 { panic(43401); };
+    if quad_b(5) != 1 { panic(43402); };
+    if quad_a(5) != quad_b(5) { panic(43403); };
+    if quad_a(11) != 1 { panic(43404); };
+    if quad_b(11) != 1 { panic(43405); };
+}

@@ -1,0 +1,84 @@
+struct Item {
+    x: i32,
+}
+
+struct Query<T> {
+    items: Vec<T>,
+}
+
+impl Query<T> {
+    fn iter_len(&self) -> i64 {
+        return len(self.items) as i64;
+    }
+
+    fn iter_at(&self, index: i64) -> T {
+        return self.items[index];
+    }
+}
+
+fn query_new<T>() -> Query<T> {
+    let items: Vec<T> = Vec::new();
+    return Query<T> { items: items };
+}
+
+struct QueryC {
+    items: Vec<Item>,
+}
+
+impl QueryC {
+    fn iter_len(&self) -> i64 {
+        return len(self.items) as i64;
+    }
+
+    fn iter_at(&self, index: i64) -> Item {
+        return self.items[index];
+    }
+}
+
+@test "borrow self vec field direct calls keep caller vec alive"() {
+    let q = query_new<Item>();
+    q.items.push(Item { x: 2 });
+    q.items.push(Item { x: 3 });
+
+    let n = q.iter_len();
+    if n != 2 { panic(1401); };
+    let a = q.iter_at(0);
+    let b = q.iter_at(1);
+    if a.x + b.x != 5 { panic(1402); };
+
+    // The borrowed calls above must not free q's buffer: q stays usable.
+    q.items.push(Item { x: 4 });
+    let n2 = q.iter_len();
+    if n2 != 3 { panic(1403); };
+    let c = q.iter_at(2);
+    if c.x != 4 { panic(1404); };
+}
+
+@test "borrow self vec field direct calls concrete"() {
+    let q = QueryC { items: Vec::new() };
+    q.items.push(Item { x: 2 });
+    q.items.push(Item { x: 3 });
+
+    let n = q.iter_len();
+    if n != 2 { panic(1411); };
+    let a = q.iter_at(0);
+    let b = q.iter_at(1);
+    if a.x + b.x != 5 { panic(1412); };
+
+    q.items.push(Item { x: 4 });
+    let n2 = q.iter_len();
+    if n2 != 3 { panic(1413); };
+}
+
+@test "concrete for in uses protocol impl"() {
+    let q = QueryC { items: Vec::new() };
+    q.items.push(Item { x: 2 });
+    q.items.push(Item { x: 3 });
+
+    let total: i32 = 0;
+    for item in q {
+        total = total + item.x;
+    }
+
+    if total != 5 { panic(1421); };
+}

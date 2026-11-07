@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Golomb 自描述数列（G(9)=5，G(10)=5；双重递归）。
+// 意对标 448 Tribonacci 的自指版（448 互补；522 做对峙）。
+
+fn golomb(n: int) -> int {
+    if n == 1 { return 1; };
+    return 1 + golomb(n - golomb(golomb(n - 1)));
+}
+
+fn main() -> i32 {
+    println("{},{},{}", golomb(9), golomb(10), golomb(4));
+    return 0;
+}
+
+@test "basic 516 golomb"() {
+    if golomb(9) != 5 { panic(51601); };
+    if golomb(10) != 5 { panic(51602); };
+    if golomb(4) != 3 { panic(51603); };
+}

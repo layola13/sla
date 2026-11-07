@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1052_rev_index：倒序下标求和（6）。
+// 倒序遍历（`len-1` 起向下），与正序求和（05/58）方向互补。
+
+fn main() -> i32 {
+    let a: [i32; 3] = [1, 2, 3];
+    let t = 0;
+    let n = len(a) as i32;
+    let i = n - 1;
+    while i >= 0 {
+        t = t + a[i];
+        i = i - 1;
+    }
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 160 rev index sum"() {
+    let a: [i32; 3] = [1, 2, 3];
+    let t = 0;
+    let n = len(a) as i32;
+    let i = n - 1;
+    while i >= 0 {
+        t = t + a[i];
+        i = i - 1;
+    }
+    if t != 6 { panic(16001); };
+}

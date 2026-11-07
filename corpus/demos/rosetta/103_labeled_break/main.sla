@@ -1,0 +1,48 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn labeled_break_total() -> i32 {
+    let outer = 0;
+    let total = 0;
+    let done = false;
+
+    while done == false {
+        outer = outer + 1;
+        let inner = 0;
+
+        while done == false {
+            inner = inner + 1;
+            if outer == 2 {
+                if inner == 2 {
+                    done = true;
+                } else {
+                    total = total + outer + inner;
+                };
+            } else {
+                total = total + outer + inner;
+            };
+            if inner >= 3 {
+                break;
+            };
+        }
+
+        if outer >= 3 {
+            done = true;
+        };
+    }
+
+    return total;
+}
+
+fn main() -> i32 {
+    let result = labeled_break_total();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 103 103_labeled_break"() {
+    let got = labeled_break_total();
+    if got != 12 {
+        panic(103);
+    };
+}

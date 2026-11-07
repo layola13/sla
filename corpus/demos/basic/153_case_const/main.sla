@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 948_case_ident：常量标识作 case 臂（1,0）。
+// 顶层 `const` 作臂双后端正常（133 证常量可用；注意顶层仅容 `const`）；
+
+const K: i32 = 3;
+
+fn pick(x: i32) -> i32 {
+    let r: i32 = 0;
+    switch x {
+        K => { r = 1; },
+        default => {},
+    };
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{}", pick(3), pick(4));
+    return 0;
+}
+
+@test "basic 153 case const"() {
+    if pick(3) != 1 { panic(15301); };
+    if pick(4) != 0 { panic(15302); };
+}

@@ -1,0 +1,220 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/vec_packed.sla"
+
+// DEF-8 (STRIDE-1) corpus: the packed export helpers in
+// sa_std/vec_packed.sla. A Vec's raw data pointer is word-slot
+// strided (max(abi_size, 8) per element), NOT packed; these tests
+// prove the exported image is byte-exact packed for u8/u16/i32/f64,
+// that a too-small destination fails loudly and untouched, that an
+// empty Vec exports as zero bytes, and that a C-shaped consumer
+// reading only (ptr, count) packed recovers the original values.
+// Panic codes: 8xx block per test (801 u8, 810 premise, 820 u16,
+// 830 i32, 840 f64, 850 capacity, 860 empty, 870 C consumer).
+
+// ---- C-shaped packed readers: take only a raw ptr + count and
+// ---- reconstruct values from packed little-endian bytes, the way
+// ---- a C extern would. They never see the Vec.
+fn c_read_u16le(p: ptr, idx: u64) -> u16 {
+    let off: u64 = idx * 2;
+    let lob: u8 = PTR_BYTE_AT(p, off);
+    let lo: u16 = lob as u16;
+    let off2: u64 = off + 1;
+    let hib: u8 = PTR_BYTE_AT(p, off2);
+    let hi: u16 = hib as u16;
+    return (hi << 8) | lo;
+}
+
+fn c_read_i32le(p: ptr, idx: u64) -> i32 {
+    let off: u64 = idx * 4;
+    let off1: u64 = off + 1;
+    let off2: u64 = off + 2;
+    let off3: u64 = off + 3;
+    let rb0: u8 = PTR_BYTE_AT(p, off);
+    let rb1: u8 = PTR_BYTE_AT(p, off1);
+    let rb2: u8 = PTR_BYTE_AT(p, off2);
+    let rb3: u8 = PTR_BYTE_AT(p, off3);
+    let b0: u32 = rb0 as u32;
+    let b1: u32 = rb1 as u32;
+    let b2: u32 = rb2 as u32;
+    let b3: u32 = rb3 as u32;
+    let bits: u32 = (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
+    return bits as i32;
+}
+
+@test "def8 packed export u8 registration case"() {
+    // STRIDE-1 registration form: push 104, 105; the packed image
+    // must be exactly [104, 105] at bytes 0 and 1.
+    let v: Vec<u8> = Vec::new();
+    v.push(104);
+    v.push(105);
+    v.push(0);
+    v.push(255);
+    let buf: [u8; 8] = [0; 8];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let (st, n) = sa_vec_export_packed_u8(&v, bp, 8);
+    if st != 0 { panic(801); };
+    if n != 4 { panic(802); };
+    if buf[0] != 104 { panic(803); };
+    if buf[1] != 105 { panic(804); };
+    if buf[2] != 0 { panic(805); };
+    if buf[3] != 255 { panic(806); };
+}
+
+@test "def8 raw vec pointer is word strided not packed"() {
+    // The premise the helpers exist for, pinned as a contract: the
+    // second u8 element lives at raw byte 8, raw byte 1 is padding.
+    let v: Vec<u8> = Vec::new();
+    v.push(104);
+    v.push(105);
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let p: ptr = PTR_NULL();
+    SLICE_AS_PTR(p, sl);
+    if PTR_BYTE_AT(p, 0) != 104 { panic(810); };
+    if PTR_BYTE_AT(p, 1) == 105 { panic(811); };
+    if PTR_BYTE_AT(p, 8) != 105 { panic(812); };
+}
+
+@test "def8 packed export u16 bytes"() {
+    let v: Vec<u16> = Vec::new();
+    v.push(0x1234);
+    v.push(0xABCD);
+    v.push(7);
+    let buf: [u8; 8] = [0; 8];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let (st, n) = sa_vec_export_packed_u16(&v, bp, 8);
+    if st != 0 { panic(820); };
+    if n != 6 { panic(821); };
+    if buf[0] != 0x34 { panic(822); };
+    if buf[1] != 0x12 { panic(823); };
+    if buf[2] != 0xCD { panic(824); };
+    if buf[3] != 0xAB { panic(825); };
+    if buf[4] != 7 { panic(826); };
+    if buf[5] != 0 { panic(827); };
+}
+
+@test "def8 packed export i32 bytes"() {
+    let v: Vec<i32> = Vec::new();
+    v.push(-2);
+    v.push(0x01020304);
+    v.push(-2147483648);
+    let buf: [u8; 16] = [0; 16];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let (st, n) = sa_vec_export_packed_i32(&v, bp, 16);
+    if st != 0 { panic(830); };
+    if n != 12 { panic(831); };
+    if buf[0] != 0xFE { panic(832); };
+    if buf[1] != 0xFF { panic(833); };
+    if buf[3] != 0xFF { panic(834); };
+    if buf[4] != 0x04 { panic(835); };
+    if buf[5] != 0x03 { panic(836); };
+    if buf[6] != 0x02 { panic(837); };
+    if buf[7] != 0x01 { panic(838); };
+    if buf[8] != 0x00 { panic(839); };
+    if buf[11] != 0x80 { panic(848); };
+}
+
+@test "def8 packed export f64 contract pending upstream vec f64 fix"() {
+    // Vec<f64> element storage is itself a known upstream defect
+    // (sla/demos/basic/POTENTIAL_ISSUES.md #24, recorded 2026-10-10,
+    // deferred): sa_vec_push takes the value as u64, so push()
+    // numerically converts an f64 instead of storing its bits, and
+    // the backends diverge on readback (SAB reads 0.0 for a pushed
+    // 1.5; the text backend's slot differs again). No export helper
+    // can recover bits the Vec never stored, so this test pins only
+    // what is backend-stable today: the export contract (status 0,
+    // byte count = len * 8) and the all-zero packed image of 0.0,
+    // the one value whose numeric conversion and bit image agree.
+    // Byte-exact f64 proofs (1.5 -> 00 00 00 00 00 00 F8 3F, ...)
+    // belong to the #24 fix round; the f64 wrapper's slot-image
+    // semantics are already the correct ones for that day.
+    let v: Vec<f64> = Vec::new();
+    v.push(0.0);
+    v.push(0.0);
+    v.push(0.0);
+    let buf: [u8; 32] = [0xEE; 32];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let (st, n) = sa_vec_export_packed_f64(&v, bp, 32);
+    if st != 0 { panic(840); };
+    if n != 24 { panic(841); };
+    if buf[0] != 0 { panic(842); };
+    if buf[7] != 0 { panic(843); };
+    if buf[15] != 0 { panic(844); };
+    if buf[23] != 0 { panic(845); };
+    if buf[24] != 0xEE { panic(846); };
+}
+
+@test "def8 packed export capacity failure is loud and untouched"() {
+    let v: Vec<u16> = Vec::new();
+    v.push(0x1234);
+    v.push(0xABCD);
+    v.push(7);
+    let buf: [u8; 8] = [0xEE; 8];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let (st, need) = sa_vec_export_packed_u16(&v, bp, 5);
+    if st != 1 { panic(850); };
+    if need != 6 { panic(851); };
+    if buf[0] != 0xEE { panic(852); };
+    if buf[5] != 0xEE { panic(853); };
+    // Exact capacity succeeds.
+    let (st2, n2) = sa_vec_export_packed_u16(&v, bp, 6);
+    if st2 != 0 { panic(854); };
+    if n2 != 6 { panic(855); };
+    if buf[1] != 0x12 { panic(856); };
+}
+
+@test "def8 packed export empty vec"() {
+    let v: Vec<u8> = Vec::new();
+    let np: ptr = PTR_NULL();
+    let (st, n) = sa_vec_export_packed_u8(&v, np, 0);
+    if st != 0 { panic(860); };
+    if n != 0 { panic(861); };
+    let w: Vec<f64> = Vec::new();
+    let (st2, n2) = sa_vec_export_packed_f64(&w, np, 0);
+    if st2 != 0 { panic(862); };
+    if n2 != 0 { panic(863); };
+}
+
+@test "def8 packed buffer read by c shaped consumer"() {
+    // Export u16 and i32 vecs packed, hand only (ptr, count) to
+    // packed readers, and round-trip the packed image through a
+    // C-side byte copy (sa_mem_copy is SA-level only, not callable
+    // from SLA; the loop below is the consumer's own memcpy): the
+    // recovered values must match.
+    let v: Vec<u16> = Vec::new();
+    v.push(1000);
+    v.push(2);
+    v.push(65535);
+    let buf: [u8; 8] = [0; 8];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let (st, n) = sa_vec_export_packed_u16(&v, bp, 8);
+    if st != 0 { panic(870); };
+    if n != 6 { panic(871); };
+    if c_read_u16le(bp, 0) != 1000 { panic(872); };
+    if c_read_u16le(bp, 1) != 2 { panic(873); };
+    if c_read_u16le(bp, 2) != 65535 { panic(874); };
+    let copy: [u8; 8] = [0; 8];
+    let cp: ptr = PTR_BYTE_ADD(&copy, 0);
+    let ci: u64 = 0;
+    while ci < n {
+        let cb: u8 = PTR_BYTE_AT(bp, ci);
+        let cdp: ptr = PTR_NULL();
+        PTR_BYTE_ADD(cdp, cp, ci);
+        PTR_WRITE_U8(cdp, cb);
+        ci = ci + 1;
+    }
+    if c_read_u16le(cp, 0) != 1000 { panic(875); };
+    if c_read_u16le(cp, 2) != 65535 { panic(876); };
+
+    let w: Vec<i32> = Vec::new();
+    w.push(-123456);
+    w.push(42);
+    let ibuf: [u8; 8] = [0; 8];
+    let ip: ptr = PTR_BYTE_ADD(&ibuf, 0);
+    let (st2, n2) = sa_vec_export_packed_i32(&w, ip, 8);
+    if st2 != 0 { panic(877); };
+    if n2 != 8 { panic(878); };
+    if c_read_i32le(ip, 0) != -123456 { panic(879); };
+    if c_read_i32le(ip, 1) != 42 { panic(880); };
+}

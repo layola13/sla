@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 38_nested_loops：嵌套 `for in` + 跳过（66）。
+// 与 146（`while` 嵌套版）互补，此处为区间版（跳过 j==1，加权累加）。
+
+fn main() -> i32 {
+    let t = 0;
+    for i in 0..3 {
+        for j in 0..3 {
+            if j == 1 { continue; };
+            t = t + i * 10 + j;
+        }
+    }
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 228 for continue"() {
+    let t = 0;
+    for i in 0..3 {
+        for j in 0..3 {
+            if j == 1 { continue; };
+            t = t + i * 10 + j;
+        }
+    }
+    if t != 66 { panic(22801); };
+}

@@ -1,0 +1,35 @@
+@import "sa_std/fmt.sai"
+@import "sa_std/time.sla"
+
+fn elapsed_millis_since_ns(started_ns: u64) -> u64 {
+    let started = Instant::from_raw_ns(started_ns);
+    return started.elapsed().as_millis();
+}
+
+async fn run() -> i32 {
+    let started_ns = instant_now_ns();
+    let elapsed_ms = elapsed_millis_since_ns(started_ns);
+    let min_elapsed_ms = duration_millis(1);
+    if elapsed_ms < min_elapsed_ms {
+        panic(92);
+    };
+    return 0;
+}
+
+fn instant_now_ns() -> u64 {
+    let started = Instant::now();
+    return started.raw_ns();
+}
+
+fn duration_millis(ms: u64) -> u64 {
+    return Duration::from_millis(ms).as_millis();
+}
+
+fn main() -> i32 {
+    println("{}", block_on_dummy());
+    return 0;
+};
+
+fn block_on_dummy() -> i32 {
+    return 1;
+}

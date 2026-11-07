@@ -1,0 +1,39 @@
+// Regression: compiler defect #4 (two independent root tasks of the
+// same async fn, polled in interleave, corrupted each other).
+//
+// Both tasks run the same loop-shaped async fn with different lengths;
+// the driver polls the long task to completion while also stepping the
+// short task inside the same loop. Each task must keep its own loop
+// state and finish with its own exact count. Before the fix, the eager
+// compilation plus the destructive single-shot poll state made the two
+// tasks interfere, so at least one result came out wrong.
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn spin_count(n: i32) -> i32 {
+    let i: i32 = 0;
+    while i < n {
+        let tick: i32 = future::defer_ready(0).await;
+        i = i + 1 + tick;
+    }
+    return i;
+}
+
+@test "interleaved root tasks of one async fn stay independent"() {
+    let ta = task::new(spin_count(100));
+    let tb = task::new(spin_count(5000));
+    let guard: i32 = 0;
+    while task::poll(tb) == false {
+        guard = guard + 1;
+        if guard > 100000 {
+            panic(7701);
+        };
+        let step: bool = task::poll(ta);
+    }
+    if task::result(ta) != 100 {
+        panic(7702);
+    };
+    if task::result(tb) != 5000 {
+        panic(7703);
+    };
+}

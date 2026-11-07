@@ -1,0 +1,4 @@
+@export shared_value(seed: i32) -> i32:
+L_ENTRY:
+    value = add seed, 0
+    return value

@@ -1,0 +1,92 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@main() -> i32:
+L_ENTRY:
+    tmp_0 = alloc 3
+    tmp_1 = 2
+    store tmp_0+0, tmp_1 as u8
+    !tmp_1
+    tmp_2 = 4
+    store tmp_0+1, tmp_2 as u8
+    !tmp_2
+    tmp_3 = 8
+    store tmp_0+2, tmp_3 as u8
+    !tmp_3
+    color = tmp_0
+    tmp_4 = load color+0 as u8
+    tmp_5 = tmp_4 as i32
+    tmp_6 = load color+1 as u8
+    tmp_7 = tmp_6 as i32
+    tmp_8 = add tmp_5, tmp_7
+    !tmp_5
+    !tmp_7
+    tmp_9 = load color+2 as u8
+    tmp_10 = tmp_9 as i32
+    tmp_11 = add tmp_8, tmp_10
+    !tmp_8
+    !tmp_10
+    total = tmp_11
+    tmp_12 = call @sa_fmt_u64(total, 10)
+    tmp_13 = call @sa_fmt_buffer_data(tmp_12)
+    tmp_14 = call @sa_fmt_buffer_len(tmp_12)
+    tmp_15 = tmp_13
+    call @sa_print_bytes(&tmp_15, tmp_14)
+    call @sa_fmt_buffer_free(^tmp_12)
+    !tmp_15
+    !tmp_14
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_16 = 0
+    !color
+    !total
+    return tmp_16
+
+@test "rosetta 036 tuple struct"():
+L_TEST_ENTRY_0:
+    tmp_17 = alloc 3
+    tmp_18 = 2
+    store tmp_17+0, tmp_18 as u8
+    !tmp_18
+    tmp_19 = 4
+    store tmp_17+1, tmp_19 as u8
+    !tmp_19
+    tmp_20 = 8
+    store tmp_17+2, tmp_20 as u8
+    !tmp_20
+    color = tmp_17
+    tmp_21 = load color+0 as u8
+    tmp_22 = tmp_21 as i32
+    tmp_23 = load color+1 as u8
+    tmp_24 = tmp_23 as i32
+    tmp_25 = add tmp_22, tmp_24
+    !tmp_22
+    !tmp_24
+    tmp_26 = load color+2 as u8
+    tmp_27 = tmp_26 as i32
+    tmp_28 = add tmp_25, tmp_27
+    !tmp_25
+    !tmp_27
+    total = tmp_28
+    tmp_29 = 14
+    tmp_30 = ne total, tmp_29
+    !tmp_29
+    br tmp_30 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_30
+    panic(36)
+
+L_ELSE_2:
+    !tmp_30
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !color
+    !total
+    return
+

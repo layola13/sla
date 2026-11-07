@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/sync/atomic.sa"
+
+fn atomic_fetch_add_sum() -> i32 {
+    let value = AtomicI32::new(5);
+    let old = value.fetch_add(3, Ordering::SeqCst);
+    let new = value.load(Ordering::SeqCst);
+    return old + new;
+}
+
+fn main() -> i32 {
+    let value = AtomicI32::new(5);
+    let old = value.fetch_add(3, Ordering::SeqCst);
+    let new = value.load(Ordering::SeqCst);
+    let result = old + new;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 109 109_atomic_fetch_add"() {
+    let got = atomic_fetch_add_sum();
+    if got != 13 {
+        panic(109);
+    }
+}

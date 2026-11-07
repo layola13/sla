@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 155_collatz / 135_pow_loop：
+// collatz(27) 步数 111（本函数计数口径：每次变换计 1，共 111 次到达 1）；2^10 = 1024。
+
+fn collatz_steps(mut_n: i32) -> i32 {
+    let x = mut_n;
+    let n: i32 = 0;
+    while x != 1 {
+        if x % 2 == 0 {
+            x = x / 2;
+        } else {
+            x = 3 * x + 1;
+        };
+        n = n + 1;
+    }
+    return n;
+}
+
+fn pow2(exp: i32) -> i32 {
+    let p: i32 = 1;
+    for i in 0..exp {
+        p = p * 2;
+    }
+    return p;
+}
+
+fn main() -> i32 {
+    println("{}", collatz_steps(27));
+    println("{}", pow2(10));
+    return 0;
+}
+
+@test "basic 49 collatz pow"() {
+    if collatz_steps(27) != 111 { panic(4901); };
+    if collatz_steps(1) != 0 { panic(4902); };
+    if pow2(10) != 1024 { panic(4903); };
+    if pow2(0) != 1 { panic(4904); };
+}

@@ -1,0 +1,73 @@
+@import "sa_std/vec.sa"
+
+// SCATTER-3 (7b) regression: a binding consumed in one branch by
+// store-moving it into a struct literal keeps an Active register in
+// the SA verifier's mask (a store does not consume the register),
+// while branch-merge compensation really releases it on the sibling
+// branch. The merge then saw Consumed vs Active and the text verifier
+// trapped PhiStateConflict (1015) in
+// struct_literal_call_arg_later_field_direct. The consuming branch
+// must additionally forget the register (`!name`) so both merge
+// predecessors agree on Consumed. Covered orientation: store-move in
+// the then branch of an if without else (the census shape). The
+// mirrored explicit-else orientation fails in stock for an adjacent
+// reason (compensation release vs checker phi-forget double-handle)
+// and is tracked as a residual, not part of this regression.
+
+struct Scatter3Ref {
+    value: Vec<i32>,
+    tick: i32,
+}
+
+struct Scatter3Holder {
+    resource: Scatter3Ref,
+}
+
+fn scatter3_make_ref(v: Vec<i32>, t: i32) -> Scatter3Ref {
+    return Scatter3Ref { value: v, tick: t };
+}
+
+fn scatter3_holder_len(h: Scatter3Holder) -> i32 {
+    return len(h.resource.value) as i32 + h.resource.tick;
+}
+
+fn scatter3_branch_then_moves(flag: bool) -> i32 {
+    let values: Vec<i32> = Vec::new();
+    values.push(1);
+    values.push(2);
+    let reference = scatter3_make_ref(values, 3);
+    let total: i32 = 0;
+    if flag {
+        let holder = Scatter3Holder { resource: reference };
+        total = scatter3_holder_len(holder);
+    };
+    return total;
+}
+
+fn scatter3_switch_arm_moves(flag: i32) -> i32 {
+    let values: Vec<i32> = Vec::new();
+    values.push(1);
+    values.push(2);
+    let reference = scatter3_make_ref(values, 3);
+    let total: i32 = 0;
+    switch flag {
+        1 => {
+            let holder = Scatter3Holder { resource: reference };
+            total = scatter3_holder_len(holder);
+        },
+        default => {
+            total = 0;
+        },
+    };
+    return total;
+}
+
+@test "scatter3 branch store-move merge then side"() {
+    if scatter3_branch_then_moves(true) != 5 { panic(96101); };
+    if scatter3_branch_then_moves(false) != 0 { panic(96102); };
+}
+
+@test "scatter3 switch arm store-move merge"() {
+    if scatter3_switch_arm_moves(1) != 5 { panic(96105); };
+    if scatter3_switch_arm_moves(0) != 0 { panic(96106); };
+}

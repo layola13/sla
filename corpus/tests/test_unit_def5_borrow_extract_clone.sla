@@ -1,0 +1,87 @@
+// DEF-5 regression corpus: borrowed handle-field extraction
+// (clone_on_extract, Jev ruling 0.86). Reading a String/Vec field out
+// of a place rooted in a borrow (`&s`, a `&T` parameter) or a pointer
+// deref (`*p`) used to hand the new binding an aliased view of the
+// field's heap object while drop elaboration treated the binding as
+// the owner — double-free/UAF against the still-live source struct,
+// surfacing as SAB signal 6 / BorrowConflict and text
+// PhiStateConflict (1015) on the branch shape. Extraction now
+// materializes a deep clone the new binding truly owns; the source
+// place is untouched, and method receivers / read-only uses keep the
+// in-place view semantics.
+//
+// Backend status: 3/3 pass on BOTH backends. On SA-text the 1015
+// verifier trap was gone first, but test 2's runtime stayed blocked
+// by DEF-6 — the plain owned-String rebind mis-lowering
+// (`let u = format("kg"); if c { u = format("mol"); }` stored the new
+// handle into the old String object's first word). DEF-6 is fixed in
+// the text assignment dispatch; see test_unit_def6_string_rebind.sla.
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+@import "sa_std/core/box.sa"
+
+struct Qty {
+    v: i64, unit: String,
+}
+
+fn get_unit_len(q: &Qty) -> u64 {
+    let u = q.unit;
+    return STR_LEN(u) as u64;
+}
+
+fn get_unit(q: &Qty) -> String {
+    return q.unit;
+}
+
+@test "def5 string extract through borrow param clones"() {
+    let a = Qty { v: 1, unit: format("kg") };
+    if get_unit_len(&a) != 2 { panic(1701); };
+    // The source field must still be alive and intact after the
+    // extraction above was dropped at the callee's scope end.
+    let u2 = (&a).unit;
+    if STR_LEN(u2) as u64 != 2 { panic(1702); };
+    let owned = get_unit(&a);
+    if STR_LEN(owned) as u64 != 2 { panic(1703); };
+    let u3 = (&a).unit;
+    if STR_LEN(u3) as u64 != 2 { panic(1704); };
+}
+
+fn pick_len(a: &Qty, b: &Qty, use_b: bool) -> u64 {
+    let u = a.unit;
+    if use_b { u = b.unit; };
+    return STR_LEN(u) as u64;
+}
+
+@test "def5 string extract reassign across branch clones"() {
+    let a = Qty { v: 1, unit: format("kg") };
+    let b = Qty { v: 2, unit: format("mol") };
+    if pick_len(&a, &b, false) != 2 { panic(1705); };
+    if pick_len(&a, &b, true) != 3 { panic(1706); };
+    let ua = (&a).unit;
+    if STR_LEN(ua) as u64 != 2 { panic(1707); };
+    let ub = (&b).unit;
+    if STR_LEN(ub) as u64 != 3 { panic(1708); };
+}
+
+struct AuthCfg {
+    secret: Vec<u8>,
+    rounds: u64,
+}
+
+fn clone_secret_len(c: *AuthCfg) -> u64 {
+    let s = (*c).secret;
+    return len(s) as u64;
+}
+
+@test "def5 vec extract through deref clones"() {
+    let cfg = Box::into_raw(Box::new(AuthCfg { secret: Vec::new(), rounds: 0 }));
+    (*cfg).secret.push(7);
+    (*cfg).secret.push(8);
+    (*cfg).secret.push(9);
+    // Two independent extractions (the slaredis D-2 shape: the first
+    // connection's clone drained the shared auth secret).
+    if clone_secret_len(cfg) != 3 { panic(1709); };
+    if clone_secret_len(cfg) != 3 { panic(1710); };
+    if len((*cfg).secret) as u64 != 3 { panic(1711); };
+    let done_cfg = unsafe { Box::from_raw(cfg) };
+}

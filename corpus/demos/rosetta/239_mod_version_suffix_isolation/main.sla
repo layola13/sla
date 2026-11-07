@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn version_suffix_isolated_versions() -> i32 {
+    let codec_v1 = 1;
+    let codec_v2 = 1;
+    return codec_v1 + codec_v2;
+}
+
+fn main() -> i32 {
+    let codec_v1 = 1;
+    let codec_v2 = 1;
+    let result = codec_v1 + codec_v2;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 239 mod version suffix isolation"() {
+    let got = version_suffix_isolated_versions();
+    if got != 2 {
+        panic(239);
+    };
+}

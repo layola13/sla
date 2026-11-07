@@ -1,0 +1,18 @@
+@import "sa_std/encoding/json.sa"
+@import "sa_std/encoding/json.sai"
+@import "sa_std/string.sai"
+
+[MACRO] SLA_JSON_OBJECT_GET %out_node, %node, %key, %key_len
+    __sla_jog_slot_%out_node = stack_alloc 8
+    __sla_jog_tmp_%out_node = call @sa_json_object_get(%node, &%key, %key_len, &__sla_jog_slot_%out_node)
+    %out_node = load __sla_jog_slot_%out_node+0 as ptr
+    !__sla_jog_tmp_%out_node
+[END_MACRO]
+
+[MACRO] SLA_JSON_STRING_PTR %out_ptr, %node
+    %out_ptr = call @sa_json_string_ptr(%node)
+[END_MACRO]
+
+[MACRO] SLA_JSON_STRING_LEN %out_len, %node
+    %out_len = call @sa_json_string_len(%node)
+[END_MACRO]

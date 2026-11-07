@@ -1,0 +1,56 @@
+@import "sa_std/redis.sla"
+
+// MINIM R4 (isolation): redis_parse_done / redis_parse_fail /
+// redis_parse_incomplete / redis_scan_line -- none of them calls
+// redis_parse_value. Same assertions as the shard's parse file.
+
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+fn reg3_crlf(v: Vec<u8>) -> Vec<u8> {
+    v.push(13);
+    v.push(10);
+    return v;
+}
+
+@test "minim parse constructors isolated"() {
+    let buf = reg3_bytes(STR_PTR("ab"), STR_LEN("ab"));
+    let d = redis_parse_done(buf, redis_int_value(1), 9);
+    if d.ready == false { panic(261); };
+    if d.status != SA_STD_OK { panic(262); };
+    if d.next_pos != 9 { panic(263); };
+    if redis_value_int(&d.value) != 1 { panic(264); };
+    let buf2 = reg3_bytes(STR_PTR("ab"), STR_LEN("ab"));
+    let f = redis_parse_fail(buf2, 3);
+    if f.ready { panic(265); };
+    if f.status != SA_STD_ERR_NET { panic(266); };
+    if f.next_pos != 3 { panic(267); };
+    if redis_value_kind(&f.value) != SA_REDIS_KIND_INVALID { panic(268); };
+    let buf3 = reg3_bytes(STR_PTR("ab"), STR_LEN("ab"));
+    let i = redis_parse_incomplete(buf3, 4);
+    if i.ready { panic(269); };
+    if i.status != SA_STD_OK { panic(270); };
+    if i.next_pos != 4 { panic(271); };
+}
+
+@test "minim scan line isolated"() {
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, STR_PTR("abc"), STR_LEN("abc"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR("def"), STR_LEN("def"));
+    let sl: Slice<u8> = VEC_AS_SLICE(w);
+    let s1 = redis_scan_line(&sl, 0, 8);
+    if s1.state != 1 { panic(281); };
+    if s1.content_end != 3 { panic(282); };
+    if s1.next != 5 { panic(283); };
+    let s2 = redis_scan_line(&sl, 5, 8);
+    if s2.state != 0 { panic(284); };
+    let w2: Vec<u8> = Vec::new();
+    w2 = redis_push_lit(w2, STR_PTR("abc"), STR_LEN("abc"));
+    w2.push(10);
+    let sl2: Slice<u8> = VEC_AS_SLICE(w2);
+    let s3 = redis_scan_line(&sl2, 0, 4);
+    if s3.state != 2 { panic(285); };
+}

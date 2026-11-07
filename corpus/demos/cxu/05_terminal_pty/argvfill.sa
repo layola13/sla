@@ -1,0 +1,24 @@
+// ARGV_FILLn: fills a [u64; 2N] array (layout-identical to N (ptr, len)
+// pairs) from .sla string registers. Modeled on demo D1's ARGV_FILL1;
+// ptr -> u64 casts are not allowed in .sla, hence SA macros.
+
+[MACRO] ARGV_FILL1 %arr_ptr, %p0, %l0
+    store %arr_ptr+0, %p0 as ptr
+    store %arr_ptr+8, %l0 as u64
+[END_MACRO]
+
+[MACRO] ARGV_FILL2 %arr_ptr, %p0, %l0, %p1, %l1
+    store %arr_ptr+0, %p0 as ptr
+    store %arr_ptr+8, %l0 as u64
+    store %arr_ptr+16, %p1 as ptr
+    store %arr_ptr+24, %l1 as u64
+[END_MACRO]
+
+[MACRO] ARGV_FILL3 %arr_ptr, %p0, %l0, %p1, %l1, %p2, %l2
+    store %arr_ptr+0, %p0 as ptr
+    store %arr_ptr+8, %l0 as u64
+    store %arr_ptr+16, %p1 as ptr
+    store %arr_ptr+24, %l1 as u64
+    store %arr_ptr+32, %p2 as ptr
+    store %arr_ptr+40, %l2 as u64
+[END_MACRO]

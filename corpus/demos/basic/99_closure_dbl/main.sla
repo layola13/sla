@@ -1,0 +1,16 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 30_closure：单参闭包翻倍（21*2=42）。
+// 与 20（捕获 + 高阶手写循环）互补，此处为最简闭包绑定调用形（写法见 57）。
+
+fn main() -> i32 {
+    let f = |x: int| x * 2;
+    println("{}", f(21));
+    return 0;
+}
+
+@test "basic 99 closure dbl"() {
+    let f = |x: int| x * 2;
+    if f(21) != 42 { panic(9901); };
+}

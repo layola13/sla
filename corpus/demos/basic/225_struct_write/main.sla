@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 13_struct：单层字段读写（和 7，改后积 40）。
+// 与 87（嵌套写）互补，此处为单层外部写。
+
+struct Pt { x: i32, y: i32 }
+
+fn main() -> i32 {
+    let p = Pt { x: 3, y: 4 };
+    println("{}", p.x + p.y);
+    p.x = 10;
+    println("{}", p.x * p.y);
+    return 0;
+}
+
+@test "basic 225 struct write"() {
+    let p = Pt { x: 3, y: 4 };
+    if p.x + p.y != 7 { panic(22501); };
+    p.x = 10;
+    if p.x * p.y != 40 { panic(22502); };
+}

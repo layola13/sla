@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 710_top_arr_indexof：带起始位查找（2,-1）。
+// 116 的延伸：`from` 起始位 + 未命中回 `-1`（与 17/21/116 同口径）。
+
+fn index_of_from(a: [i32; 3], v: i32, from: i32) -> i32 {
+    let i = from;
+    while i < 3 {
+        if a[i] == v { return i; };
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn main() -> i32 {
+    let a: [i32; 3] = [1, 2, 1];
+    println("{},{}", index_of_from(a, 1, 1), index_of_from(a, 9, 0));
+    return 0;
+}
+
+@test "basic 140 indexof from"() {
+    let a: [i32; 3] = [1, 2, 1];
+    if index_of_from(a, 1, 1) != 2 { panic(14001); };
+    if index_of_from(a, 1, 0) != 0 { panic(14002); };
+    if index_of_from(a, 9, 0) != -1 { panic(14003); };
+}

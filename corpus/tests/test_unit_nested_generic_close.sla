@@ -1,0 +1,18 @@
+@import "sa_std/vec.sa"
+
+fn nested_len(values: Vec<Vec<i32>>) -> i32 {
+    return len(values) as i32;
+}
+
+@test "nested generic close parses without spacing workaround"() {
+    let inner_a: Vec<i32> = Vec::new();
+    let inner_b: Vec<i32> = Vec::new();
+    inner_a.push(1);
+    inner_b.push(2);
+    let outer: Vec<Vec<i32>> = Vec::new();
+    outer.push(inner_a);
+    outer.push(inner_b);
+    if nested_len(outer) != 2 {
+        panic(9200);
+    };
+}

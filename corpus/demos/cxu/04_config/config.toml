@@ -1,0 +1,28 @@
+# Sample codex-style configuration for the D4 demo (distilled from the
+# shapes CXU reads and health-checks in codex config.toml files).
+model = "gpt-cxu"
+temperature = 0.2
+max_turns = 42
+debug = false
+
+[model_providers.cxu]
+name = "CXU Relay"
+base_url = "https://example.invalid/v1"
+wire_api = "responses"
+requires_auth = true
+
+[mcp_servers.jex]
+command = "node"
+args = ["server.js", "--port", "8080"]
+
+[mcp_servers.jex.env]
+API_KEY = "redacted"
+RETRIES = 3
+
+[[servers]]
+host = "a.example"
+port = 8001
+
+[[servers]]
+host = "b.example"
+port = 8002

@@ -1,0 +1,12 @@
+@import "sa_std/fmt.sai"
+@import "sa_std/time.sla"
+
+fn unix_now_millis() -> u64 {
+    return SystemTime::now().duration_since(SystemTime::unix_epoch()).unwrap().as_millis();
+}
+
+fn main() -> i32 {
+    let t = unix_now_millis();
+    println("{}", t);
+    return 0;
+};

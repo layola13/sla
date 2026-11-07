@@ -1,0 +1,79 @@
+// 308 - Rest Patterns (..)
+// SA: 用 DESTRUCT_FIRST_N 宏模拟 Rust 的 [a, b, ..] 和 (head, ..)
+// 只提取前 N 个元素，忽略剩余
+
+@import "sa_std/io/print.sai"
+
+@const RESULT_OK = utf8:"30,100\n"
+@const RESULT_ERR = utf8:"error\n"
+
+#def Tuple3_SIZE = 12
+#def Tuple3_0 = +0
+#def Tuple3_1 = +4
+#def Tuple3_2 = +8
+
+// DESTRUCT_PAIR: 从连续内存中提取前两个 i32
+[MACRO] DESTRUCT_PAIR %out_a, %out_b, %base
+    %out_a = load %base+0 as i32
+    %out_b = load %base+4 as i32
+[END_MACRO]
+
+// DESTRUCT_FIRST: 从结构体中提取第一个字段
+[MACRO] DESTRUCT_FIRST %out, %base, %offset
+    %out = load %base+%offset as i32
+[END_MACRO]
+
+@sum_first_two(&arr: ptr) -> i32:
+L_ENTRY:
+    EXPAND DESTRUCT_PAIR a, b, arr
+    sum = add a, b
+    !a
+    !b
+    !arr
+    return sum
+
+@head(&t: ptr) -> i32:
+L_ENTRY:
+    EXPAND DESTRUCT_FIRST first, t, Tuple3_0
+    !t
+    return first
+
+@main() -> i32:
+L_ENTRY:
+    // arr = [10, 20, 30, 40]
+    arr = alloc 16
+    store arr+0, 10 as i32
+    store arr+4, 20 as i32
+    store arr+8, 30 as i32
+    store arr+12, 40 as i32
+
+    s = call @sum_first_two(&arr)
+
+    // tuple = (100, 200, 300)
+    tuple = alloc Tuple3_SIZE
+    store tuple+Tuple3_0, 100 as i32
+    store tuple+Tuple3_1, 200 as i32
+    store tuple+Tuple3_2, 300 as i32
+
+    h = call @head(&tuple)
+
+    ok_s = eq s, 30
+    ok_h = eq h, 100
+    ok = and ok_s, ok_h
+    !s
+    !h
+    !ok_s
+    !ok_h
+    !arr
+    !tuple
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    !ok
+    call @sa_print_bytes(&RESULT_OK, 5)
+    return 0
+
+L_ERR:
+    !ok
+    call @sa_print_bytes(&RESULT_ERR, 6)
+    return 1

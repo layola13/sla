@@ -1,0 +1,71 @@
+// Goroutine syntax batch P5: async interop. Async functions are
+// driven from synchronous goroutine entries through the std
+// block_on driver (R1 forbids spawning async functions
+// directly); non-blocking channel forms stay legal inside async
+// bodies (R2 forbids only the blocking forms).
+
+@import "sa_std/globals.sai"
+@import "sa_std/async.sla"
+@import "sa_std/task.sai"
+
+async fn go_base() -> i32 {
+    return 40;
+}
+
+async fn go_compute() -> i32 {
+    let b = go_base().await;
+    return b + 2;
+}
+
+fn go_drive(arg: u64) {
+    let v = sched_block_on_timeout(go_compute(), 10000);
+    let rc = sa_global_u64_set("interop_v", 8, v as u64);
+    if rc != 0 { panic(9801); };
+}
+
+@test "async fn driven by block_on inside a goroutine"() {
+    let h = go go_drive(0);
+    let status = sa_task_join(h);
+    if status != 0 { panic(9802); };
+    let v: u64 = 0;
+    let rc = sa_global_u64_get("interop_v", 8, &v);
+    if rc != 0 { panic(9803); };
+    if v != 42 { panic(9804); };
+}
+
+async fn go_probe(ch: Chan<u64>) -> i32 {
+    select {
+        case let (v, closed) = ch.recv() {
+            return 1;
+        }
+        default {
+            return 0;
+        }
+    }
+}
+
+fn go_probe_drive(arg: u64) {
+    let ch: Chan<u64> = Chan::new(1);
+    let first = sched_block_on_timeout(go_probe(ch), 10000);
+    let rc1 = sa_global_u64_set("probe_first", 8, first as u64);
+    if rc1 != 0 { panic(9810); };
+    ch.send(9);
+    let second = sched_block_on_timeout(go_probe(ch), 10000);
+    let rc2 = sa_global_u64_set("probe_second", 8, second as u64);
+    if rc2 != 0 { panic(9811); };
+    ch.destroy();
+}
+
+@test "non-blocking select with default is legal in async fns"() {
+    let h = go go_probe_drive(0);
+    let status = sa_task_join(h);
+    if status != 0 { panic(9812); };
+    let f: u64 = 0;
+    let rc1 = sa_global_u64_get("probe_first", 8, &f);
+    if rc1 != 0 { panic(9813); };
+    if f != 0 { panic(9814); };
+    let s: u64 = 0;
+    let rc2 = sa_global_u64_get("probe_second", 8, &s);
+    if rc2 != 0 { panic(9815); };
+    if s != 1 { panic(9816); };
+}

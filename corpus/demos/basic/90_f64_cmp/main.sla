@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 22_f64_cmp：浮点运算比较（真，真，真）。
+// 布尔打印写法见 20（`println("{}", pred)`），浮点字面量探针已验证。
+
+fn main() -> i32 {
+    let a = 7.5;
+    let b = 2.5;
+    println("{},{},{}", a + b == 10.0, a - b > 4.9, a * b == 18.75);
+    return 0;
+}
+
+@test "basic 90 f64 cmp"() {
+    let a = 7.5;
+    let b = 2.5;
+    if (a + b) != 10.0 { panic(9001); };
+    if !(a - b > 4.9) { panic(9002); };
+    if (a * b) != 18.75 { panic(9003); };
+}

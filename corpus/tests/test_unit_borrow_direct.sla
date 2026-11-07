@@ -1,0 +1,59 @@
+fn read_twice(&value: i32) -> i32 {
+    let left = *value;
+    let right = *value;
+    left + right
+};
+
+fn read_nested(value: i32) -> i32 {
+    let borrowed = &value;
+    *borrowed
+};
+
+struct DirectBorrowPoint { pad: i32, value: i32 }
+
+struct DirectBorrowInner { value: i32 }
+
+struct DirectBorrowOuter { pad: i32, inner: DirectBorrowInner }
+
+fn read_field_borrow(item: DirectBorrowPoint) -> i32 {
+    let borrowed = &item.value;
+    *borrowed
+};
+
+fn read_nested_field_borrow(item: DirectBorrowOuter) -> i32 {
+    let borrowed = &item.inner.value;
+    *borrowed
+};
+
+fn read_borrowed_deref(&value: i32) -> i32 {
+    let borrowed = &*value;
+    *borrowed
+};
+
+fn read_index_borrow(values: [i32; 3], index: int) -> i32 {
+    let borrowed = &values[index];
+    *borrowed
+};
+
+fn read_borrowed_index_borrow(values: &[i32; 3], index: int) -> i32 {
+    let borrowed = &values[index];
+    *borrowed
+};
+
+@test "direct borrow deref"() {
+    let value: i32 = 6;
+    if read_twice(&value) != 12 { panic(30701); };
+    if read_nested(8) != 8 { panic(30702); };
+    let values = [4i32, 5i32, 6i32];
+    if read_index_borrow(values, 1) != 5 { panic(30706); };
+    if read_borrowed_index_borrow(&values, 2) != 6 { panic(30707); };
+};
+
+@test "direct borrow precedence"() {
+    let item = DirectBorrowPoint { pad: 3, value: 9 };
+    if read_field_borrow(item) != 9 { panic(30703); };
+    let outer = DirectBorrowOuter { pad: 1, inner: DirectBorrowInner { value: 13 } };
+    if read_nested_field_borrow(outer) != 13 { panic(30705); };
+    let value: i32 = 10;
+    if read_borrowed_deref(&value) != 10 { panic(30704); };
+};

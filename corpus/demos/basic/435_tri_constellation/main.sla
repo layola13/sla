@@ -1,0 +1,81 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 素数星座三向计数（<=50：孪生 6，三元 7，四元 2）。
+// 意对标 431 三元组的三星座版（366/430/431 合取）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn twin_count(limit: int) -> int {
+    let c = 0;
+    let p = 3;
+    while p + 2 <= limit {
+        if is_prime(p) == 1 {
+            if is_prime(p + 2) == 1 { c = c + 1; };
+        };
+        p = p + 1;
+    }
+    return c;
+}
+
+fn trip_a(p: int) -> int {
+    if is_prime(p) != 1 { return 0; };
+    if is_prime(p + 2) != 1 { return 0; };
+    if is_prime(p + 6) != 1 { return 0; };
+    return 1;
+}
+
+fn trip_b(p: int) -> int {
+    if is_prime(p) != 1 { return 0; };
+    if is_prime(p + 4) != 1 { return 0; };
+    if is_prime(p + 6) != 1 { return 0; };
+    return 1;
+}
+
+fn triplet_count(limit: int) -> int {
+    let c = 0;
+    let k = 2;
+    while k + 6 <= limit {
+        if trip_a(k) == 1 { c = c + 1; };
+        if trip_b(k) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn quad_count(limit: int) -> int {
+    let c = 0;
+    let k = 2;
+    while k + 8 <= limit {
+        if is_prime(k) == 1 {
+            if is_prime(k + 2) == 1 {
+                if is_prime(k + 6) == 1 {
+                    if is_prime(k + 8) == 1 { c = c + 1; };
+                };
+            };
+        };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", twin_count(50), triplet_count(50), quad_count(50));
+    return 0;
+}
+
+@test "basic 435 tri constellation"() {
+    if twin_count(50) != 6 { panic(43501); };
+    if triplet_count(50) != 7 { panic(43502); };
+    if quad_count(50) != 2 { panic(43503); };
+}

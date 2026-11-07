@@ -1,0 +1,24 @@
+<Component name="TokenView">
+  <state>
+    received: i64 = 0
+    done: i64 = 0
+  </state>
+
+  <section class="token-view">
+    <h1>Token stream</h1>
+    <p>Received: {received}</p>
+    <p>Done: {done}</p>
+    <button onclick={^on_token}>token</button>
+    <button onclick={^on_done}>done</button>
+  </section>
+
+  fn on_token() {
+    received = received + 1;
+    render();
+  }
+
+  fn on_done() {
+    done = 1;
+    render();
+  }
+</Component>

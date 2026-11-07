@@ -1,0 +1,31 @@
+mod math {
+    pub fn double(value: i32) -> i32 {
+        return value + value;
+    }
+
+    pub fn add_offset(value: i32, offset: i32) -> i32 {
+        return value + offset;
+    }
+}
+
+using math;
+
+struct NumberBox {
+    value: i32,
+}
+
+impl NumberBox {
+    fn double(self) -> i32 {
+        return self.value.double();
+    }
+
+    fn add_offset(self, offset: i32) -> i32 {
+        return self.value.add_offset(offset);
+    }
+}
+
+@test "using static extension resolves module functions"() {
+    let boxed = NumberBox { value: 12 };
+    if boxed.double() != 24 { panic(31000); };
+    if boxed.add_offset(5) != 17 { panic(31001); };
+}

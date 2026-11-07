@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 166_splice_do：`slice(1)` 尾段（长 3，首元 2）。
+// 与 65/83（手工切片）同口径，此处为开区间尾段版。
+
+fn main() -> i32 {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    a.push(4);
+    let b: Vec<i32> = Vec::new();
+    for i in 1..4 {
+        b.push(a[i]);
+    }
+    println("{},{}", len(b), b[0]);
+    return 0;
+}
+
+@test "basic 89 splice"() {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    a.push(4);
+    let b: Vec<i32> = Vec::new();
+    for i in 1..4 {
+        b.push(a[i]);
+    }
+    if len(b) != 3 { panic(8901); };
+    if b[0] != 2 { panic(8902); };
+}

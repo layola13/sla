@@ -1,0 +1,9 @@
+@import "shadow/registry/../left/index.sa"
+@import "shadow/registry/../right/index.sa"
+
+@shadow_registry_value() -> i32:
+L_ENTRY:
+    left = call @left_value()
+    right = call @right_value()
+    total = add left, right
+    return total

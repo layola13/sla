@@ -1,0 +1,106 @@
+@import "sa_std/vec.sa"
+@import "sa_std/string.sa"
+
+// DEF triage batch 11 (MOVEVEC-1): a tuple literal element taken from an
+// owned local binding must MOVE into the aggregate. Both backends used
+// to store the element handle and still drop the source local at scope
+// exit (SA-text emitted VEC_FREE for the source right after the store),
+// so the caller received a dangling Vec: contents corrupted on a single
+// call, double-free / segfault under the loop-carried reassign idiom
+// `let x2 = f(x); x = x2;` where f returns a tuple. Elements that are
+// direct call results were never affected (no named local to drop),
+// which is why the (bool, Vec) ENVRET shape survived. Registration:
+// duck2sla BASE_GAPS.md MOVEVEC-1 (dispatch threading a Vec through a
+// (Vec, n) tuple return in an accept loop).
+
+fn tri_grow(v: Vec<u8>, tag: u64) -> (Vec<u8>, u64) {
+    let o: Vec<u8> = v;
+    o.push(7);
+    return (o, tag + 1);
+}
+
+fn tri_fresh_vec() -> Vec<u8> {
+    let o: Vec<u8> = Vec::new();
+    o.push(7);
+    return o;
+}
+
+fn tri_tuple_via_local() -> (Vec<u8>, u64) {
+    let o: Vec<u8> = Vec::new();
+    o.push(7);
+    let t = (o, 1);
+    return t;
+}
+
+fn tri_tuple_call_result() -> (Vec<u8>, u64) {
+    return (tri_fresh_vec(), 1);
+}
+
+struct TriEnt {
+    name: String,
+    size: u64,
+}
+
+fn tri_dispatch(files: Vec<TriEnt>, tag: u64) -> (Vec<TriEnt>, u64) {
+    let f: Vec<TriEnt> = files;
+    f.push(TriEnt { name: format("ent"), size: tag });
+    return (f, tag + 1);
+}
+
+@test "tuple element from owned local keeps its buffer"() {
+    let (y, n) = tri_tuple_via_local();
+    if len(y) != 1 { panic(5101); };
+    if y[0] != 7 { panic(5102); };
+    if n != 1 { panic(5103); };
+}
+
+@test "tuple element call result control"() {
+    let (y, n) = tri_tuple_call_result();
+    if len(y) != 1 { panic(5111); };
+    if y[0] != 7 { panic(5112); };
+    if n != 1 { panic(5113); };
+}
+
+@test "tuple return loop reassign 100 iterations"() {
+    let x: Vec<u8> = Vec::new();
+    let n: u64 = 0;
+    let i: u64 = 0;
+    while i < 100 {
+        let r = tri_grow(x, i);
+        x = r.0;
+        n = r.1;
+        i = i + 1;
+    }
+    if len(x) != 100 { panic(5121); };
+    if x[99] != 7 { panic(5122); };
+    if n != 100 { panic(5123); };
+}
+
+@test "tuple destructure loop reassign 100 iterations"() {
+    let x: Vec<u8> = Vec::new();
+    let n: u64 = 0;
+    let i: u64 = 0;
+    while i < 100 {
+        let (x2, n2) = tri_grow(x, i);
+        x = x2;
+        n = n2;
+        i = i + 1;
+    }
+    if len(x) != 100 { panic(5131); };
+    if n != 100 { panic(5132); };
+}
+
+@test "aggregate vec tuple dispatch loop"() {
+    let files: Vec<TriEnt> = Vec::new();
+    let n: u64 = 0;
+    let i: u64 = 0;
+    while i < 100 {
+        let r = tri_dispatch(files, i);
+        files = r.0;
+        n = r.1;
+        i = i + 1;
+    }
+    if len(files) != 100 { panic(5141); };
+    if n != 100 { panic(5142); };
+    if files[99].size != 99 { panic(5143); };
+}

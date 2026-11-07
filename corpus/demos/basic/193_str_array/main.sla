@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 286_str_elem 的读值部（1,2）。
+// 定长字符串数组 + `str_eq` 断言（与 95/122 的字符串口径一致；
+// `split` 等方法暂无，此处只做存取）；
+
+fn main() -> i32 {
+    let f = ["ab", "cd"];
+    let r = 0;
+    if str_eq(f[0], "ab") { r = 1; };
+    println("{},{}", r, len(f));
+    return 0;
+}
+
+@test "basic 193 str array"() {
+    let f = ["ab", "cd"];
+    if !str_eq(f[0], "ab") { panic(19301); };
+    if !str_eq(f[1], "cd") { panic(19302); };
+    if len(f) != 2 { panic(19303); };
+}

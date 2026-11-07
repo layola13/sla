@@ -1,0 +1,3 @@
+[MACRO] STORE_I32 %base, %value
+    store %base+0, %value as i32
+[END_MACRO]

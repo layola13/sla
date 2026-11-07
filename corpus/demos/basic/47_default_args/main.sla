@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 150_multi_default（f(a=1,b=2,c=3)）语义：f()=6, f(10)=15, f(10,20,30)=60。
+// 注意（POTENTIAL_ISSUES #8）：SLA 形参不支持 `= 默认值`（parse 报 SyntaxError），
+// 此处用零参/全参两个显式函数表达同一语义。
+
+fn f_default() -> i32 {
+    return 1 + 2 + 3;
+}
+
+fn f_full(a: i32, b: i32, c: i32) -> i32 {
+    return a + b + c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", f_default(), f_full(10, 2, 3), f_full(10, 20, 30));
+    return 0;
+}
+
+@test "basic 47 default args"() {
+    if f_default() != 6 { panic(4701); };
+    if f_full(10, 2, 3) != 15 { panic(4702); };
+    if f_full(10, 20, 30) != 60 { panic(4703); };
+}

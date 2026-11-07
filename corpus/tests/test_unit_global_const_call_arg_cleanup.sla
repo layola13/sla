@@ -1,0 +1,25 @@
+const GLOBAL_MARKER: i32 = 7;
+
+fn matches_marker(value: i32, marker: i32) -> bool {
+    return value == marker;
+}
+
+fn global_const_call_arg_cleanup_demo() -> i32 {
+    let i: i32 = 0;
+    let hits: i32 = 0;
+    while i < 10 {
+        if matches_marker(i, GLOBAL_MARKER) {
+            hits = hits + 1;
+        };
+        i = i + 1;
+    }
+    return hits;
+}
+
+fn main() -> i32 {
+    return global_const_call_arg_cleanup_demo();
+}
+
+@test "global scalar const call arg cleans up across loop branch"() {
+    if global_const_call_arg_cleanup_demo() != 1 { panic(17300); };
+}

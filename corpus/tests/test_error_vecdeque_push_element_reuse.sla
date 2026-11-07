@@ -1,0 +1,20 @@
+@import "sa_std/vec_deque.sa"
+@import "sa_std/string.sa"
+
+// DEF-VECDEQUE-PUSH-CONSUME (registered probe p11): push_back moves
+// a non-copy element into the deque. Pushing the same owned binding
+// twice must be rejected with a language-level UseAfterMove naming
+// the variable and `push_back` (judge by standalone `sla check`,
+// never by the test runner). Vec.push has the same discipline via
+// tests/test_error_push_element_reuse.sla.
+fn bad_push_reuse(k: String) -> VecDeque<String> {
+    let queue: VecDeque<String> = VecDeque::new();
+    queue.push_back(k);
+    queue.push_back(k);
+    return queue;
+}
+
+fn main() -> i32 {
+    let r = bad_push_reuse(format("ab"));
+    return len(r) as i32;
+}

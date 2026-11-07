@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn ffi_cxx_symbol_name_count() -> i32 { let mangled_name = 1; let extern_c_shim = 1; return mangled_name + extern_c_shim; }
+fn main() -> i32 { let mangled_name = 1; let extern_c_shim = 1; let result = mangled_name + extern_c_shim; println("{}", result); return result; }
+@test "rosetta 288 ffi cxx name mangling"() { let got = ffi_cxx_symbol_name_count(); if got != 2 { panic(288); }; }

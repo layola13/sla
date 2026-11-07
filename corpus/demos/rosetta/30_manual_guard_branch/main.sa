@@ -1,0 +1,184 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_eval_guard = vtable { call = @sla__eval_guard }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__eval_guard(opt: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = alloc 4
+    jmp L_MATCH_CHECK_0_2
+
+L_MATCH_CHECK_0_2:
+    tmp_1 = load opt+0 as i64
+    tmp_2 = 1
+    tmp_3 = eq tmp_1, tmp_2
+    !tmp_1
+    !tmp_2
+    br tmp_3 -> L_MATCH_CASE_0_2, L_MATCH_CHECK_1_2
+
+L_MATCH_CASE_0_2:
+    value = load opt+8 as i32
+    tmp_4 = 3
+    tmp_5 = sgt value, tmp_4
+    !tmp_4
+    br tmp_5 -> L_MATCH_GUARD_BODY_3, L_MATCH_GUARD_FAIL_4
+
+L_MATCH_GUARD_FAIL_4:
+    !tmp_5
+    !value
+    jmp L_MATCH_CHECK_1_2
+
+L_MATCH_GUARD_BODY_3:
+    !tmp_5
+    !tmp_3
+    tmp_6 = add value, 0
+    store tmp_0+0, tmp_6 as i32
+    !tmp_6
+    !value
+    jmp L_MATCH_MERGE_0
+
+L_MATCH_CHECK_1_2:
+    !tmp_3
+    tmp_7 = load opt+0 as i64
+    tmp_8 = 1
+    tmp_9 = eq tmp_7, tmp_8
+    !tmp_7
+    !tmp_8
+    br tmp_9 -> L_MATCH_CASE_1_2, L_MATCH_CHECK_2_2
+
+L_MATCH_CASE_1_2:
+    value = load opt+8 as i32
+    !tmp_9
+    tmp_10 = 0
+    store tmp_0+0, tmp_10 as i32
+    !tmp_10
+    !value
+    jmp L_MATCH_MERGE_0
+
+L_MATCH_CHECK_2_2:
+    !tmp_9
+    tmp_11 = load opt+0 as i64
+    tmp_12 = 0
+    tmp_13 = eq tmp_11, tmp_12
+    !tmp_11
+    !tmp_12
+    br tmp_13 -> L_MATCH_CASE_2_2, L_MATCH_NO_MATCH_1
+
+L_MATCH_CASE_2_2:
+    !tmp_13
+    tmp_14 = 0
+    tmp_15 = 1
+    tmp_16 = sub tmp_14, tmp_15
+    !tmp_14
+    !tmp_15
+    store tmp_0+0, tmp_16 as i32
+    !tmp_16
+    jmp L_MATCH_MERGE_0
+
+L_MATCH_NO_MATCH_1:
+    !tmp_13
+    panic(1)
+
+L_MATCH_MERGE_0:
+    tmp_17 = load tmp_0+0 as i32
+    !tmp_0
+    result = tmp_17
+    !opt
+    return result
+
+@main() -> i32:
+L_ENTRY:
+    value = alloc 12
+    store value+0, 1 as i64
+    tmp_18 = 5
+    store value+8, tmp_18 as i32
+    tmp_19 = call @sla__eval_guard(value)
+    result = tmp_19
+    tmp_20 = call @sa_fmt_u64(result, 10)
+    tmp_21 = call @sa_fmt_buffer_data(tmp_20)
+    tmp_22 = call @sa_fmt_buffer_len(tmp_20)
+    tmp_23 = tmp_21
+    call @sa_print_bytes(&tmp_23, tmp_22)
+    call @sa_fmt_buffer_free(^tmp_20)
+    !tmp_23
+    !tmp_22
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_24 = 0
+    !value
+    !result
+    return tmp_24
+
+@test "rosetta 030 manual guard branch"():
+L_TEST_ENTRY_5:
+    value = alloc 12
+    store value+0, 1 as i64
+    tmp_25 = 5
+    store value+8, tmp_25 as i32
+    tmp_26 = call @sla__eval_guard(value)
+    result = tmp_26
+    tmp_27 = 5
+    tmp_28 = ne result, tmp_27
+    !tmp_27
+    br tmp_28 -> L_THEN_6, L_ELSE_7
+
+L_THEN_6:
+    !tmp_28
+    panic(30)
+
+L_ELSE_7:
+    !tmp_28
+    jmp L_MERGE_8
+
+L_MERGE_8:
+    low_value = alloc 12
+    store low_value+0, 1 as i64
+    tmp_31 = 2
+    store low_value+8, tmp_31 as i32
+    tmp_32 = call @sla__eval_guard(low_value)
+    tmp_33 = 0
+    tmp_34 = ne tmp_32, tmp_33
+    !tmp_32
+    !tmp_33
+    br tmp_34 -> L_THEN_9, L_ELSE_10
+
+L_THEN_9:
+    !tmp_34
+    panic(31)
+
+L_ELSE_10:
+    !tmp_34
+    jmp L_MERGE_11
+
+L_MERGE_11:
+    none_value = alloc 12
+    store none_value+0, 0 as i64
+    tmp_37 = call @sla__eval_guard(none_value)
+    tmp_38 = 0
+    tmp_39 = 1
+    tmp_40 = sub tmp_38, tmp_39
+    !tmp_38
+    !tmp_39
+    tmp_41 = ne tmp_37, tmp_40
+    !tmp_37
+    !tmp_40
+    br tmp_41 -> L_THEN_12, L_ELSE_13
+
+L_THEN_12:
+    !tmp_41
+    panic(32)
+
+L_ELSE_13:
+    !tmp_41
+    jmp L_MERGE_14
+
+L_MERGE_14:
+    !value
+    !none_value
+    !result
+    !low_value
+    return
+

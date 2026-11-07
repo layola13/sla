@@ -1,0 +1,9 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: RefCell carries a borrow flag outside the
+// value; it can never be an arena root (design 2.2).
+fn neg_refcell() -> i32 {
+    arena {
+        let c = RefCell::new(5);
+    }
+    return 0;
+}

@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+@import "sa_std/thread.sa"
+
+fn worker(input: i32) -> i32 {
+    return input + 4;
+}
+
+fn pthread_joined_worker_value() -> i32 {
+    let handle = thread::spawn(|| worker(1));
+    return handle.join().unwrap();
+}
+
+fn main() -> i32 {
+    let handle = thread::spawn(|| worker(1));
+    let result = handle.join().unwrap();
+    println("{}", result);
+    return result;
+}
+@test "rosetta 184 184_pthread_spawn_join"() { let got = pthread_joined_worker_value(); if got != 5 { panic(184); }; }

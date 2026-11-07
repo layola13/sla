@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 除数和函数 σ（σ(12)=28）。
+// 意对标 337 除数计数的求和版（337 互补；379 做三向）。
+
+fn sigma(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        if n % i == 0 { s = s + i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", sigma(12), sigma(6), sigma(7));
+    return 0;
+}
+
+@test "basic 377 sigma"() {
+    if sigma(12) != 28 { panic(37701); };
+    if sigma(6) != 12 { panic(37702); };
+    if sigma(7) != 8 { panic(37703); };
+}

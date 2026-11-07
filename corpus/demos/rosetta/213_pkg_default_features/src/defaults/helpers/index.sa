@@ -1,0 +1,7 @@
+@import "src/defaults/helpers/defaults.sal"
+
+@defaults_helper_value() -> i32:
+L_ENTRY:
+    value = add DEFAULT_OFFSET, 0
+    !value
+    return DEFAULT_OFFSET

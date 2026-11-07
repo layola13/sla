@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Account {
+    balance: i32,
+}
+
+impl Account {
+    fn deposit(self, amount: i32) -> Account {
+        return Account {
+            balance: self.balance + amount,
+        };
+    }
+}
+
+fn main() -> i32 {
+    let account = Account { balance: 10 };
+    let updated = account.deposit(5);
+    println("{}", updated.balance);
+    return 0;
+}
+
+@test "rosetta 040 impl block state"() {
+    let account = Account { balance: 10 };
+    let updated = account.deposit(5);
+    if updated.balance != 15 {
+        panic(40);
+    };
+}

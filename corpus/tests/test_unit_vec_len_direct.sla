@@ -1,0 +1,8 @@
+@import "sa_std/vec.sa"
+
+@test "direct vec len metadata"() {
+    let values: Vec<i32> = Vec::new();
+    values.push(11);
+    values.push(22);
+    if len(values) != 2 { panic(30901); };
+};

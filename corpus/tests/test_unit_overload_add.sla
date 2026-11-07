@@ -1,0 +1,23 @@
+struct Vec2 {
+    x: i32,
+    y: i32,
+}
+
+@overload Vec2 {
+    fn +(self: Vec2, other: Vec2) -> Vec2 {
+        return Vec2 { x: self.x + other.x, y: self.y + other.y };
+    }
+}
+
+fn add_vec2() -> i32 {
+    let a = Vec2 { x: 2, y: 3 };
+    let b = Vec2 { x: 5, y: 7 };
+    let c = a + b;
+    if c.x != 7 { return 0; };
+    if c.y != 10 { return 0; };
+    return 17;
+}
+
+@test "overload add rewrites to static dispatch"() {
+    if add_vec2() != 17 { panic(24100); };
+}

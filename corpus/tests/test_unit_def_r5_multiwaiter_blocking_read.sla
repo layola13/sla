@@ -1,0 +1,97 @@
+// DEF-R5 corpus: a spawned goroutine parked in a blocking
+// sa_std_net_tcp_stream_read on its own connection must not
+// starve a second waiter's already-queued data. Baseline
+// mechanism: the first reader held the sa_std registry mutex
+// across its blocking read, so the second waiter's read (and
+// every other registry user) could not be serviced until the
+// first reader returned. Panic codes: 9610 setup, 9612 wrong
+// waiter reported, 9613 parked waiter reported early, 9615
+// join, 9616 phase-2 wrong report.
+//
+// Baseline failure mode is a HANG, not a panic: the parked
+// reader holds the mutex inside the syscall and the starved
+// waiter spins on it, so no in-process deadline can fire.
+// The supervised batched runner bounds it with its per-test
+// timeout (SLA_TEST_TIMEOUT_MS, default 60 s) and records a
+// FAIL; the fast A/B signature (exit 61 vs 0) is carried by
+// the standalone probes in the DEF-R5 working notes.
+//
+// Carrier economy: at the default carrier count the shape
+// uses exactly two waiters -- the parked one occupies one
+// carrier in its read, the serviced one and the main task
+// share the other. The fed waiter's byte is pre-queued by
+// main before any waiter spawns (writes need no waiter), and
+// the parked waiter gets a 300 ms head start so the baseline
+// mutex holder is deterministic.
+
+@import "sa_std/net.sai"
+@import "sa_std/task.sai"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/box.sa"
+
+const R5C_PORT: u32 = 18321;
+
+struct R5Ctx {
+    stream: u64,
+    id: u64,
+    done: Chan<u64>,
+}
+
+fn r5_waiter(ctx: *R5Ctx) {
+    let buf: [u8; 16] = [0; 16];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let nread: u64 = 0;
+    let rst: i32 = sa_std_net_tcp_stream_read((*ctx).stream, bp, 16, &nread);
+    if rst != 0 { (*ctx).done.send(700 + (*ctx).id); return; };
+    if nread != 1 { (*ctx).done.send(600 + (*ctx).id); return; };
+    if buf[0] != (65 + ((*ctx).id as u8)) { (*ctx).done.send(500 + (*ctx).id); return; };
+    (*ctx).done.send((*ctx).id);
+}
+
+fn r5_feed(client: u64, byte: u8) {
+    let b: [u8; 2] = [0; 2];
+    b[0] = byte;
+    let bp: ptr = PTR_BYTE_ADD(&b, 0);
+    let nw: u64 = 0;
+    let st: i32 = sa_std_net_tcp_stream_write(client, bp, 1, &nw);
+    if st != 0 { panic(9610); };
+    if nw != 1 { panic(9610); };
+}
+
+@test "def-r5 multi-waiter blocking read service"() {
+    let host: [u8; 16] = [0; 16];
+    host[0] = 49; host[1] = 50; host[2] = 55; host[3] = 46;
+    host[4] = 48; host[5] = 46; host[6] = 48; host[7] = 46;
+    host[8] = 49;
+    let hp: ptr = PTR_BYTE_ADD(&host, 0);
+    let listener: u64 = 0;
+    let bound: u32 = 0;
+    if sa_std_net_tcp_listen(hp, 9, R5C_PORT, &listener, &bound) != 0 { panic(9610); };
+    let c0: u64 = 0; let c1: u64 = 0;
+    if sa_std_net_tcp_connect(hp, 9, R5C_PORT, &c0) != 0 { panic(9610); };
+    if sa_std_net_tcp_connect(hp, 9, R5C_PORT, &c1) != 0 { panic(9610); };
+    let s0: u64 = 0; let s1: u64 = 0;
+    if sa_std_net_tcp_accept(listener, &s0) != 0 { panic(9610); };
+    if sa_std_net_tcp_accept(listener, &s1) != 0 { panic(9610); };
+    // Pre-queue waiter 1's byte; waiter 0 gets nothing yet.
+    r5_feed(c1, 66);
+    let done: Chan<u64> = Chan::new(4);
+    let h0 = go r5_waiter(Box::into_raw(Box::new(R5Ctx { stream: s0, id: 0, done: done })));
+    // Head start: waiter 0 is parked in its blocking read
+    // before waiter 1 spawns.
+    let slp = sa_task_sleep_ms(300);
+    let h1 = go r5_waiter(Box::into_raw(Box::new(R5Ctx { stream: s1, id: 1, done: done })));
+    // Phase 1: waiter 1 must be serviced while waiter 0 is
+    // still parked (baseline: never happens -- hang, above).
+    let (v1, closed1) = done.recv();
+    if closed1 { panic(9612); };
+    if v1 != 1 { panic(9612); };
+    if done.len() != 0 { panic(9613); };
+    // Phase 2: feed waiter 0; it completes now.
+    r5_feed(c0, 65);
+    let (v0, closed0) = done.recv();
+    if closed0 { panic(9616); };
+    if v0 != 0 { panic(9616); };
+    if sa_task_join(h0) != 0 { panic(9615); };
+    if sa_task_join(h1) != 0 { panic(9615); };
+}

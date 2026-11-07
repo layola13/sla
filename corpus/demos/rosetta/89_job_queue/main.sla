@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+@import "sa_std/vec_deque.sa"
+
+struct Job {
+    id: i32,
+    cost: i32,
+}
+
+fn first_job_score() -> i32 {
+    let queue = VecDeque::new();
+    queue.push_back(Job { id: 7, cost: 3 });
+    queue.push_back(Job { id: 9, cost: 5 });
+    let first = queue.pop_front().unwrap();
+    let id = first.id;
+    let cost = first.cost;
+    return id + cost;
+}
+
+fn main() -> i32 {
+    let value = first_job_score();
+    println("{}", value);
+    return value;
+}
+
+@test "rosetta 089 89_job_queue"() {
+    let got = first_job_score();
+    if got != 10 {
+        panic(89);
+    };
+}

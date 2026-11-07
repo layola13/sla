@@ -1,0 +1,10 @@
+// expect: UseBeforeInit
+fn bad_var_compare_before_init() -> bool {
+    var ok: bool;
+    return ok == true;
+}
+
+fn main() -> i32 {
+    if bad_var_compare_before_init() { return 1; };
+    return 0;
+}

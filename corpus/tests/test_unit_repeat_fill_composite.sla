@@ -1,0 +1,62 @@
+// Regression (BJ defect, fixed by BG): a repeat-fill array literal
+// [value; N] whose element type is pointer-represented (nested array,
+// struct, String, ...) evaluated `value` ONCE and stored the same
+// register into every slot, so all elements aliased one heap object:
+// writes to slot k landed in every slot (e.g. [[u8; 8]; 4] rows all
+// read the last-written row's bytes; [pair_new(..); N] slots shared
+// one struct). Both codegens (SA text genRepeatArrayLiteralInto and
+// SAB genRepeatArrayLiteral / genMacroRepeatArrayLiteralWithType)
+// now evaluate the value expression once per element for composite
+// element types; scalar fills keep the single-evaluation path.
+// This file FAILS on the pre-fix plugin (both backends) and passes
+// after.
+
+struct Nest {
+    bytes2d: [[u8; 8]; 4],
+    lens: [u64; 4],
+    flags: [bool; 4],
+}
+
+struct Pair {
+    key: u64,
+    val: u64,
+}
+
+fn pair_new(k: u64, v: u64) -> Pair {
+    return Pair { key: k, val: v };
+}
+
+@test "repeat fill nested array rows are independent"() {
+    let n = Nest { bytes2d: [[0u8; 8]; 4], lens: [0u64; 4], flags: [false; 4] };
+    n.bytes2d[1][0] = 65;
+    n.bytes2d[1][1] = 66;
+    n.bytes2d[3][0] = 67;
+    n.lens[1] = 2;
+    n.lens[3] = 1;
+    if n.bytes2d[0][0] != 0 { panic(4901); };
+    if n.bytes2d[1][0] != 65 { panic(4902); };
+    if n.bytes2d[2][0] != 0 { panic(4903); };
+    if n.bytes2d[3][0] != 67 { panic(4904); };
+    if n.bytes2d[1][1] != 66 { panic(4905); };
+    let s: u64 = 3;
+    if n.bytes2d[s][0] != 67 { panic(4906); };
+    if n.lens[0] != 0 { panic(4907); };
+    if n.lens[3] != 1 { panic(4908); };
+}
+
+@test "repeat fill struct elements from a call are independent"() {
+    let arr = [pair_new(1, 2); 3];
+    arr[1].key = 9;
+    if arr[0].key != 1 { panic(4911); };
+    if arr[1].key != 9 { panic(4912); };
+    if arr[2].key != 1 { panic(4913); };
+    if arr[2].val != 2 { panic(4914); };
+}
+
+@test "repeat fill scalar elements still uniform"() {
+    let a = [7u64; 3];
+    a[1] = 8;
+    if a[0] != 7 { panic(4931); };
+    if a[1] != 8 { panic(4932); };
+    if a[2] != 7 { panic(4933); };
+}

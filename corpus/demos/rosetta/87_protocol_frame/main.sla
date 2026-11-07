@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn frame_valid(kind: u8, len: u8, checksum: u8) -> bool {
+    if kind == 1u8 {
+        return checksum == kind + len;
+    } else {
+        return false;
+    };
+}
+
+fn main() -> i32 {
+    let result = frame_valid(1u8, 4u8, 5u8);
+    println("{}", result);
+    return 0;
+};
+
+@test "rosetta 087 87_protocol_frame"() {
+    let got = frame_valid(1u8, 4u8, 5u8);
+    if got != true {
+        panic(87);
+    };
+};

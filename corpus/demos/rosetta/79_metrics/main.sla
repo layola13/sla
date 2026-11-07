@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn success_per_thousand(ok: i32, failed: i32) -> i32 {
+    return ok * 1000 / (ok + failed);
+}
+
+fn main() -> i32 {
+    let value = success_per_thousand(95, 5);
+    println("{}", value);
+    return value;
+};
+
+@test "rosetta 079 79_metrics"() {
+    if success_per_thousand(95, 5) != 950 {
+        panic(79);
+    };
+};

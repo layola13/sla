@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_dev_dependency_count() -> i32 {
+    let test_only_dependency = 1;
+    return test_only_dependency;
+}
+
+fn main() -> i32 { let test_only_dependency = 1; println("{}", test_only_dependency); return test_only_dependency; }
+@test "rosetta 208 pkg dev dependencies"() { let got = pkg_dev_dependency_count(); if got != 1 { panic(208); }; }

@@ -1,0 +1,32 @@
+fn direct_array_sum(values: [int; 3]) -> int {
+    return values[0] + values[1] + values[2];
+}
+
+fn direct_array_pick(values: [int; 3], index: int) -> int {
+    return values[index];
+}
+
+fn direct_array_write(^values: [int; 3], index: int, value: int) -> [int; 3] {
+    values[index] = value;
+    return values;
+}
+
+fn direct_array_zero(^values: [int; 3]) -> [int; 3] {
+    for i in 0..3 {
+        values[i] = 0;
+    }
+    return values;
+}
+
+@test "direct array literal repeat dynamic index range for"() {
+    let values = [4, 5, 6];
+    values[1] = 8;
+    let got = direct_array_sum(values);
+    if got != 18 { panic(31101); };
+    let repeated = [7; 3];
+    if direct_array_sum(repeated) != 21 { panic(31102); };
+    let dynamic = direct_array_write(^repeated, 1, 9);
+    if direct_array_pick(dynamic, 1) != 9 { panic(31103); };
+    let zeroed = direct_array_zero(^dynamic);
+    if direct_array_sum(zeroed) != 0 { panic(31104); };
+};

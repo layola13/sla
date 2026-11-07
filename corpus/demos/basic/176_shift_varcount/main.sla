@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1233_shift_varcount：变量位移计数（8,2）。
+// 与 119 的字面量位移互补：此处计数来自 `const` 绑定。
+
+const K: i32 = 3;
+
+fn main() -> i32 {
+    println("{},{}", 1 << K, 16 >> K);
+    return 0;
+}
+
+@test "basic 176 shift varcount"() {
+    if 1 << K != 8 { panic(17601); };
+    if 16 >> K != 2 { panic(17602); };
+    let k = 1;
+    if 1 << k != 2 { panic(17603); };
+}

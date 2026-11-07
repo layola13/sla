@@ -1,0 +1,5 @@
+@import "sa_std/time.sla"
+
+@test "time thread sleep millis"() {
+    thread::sleep(Duration::from_millis(0));
+}

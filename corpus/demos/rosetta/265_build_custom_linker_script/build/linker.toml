@@ -1,0 +1,4 @@
+[linker]
+script = "linker/linker.ld"
+memory = "linker/memory.x"
+output = "generated/link_plan.sa"

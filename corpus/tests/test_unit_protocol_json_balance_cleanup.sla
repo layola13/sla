@@ -1,0 +1,160 @@
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+
+fn protocol_json_test_slice_eq(data_ref: &ptr, data_len: u64, expected_ref: &ptr, expected_len: u64) -> bool {
+    if data_len != expected_len {
+        return false;
+    };
+    let data_ptr = *data_ref;
+    let expected_ptr = *expected_ref;
+    let data_slice = STR_FROM_PARTS(data_ptr, data_len);
+    let expected_slice = STR_FROM_PARTS(expected_ptr, expected_len);
+    return STR_EQ(data_slice, expected_slice);
+}
+
+fn protocol_json_test_type_code(data_ref: &ptr, data_len: u64) -> u8 {
+    let configured_ptr = STR_PTR("session_configured");
+    if protocol_json_test_slice_eq(data_ref, data_len, &configured_ptr, STR_LEN("session_configured")) {
+        return 3;
+    };
+    let complete_ptr = STR_PTR("task_complete");
+    if protocol_json_test_slice_eq(data_ref, data_len, &complete_ptr, STR_LEN("task_complete")) {
+        return 5;
+    };
+    return 255;
+}
+
+fn protocol_json_test_envelope_balanced(data_ref: &ptr, data_len: u64) -> bool {
+    let data_ptr = *data_ref;
+    let depth: u64 = 0;
+    let in_string = false;
+    let escaped = false;
+    let i: u64 = 0;
+    while i < data_len {
+        let ch = PTR_READ_U8(PTR_BYTE_ADD(data_ptr, i));
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else {
+                if ch == 92 {
+                    escaped = true;
+                } else {
+                    if ch == 34 {
+                        in_string = false;
+                    };
+                };
+            };
+        } else {
+            if ch == 34 {
+                in_string = true;
+            } else {
+                if ch == 123 || ch == 91 {
+                    depth = depth + 1;
+                } else {
+                    if ch == 125 || ch == 93 {
+                        if depth == 0 {
+                            return false;
+                        };
+                        depth = depth - 1;
+                    };
+                };
+            };
+        };
+        i = i + 1;
+    }
+    return depth == 0 && in_string == false && escaped == false;
+}
+
+fn protocol_json_test_msg_code(data_ref: &ptr, data_len: u64) -> u8 {
+    let data_ptr = *data_ref;
+    let i: u64 = 0;
+    let previous_was_type = false;
+    while i < data_len {
+        let ch = PTR_READ_U8(PTR_BYTE_ADD(data_ptr, i));
+        if ch == 34 {
+            let value_start = i + 1;
+            i = value_start;
+            let escaped = false;
+            let done = false;
+            while i < data_len && done != true {
+                let item_ch = PTR_READ_U8(PTR_BYTE_ADD(data_ptr, i));
+                if escaped {
+                    escaped = false;
+                } else {
+                    if item_ch == 92 {
+                        escaped = true;
+                    } else {
+                        if item_ch == 34 {
+                            let value_len = i - value_start;
+                            let value_ptr = PTR_BYTE_ADD(data_ptr, value_start);
+                            if previous_was_type {
+                                return protocol_json_test_type_code(&value_ptr, value_len);
+                            };
+                            let type_ptr = STR_PTR("type");
+                            previous_was_type = protocol_json_test_slice_eq(&value_ptr, value_len, &type_ptr, STR_LEN("type"));
+                            done = true;
+                        };
+                    };
+                };
+                i = i + 1;
+            }
+        } else {
+            i = i + 1;
+        };
+    }
+    return 255;
+}
+
+fn protocol_json_test_round_trip_ok(data_ref: &ptr, data_len: u64) -> bool {
+    return protocol_json_test_envelope_balanced(data_ref, data_len) && protocol_json_test_msg_code(data_ref, data_len) != 255;
+}
+
+fn protocol_json_test_first_byte(data_ref: &ptr) -> u8 {
+    return PTR_READ_U8(*data_ref);
+}
+
+fn protocol_json_test_first_byte_value(data: ptr) -> u8 {
+    return PTR_READ_U8(data);
+}
+
+@test "protocol json ptr value reads non owning macro result"() {
+    let json = "{}";
+    if protocol_json_test_first_byte_value(STR_PTR(json)) != 123 {
+        panic(19049);
+    };
+}
+
+@test "protocol json ptr local stores non owning macro result"() {
+    let json = "{}";
+    let json_ptr = STR_PTR(json);
+    if protocol_json_test_first_byte(&json_ptr) != 123 {
+        panic(19050);
+    };
+}
+
+@test "protocol json scanner round trip keeps temporaries balanced"() {
+    let configured_json = "{\"id\":\"0\",\"msg\":{\"type\":\"session_configured\"}}";
+    let configured_ptr = STR_PTR(configured_json);
+    if protocol_json_test_round_trip_ok(&configured_ptr, STR_LEN(configured_json)) != true {
+        panic(19060);
+    };
+    if protocol_json_test_msg_code(&configured_ptr, STR_LEN(configured_json)) != 3 {
+        panic(19061);
+    };
+}
+
+@test "protocol json scanner malformed envelope keeps false path balanced"() {
+    let broken_json = "{\"id\":\"0\",\"msg\":{\"type\":\"task_complete\"}";
+    let broken_ptr = STR_PTR(broken_json);
+    if protocol_json_test_envelope_balanced(&broken_ptr, STR_LEN(broken_json)) {
+        panic(19073);
+    };
+}
+
+@test "protocol json scanner missing type keeps false path balanced"() {
+    let missing_type_json = "{\"id\":\"0\",\"msg\":{}}";
+    let missing_type_ptr = STR_PTR(missing_type_json);
+    if protocol_json_test_round_trip_ok(&missing_type_ptr, STR_LEN(missing_type_json)) {
+        panic(19070);
+    };
+}

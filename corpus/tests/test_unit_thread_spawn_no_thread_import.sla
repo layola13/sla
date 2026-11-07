@@ -1,0 +1,34 @@
+@import "sa_std/core/result.sa"
+
+// Regression (AD3 defect #19, fixed by BG): thread::spawn is a compiler
+// builtin, so an SLA program may use it without importing sa_std/thread.sa
+// itself. The SA-text codegen emits spawn helpers that EXPAND THREAD_SPAWN
+// (and join sites that EXPAND THREAD_JOIN_STATUS / THREAD_DROP); those
+// macro definitions live in sa_std/thread.sa, so the generated SA must
+// carry the import whenever spawn helpers are emitted. Before the fix,
+// assembling the generated SA (sa test --test-backend sa, sa build-exe,
+// sa sla build-exe on launchInstall-sized modules) trapped in the sci
+// flattener with ForbiddenSyntax / InvalidMacroInvocation even though
+// `sa sla check` passed. The SAB codegen already ensured this dependency
+// itself (ensureStdDeps); this file deliberately omits the thread.sa
+// import to lock the SA-text path.
+// This file FAILS on the pre-fix plugin (SA backend) and passes after.
+
+fn spawn_with_capture() -> i32 {
+    let value: i32 = 40;
+    let handle = thread::spawn(^|| value + 2);
+    return handle.join().unwrap();
+}
+
+fn spawn_no_capture() -> i32 {
+    let handle = thread::spawn(^|| 7);
+    return handle.join().unwrap();
+}
+
+@test "thread spawn without importing thread.sa (capture)"() {
+    if spawn_with_capture() != 42 { panic(51401); };
+}
+
+@test "thread spawn without importing thread.sa (no capture)"() {
+    if spawn_no_capture() != 7 { panic(51402); };
+}

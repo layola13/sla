@@ -1,0 +1,57 @@
+@import "sa_std/http_proxy.sla"
+
+// REG-SHARD3 coverage: SAB registry `declared` entries for the
+// http_proxy.sla transport I/O surface (proxy_open_transport,
+// proxy_read_byte, proxy_read_exact_tcp, proxy_read_head,
+// proxy_write_all). These need live stream handles to exercise the
+// success path; here they are driven against a dead handle (0) and
+// a refused loopback port, which per the file's documented contract
+// ("Errors are i32 status codes ... zero is success") must surface
+// as deterministic non-OK statuses with zeroed result fields --
+// never a panic, a hang, or a fake success.
+
+@test "reg3 proxy open_transport refused"() {
+    let t = proxy_open_transport(SA_HTTP_PROXY_KIND_HTTP, format("127.0.0.1"), 1);
+    if t.status == SA_STD_OK { panic(3501); };
+    if t.kind != PROXY_TRANSPORT_TCP { panic(3502); };
+    if t.handle != 0 { panic(3503); };
+    // HTTPS kind fails at the same TCP connect step, same shape.
+    let t2 = proxy_open_transport(SA_HTTP_PROXY_KIND_HTTPS, format("127.0.0.1"), 1);
+    if t2.status == SA_STD_OK { panic(3504); };
+    if t2.kind != PROXY_TRANSPORT_TCP { panic(3505); };
+    if t2.handle != 0 { panic(3506); };
+}
+
+@test "reg3 proxy read_byte dead handle"() {
+    let rb = proxy_read_byte(PROXY_TRANSPORT_TCP, 0);
+    if rb.status == SA_STD_OK { panic(3511); };
+    if rb.value != 0 { panic(3512); };
+    if rb.eof { panic(3513); };
+}
+
+@test "reg3 proxy read_head dead handle"() {
+    let h = proxy_read_head(PROXY_TRANSPORT_TCP, 0);
+    if h.status == SA_STD_OK { panic(3521); };
+    if h.http_status != 0 { panic(3522); };
+}
+
+@test "reg3 proxy read_exact_tcp"() {
+    let buf: [u8; 4] = [0u8; 4];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    // Zero-length read is a no-op success even on a dead handle.
+    if proxy_read_exact_tcp(0, bp, 0) != SA_STD_OK { panic(3531); };
+    // A real read on handle 0 must fail with a status, not hang.
+    if proxy_read_exact_tcp(0, bp, 4) == SA_STD_OK { panic(3532); };
+}
+
+@test "reg3 proxy write_all"() {
+    let buf: [u8; 3] = [0u8; 3];
+    buf[0] = 65;
+    buf[1] = 66;
+    buf[2] = 67;
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    // Zero-length write is a no-op success even on a dead handle.
+    if proxy_write_all(PROXY_TRANSPORT_TCP, 0, bp, 0) != SA_STD_OK { panic(3541); };
+    // A real write on handle 0 must fail with a status.
+    if proxy_write_all(PROXY_TRANSPORT_TCP, 0, bp, 3) == SA_STD_OK { panic(3542); };
+}

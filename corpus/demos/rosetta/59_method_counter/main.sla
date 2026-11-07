@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/cell.sa"
+
+struct Counter {
+    value: Cell<i32>,
+}
+
+impl Counter {
+    fn inc(&self) -> void {
+        let current = self.value.get();
+        self.value.set(current + 1);
+    }
+}
+
+fn main() -> i32 {
+    let counter = Counter { value: Cell::new(3) };
+    counter.inc();
+    println("{}", counter.value.get());
+    return 0;
+}
+
+@test "rosetta 059 method counter"() {
+    let counter = Counter { value: Cell::new(3) };
+    counter.inc();
+    if counter.value.get() != 4 {
+        panic(59);
+    };
+}

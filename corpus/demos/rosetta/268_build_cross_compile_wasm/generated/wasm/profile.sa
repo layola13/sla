@@ -1,0 +1,14 @@
+// Generated from build/wasm/target.toml.
+#def WASM_PROFILE_COUNT = 2
+
+@wasm_profile_value() -> i32:
+L_ENTRY:
+    value = add 267, 1
+    !value
+    return 268
+
+@wasm_profile_count() -> i32:
+L_ENTRY:
+    count = add 1, 1
+    !count
+    return WASM_PROFILE_COUNT

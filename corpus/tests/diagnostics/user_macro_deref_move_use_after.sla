@@ -1,0 +1,12 @@
+@import "sa_std/core/box.sa"
+
+macro deref_move(out, value) {
+    out = *^value;
+}
+
+fn reject_deref_macro_move_use_after() -> i64 {
+    let source = Box::new(42i64);
+    let result = 0i64;
+    deref_move(result, source);
+    *source
+}

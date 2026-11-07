@@ -1,0 +1,90 @@
+@import "sa_std/vec.sa"
+
+struct MiniWriter {
+    bytes: Vec<u8>,
+}
+
+struct MiniReader {
+    bytes: &Vec<u8>,
+    offset: u64,
+}
+
+fn mini_writer_new() -> MiniWriter {
+    let bytes: Vec<u8> = Vec::new();
+    return MiniWriter { bytes: bytes };
+}
+
+fn mini_writer_push(writer: &MiniWriter, byte: u8) {
+    writer.bytes.push(byte);
+}
+
+fn mini_writer_push_vlq(writer: &MiniWriter, value: u64) {
+    let buffer = [0u8; 4];
+    let count: i32 = 1;
+    let current = value;
+    buffer[3] = (current % 128) as u8;
+    current = current / 128;
+    while current > 0 {
+        count = count + 1;
+        let index = 4 - count;
+        buffer[index] = ((current % 128) + 128) as u8;
+        current = current / 128;
+    }
+    let pos = 4 - count;
+    while pos < 4 {
+        mini_writer_push(writer, buffer[pos]);
+        pos = pos + 1;
+    }
+}
+
+fn mini_reader_new(bytes: &Vec<u8>) -> MiniReader {
+    return MiniReader { bytes: bytes, offset: 0 };
+}
+
+fn mini_reader_read_u8(reader: &MiniReader) -> u8 {
+    if reader.offset >= len(reader.bytes) {
+        return 0;
+    };
+    let value = reader.bytes[reader.offset];
+    reader.offset = reader.offset + 1;
+    return value;
+}
+
+fn mini_reader_read_vlq(reader: &MiniReader) -> u64 {
+    let value: u64 = 0;
+    let done = false;
+    let count: i32 = 0;
+    while done != true {
+        let byte = mini_reader_read_u8(reader);
+        value = value * 128 + ((byte as u64) % 128);
+        count = count + 1;
+        if byte < 128 {
+            done = true;
+        };
+        if count >= 4 {
+            done = true;
+        };
+    }
+    return value;
+}
+
+@test "vlq writer reader boundaries stay ordered"() {
+    let writer = mini_writer_new();
+    mini_writer_push_vlq(&writer, 0);
+    mini_writer_push_vlq(&writer, 127);
+    mini_writer_push_vlq(&writer, 128);
+    mini_writer_push_vlq(&writer, 16383);
+    mini_writer_push_vlq(&writer, 16384);
+    if len(writer.bytes) != 9 { panic(7210); };
+    if writer.bytes[0] != 0 { panic(7211); };
+    if writer.bytes[1] != 127 { panic(7212); };
+    if writer.bytes[2] != 129 { panic(7213); };
+    if writer.bytes[3] != 0 { panic(7214); };
+    let reader = mini_reader_new(&writer.bytes);
+    if mini_reader_read_vlq(&reader) != 0 { panic(7201); };
+    if reader.offset != 1 { panic(7215); };
+    if mini_reader_read_vlq(&reader) != 127 { panic(7202); };
+    if mini_reader_read_vlq(&reader) != 128 { panic(7203); };
+    if mini_reader_read_vlq(&reader) != 16383 { panic(7204); };
+    if mini_reader_read_vlq(&reader) != 16384 { panic(7205); };
+}

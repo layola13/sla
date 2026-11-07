@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/slice.sa"
+
+fn sum(values: &[i32]) -> i32 {
+    values.iter().copied().sum()
+}
+
+fn main() -> i32 {
+    let values: [i32; 4] = [1, 2, 3, 4];
+    println("{}", sum(&values));
+    return 0;
+}
+
+@test "rosetta 044 slice iteration"() {
+    let values: [i32; 4] = [1, 2, 3, 4];
+    let total = sum(&values);
+    if total != 10 {
+        panic(44);
+    };
+}

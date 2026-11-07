@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Unit {}
+
+fn process(_u: Unit) -> i32 { return 42; }
+
+fn zero_sized_process_result() -> i32 {
+    let u = Unit {};
+    return process(u);
+}
+fn main() -> i32 {
+    let u = Unit {};
+    let result = process(u);
+    println("{}", result);
+    return result;
+}
+@test "rosetta 142 142_zero_sized_types"() { let got = zero_sized_process_result(); if got != 42 { panic(142); }; }

@@ -1,0 +1,18 @@
+// expect: UseAfterMove
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+
+// DEF-deep-copy negative: a struct literal field filled from a live
+// binding of a deep (handle-owning) type transfers ownership into the
+// literal; using the binding afterwards must be rejected at check
+// time (UseAfterMove naming the literal field) instead of aliasing on
+// the SA-text backend / trapping 1009 on the SAB backend.
+
+struct Deep { xs: Vec<u8>, n: i32 }
+struct Wrap { inner: Deep, tag: i32 }
+
+fn bad(d: Deep) -> i32 {
+    let w: Wrap = Wrap { inner: d, tag: 7 };
+    return d.n + w.tag;
+}

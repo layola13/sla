@@ -1,0 +1,103 @@
+// smoke-wave2 edge set: os/fd (4), http2 buffers (2), http_cookie jar
+// getter (1), net udp v6 getter (1). All hermetic: fd chain is built on
+// dup_raw(0)/from_raw(0) under the test runner (stdin is /dev/null).
+@import "sla_std/wrap/os/fd.sla"
+@import "sla_std/wrap/http2.sla"
+@import "sla_std/wrap/http_cookie.sla"
+@import "sla_std/wrap/net.sla"
+@import "sla_std/wrap/fs.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+@test "smoke2 sa_std_fd_as_raw"() {
+    let h: u64 = 0;
+    if sla_std_fd_from_raw(0, &h) != 0 { panic(64700); };
+    let raw: u64 = 0;
+    if sla_std_fd_as_raw(h, &raw) != 0 { panic(64701); };
+    if raw != 0 { panic(64702); };
+    // Release the wrapper without closing fd 0 itself.
+    let back: u64 = 0;
+    if sla_std_fd_into_raw(h, &back) != 0 { panic(64703); };
+}
+
+@test "smoke2 sa_std_fd_dup"() {
+    let h: u64 = 0;
+    if sla_std_fd_from_raw(0, &h) != 0 { panic(64710); };
+    let d: u64 = 0;
+    if sla_std_fd_dup(h, &d) != 0 { panic(64711); };
+    if d == 0 { panic(64712); };
+    // The dup is a distinct descriptor: its raw number differs from 0.
+    let draw: u64 = 0;
+    if sla_std_fd_as_raw(d, &draw) != 0 { panic(64713); };
+    if draw == 0 { panic(64714); };
+    let back: u64 = 0;
+    if sla_std_fd_into_raw(d, &back) != 0 { panic(64715); };
+    if sla_std_fd_close_raw((back as i32)) != 0 { panic(64716); };
+    let back0: u64 = 0;
+    if sla_std_fd_into_raw(h, &back0) != 0 { panic(64717); };
+}
+
+@test "smoke2 sa_std_fd_into_raw"() {
+    let h: u64 = 0;
+    if sla_std_fd_from_raw(0, &h) != 0 { panic(64720); };
+    let raw: u64 = 0;
+    if sla_std_fd_into_raw(h, &raw) != 0 { panic(64721); };
+    if raw != 0 { panic(64722); };
+    // fd 0 is intentionally left open (the runner's stdin).
+}
+
+@test "smoke2 sa_std_fd_is_terminal"() {
+    let h: u64 = 0;
+    if sla_std_fd_from_raw(0, &h) != 0 { panic(64730); };
+    let flag: u64 = 0;
+    if sla_std_fd_is_terminal(h, &flag) != 0 { panic(64731); };
+    // Under the test runner stdin is /dev/null, not a terminal.
+    if flag != 0 { panic(64732); };
+    let back: u64 = 0;
+    if sla_std_fd_into_raw(h, &back) != 0 { panic(64733); };
+}
+
+@test "smoke2 sa_std_http2_buffer_len"() {
+    let bh: u64 = 0;
+    if sla_std_http2_status_json(&bh) != 0 { panic(64740); };
+    if bh == 0 { panic(64741); };
+    if sla_std_http2_buffer_len(bh) == 0 { panic(64742); };
+    if sla_std_http2_buffer_free(^bh) != 0 { panic(64743); };
+}
+
+@test "smoke2 sa_std_http2_buffer_free"() {
+    let bh: u64 = 0;
+    if sla_std_http2_status_json(&bh) != 0 { panic(64750); };
+    if bh == 0 { panic(64751); };
+    if sla_std_http2_buffer_free(^bh) != 0 { panic(64752); };
+}
+
+@test "smoke2 sa_cookie_is_host_only"() {
+    // The jar store path is the construction path that maintains the
+    // host_only flag (W1-DEF-COOKIE-HOSTONLY covers the new/parse
+    // constructors, which stay registered separately).
+    let jar: u64 = sla_cookie_jar_new();
+    if jar == 0 { panic(64760); };
+    let res = [0u64; 4];
+    if sla_cookie_jar_store(jar, STR_PTR("http://example.com/"), STR_LEN("http://example.com/"), STR_PTR("h=1; Path=/"), STR_LEN("h=1; Path=/"), 1700000000, &res[0]) != 0 { panic(64761); };
+    if sla_cookie_jar_store(jar, STR_PTR("http://example.com/"), STR_LEN("http://example.com/"), STR_PTR("d=2; Domain=example.com; Path=/"), STR_LEN("d=2; Domain=example.com; Path=/"), 1700000000, &res[0]) != 0 { panic(64762); };
+    let c0: u64 = sla_cookie_jar_at(jar, 0);
+    if c0 == 0 { panic(64763); };
+    let flag = [0u64; 4];
+    if sla_cookie_is_host_only(c0, &flag[0]) != 0 { panic(64764); };
+    if flag[0] != 1 { panic(64765); };
+    let c1: u64 = sla_cookie_jar_at(jar, 1);
+    if c1 == 0 { panic(64766); };
+    if sla_cookie_is_host_only(c1, &flag[0]) != 0 { panic(64767); };
+    if flag[0] != 0 { panic(64768); };
+    sla_cookie_jar_free(^jar);
+}
+
+@test "smoke2 sa_std_net_udp_only_v6"() {
+    let sk = [0u64; 4];
+    if sla_std_net_udp_bind(STR_PTR("::1"), STR_LEN("::1"), 0, &sk[0]) != 0 { panic(64771); };
+    let en = [0u64; 4];
+    if sla_std_net_udp_only_v6(sk[0], &en[0]) != 0 { panic(64772); };
+    if en[0] > 1 { panic(64773); };
+    sla_std_close(sk[0]);
+}

@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Task {
+    deps_done: bool,
+    priority: i32,
+    retries: i32,
+    cooldown: bool,
+}
+
+fn ready_score(task: Task) -> i32 {
+    if task.deps_done == true {
+        if task.cooldown == true {
+            return 0;
+        } else {
+            let priority = task.priority;
+            let retries = task.retries;
+            return priority - retries;
+        };
+    } else {
+        return 0;
+    };
+}
+
+fn main() -> i32 {
+    let task = Task { deps_done: true, priority: 7, retries: 2, cooldown: false };
+    let result = ready_score(task);
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 096 96_task_orchestrator"() {
+    let task = Task { deps_done: true, priority: 7, retries: 2, cooldown: false };
+    let got = ready_score(task);
+    if got != 5 {
+        panic(96);
+    };
+};

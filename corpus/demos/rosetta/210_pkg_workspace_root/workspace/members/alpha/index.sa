@@ -1,0 +1,8 @@
+@import "workspace/members/alpha/helpers/index.sa"
+
+@alpha_package_value() -> i32:
+L_ENTRY:
+    helper = call @alpha_helper_value()
+    value = add helper, 0
+    !helper
+    return value

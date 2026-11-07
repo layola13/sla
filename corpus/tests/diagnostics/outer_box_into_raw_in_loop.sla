@@ -1,0 +1,14 @@
+@import "sa_std/core/box.sa"
+
+fn reject_outer_box_into_raw_in_loop() -> void {
+    let outer: Box<i64> = Box::new(9i64);
+    for n in 0..1 {
+        if n == 0 {
+            let raw = Box::into_raw(outer);
+            unsafe {
+                let restored: Box<i64> = Box::from_raw(raw);
+                !restored;
+            };
+        };
+    }
+}

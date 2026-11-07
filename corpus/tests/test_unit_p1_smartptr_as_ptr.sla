@@ -1,0 +1,33 @@
+@import "sa_std/core/box.sa"
+@import "sa_std/core/rc.sa"
+@import "sa_std/core/arc.sa"
+
+// P1 coverage: Box.as_ptr / Rc.as_ptr / Arc.as_ptr are declared
+// in sla_std std_surface.sla_meta but no unit corpus file
+// references any of them (only demos hit as_ptr). Per the DEF-SP2
+// corpus note: BOX_AS_PTR returns the payload pointer itself;
+// Rc/Arc as_ptr results address the RcBox/ArcBox data slot and
+// need exactly one load. Assertions read the pointee back through
+// the returned pointer and cross-check against the smart
+// pointer's own deref.
+
+@test "p1 box as_ptr reads payload"() {
+    let b = Box::new(41);
+    let p = b.as_ptr();
+    let v = unsafe { *p };
+    if v != 41 { panic(320); };
+}
+
+@test "p1 rc as_ptr reads payload"() {
+    let r = Rc::new(42);
+    let p = r.as_ptr();
+    let v = unsafe { *p };
+    if v != 42 { panic(321); };
+}
+
+@test "p1 arc as_ptr reads payload"() {
+    let a = Arc::new(43);
+    let p = a.as_ptr();
+    let v = unsafe { *p };
+    if v != 43 { panic(322); };
+}

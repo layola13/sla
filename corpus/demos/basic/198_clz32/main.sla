@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1438_clz32：手写前导零计数（clz32(1)=31）。
+// SLA 无 `Math.clz32`，用 `>>` 折半循环表达（与 178 同机制；
+// `&` 须加括号，见 145；`1<<31` 为 64 位正数 2147483648，见 171）。
+
+fn clz32(x: int) -> int {
+    let n = 0;
+    let bit = 2147483648;
+    while bit > 0 {
+        if (x & bit) != 0 { break; };
+        n = n + 1;
+        bit = bit >> 1;
+    }
+    return n;
+}
+
+fn main() -> i32 {
+    println("{}", clz32(1));
+    return 0;
+}
+
+@test "basic 198 clz32"() {
+    if clz32(1) != 31 { panic(19801); };
+    if clz32(16) != 27 { panic(19802); };
+}

@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 118_prefix：前缀和原地写（[2,4,6] -> [2,6,12]）。
+
+fn prefix(^a: [int; 3]) -> [int; 3] {
+    let t = 0;
+    for i in 0..3 {
+        t = t + a[i];
+        a[i] = t;
+    }
+    return a;
+}
+
+fn main() -> i32 {
+    let a = [2, 4, 6];
+    let p = prefix(^a);
+    println("{},{},{}", p[0], p[1], p[2]);
+    return 0;
+}
+
+@test "basic 36 prefix sums"() {
+    let a = [2, 4, 6];
+    let p = prefix(^a);
+    if p[0] != 2 { panic(3601); };
+    if p[1] != 6 { panic(3602); };
+    if p[2] != 12 { panic(3603); };
+}

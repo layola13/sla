@@ -1,0 +1,28 @@
+// DEF-12 legal control A: same shape as the param-forward repro, but
+// the by-value field-element reads belong to a different root
+// binding (other) that does not overlap the borrowed doc. Must pass
+// `sla check` on baseline and fixed trees alike (RC=0 both).
+
+struct Doc {
+    soff: Vec<u64>,
+    slen: Vec<u64>,
+    pool: Vec<u8>,
+}
+
+fn pool_byte(doc: &Doc, off: u64) -> u8 {
+    return doc.pool[off];
+}
+
+fn span_eq(doc: &Doc, off: u64, len: u64, tp: ptr, tn: u64) -> bool {
+    if len != tn { return false; };
+    let i: u64 = 0;
+    while i < len {
+        if pool_byte(doc, off + i) != 0 { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn str_eq_ctrl(doc: &Doc, other: &Doc, node: i64, tp: ptr, tn: u64) -> bool {
+    return span_eq(doc, other.soff[node as u64], other.slen[node as u64], tp, tn);
+}

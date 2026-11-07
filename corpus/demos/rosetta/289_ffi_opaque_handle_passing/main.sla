@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn ffi_opaque_handle_transfers() -> i32 { let handle_round_trip = 1; return handle_round_trip; }
+fn main() -> i32 { let handle_round_trip = 1; println("{}", handle_round_trip); return handle_round_trip; }
+@test "rosetta 289 ffi opaque handle passing"() { let got = ffi_opaque_handle_transfers(); if got != 1 { panic(289); }; }

@@ -1,0 +1,73 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/slice.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_file_manifest_count = vtable { call = @sla__file_manifest_count }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__file_manifest_count() -> u64:
+L_ENTRY:
+    files = alloc 24
+    @const SLA_STR_0 = utf8:"main.rs"
+    tmp_1 = 7
+    tmp_0 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_0, &SLA_STR_0, tmp_1
+    !tmp_1
+    store files+0, tmp_0 as ptr
+    @const SLA_STR_1 = utf8:"main.sa"
+    tmp_3 = 7
+    tmp_2 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_2, &SLA_STR_1, tmp_3
+    !tmp_3
+    store files+8, tmp_2 as ptr
+    @const SLA_STR_2 = utf8:"README.md"
+    tmp_5 = 9
+    tmp_4 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_4, &SLA_STR_2, tmp_5
+    !tmp_5
+    store files+16, tmp_4 as ptr
+    tmp_6 = 3
+    !files
+    return tmp_6
+
+@main() -> i32:
+L_ENTRY:
+    tmp_7 = call @sla__file_manifest_count()
+    count = tmp_7
+    tmp_8 = call @sa_fmt_u64(count, 10)
+    tmp_9 = call @sa_fmt_buffer_data(tmp_8)
+    tmp_10 = call @sa_fmt_buffer_len(tmp_8)
+    tmp_11 = tmp_9
+    call @sa_print_bytes(&tmp_11, tmp_10)
+    call @sa_fmt_buffer_free(^tmp_8)
+    !tmp_11
+    !tmp_10
+    @const SLA_STR_3 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_3, 1)
+    tmp_12 = 0
+    !count
+    return tmp_12
+
+@test "rosetta 064 64_file_manifest"():
+L_TEST_ENTRY_0:
+    tmp_13 = call @sla__file_manifest_count()
+    got = tmp_13
+    tmp_14 = 3
+    tmp_15 = ne got, tmp_14
+    !tmp_14
+    br tmp_15 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_15
+    panic(64)
+
+L_ELSE_2:
+    !tmp_15
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

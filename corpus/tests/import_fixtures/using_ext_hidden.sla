@@ -1,0 +1,13 @@
+// DEF-E0 fixture: module with one non-pub and one pub fn. Only the pub
+// fn may be registered by `using` (visibility rule, sala 07_modules);
+// the non-pub fn is exercised by check-only negatives outside the
+// test-runner corpus.
+mod hidden_ext {
+    fn secret(value: i32) -> i32 {
+        return value * 10;
+    }
+
+    pub fn open(value: i32) -> i32 {
+        return value + 1;
+    }
+}

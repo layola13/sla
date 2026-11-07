@@ -1,0 +1,37 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 互异分拆增长段（q(8..10)=6,7,9；526 的高位延续，540 做 Euler 交叉核对）。
+// 意对标 526 distinct（低位版互补）。
+
+fn distinct_part(n: int) -> int {
+    let dp: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        dp.push(0);
+        i = i + 1;
+    }
+    dp[0] = 1;
+    let k = 1;
+    while k <= n {
+        let s = n;
+        while s >= k {
+            dp[s] = dp[s] + dp[s - k];
+            s = s - 1;
+        }
+        k = k + 1;
+    }
+    return dp[n];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", distinct_part(8), distinct_part(9), distinct_part(10));
+    return 0;
+}
+
+@test "basic 539 qgrow"() {
+    if distinct_part(8) != 6 { panic(53901); };
+    if distinct_part(9) != 8 { panic(53902); };
+    if distinct_part(10) != 10 { panic(53903); };
+}

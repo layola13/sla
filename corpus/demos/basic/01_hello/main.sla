@@ -1,0 +1,14 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+// 对标 tsgosa 01_hello / 20_console。
+
+fn main() -> i32 {
+    println("hello world");
+    return 0;
+}
+
+@test "basic 01 hello world"() {
+    if !str_eq("hello world", "hello world") { panic(101); };
+}

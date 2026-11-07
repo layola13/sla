@@ -1,0 +1,155 @@
+// DEF-R2 regression corpus: task-stack reserve/commit growth.
+//
+// Distilled shape of the natural case (Heng validate_kb, whose
+// spawned workers need a task stack in (2MiB, 4MiB] against the
+// 256KiB default): a worker whose own frame is giant (four
+// 64KiB buffer locals + a 64KiB struct-literal temporary, all
+// live across the calls) drives a recursion whose levels each
+// hold ~64KiB of buffers, with chan round-trips between rounds
+// (the checkpoint structure of the natural worker loop). Total
+// descent is ~3.4MiB — inside validate_kb's measured band.
+// All buffers are filled through helpers taking &struct (the
+// validate_kb OutB/KbSlot shape). Backend asymmetry, verified
+// on the generated .sa: the SAB backend materialises these
+// aggregates as real stack frames (it is the discriminating
+// backend for this corpus — baseline abort, fixed pass), while
+// the text backend register-materialises SLA aggregates (no
+// stack_alloc larger than 8 bytes in the generated text for
+// any variant of this shape: plain locals, dynamic-index
+// loops, or &struct fills), so this shape exerts no comparable
+// task-stack pressure there. That mirrors the natural case,
+// whose (2MiB, 4MiB] requirement was likewise only ever
+// measured on the SAB build (its text build is blocked by an
+// unrelated pre-existing trap). The text backend's obligation
+// here is the fixed-tree PASS (no regression).
+//
+// Baseline (fixed 256KiB task stacks): the worker aborts with
+// "goroutine ... stack overflow" on the first descent.
+// Fixed (DEF-R2, Jev reserve_commit_grow 0.97): the runtime
+// reserves a 64MiB virtual region per task and commits pages on
+// demand at the protection boundary; addresses never move, so
+// the out-param write performed at the deepest level through a
+// pointer taken in the worker frame must land in the worker's
+// sink field — the test asserts exactly that, plus the folded
+// checksum of every level's buffers.
+// DEF-R2-GIANT-FILL addendum (2026-11-04): the timeout this file
+// exhibited at the 0cc23855/aa657ef0 pins was a COMPILE-TIME defect,
+// distinct from the runtime stack-growth behaviour above: both
+// backends materialised the aggregate literals per element
+// (~4 host instructions/element, 197,176 SAB-disasm lines, 49,152
+// ownership fences), and the host's LLVM mem2reg is quadratic in
+// that shape (measured 139.6 s at 12,288 elements, 656.8 s at
+// 24,576; this file's 49,152 extrapolate to ~2,600-3,100 s -- the
+// text route timed out at the same libLLVM offset, so the "no
+// comparable pressure" observation above holds only for runtime
+// task-stack pressure, not for compilation). The fix emits bulk
+// forms above 32 elements (seed store + doubling
+// @sa_mem_copy_nonoverlapping; one bulk copy for struct-literal
+// array fields): the file now compiles in ~1 s and the text
+// backend passes end-to-end within the 240 s budget. NOTE: on a
+// fresh aa657ef0 host build the SAB route terminated by signal 11
+// in the &struct fill path -- reproduced with the STOCK plugin at
+// s25 scale, i.e. a pre-existing defect independent of the fill
+// fix (DEF-SAB-BORROW-WRITE-NULL). That defect is fixed in the
+// same integration train (2026-11-05), after which the SAB route
+// of this file passes as well.
+@import "sa_std/ptr.sa"
+@import "sa_std/task.sai"
+@import "sa_std/core/box.sa"
+
+struct R2Ctx {
+    jobs: Chan<u64>,
+    done: Chan<u64>,
+    sink: u64,
+}
+
+struct R2Slot {
+    bytes: [u64; 8192],
+    tag: u64,
+}
+
+struct R2Frame {
+    a: [u64; 4096],
+    b: [u64; 4096],
+}
+
+fn r2_fill_frame(f: &R2Frame, n: u64) {
+    let i: u64 = 0;
+    while i < 4096 {
+        f.a[i] = n + i;
+        f.b[i] = n * 3 + i;
+        i = i + 1;
+    }
+}
+
+fn r2_level(n: u64, ctx: *R2Ctx) -> u64 {
+    let f = R2Frame { a: [0; 4096], b: [0; 4096] };
+    r2_fill_frame(&f, n);
+    let sub: u64 = 0;
+    if n > 0 {
+        sub = r2_level(n - 1, ctx);
+    } else {
+        (*ctx).sink = 777;
+    };
+    return sub + f.a[n] + f.b[n * 7];
+}
+
+struct R2Bufs {
+    w1: [u64; 8192],
+    w2: [u64; 8192],
+    w3: [u64; 8192],
+    w4: [u64; 8192],
+}
+
+fn r2_fill_bufs(s: &R2Bufs) {
+    let i: u64 = 0;
+    while i < 8192 {
+        s.w1[i] = i + 1;
+        s.w2[i] = i + 2;
+        s.w3[i] = i + 3;
+        s.w4[i] = i + 4;
+        i = i + 1;
+    }
+}
+
+fn r2_fill_slot(s: &R2Slot) {
+    let j: u64 = 0;
+    while j < 8192 {
+        s.bytes[j] = 1;
+        j = j + 1;
+    }
+}
+
+fn r2_worker(ctx: *R2Ctx) {
+    let bufs = R2Bufs { w1: [0; 8192], w2: [0; 8192], w3: [0; 8192], w4: [0; 8192] };
+    let slot = R2Slot { bytes: [0; 8192], tag: 9 };
+    r2_fill_bufs(&bufs);
+    r2_fill_slot(&slot);
+    let rounds: u64 = 0;
+    while rounds < 3 {
+        let (job, closed) = (*ctx).jobs.recv();
+        if closed { break; };
+        let sum = r2_level(48, ctx);
+        (*ctx).done.send(sum + bufs.w1[100] + bufs.w2[200] + bufs.w3[300] + bufs.w4[400] + slot.bytes[1234] + slot.tag + job * 0);
+        rounds = rounds + 1;
+    }
+}
+
+@test "def_r2 giant-frame worker grows past the fixed stack"() {
+    let jobs: Chan<u64> = Chan::new(1);
+    let done: Chan<u64> = Chan::new(1);
+    let ctx = Box::into_raw(Box::new(R2Ctx { jobs: jobs, done: done, sink: 0 }));
+    let h = go r2_worker(ctx);
+    let r: u64 = 0;
+    while r < 3 {
+        (*ctx).jobs.send(r);
+        let (v, closed) = (*ctx).done.recv();
+        if closed { panic(2071); };
+        if v != 15132 { panic(2072); };
+        if (*ctx).sink != 777 { panic(2073); };
+        (*ctx).sink = 0;
+        r = r + 1;
+    }
+    let st = sa_task_join(h);
+    if st != 0 { panic(2074); };
+}

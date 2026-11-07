@@ -1,0 +1,104 @@
+@import "sa_std/vec.sa"
+@import "sa_std/growvec.sa"
+@import "sa_std/growvec.sai"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+
+// DEF-SLAREDIS-BUILD-MAIN regression: a borrow of a heap-handle
+// element -- &v[i] where the element type is itself a Vec<u8> --
+// passed to a call loads the element handle through the slot
+// address in the same statement. The Class-B vecLike branch of
+// genIndexAddress released the slot address's base register right
+// after ptr_add, before that load, and the SA verifier rejected
+// the program with UseAfterMove (trap 1009): the ptr_add result
+// is capability-linked to its base, so releasing the base first
+// poisons the load. Origin: slaredis resp_write_command
+// (out = resp_bulk(out, &args[i]) inside a while loop), which
+// stopped building at sla b2e91147. The pre-existing classb
+// index-borrow corpus only covered struct elements, whose borrow
+// is the slot address itself and never loads through it in the
+// same statement, so the shape was missed.
+//
+// Backend status: the SA-text arm carries this regression (fails
+// with trap 1009 before the fix, passes after). The SAB side is
+// defective for this shape family independently of this fix
+// (the fix touches only the SA-text codegen): standalone direct
+// SAB lowering rejects index borrows of Vec handle elements /
+// borrowed Vec containers with UnsupportedSabDirectFeature on
+// pre-Class-B and current plugins alike (probe evidence q2-q8
+// in def-slaredis-build-main), and under the in-tree test
+// caliber the SAB arm lowers but all tests terminate by
+// signal 11. Both are pre-existing SAB borrow-machinery gaps,
+// registered with this batch; this file's #sab sweep entry
+// belongs to the same class as the other #sab-only failures in
+// the corpus baseline.
+
+fn take_bulk(out: Vec<u8>, data: &Vec<u8>) -> Vec<u8> {
+    out.push(36);
+    let n = len(data);
+    out.push(n as u8);
+    return out;
+}
+
+fn write_cmd(out: Vec<u8>, args: &Vec<Vec<u8>>) -> Vec<u8> {
+    let i: u64 = 0;
+    while i < len(args) {
+        out = take_bulk(out, &args[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+@test "handle element index borrow in loop replace call"() {
+    let args: Vec<Vec<u8>> = Vec::new();
+    let a: Vec<u8> = Vec::new();
+    a.push(65);
+    args.push(a);
+    let b: Vec<u8> = Vec::new();
+    b.push(66);
+    b.push(67);
+    args.push(b);
+    let out: Vec<u8> = Vec::new();
+    let r = write_cmd(out, &args);
+    if len(r) != 4 { panic(711); };
+    if r[0] != 36 { panic(712); };
+    if r[1] != 1 { panic(713); };
+    if r[2] != 36 { panic(714); };
+    if r[3] != 2 { panic(715); };
+}
+
+@test "handle element index borrow straight line"() {
+    let args: Vec<Vec<u8>> = Vec::new();
+    let a: Vec<u8> = Vec::new();
+    a.push(65);
+    args.push(a);
+    let out: Vec<u8> = Vec::new();
+    let r = take_bulk(out, &args[0]);
+    if len(r) != 2 { panic(721); };
+    if r[1] != 1 { panic(722); };
+}
+
+@test "growvec handle element index borrow in loop replace call"() {
+    let args: GrowVec<Vec<u8>> = GrowVec::with_max(16);
+    let a: Vec<u8> = Vec::new();
+    a.push(65);
+    args.push(a);
+    let b: Vec<u8> = Vec::new();
+    b.push(66);
+    b.push(67);
+    args.push(b);
+    let out: Vec<u8> = Vec::new();
+    let r = write_cmd_gv(out, &args);
+    if len(r) != 4 { panic(731); };
+    if r[1] != 1 { panic(732); };
+    if r[3] != 2 { panic(733); };
+}
+
+fn write_cmd_gv(out: Vec<u8>, args: &GrowVec<Vec<u8>>) -> Vec<u8> {
+    let i: u64 = 0;
+    while i < len(args) {
+        out = take_bulk(out, &args[i]);
+        i = i + 1;
+    }
+    return out;
+}

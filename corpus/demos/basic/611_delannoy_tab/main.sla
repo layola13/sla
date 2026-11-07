@@ -1,0 +1,49 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Delannoy 拍扁建表 D(m,n)=D(m-1,n)+D(m-1,n-1)+D(m,n-1)（546 范式）。
+// D(2,2)=13，D(3,3)=63，D(2,3)=25（612 做建表/直和对峙）。
+// 意对标 464_duel_delannoy（格路版互补；此处为纯建表版）。
+
+fn delan(m: int, n: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= m * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= m {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let b = 0;
+    while b <= n {
+        t[b] = 1;
+        b = b + 1;
+    }
+    let mm = 1;
+    while mm <= m {
+        let nn = 1;
+        while nn <= n {
+            t[mm * w + nn] = t[(mm - 1) * w + nn] + t[(mm - 1) * w + nn - 1] + t[mm * w + nn - 1];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[m * w + n];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", delan(2, 2), delan(3, 3), delan(2, 3));
+    return 0;
+}
+
+@test "basic 611 delannoy tab"() {
+    if delan(2, 2) != 13 { panic(61101); };
+    if delan(3, 3) != 63 { panic(61102); };
+    if delan(2, 3) != 25 { panic(61103); };
+    if delan(4, 4) != 321 { panic(61104); };
+}

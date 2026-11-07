@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+fn blanket_impl_len() -> i32 { let array_pair = [1, 2]; return array_pair.len(); }
+fn main() -> i32 {
+    let array_pair = [1, 2];
+    let result = array_pair.len();
+    println("{}", result);
+    return result;
+}
+@test "rosetta 165 165_blanket_impl_resolution"() { let got = blanket_impl_len(); if got != 2 { panic(165); }; }

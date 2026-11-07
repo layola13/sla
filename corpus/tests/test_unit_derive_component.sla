@@ -1,0 +1,33 @@
+@derive(Alpha)
+struct DerivedAnnotationOne {
+    value: i32,
+}
+
+@derive(Beta, Gamma)
+struct DerivedAnnotationTwo {
+    left: i32,
+    right: i32,
+}
+
+impl DerivedAnnotationOne {
+    fn metadata_score() -> i32 {
+        return 7;
+    }
+}
+
+impl DerivedAnnotationTwo {
+    fn metadata_score() -> i32 {
+        return 11;
+    }
+}
+
+fn derived_annotation_score() -> i32 {
+    let one = DerivedAnnotationOne { value: 3 };
+    let two = DerivedAnnotationTwo { left: 5, right: 9 };
+    return one.value + two.left + two.right + DerivedAnnotationOne::metadata_score() + DerivedAnnotationTwo::metadata_score();
+}
+
+@test "derive annotations are language-neutral"() {
+    if derived_annotation_score() != 35 { panic(9101); };
+}
+

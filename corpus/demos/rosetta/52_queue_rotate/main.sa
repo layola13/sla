@@ -1,0 +1,251 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec_deque.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@main() -> i32:
+L_ENTRY:
+    EXPAND VEC_DEQUE_NEW tmp_0
+    tmp_1 = 1
+    EXPAND VEC_DEQUE_PUSH_BACK tmp_0, tmp_1
+    !tmp_1
+    tmp_2 = 2
+    EXPAND VEC_DEQUE_PUSH_BACK tmp_0, tmp_2
+    !tmp_2
+    tmp_3 = 3
+    EXPAND VEC_DEQUE_PUSH_BACK tmp_0, tmp_3
+    !tmp_3
+    queue = tmp_0
+    tmp_4 = 1
+    EXPAND VEC_DEQUE_LEN tmp_5, queue
+    tmp_6 = stack_alloc 8
+    store tmp_6+0, 0 as u64
+    tmp_7 = stack_alloc 8
+    tmp_8 = eq tmp_5, 0
+    br tmp_8 -> L_VEC_DEQUE_ROTATE_EMPTY_1, L_VEC_DEQUE_ROTATE_RUN_0
+
+L_VEC_DEQUE_ROTATE_EMPTY_1:
+    !tmp_8
+    jmp L_VEC_DEQUE_ROTATE_END_7
+
+L_VEC_DEQUE_ROTATE_RUN_0:
+    !tmp_8
+    tmp_9 = urem tmp_4, tmp_5
+    tmp_10 = eq tmp_9, 0
+    br tmp_10 -> L_VEC_DEQUE_ROTATE_NO_MOVE_3, L_VEC_DEQUE_ROTATE_INIT_2
+
+L_VEC_DEQUE_ROTATE_NO_MOVE_3:
+    !tmp_10
+    !tmp_9
+    jmp L_VEC_DEQUE_ROTATE_END_7
+
+L_VEC_DEQUE_ROTATE_INIT_2:
+    !tmp_10
+    store tmp_6+0, 0 as u64
+    jmp L_VEC_DEQUE_ROTATE_HEAD_4
+
+L_VEC_DEQUE_ROTATE_HEAD_4:
+    tmp_11 = load tmp_6+0 as u64
+    tmp_12 = eq tmp_11, tmp_9
+    br tmp_12 -> L_VEC_DEQUE_ROTATE_DONE_6, L_VEC_DEQUE_ROTATE_BODY_5
+
+L_VEC_DEQUE_ROTATE_BODY_5:
+    !tmp_12
+    tmp_13 = call @sa_vec_deque_try_pop_front(&queue, &tmp_7)
+    tmp_14 = load tmp_7+0 as u64
+    !tmp_13
+    EXPAND VEC_DEQUE_PUSH_BACK queue, tmp_14
+    !tmp_14
+    tmp_15 = add tmp_11, 1
+    store tmp_6+0, tmp_15 as u64
+    !tmp_15
+    !tmp_11
+    jmp L_VEC_DEQUE_ROTATE_HEAD_4
+
+L_VEC_DEQUE_ROTATE_DONE_6:
+    !tmp_12
+    !tmp_11
+    !tmp_9
+    jmp L_VEC_DEQUE_ROTATE_END_7
+
+L_VEC_DEQUE_ROTATE_END_7:
+    !tmp_5
+    tmp_16 = 0
+    !tmp_4
+    !tmp_16
+    tmp_17 = 0
+    EXPAND VEC_DEQUE_GET tmp_18, queue, tmp_17
+    !tmp_17
+    tmp_19 = call @sa_fmt_u64(tmp_18, 10)
+    tmp_20 = call @sa_fmt_buffer_data(tmp_19)
+    tmp_21 = call @sa_fmt_buffer_len(tmp_19)
+    tmp_22 = tmp_20
+    call @sa_print_bytes(&tmp_22, tmp_21)
+    call @sa_fmt_buffer_free(^tmp_19)
+    !tmp_22
+    !tmp_21
+    !tmp_18
+    @const SLA_STR_0 = utf8:","
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_23 = 1
+    EXPAND VEC_DEQUE_GET tmp_24, queue, tmp_23
+    !tmp_23
+    tmp_25 = call @sa_fmt_u64(tmp_24, 10)
+    tmp_26 = call @sa_fmt_buffer_data(tmp_25)
+    tmp_27 = call @sa_fmt_buffer_len(tmp_25)
+    tmp_28 = tmp_26
+    call @sa_print_bytes(&tmp_28, tmp_27)
+    call @sa_fmt_buffer_free(^tmp_25)
+    !tmp_28
+    !tmp_27
+    !tmp_24
+    @const SLA_STR_1 = utf8:","
+    call @sa_print_bytes(&SLA_STR_1, 1)
+    tmp_29 = 2
+    EXPAND VEC_DEQUE_GET tmp_30, queue, tmp_29
+    !tmp_29
+    tmp_31 = call @sa_fmt_u64(tmp_30, 10)
+    tmp_32 = call @sa_fmt_buffer_data(tmp_31)
+    tmp_33 = call @sa_fmt_buffer_len(tmp_31)
+    tmp_34 = tmp_32
+    call @sa_print_bytes(&tmp_34, tmp_33)
+    call @sa_fmt_buffer_free(^tmp_31)
+    !tmp_34
+    !tmp_33
+    !tmp_30
+    @const SLA_STR_2 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_2, 1)
+    tmp_35 = 0
+    !queue
+    return tmp_35
+
+@test "rosetta 052 queue rotate"():
+L_TEST_ENTRY_8:
+    EXPAND VEC_DEQUE_NEW tmp_36
+    tmp_37 = 1
+    EXPAND VEC_DEQUE_PUSH_BACK tmp_36, tmp_37
+    !tmp_37
+    tmp_38 = 2
+    EXPAND VEC_DEQUE_PUSH_BACK tmp_36, tmp_38
+    !tmp_38
+    tmp_39 = 3
+    EXPAND VEC_DEQUE_PUSH_BACK tmp_36, tmp_39
+    !tmp_39
+    queue = tmp_36
+    tmp_40 = 1
+    EXPAND VEC_DEQUE_LEN tmp_41, queue
+    tmp_42 = stack_alloc 8
+    store tmp_42+0, 0 as u64
+    tmp_43 = stack_alloc 8
+    tmp_44 = eq tmp_41, 0
+    br tmp_44 -> L_VEC_DEQUE_ROTATE_EMPTY_10, L_VEC_DEQUE_ROTATE_RUN_9
+
+L_VEC_DEQUE_ROTATE_EMPTY_10:
+    !tmp_44
+    jmp L_VEC_DEQUE_ROTATE_END_16
+
+L_VEC_DEQUE_ROTATE_RUN_9:
+    !tmp_44
+    tmp_45 = urem tmp_40, tmp_41
+    tmp_46 = eq tmp_45, 0
+    br tmp_46 -> L_VEC_DEQUE_ROTATE_NO_MOVE_12, L_VEC_DEQUE_ROTATE_INIT_11
+
+L_VEC_DEQUE_ROTATE_NO_MOVE_12:
+    !tmp_46
+    !tmp_45
+    jmp L_VEC_DEQUE_ROTATE_END_16
+
+L_VEC_DEQUE_ROTATE_INIT_11:
+    !tmp_46
+    store tmp_42+0, 0 as u64
+    jmp L_VEC_DEQUE_ROTATE_HEAD_13
+
+L_VEC_DEQUE_ROTATE_HEAD_13:
+    tmp_47 = load tmp_42+0 as u64
+    tmp_48 = eq tmp_47, tmp_45
+    br tmp_48 -> L_VEC_DEQUE_ROTATE_DONE_15, L_VEC_DEQUE_ROTATE_BODY_14
+
+L_VEC_DEQUE_ROTATE_BODY_14:
+    !tmp_48
+    tmp_49 = call @sa_vec_deque_try_pop_front(&queue, &tmp_43)
+    tmp_50 = load tmp_43+0 as u64
+    !tmp_49
+    EXPAND VEC_DEQUE_PUSH_BACK queue, tmp_50
+    !tmp_50
+    tmp_51 = add tmp_47, 1
+    store tmp_42+0, tmp_51 as u64
+    !tmp_51
+    !tmp_47
+    jmp L_VEC_DEQUE_ROTATE_HEAD_13
+
+L_VEC_DEQUE_ROTATE_DONE_15:
+    !tmp_48
+    !tmp_47
+    !tmp_45
+    jmp L_VEC_DEQUE_ROTATE_END_16
+
+L_VEC_DEQUE_ROTATE_END_16:
+    !tmp_41
+    tmp_52 = 0
+    !tmp_40
+    !tmp_52
+    tmp_53 = 0
+    EXPAND VEC_DEQUE_GET tmp_54, queue, tmp_53
+    !tmp_53
+    tmp_55 = 2
+    tmp_56 = ne tmp_54, tmp_55
+    !tmp_54
+    !tmp_55
+    br tmp_56 -> L_THEN_17, L_ELSE_18
+
+L_THEN_17:
+    !tmp_56
+    panic(52)
+
+L_ELSE_18:
+    !tmp_56
+    jmp L_MERGE_19
+
+L_MERGE_19:
+    tmp_59 = 1
+    EXPAND VEC_DEQUE_GET tmp_60, queue, tmp_59
+    !tmp_59
+    tmp_61 = 3
+    tmp_62 = ne tmp_60, tmp_61
+    !tmp_60
+    !tmp_61
+    br tmp_62 -> L_THEN_20, L_ELSE_21
+
+L_THEN_20:
+    !tmp_62
+    panic(152)
+
+L_ELSE_21:
+    !tmp_62
+    jmp L_MERGE_22
+
+L_MERGE_22:
+    tmp_65 = 2
+    EXPAND VEC_DEQUE_GET tmp_66, queue, tmp_65
+    !tmp_65
+    tmp_67 = 1
+    tmp_68 = ne tmp_66, tmp_67
+    !tmp_66
+    !tmp_67
+    br tmp_68 -> L_THEN_23, L_ELSE_24
+
+L_THEN_23:
+    !tmp_68
+    panic(252)
+
+L_ELSE_24:
+    !tmp_68
+    jmp L_MERGE_25
+
+L_MERGE_25:
+    !queue
+    return
+

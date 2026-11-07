@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1099_switch_bool：布尔 switch（0,1）。
+// `true`/`false` 作字面量臂双后端正常（探针 + exe 核对；
+// 条件表达式臂见缺口 #22，此处只用字面量臂）。
+
+fn pick(b: bool) -> i32 {
+    let r: i32 = 9;
+    switch b {
+        true => { r = 1; },
+        false => { r = 0; },
+        default => {},
+    };
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{}", pick(false), pick(true));
+    return 0;
+}
+
+@test "basic 166 switch bool"() {
+    if pick(false) != 0 { panic(16601); };
+    if pick(true) != 1 { panic(16602); };
+}

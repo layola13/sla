@@ -1,0 +1,17 @@
+@import "src/targets/helpers/native.sa"
+@import "src/targets/helpers/portable.sa"
+
+@targets_helper_value() -> i32:
+L_ENTRY:
+    use_native = eq TARGET_NATIVE, 1
+    br use_native -> L_NATIVE, L_PORTABLE
+
+L_NATIVE:
+    native = call @native_target_value()
+    !use_native
+    return native
+
+L_PORTABLE:
+    portable = call @portable_target_value()
+    !use_native
+    return portable

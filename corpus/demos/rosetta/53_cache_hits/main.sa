@@ -1,0 +1,103 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+@import "sa_std/hashmap.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+
+[MACRO] SLA_MAP_TRY_GET_OPTION %out_opt, %map_reg, %key_reg
+    EXPAND MAP_TRY_GET __sla_map_get_ok_%out_opt, __sla_map_get_ptr_%out_opt, %map_reg, %key_reg
+    br __sla_map_get_ok_%out_opt -> L_SLA_MAP_GET_SOME_%out_opt, L_SLA_MAP_GET_NONE_%out_opt
+L_SLA_MAP_GET_SOME_%out_opt:
+    EXPAND OPTION_NEW_SOME %out_opt, __sla_map_get_ptr_%out_opt
+    !__sla_map_get_ptr_%out_opt
+    !__sla_map_get_ok_%out_opt
+    jmp L_SLA_MAP_GET_END_%out_opt
+L_SLA_MAP_GET_NONE_%out_opt:
+    EXPAND OPTION_NEW_NONE %out_opt
+    !__sla_map_get_ptr_%out_opt
+    !__sla_map_get_ok_%out_opt
+L_SLA_MAP_GET_END_%out_opt:
+[END_MACRO]
+
+[MACRO] SLA_MAP_INSERT_OPTION_U64 %out_opt, %map_reg, %key_reg, %value_reg
+    EXPAND MAP_INSERT __sla_map_insert_replaced_%out_opt, __sla_map_insert_old_ptr_%out_opt, %map_reg, %key_reg, %value_reg
+    br __sla_map_insert_replaced_%out_opt -> L_SLA_MAP_INSERT_SOME_%out_opt, L_SLA_MAP_INSERT_NONE_%out_opt
+L_SLA_MAP_INSERT_SOME_%out_opt:
+    __sla_map_insert_old_value_%out_opt = load __sla_map_insert_old_ptr_%out_opt+0 as u64
+    EXPAND OPTION_NEW_SOME %out_opt, __sla_map_insert_old_value_%out_opt
+    !__sla_map_insert_old_value_%out_opt
+    !__sla_map_insert_old_ptr_%out_opt
+    !__sla_map_insert_replaced_%out_opt
+    jmp L_SLA_MAP_INSERT_END_%out_opt
+L_SLA_MAP_INSERT_NONE_%out_opt:
+    EXPAND OPTION_NEW_NONE %out_opt
+    !__sla_map_insert_old_ptr_%out_opt
+    !__sla_map_insert_replaced_%out_opt
+L_SLA_MAP_INSERT_END_%out_opt:
+[END_MACRO]
+@const SLA_FNPTR_VT_cache_hit_value = vtable { call = @sla__cache_hit_value }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__cache_hit_value() -> i32:
+L_ENTRY:
+    EXPAND MAP_NEW tmp_0
+    cache = tmp_0
+    @const SLA_STR_0 = utf8:"a"
+    tmp_2 = 1
+    tmp_1 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_1, &SLA_STR_0, tmp_2
+    !tmp_2
+    tmp_3 = 3
+    tmp_4 = stack_alloc 8
+    store tmp_4+0, tmp_3 as u64
+    !tmp_3
+    EXPAND SLA_MAP_INSERT_OPTION_U64 tmp_5, cache, tmp_1, tmp_4
+    !tmp_5
+    EXPAND SLA_MAP_TRY_GET_OPTION tmp_6, cache, tmp_1
+    EXPAND OPTION_COPIED_U64 tmp_7, tmp_6
+    !tmp_6
+    EXPAND OPTION_UNWRAP_OR_DEFAULT tmp_8, tmp_7
+    !tmp_7
+    hit = tmp_8
+    EXPAND MAP_FREE cache
+    return hit
+
+@main() -> i32:
+L_ENTRY:
+    tmp_9 = call @sla__cache_hit_value()
+    hit = tmp_9
+    tmp_10 = call @sa_fmt_u64(hit, 10)
+    tmp_11 = call @sa_fmt_buffer_data(tmp_10)
+    tmp_12 = call @sa_fmt_buffer_len(tmp_10)
+    tmp_13 = tmp_11
+    call @sa_print_bytes(&tmp_13, tmp_12)
+    call @sa_fmt_buffer_free(^tmp_10)
+    !tmp_13
+    !tmp_12
+    @const SLA_STR_1 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_1, 1)
+    return hit
+
+@test "rosetta 053 cache hits"():
+L_TEST_ENTRY_0:
+    tmp_14 = call @sla__cache_hit_value()
+    hit = tmp_14
+    tmp_15 = 3
+    tmp_16 = ne hit, tmp_15
+    !tmp_15
+    br tmp_16 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_16
+    panic(53)
+
+L_ELSE_2:
+    !tmp_16
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !hit
+    return
+

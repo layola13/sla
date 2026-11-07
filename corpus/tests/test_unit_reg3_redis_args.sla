@@ -1,0 +1,256 @@
+@import "sa_std/redis.sla"
+
+// REG-SHARD3 coverage: SAB registry `declared` entries for the
+// redis.sla command-frame builder surface (redis_args_new,
+// redis_args_count, redis_args_verb, redis_args_push,
+// redis_args_push_int, redis_args_push_lit, redis_args_frame,
+// redis_eval_compose) and the byte-push primitives it stands on
+// (redis_push_i64, redis_push_u64, redis_push_lit, redis_push_slice,
+// redis_bytes_of, redis_bytes_eq, redis_slice_byte, redis_slice_len,
+// redis_is_digit). All class=declared, zero corpus references at
+// registry stamp ee7b41c3. Assertions are byte-exact against
+// independently constructed RESP frames.
+
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+fn reg3_crlf(v: Vec<u8>) -> Vec<u8> {
+    v.push(13);
+    v.push(10);
+    return v;
+}
+
+fn reg3_expect(got: Vec<u8>, want: Vec<u8>, code: u32) {
+    if redis_bytes_eq(got, want) == false {
+        panic(code);
+    };
+}
+
+@test "reg3 redis args new and empty frame"() {
+    let a = redis_args_new();
+    if redis_args_count(&a) != 0 { panic(4001); };
+    let frame = redis_args_frame(a);
+    let want: Vec<u8> = Vec::new();
+    want = redis_push_lit(want, STR_PTR("*0"), STR_LEN("*0"));
+    want = reg3_crlf(want);
+    reg3_expect(frame, want, 4002);
+}
+
+@test "reg3 redis args verb frame"() {
+    let a = redis_args_verb(STR_PTR("GET"), STR_LEN("GET"));
+    if redis_args_count(&a) != 1 { panic(4011); };
+    let frame = redis_args_frame(a);
+    let want: Vec<u8> = Vec::new();
+    want = redis_push_lit(want, STR_PTR("*1"), STR_LEN("*1"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$3"), STR_LEN("$3"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("GET"), STR_LEN("GET"));
+    want = reg3_crlf(want);
+    reg3_expect(frame, want, 4012);
+}
+
+@test "reg3 redis args push frame"() {
+    let a = redis_args_verb(STR_PTR("GET"), STR_LEN("GET"));
+    a = redis_args_push(a, reg3_bytes(STR_PTR("key"), STR_LEN("key")));
+    if redis_args_count(&a) != 2 { panic(4021); };
+    let frame = redis_args_frame(a);
+    let want: Vec<u8> = Vec::new();
+    want = redis_push_lit(want, STR_PTR("*2"), STR_LEN("*2"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$3"), STR_LEN("$3"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("GET"), STR_LEN("GET"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$3"), STR_LEN("$3"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("key"), STR_LEN("key"));
+    want = reg3_crlf(want);
+    reg3_expect(frame, want, 4022);
+}
+
+@test "reg3 redis args push lit frame"() {
+    let a = redis_args_new();
+    a = redis_args_push_lit(a, STR_PTR("SET"), STR_LEN("SET"));
+    a = redis_args_push_lit(a, STR_PTR("NX"), STR_LEN("NX"));
+    if redis_args_count(&a) != 2 { panic(4031); };
+    let frame = redis_args_frame(a);
+    let want: Vec<u8> = Vec::new();
+    want = redis_push_lit(want, STR_PTR("*2"), STR_LEN("*2"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$3"), STR_LEN("$3"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("SET"), STR_LEN("SET"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$2"), STR_LEN("$2"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("NX"), STR_LEN("NX"));
+    want = reg3_crlf(want);
+    reg3_expect(frame, want, 4032);
+}
+
+@test "reg3 redis args push int frame"() {
+    let a = redis_args_verb(STR_PTR("INCRBY"), STR_LEN("INCRBY"));
+    a = redis_args_push(a, reg3_bytes(STR_PTR("n"), STR_LEN("n")));
+    a = redis_args_push_int(a, 0 - 5);
+    if redis_args_count(&a) != 3 { panic(4041); };
+    let frame = redis_args_frame(a);
+    let want: Vec<u8> = Vec::new();
+    want = redis_push_lit(want, STR_PTR("*3"), STR_LEN("*3"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$6"), STR_LEN("$6"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("INCRBY"), STR_LEN("INCRBY"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$1"), STR_LEN("$1"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("n"), STR_LEN("n"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$2"), STR_LEN("$2"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("-5"), STR_LEN("-5"));
+    want = reg3_crlf(want);
+    reg3_expect(frame, want, 4042);
+}
+
+@test "reg3 redis push i64 spellings"() {
+    let v0: Vec<u8> = Vec::new();
+    reg3_expect(redis_push_i64(v0, 0), reg3_bytes(STR_PTR("0"), STR_LEN("0")), 4051);
+    let v1: Vec<u8> = Vec::new();
+    reg3_expect(redis_push_i64(v1, 7), reg3_bytes(STR_PTR("7"), STR_LEN("7")), 4052);
+    let v2: Vec<u8> = Vec::new();
+    reg3_expect(redis_push_i64(v2, 0 - 42), reg3_bytes(STR_PTR("-42"), STR_LEN("-42")), 4053);
+    let v3: Vec<u8> = Vec::new();
+    reg3_expect(redis_push_i64(v3, 9223372036854775807), reg3_bytes(STR_PTR("9223372036854775807"), STR_LEN("9223372036854775807")), 4054);
+    let v4: Vec<u8> = Vec::new();
+    reg3_expect(redis_push_i64(v4, 0 - 9223372036854775807 - 1), reg3_bytes(STR_PTR("-9223372036854775808"), STR_LEN("-9223372036854775808")), 4055);
+    // Appends to existing content rather than replacing it.
+    let v5: Vec<u8> = Vec::new();
+    v5.push(58);
+    reg3_expect(redis_push_i64(v5, 12), reg3_bytes(STR_PTR(":12"), STR_LEN(":12")), 4056);
+}
+
+@test "reg3 redis push u64 spellings"() {
+    let v0: Vec<u8> = Vec::new();
+    reg3_expect(redis_push_u64(v0, 0), reg3_bytes(STR_PTR("0"), STR_LEN("0")), 4061);
+    let v1: Vec<u8> = Vec::new();
+    reg3_expect(redis_push_u64(v1, 10), reg3_bytes(STR_PTR("10"), STR_LEN("10")), 4062);
+    let maxv: u64 = ((1 as u64) << 63) + (((1 as u64) << 63) - 1);
+    let v2: Vec<u8> = Vec::new();
+    reg3_expect(redis_push_u64(v2, maxv), reg3_bytes(STR_PTR("18446744073709551615"), STR_LEN("18446744073709551615")), 4063);
+}
+
+@test "reg3 redis push lit raw bytes"() {
+    // push_lit copies bytes verbatim, including CR and LF.
+    let arr: [u8; 4] = [0u8; 4];
+    arr[0] = 97;
+    arr[1] = 13;
+    arr[2] = 10;
+    arr[3] = 98;
+    let ap: ptr = PTR_BYTE_ADD(&arr, 0);
+    let out: Vec<u8> = Vec::new();
+    let got = redis_push_lit(out, ap, 4);
+    let want: Vec<u8> = Vec::new();
+    want.push(97);
+    want.push(13);
+    want.push(10);
+    want.push(98);
+    reg3_expect(got, want, 4071);
+    // Zero-length copy appends nothing.
+    let out2: Vec<u8> = Vec::new();
+    let got2 = redis_push_lit(out2, ap, 0);
+    if (len(got2) as u64) != 0 { panic(4072); };
+}
+
+@test "reg3 redis push slice ranges"() {
+    let src = reg3_bytes(STR_PTR("hello"), STR_LEN("hello"));
+    let sl: Slice<u8> = VEC_AS_SLICE(src);
+    let out: Vec<u8> = Vec::new();
+    reg3_expect(redis_push_slice(out, &sl, 1, 4), reg3_bytes(STR_PTR("ell"), STR_LEN("ell")), 4081);
+    let out2: Vec<u8> = Vec::new();
+    reg3_expect(redis_push_slice(out2, &sl, 0, 5), reg3_bytes(STR_PTR("hello"), STR_LEN("hello")), 4082);
+    let out3: Vec<u8> = Vec::new();
+    let got3 = redis_push_slice(out3, &sl, 3, 3);
+    if (len(got3) as u64) != 0 { panic(4083); };
+}
+
+@test "reg3 redis bytes_of"() {
+    let b = redis_bytes_of(format("abc"));
+    reg3_expect(b, reg3_bytes(STR_PTR("abc"), STR_LEN("abc")), 4091);
+    let e = redis_bytes_of(format(""));
+    if (len(e) as u64) != 0 { panic(4092); };
+}
+
+@test "reg3 redis bytes_eq"() {
+    let a = reg3_bytes(STR_PTR("same"), STR_LEN("same"));
+    let b = reg3_bytes(STR_PTR("same"), STR_LEN("same"));
+    if redis_bytes_eq(a, b) == false { panic(4101); };
+    let c = reg3_bytes(STR_PTR("diff"), STR_LEN("diff"));
+    if redis_bytes_eq(a, c) { panic(4102); };
+    let d = reg3_bytes(STR_PTR("sam"), STR_LEN("sam"));
+    if redis_bytes_eq(a, d) { panic(4103); };
+    let e1: Vec<u8> = Vec::new();
+    let e2: Vec<u8> = Vec::new();
+    if redis_bytes_eq(e1, e2) == false { panic(4104); };
+}
+
+@test "reg3 redis slice byte and len"() {
+    let v = reg3_bytes(STR_PTR("xyz"), STR_LEN("xyz"));
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    if redis_slice_len(&sl) != 3 { panic(4111); };
+    if redis_slice_byte(&sl, 0) != 120 { panic(4112); };
+    if redis_slice_byte(&sl, 2) != 122 { panic(4113); };
+    let ev: Vec<u8> = Vec::new();
+    let esl: Slice<u8> = VEC_AS_SLICE(ev);
+    if redis_slice_len(&esl) != 0 { panic(4114); };
+}
+
+@test "reg3 redis is_digit"() {
+    if redis_is_digit(53) == false { panic(4121); };
+    if redis_is_digit(48) == false { panic(4122); };
+    if redis_is_digit(57) == false { panic(4123); };
+    if redis_is_digit(47) { panic(4124); };
+    if redis_is_digit(58) { panic(4125); };
+}
+
+@test "reg3 redis eval compose"() {
+    let keys = redis_args_new();
+    keys = redis_args_push(keys, reg3_bytes(STR_PTR("k1"), STR_LEN("k1")));
+    keys = redis_args_push(keys, reg3_bytes(STR_PTR("k2"), STR_LEN("k2")));
+    let argv = redis_args_new();
+    argv = redis_args_push(argv, reg3_bytes(STR_PTR("a1"), STR_LEN("a1")));
+    let script = reg3_bytes(STR_PTR("return 1"), STR_LEN("return 1"));
+    let composed = redis_eval_compose(STR_PTR("EVAL"), STR_LEN("EVAL"), script, keys, argv);
+    if redis_args_count(&composed) != 6 { panic(4131); };
+    let frame = redis_args_frame(composed);
+    let want: Vec<u8> = Vec::new();
+    want = redis_push_lit(want, STR_PTR("*6"), STR_LEN("*6"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$4"), STR_LEN("$4"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("EVAL"), STR_LEN("EVAL"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$8"), STR_LEN("$8"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("return 1"), STR_LEN("return 1"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$1"), STR_LEN("$1"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("2"), STR_LEN("2"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$2"), STR_LEN("$2"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("k1"), STR_LEN("k1"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$2"), STR_LEN("$2"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("k2"), STR_LEN("k2"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("$2"), STR_LEN("$2"));
+    want = reg3_crlf(want);
+    want = redis_push_lit(want, STR_PTR("a1"), STR_LEN("a1"));
+    want = reg3_crlf(want);
+    reg3_expect(frame, want, 4132);
+}

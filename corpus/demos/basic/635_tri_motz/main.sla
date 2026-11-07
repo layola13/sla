@@ -1,0 +1,75 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Motzkin 三向：迭代建表 × 递归 × 二项直和（n=5：21 三锁）。
+// 意对标 628_motz_high（高位源互补；605 三向体例收束 Motzkin 族）。
+
+fn moz(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k <= ii - 2 {
+            s = s + t[k] * t[ii - 2 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn rmoz(n: int) -> int {
+    if n == 0 { return 1; };
+    if n == 1 { return 1; };
+    let s = rmoz(n - 1);
+    let k = 0;
+    while k <= n - 2 {
+        s = s + rmoz(k) * rmoz(n - 2 - k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn cmot(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while 2 * k <= n {
+        s = s + binom_mul(n, 2 * k) * binom_mul(2 * k, k) / (k + 1);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", moz(5), rmoz(5), cmot(5));
+    return 0;
+}
+
+@test "basic 635 tri motz"() {
+    if moz(5) != 21 { panic(63501); };
+    if rmoz(5) != 21 { panic(63502); };
+    if cmot(5) != 21 { panic(63503); };
+    if cmot(4) != 9 { panic(63504); };
+}

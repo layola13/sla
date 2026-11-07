@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1065_chained_returns：返回表达式组合（two()=one()+one()=2）。
+
+fn one() -> int {
+    return 1;
+}
+
+fn two() -> int {
+    return one() + one();
+}
+
+fn main() -> i32 {
+    println("{}", two());
+    return 0;
+}
+
+@test "basic 219 chainret"() {
+    if two() != 2 { panic(21901); };
+    if one() + one() != 2 { panic(21902); };
+}

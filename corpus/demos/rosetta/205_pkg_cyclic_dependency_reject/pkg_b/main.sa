@@ -1,0 +1,10 @@
+@import "pkg_b/../pkg_a/main.sa"
+
+#def PkgB_SIZE = 4
+#def PkgB_value = +0
+
+@pkg_b_value() -> i32:
+L_ENTRY:
+    value = add 2, 0
+    !value
+    return 2

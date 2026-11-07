@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 连乘×平方乘×位移三向幂对峙（113×258×119：2^10→1024=1024=1024）。
+// 双向已见 293，此处加位移版收束三向（`1<<10`，119 的位移口径）。
+
+fn pow_loop(base: int, exp: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < exp {
+        r = r * base;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn pow_sqmul(base: int, exp: int) -> int {
+    let r = 1;
+    let b = base;
+    let e = exp;
+    while e > 0 {
+        if e % 2 == 1 { r = r * b; };
+        b = b * b;
+        e = e / 2;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", pow_loop(2, 10), pow_sqmul(2, 10), 1 << 10);
+    return 0;
+}
+
+@test "basic 309 tri pow"() {
+    if pow_loop(2, 10) != pow_sqmul(2, 10) { panic(30901); };
+    if pow_sqmul(2, 10) != 1 << 10 { panic(30902); };
+    if (1 << 10) != 1024 { panic(30903); };
+}

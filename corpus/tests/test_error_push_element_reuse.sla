@@ -1,0 +1,26 @@
+// expect: UseAfterMove
+@import "sa_std/vec.sa"
+@import "sa_std/string.sa"
+
+// DEF-deep-copy follow-up (push consume): a Vec push MOVES a
+// non-copy-like element into the container (String, Vec, Box, ...);
+// only copy-like elements (scalars, shallow-copy structs) are
+// copy-consumed. This form pushed the same String binding twice:
+// before the fix the checker accepted it, the SA referee caught the
+// text route with a raw register-level UseAfterMove, and the SAB
+// route compiled it into a binary that aborted (signal 6) on the
+// double ownership. The checker must reject the second push with a
+// language-level UseAfterMove naming the variable and `push`
+// (mirrors tests/test_error_use_after_move_call.sla for plain calls).
+
+fn bad_push_reuse(x: String) -> Vec<String> {
+    let out: Vec<String> = Vec::new();
+    out.push(x);
+    out.push(x);
+    return out;
+}
+
+fn main() -> i32 {
+    let r = bad_push_reuse(format("ab"));
+    return len(r) as i32;
+}

@@ -1,0 +1,94 @@
+// REG3-DEF-2 (FP-2): deep-clone materialization of a recursive struct
+// type (a struct whose fields transitively contain the type itself,
+// here items: Vec<RNode>) must terminate at compile time and produce
+// an independently owned copy at every copy materialization point:
+// preserved by-value argument, struct-literal fill from a live place,
+// and copy-mode Vec push. Stock compiler: unbounded recursion in clone
+// generation (text backend SIGSEGV, SAB memory-bloat hang). The
+// runtime side is checked by ownership: every clone is dropped inside
+// its callee, so any residual aliasing between a clone and its source
+// (at any tree depth) shows up as corruption or a double free when the
+// source is read afterwards or dropped at scope exit.
+
+struct RNode {
+    n: i64,
+    bulk: Vec<u8>,
+    items: Vec<RNode>,
+}
+
+struct RWrap {
+    tag: i64,
+    node: RNode,
+}
+
+fn rnode(n: i64) -> RNode {
+    let b: Vec<u8> = Vec::new();
+    let it: Vec<RNode> = Vec::new();
+    return RNode {
+        n: n,
+        bulk: b,
+        items: it,
+    };
+}
+
+fn rnode_full(n: i64, fills: i64) -> RNode {
+    let r = rnode(n);
+    if fills >= 1 { r.bulk.push(5); };
+    if fills >= 2 { r.bulk.push(6); };
+    if fills >= 3 { r.bulk.push(7); };
+    return r;
+}
+
+// Shallow observables of the callee's own clone; the parameter is
+// dropped when this returns.
+fn observe(x: RNode) -> i64 {
+    return x.n + (len(x.bulk) as i64) + (len(x.items) as i64);
+}
+
+fn wrap_of(r: RNode) -> RWrap {
+    return RWrap {
+        tag: 3,
+        node: r,
+    };
+}
+
+fn push_and_drop(r: RNode) -> i64 {
+    let v: Vec<RNode> = Vec::new();
+    v.push(r);
+    return (len(v) as i64) + r.n;
+}
+
+@test "recursive struct clone materializations"() {
+    // Tree: root(1, bulk 1) -> child(10, bulk 2) -> grandchild(100, bulk 3).
+    let grandchild = rnode_full(100, 3);
+    let child = rnode_full(10, 2);
+    child.items.push(grandchild);
+    let root = rnode_full(1, 1);
+    root.items.push(child);
+
+    // Preserved by-value argument: observe() walks away with a clone
+    // and drops it; the source must stay fully intact.
+    if observe(root) != 3 { panic(201); };
+    if observe(root) != 3 { panic(202); };
+    if root.n != 1 { panic(203); };
+    if (len(root.bulk) as u64) != 1 { panic(204); };
+    if (len(root.items) as u64) != 1 { panic(205); };
+
+    // Mutating the source afterwards is seen by the next call's fresh
+    // clone (the passes never shared storage with the source).
+    root.bulk.push(77);
+    root.items.push(rnode_full(50, 0));
+    if observe(root) != 5 { panic(206); };
+
+    // Struct-literal fill from a live place clones as well; dropping
+    // the wrapper at scope exit must not disturb the source.
+    let w = wrap_of(root);
+    if w.tag != 3 { panic(207); };
+    if observe(w.node) != 5 { panic(208); };
+    if observe(root) != 5 { panic(209); };
+
+    // Copy-mode push of a live local clones; the pushed copy is
+    // dropped with the callee's Vec, the source stays valid.
+    if push_and_drop(root) != 2 { panic(210); };
+    if observe(root) != 5 { panic(211); };
+}

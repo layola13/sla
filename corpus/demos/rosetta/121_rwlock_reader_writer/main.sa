@@ -1,0 +1,518 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/result.sa"
+@import "sa_std/sync/rwlock.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@import "sa_std/core/result.sa"
+@const SLA_THREAD_VT_1 = vtable { call = @sla_thread_worker_1 }
+@const SLA_THREAD_VT_0 = vtable { call = @sla_thread_worker_0 }
+
+@ffi_wrapper sla_thread_spawn_1(*slot: ptr):
+L_ENTRY:
+    worker_vt = &SLA_THREAD_VT_1
+    worker_fn = load worker_vt+0 as ptr
+    worker_raw = *worker_fn
+    worker_safe = assume_safe worker_raw
+    EXPAND THREAD_SPAWN handle, *worker_safe, *slot
+    store slot+0, handle as i32
+    !handle
+    !worker_safe
+    !worker_raw
+    !worker_fn
+    !worker_vt
+    !slot
+    return
+
+@sla_thread_worker_1(&slot: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load slot+16 as ptr
+    tmp_1 = call @sla__read_shared(^tmp_0)
+    store slot+8, tmp_1 as i32
+    !slot
+    return tmp_1
+
+@ffi_wrapper sla_thread_spawn_0(*slot: ptr):
+L_ENTRY:
+    worker_vt = &SLA_THREAD_VT_0
+    worker_fn = load worker_vt+0 as ptr
+    worker_raw = *worker_fn
+    worker_safe = assume_safe worker_raw
+    EXPAND THREAD_SPAWN handle, *worker_safe, *slot
+    store slot+0, handle as i32
+    !handle
+    !worker_safe
+    !worker_raw
+    !worker_fn
+    !worker_vt
+    !slot
+    return
+
+@sla_thread_worker_0(&slot: ptr) -> i32:
+L_ENTRY:
+    tmp_2 = load slot+16 as ptr
+    tmp_3 = call @sla__read_shared(^tmp_2)
+    store slot+8, tmp_3 as i32
+    !slot
+    return tmp_3
+
+@const SLA_FNPTR_VT_read_shared = vtable { call = @sla__read_shared }
+@const SLA_FNPTR_VT_rwlock_reader_writer_total = vtable { call = @sla__rwlock_reader_writer_total }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__read_shared(^shared: ptr) -> i32:
+L_ENTRY:
+    EXPAND ARC_GET tmp_4, shared
+    EXPAND RWLOCK_TRY_READ_NOERR tmp_5, tmp_6, tmp_4
+    br tmp_5 -> L_RWLOCK_RESULT_OK_1, L_RWLOCK_RESULT_ERR_0
+
+L_RWLOCK_RESULT_ERR_0:
+    EXPAND RESULT_NEW_ERR tmp_8, 1
+    jmp L_RWLOCK_RESULT_END_2
+
+L_RWLOCK_RESULT_OK_1:
+    tmp_7 = ptr_add tmp_4, RwLock_data
+    EXPAND RESULT_NEW_OK tmp_8, tmp_7
+    !tmp_7
+    jmp L_RWLOCK_RESULT_END_2
+
+L_RWLOCK_RESULT_END_2:
+    !tmp_5
+    !tmp_6
+    tmp_10 = load tmp_8+0 as u64
+    tmp_11 = eq tmp_10, 0
+    br tmp_11 -> L_RESULT_UNWRAP_OK_3, L_RESULT_UNWRAP_ERR_4
+
+L_RESULT_UNWRAP_OK_3:
+    !tmp_11
+    tmp_9 = load tmp_8+8 as ptr
+    !tmp_10
+    jmp L_RESULT_UNWRAP_END_5
+
+L_RESULT_UNWRAP_ERR_4:
+    !tmp_11
+    panic(17)
+    tmp_9 = 0
+    !tmp_10
+    jmp L_RESULT_UNWRAP_END_5
+
+L_RESULT_UNWRAP_END_5:
+    !tmp_8
+    reader = tmp_9
+    tmp_12 = load reader+0 as i32
+    value = add tmp_12, 0
+    !tmp_12
+    EXPAND RWLOCK_RELEASE_READ tmp_4
+    !tmp_4
+    !reader
+    !shared
+    return value
+
+@sla__rwlock_reader_writer_total() -> i32:
+L_ENTRY:
+    tmp_13 = 1
+    EXPAND RWLOCK_NEW_I32 tmp_14, tmp_13
+    !tmp_13
+    EXPAND ARC_NEW tmp_15, tmp_14
+    !tmp_14
+    shared = tmp_15
+    tmp_16 = add shared, 0
+    EXPAND ARC_CLONE tmp_16
+    cloned = tmp_16
+    tmp_17 = alloc 24
+    store tmp_17+0, 0 as i32
+    store tmp_17+8, 0 as i32
+    store tmp_17+16, cloned as ptr
+    ^cloned
+    call @sla_thread_spawn_0(*tmp_17)
+    first_reader = tmp_17
+    tmp_18 = load first_reader+0 as i32
+    tmp_19 = eq tmp_18, -1
+    br tmp_19 -> L_THREAD_JOIN_INLINE_6, L_THREAD_JOIN_PTHREAD_7
+
+L_THREAD_JOIN_INLINE_6:
+    !tmp_19
+    tmp_23 = load first_reader+8 as i32
+    tmp_22 = alloc 24
+    tmp_24 = 0
+    store tmp_22+0, tmp_24 as u64
+    store tmp_22+8, tmp_23 as i32
+    store tmp_22+16, tmp_24 as u64
+    !tmp_24
+    !tmp_23
+    jmp L_THREAD_JOIN_END_10
+
+L_THREAD_JOIN_PTHREAD_7:
+    !tmp_19
+    EXPAND THREAD_JOIN_STATUS tmp_20, tmp_18, *first_reader
+    EXPAND THREAD_DROP tmp_18
+    tmp_21 = eq tmp_20, 0
+    br tmp_21 -> L_THREAD_JOIN_OK_8, L_THREAD_JOIN_ERR_9
+
+L_THREAD_JOIN_OK_8:
+    !tmp_21
+    tmp_25 = load first_reader+8 as i32
+    tmp_22 = alloc 24
+    tmp_26 = 0
+    store tmp_22+0, tmp_26 as u64
+    store tmp_22+8, tmp_25 as i32
+    store tmp_22+16, tmp_26 as u64
+    !tmp_26
+    !tmp_25
+    !tmp_20
+    jmp L_THREAD_JOIN_END_10
+
+L_THREAD_JOIN_ERR_9:
+    !tmp_21
+    tmp_27 = add tmp_20, 0
+    tmp_22 = alloc 24
+    tmp_28 = 1
+    tmp_29 = 0
+    store tmp_22+0, tmp_28 as u64
+    store tmp_22+8, tmp_29 as i32
+    store tmp_22+16, tmp_27 as i64
+    !tmp_29
+    !tmp_28
+    !tmp_27
+    !tmp_20
+    jmp L_THREAD_JOIN_END_10
+
+L_THREAD_JOIN_END_10:
+    !tmp_18
+    tmp_31 = load tmp_22+0 as u64
+    tmp_32 = eq tmp_31, 0
+    br tmp_32 -> L_RESULT_UNWRAP_OK_11, L_RESULT_UNWRAP_ERR_12
+
+L_RESULT_UNWRAP_OK_11:
+    !tmp_32
+    tmp_30 = load tmp_22+8 as i32
+    !tmp_31
+    jmp L_RESULT_UNWRAP_END_13
+
+L_RESULT_UNWRAP_ERR_12:
+    !tmp_32
+    panic(17)
+    tmp_30 = 0
+    !tmp_31
+    jmp L_RESULT_UNWRAP_END_13
+
+L_RESULT_UNWRAP_END_13:
+    !tmp_22
+    first = add tmp_30, 0
+    !tmp_30
+    EXPAND ARC_GET tmp_33, shared
+    EXPAND RWLOCK_TRY_WRITE_NOERR tmp_34, tmp_35, tmp_33
+    br tmp_34 -> L_RWLOCK_RESULT_OK_15, L_RWLOCK_RESULT_ERR_14
+
+L_RWLOCK_RESULT_ERR_14:
+    EXPAND RESULT_NEW_ERR tmp_37, 1
+    jmp L_RWLOCK_RESULT_END_16
+
+L_RWLOCK_RESULT_OK_15:
+    tmp_36 = ptr_add tmp_33, RwLock_data
+    EXPAND RESULT_NEW_OK tmp_37, tmp_36
+    !tmp_36
+    jmp L_RWLOCK_RESULT_END_16
+
+L_RWLOCK_RESULT_END_16:
+    !tmp_34
+    !tmp_35
+    tmp_39 = load tmp_37+0 as u64
+    tmp_40 = eq tmp_39, 0
+    br tmp_40 -> L_RESULT_UNWRAP_OK_17, L_RESULT_UNWRAP_ERR_18
+
+L_RESULT_UNWRAP_OK_17:
+    !tmp_40
+    tmp_38 = load tmp_37+8 as ptr
+    !tmp_39
+    jmp L_RESULT_UNWRAP_END_19
+
+L_RESULT_UNWRAP_ERR_18:
+    !tmp_40
+    panic(17)
+    tmp_38 = 0
+    !tmp_39
+    jmp L_RESULT_UNWRAP_END_19
+
+L_RESULT_UNWRAP_END_19:
+    !tmp_37
+    writer = tmp_38
+    tmp_41 = load writer+0 as i32
+    current = add tmp_41, 0
+    !tmp_41
+    tmp_42 = 2
+    tmp_43 = add current, tmp_42
+    !tmp_42
+    updated = add tmp_43, 0
+    !tmp_43
+    store writer+0, updated as i32
+    !updated
+    EXPAND RWLOCK_RELEASE_WRITE tmp_33
+    !tmp_33
+    !writer
+    !current
+    EXPAND ARC_GET tmp_44, shared
+    EXPAND RWLOCK_TRY_READ_NOERR tmp_45, tmp_46, tmp_44
+    br tmp_45 -> L_RWLOCK_RESULT_OK_21, L_RWLOCK_RESULT_ERR_20
+
+L_RWLOCK_RESULT_ERR_20:
+    EXPAND RESULT_NEW_ERR tmp_48, 1
+    jmp L_RWLOCK_RESULT_END_22
+
+L_RWLOCK_RESULT_OK_21:
+    tmp_47 = ptr_add tmp_44, RwLock_data
+    EXPAND RESULT_NEW_OK tmp_48, tmp_47
+    !tmp_47
+    jmp L_RWLOCK_RESULT_END_22
+
+L_RWLOCK_RESULT_END_22:
+    !tmp_45
+    !tmp_46
+    tmp_50 = load tmp_48+0 as u64
+    tmp_51 = eq tmp_50, 0
+    br tmp_51 -> L_RESULT_UNWRAP_OK_23, L_RESULT_UNWRAP_ERR_24
+
+L_RESULT_UNWRAP_OK_23:
+    !tmp_51
+    tmp_49 = load tmp_48+8 as ptr
+    !tmp_50
+    jmp L_RESULT_UNWRAP_END_25
+
+L_RESULT_UNWRAP_ERR_24:
+    !tmp_51
+    panic(17)
+    tmp_49 = 0
+    !tmp_50
+    jmp L_RESULT_UNWRAP_END_25
+
+L_RESULT_UNWRAP_END_25:
+    !tmp_48
+    reader = tmp_49
+    tmp_52 = load reader+0 as i32
+    second = add tmp_52, 0
+    !tmp_52
+    tmp_53 = add first, second
+    !first
+    EXPAND RWLOCK_RELEASE_READ tmp_44
+    !tmp_44
+    !reader
+    !shared
+    !second
+    return tmp_53
+
+@main() -> i32:
+L_ENTRY:
+    tmp_54 = 1
+    EXPAND RWLOCK_NEW_I32 tmp_55, tmp_54
+    !tmp_54
+    EXPAND ARC_NEW tmp_56, tmp_55
+    !tmp_55
+    shared = tmp_56
+    tmp_57 = add shared, 0
+    EXPAND ARC_CLONE tmp_57
+    cloned = tmp_57
+    tmp_58 = alloc 24
+    store tmp_58+0, 0 as i32
+    store tmp_58+8, 0 as i32
+    store tmp_58+16, cloned as ptr
+    ^cloned
+    call @sla_thread_spawn_1(*tmp_58)
+    first_reader = tmp_58
+    tmp_59 = load first_reader+0 as i32
+    tmp_60 = eq tmp_59, -1
+    br tmp_60 -> L_THREAD_JOIN_INLINE_26, L_THREAD_JOIN_PTHREAD_27
+
+L_THREAD_JOIN_INLINE_26:
+    !tmp_60
+    tmp_64 = load first_reader+8 as i32
+    tmp_63 = alloc 24
+    tmp_65 = 0
+    store tmp_63+0, tmp_65 as u64
+    store tmp_63+8, tmp_64 as i32
+    store tmp_63+16, tmp_65 as u64
+    !tmp_65
+    !tmp_64
+    jmp L_THREAD_JOIN_END_30
+
+L_THREAD_JOIN_PTHREAD_27:
+    !tmp_60
+    EXPAND THREAD_JOIN_STATUS tmp_61, tmp_59, *first_reader
+    EXPAND THREAD_DROP tmp_59
+    tmp_62 = eq tmp_61, 0
+    br tmp_62 -> L_THREAD_JOIN_OK_28, L_THREAD_JOIN_ERR_29
+
+L_THREAD_JOIN_OK_28:
+    !tmp_62
+    tmp_66 = load first_reader+8 as i32
+    tmp_63 = alloc 24
+    tmp_67 = 0
+    store tmp_63+0, tmp_67 as u64
+    store tmp_63+8, tmp_66 as i32
+    store tmp_63+16, tmp_67 as u64
+    !tmp_67
+    !tmp_66
+    !tmp_61
+    jmp L_THREAD_JOIN_END_30
+
+L_THREAD_JOIN_ERR_29:
+    !tmp_62
+    tmp_68 = add tmp_61, 0
+    tmp_63 = alloc 24
+    tmp_69 = 1
+    tmp_70 = 0
+    store tmp_63+0, tmp_69 as u64
+    store tmp_63+8, tmp_70 as i32
+    store tmp_63+16, tmp_68 as i64
+    !tmp_70
+    !tmp_69
+    !tmp_68
+    !tmp_61
+    jmp L_THREAD_JOIN_END_30
+
+L_THREAD_JOIN_END_30:
+    !tmp_59
+    tmp_72 = load tmp_63+0 as u64
+    tmp_73 = eq tmp_72, 0
+    br tmp_73 -> L_RESULT_UNWRAP_OK_31, L_RESULT_UNWRAP_ERR_32
+
+L_RESULT_UNWRAP_OK_31:
+    !tmp_73
+    tmp_71 = load tmp_63+8 as i32
+    !tmp_72
+    jmp L_RESULT_UNWRAP_END_33
+
+L_RESULT_UNWRAP_ERR_32:
+    !tmp_73
+    panic(17)
+    tmp_71 = 0
+    !tmp_72
+    jmp L_RESULT_UNWRAP_END_33
+
+L_RESULT_UNWRAP_END_33:
+    !tmp_63
+    first = add tmp_71, 0
+    !tmp_71
+    EXPAND ARC_GET tmp_74, shared
+    EXPAND RWLOCK_TRY_WRITE_NOERR tmp_75, tmp_76, tmp_74
+    br tmp_75 -> L_RWLOCK_RESULT_OK_35, L_RWLOCK_RESULT_ERR_34
+
+L_RWLOCK_RESULT_ERR_34:
+    EXPAND RESULT_NEW_ERR tmp_78, 1
+    jmp L_RWLOCK_RESULT_END_36
+
+L_RWLOCK_RESULT_OK_35:
+    tmp_77 = ptr_add tmp_74, RwLock_data
+    EXPAND RESULT_NEW_OK tmp_78, tmp_77
+    !tmp_77
+    jmp L_RWLOCK_RESULT_END_36
+
+L_RWLOCK_RESULT_END_36:
+    !tmp_75
+    !tmp_76
+    tmp_80 = load tmp_78+0 as u64
+    tmp_81 = eq tmp_80, 0
+    br tmp_81 -> L_RESULT_UNWRAP_OK_37, L_RESULT_UNWRAP_ERR_38
+
+L_RESULT_UNWRAP_OK_37:
+    !tmp_81
+    tmp_79 = load tmp_78+8 as ptr
+    !tmp_80
+    jmp L_RESULT_UNWRAP_END_39
+
+L_RESULT_UNWRAP_ERR_38:
+    !tmp_81
+    panic(17)
+    tmp_79 = 0
+    !tmp_80
+    jmp L_RESULT_UNWRAP_END_39
+
+L_RESULT_UNWRAP_END_39:
+    !tmp_78
+    writer = tmp_79
+    tmp_82 = load writer+0 as i32
+    current = add tmp_82, 0
+    !tmp_82
+    tmp_83 = 2
+    tmp_84 = add current, tmp_83
+    !tmp_83
+    updated = add tmp_84, 0
+    !tmp_84
+    store writer+0, updated as i32
+    !updated
+    EXPAND RWLOCK_RELEASE_WRITE tmp_74
+    !tmp_74
+    !writer
+    !current
+    EXPAND ARC_GET tmp_85, shared
+    EXPAND RWLOCK_TRY_READ_NOERR tmp_86, tmp_87, tmp_85
+    br tmp_86 -> L_RWLOCK_RESULT_OK_41, L_RWLOCK_RESULT_ERR_40
+
+L_RWLOCK_RESULT_ERR_40:
+    EXPAND RESULT_NEW_ERR tmp_89, 1
+    jmp L_RWLOCK_RESULT_END_42
+
+L_RWLOCK_RESULT_OK_41:
+    tmp_88 = ptr_add tmp_85, RwLock_data
+    EXPAND RESULT_NEW_OK tmp_89, tmp_88
+    !tmp_88
+    jmp L_RWLOCK_RESULT_END_42
+
+L_RWLOCK_RESULT_END_42:
+    !tmp_86
+    !tmp_87
+    tmp_91 = load tmp_89+0 as u64
+    tmp_92 = eq tmp_91, 0
+    br tmp_92 -> L_RESULT_UNWRAP_OK_43, L_RESULT_UNWRAP_ERR_44
+
+L_RESULT_UNWRAP_OK_43:
+    !tmp_92
+    tmp_90 = load tmp_89+8 as ptr
+    !tmp_91
+    jmp L_RESULT_UNWRAP_END_45
+
+L_RESULT_UNWRAP_ERR_44:
+    !tmp_92
+    panic(17)
+    tmp_90 = 0
+    !tmp_91
+    jmp L_RESULT_UNWRAP_END_45
+
+L_RESULT_UNWRAP_END_45:
+    !tmp_89
+    reader = tmp_90
+    tmp_93 = load reader+0 as i32
+    second = add tmp_93, 0
+    !tmp_93
+    tmp_94 = add first, second
+    result = add tmp_94, 0
+    !tmp_94
+    tmp_95 = call @sa_fmt_u64(result, 10)
+    tmp_96 = call @sa_fmt_buffer_data(tmp_95)
+    tmp_97 = call @sa_fmt_buffer_len(tmp_95)
+    tmp_98 = tmp_96
+    call @sa_print_bytes(&tmp_98, tmp_97)
+    call @sa_fmt_buffer_free(^tmp_95)
+    !tmp_98
+    !tmp_97
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    EXPAND RWLOCK_RELEASE_READ tmp_85
+    !tmp_85
+    !reader
+    !second
+    !first
+    !shared
+    return result
+
+@test "rosetta 121 121_rwlock_reader_writer"():
+L_TEST_ENTRY_46:
+    return
+

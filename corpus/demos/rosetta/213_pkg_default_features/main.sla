@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_default_feature_count() -> i32 {
+    let std_feature = 1;
+    return std_feature;
+}
+
+fn main() -> i32 { let std_feature = 1; println("{}", std_feature); return std_feature; }
+@test "rosetta 213 pkg default features"() { let got = pkg_default_feature_count(); if got != 1 { panic(213); }; }

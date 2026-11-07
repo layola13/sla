@@ -1,0 +1,12 @@
+// expect: FallibleResultDiscarded
+@import "sla_std/wrap/io.sla"
+@import "sa_std/string.sa"
+
+// A_min must-consume through the sugar provenance chain: the wrapper
+// is an ordinary SLA fn declared `-> i32!` (sugar for
+// `Result<i32, i32>`), so dropping its result as a bare statement is
+// the same offence as dropping a direct fallible extern result.
+fn discard_wrapped_result() -> i32 {
+    sla_std_println(STR_PTR("x"), 1);
+    return 0;
+}

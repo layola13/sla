@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 连乘 vs 平方乘幂对峙（113×258：2^10→1024=1024）。
+// 双实现一致性锁定（单实现见 113/258）。
+
+fn pow_loop(base: int, exp: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < exp {
+        r = r * base;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn pow_sqmul(base: int, exp: int) -> int {
+    let r = 1;
+    let b = base;
+    let e = exp;
+    while e > 0 {
+        if e % 2 == 1 { r = r * b; };
+        b = b * b;
+        e = e / 2;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{}", pow_loop(2, 10));
+    return 0;
+}
+
+@test "basic 293 duel pow"() {
+    if pow_loop(2, 10) != pow_sqmul(2, 10) { panic(29301); };
+    if pow_sqmul(2, 10) != 1024 { panic(29302); };
+    if pow_loop(3, 5) != pow_sqmul(3, 5) { panic(29303); };
+}

@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 错排容斥和式 !n=Σ_{k=0}^{n}(-1)^k·n!/k!（下降阶乘逐项：!3..!5=2,9,44）。
+// 意对标 566 derange（递推版互补；568 做双实现对峙）。
+
+fn derange_sum(n: int) -> int {
+    let acc = 0;
+    let k = 0;
+    while k <= n {
+        let f = 1;
+        let j = 0;
+        while j < n - k {
+            f = f * (n - j);
+            j = j + 1;
+        }
+        let sgn = 0 - 1;
+        if k % 2 == 0 { sgn = 1; };
+        acc = acc + sgn * f;
+        k = k + 1;
+    }
+    return acc;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", derange_sum(3), derange_sum(4), derange_sum(5));
+    return 0;
+}
+
+@test "basic 567 derangesum"() {
+    if derange_sum(3) != 2 { panic(56701); };
+    if derange_sum(4) != 9 { panic(56702); };
+    if derange_sum(5) != 44 { panic(56703); };
+}

@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Color(u8, u8, u8);
+
+fn main() -> i32 {
+    let color = Color(2, 4, 8);
+    let c0 = color.0 as i32;
+    let c1 = color.1 as i32;
+    let c2 = color.2 as i32;
+    let total = c0 + c1 + c2;
+    println("{}", total);
+    return 0;
+}
+
+@test "rosetta 036 tuple struct"() {
+    let color = Color(2, 4, 8);
+    let c0 = color.0 as i32;
+    let c1 = color.1 as i32;
+    let c2 = color.2 as i32;
+    let total = c0 + c1 + c2;
+    if total != 14 {
+        panic(36);
+    };
+}

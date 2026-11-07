@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct OptionValue<T> {
+    is_some: bool,
+    value: T,
+}
+
+fn unwrap_or(opt: OptionValue<i32>, default: i32) -> i32 {
+    if opt.is_some {
+        return opt.value;
+    } else {
+        return default;
+    };
+}
+
+fn main() -> i32 {
+    let opt = OptionValue<i32> {
+        is_some: true,
+        value: 42,
+    };
+    let result = unwrap_or(opt, 0);
+    println("{}", result);
+    return 0;
+};
+
+@test "rosetta 010 generics monomorph"() {
+    let opt = OptionValue<i32> {
+        is_some: true,
+        value: 42,
+    };
+    let result = unwrap_or(opt, 0);
+    if result != 42 {
+        panic(10);
+    };
+};

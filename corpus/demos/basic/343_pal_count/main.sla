@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 回文数表（1–20 共 10 个，末项 11）。
+// 234 为单值版，此处为计数版（232 的计数口径之回文版）。
+
+fn is_numpal(n: int) -> int {
+    let rev = 0;
+    let m = n;
+    while m > 0 {
+        rev = rev * 10 + m % 10;
+        m = m / 10;
+    }
+    return if rev == n { 1 } else { 0 };
+}
+
+fn main() -> i32 {
+    let pals: Vec<i32> = Vec::new();
+    let c = 1;
+    while c <= 20 {
+        if is_numpal(c) == 1 { pals.push(c); };
+        c = c + 1;
+    }
+    println("{},{}", len(pals), pals[9]);
+    return 0;
+}
+
+@test "basic 343 pal count"() {
+    let pals: Vec<i32> = Vec::new();
+    let c = 1;
+    while c <= 20 {
+        if is_numpal(c) == 1 { pals.push(c); };
+        c = c + 1;
+    }
+    if len(pals) != 10 { panic(34301); };
+    if pals[9] != 11 { panic(34302); };
+}

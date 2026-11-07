@@ -1,0 +1,51 @@
+// Sla fixed array smoke tests.
+
+fn sum4(values: [int; 4]) -> int {
+    let total = values[0] + values[1] + values[2] + values[3];
+    return total;
+}
+
+fn fill_zero(^values: [int; 4]) -> [int; 4] {
+    for i in 0..4 {
+        values[i] = 0;
+    }
+    return values;
+}
+
+fn iter(values: [int; 4]) -> [int; 4] {
+    return values;
+}
+
+fn sum(values: [int; 4]) -> int {
+    let total = 0;
+    for i in 0..4 {
+        total = total + values[i];
+    }
+    return total;
+}
+
+@test "array literal index read write"() {
+    let values = [1, 2, 3, 4];
+    values[2] = 9;
+    let total = sum4(values);
+    if total != 16 {
+        panic(1);
+    };
+}
+
+@test "array for loop index write"() {
+    let values = [1, 2, 3, 4];
+    let zeroed = fill_zero(^values);
+    let total = sum4(zeroed);
+    if total != 0 {
+        panic(2);
+    };
+}
+
+@test "array method chain sum"() {
+    let values = [1, 2, 3, 4];
+    let total: int = values.iter().sum();
+    if total != 10 {
+        panic(3);
+    };
+}

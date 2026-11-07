@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 素数判定双实现对峙（试除 vs 跳偶轮式：29 皆判素）。
+// 意对标 290 试除轮式对峙的判定版（46×261 口径）。
+
+fn is_prime_trial(n: int) -> int {
+    if n < 2 { return 0; };
+    let d = 2;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 1;
+    }
+    return 1;
+}
+
+fn is_prime_wheel(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", is_prime_trial(29), is_prime_wheel(29), is_prime_trial(30));
+    return 0;
+}
+
+@test "basic 364 duel prime"() {
+    if is_prime_trial(29) != 1 { panic(36401); };
+    if is_prime_wheel(29) != 1 { panic(36402); };
+    if is_prime_trial(30) != 0 { panic(36403); };
+    if is_prime_wheel(30) != 0 { panic(36404); };
+    if is_prime_trial(29) != is_prime_wheel(29) { panic(36405); };
+}

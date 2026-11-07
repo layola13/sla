@@ -1,0 +1,35 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 102_insert_sort：插入排序（定长 [int; 5]，原地 while 内移）。
+// 用 ^borrow 形参原地写（见 tests/test_unit_arrays.sla fill_zero 写法）。
+
+fn insert_sort(^a: [int; 5]) -> [int; 5] {
+    for i in 1..5 {
+        let k = a[i];
+        let j = i - 1;
+        while j >= 0 && a[j] > k {
+            a[j + 1] = a[j];
+            j = j - 1;
+        }
+        a[j + 1] = k;
+    }
+    return a;
+}
+
+fn main() -> i32 {
+    let a = [5, 2, 4, 1, 3];
+    let s = insert_sort(^a);
+    println("{},{},{},{},{}", s[0], s[1], s[2], s[3], s[4]);
+    return 0;
+}
+
+@test "basic 16 insert sort"() {
+    let a = [5, 2, 4, 1, 3];
+    let s = insert_sort(^a);
+    if s[0] != 1 { panic(1601); };
+    if s[1] != 2 { panic(1602); };
+    if s[2] != 3 { panic(1603); };
+    if s[3] != 4 { panic(1604); };
+    if s[4] != 5 { panic(1605); };
+}

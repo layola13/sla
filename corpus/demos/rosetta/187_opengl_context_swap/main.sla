@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/ptr.sa"
+
+extern "C" {
+    fn gl_make_current(ctx: *u8) -> i32;
+    fn gl_swap_buffers(ctx: *u8) -> i32;
+}
+
+@no_mangle pub extern "C" fn gl_make_current(ctx: *u8) -> i32 {
+    return 0;
+}
+
+@no_mangle pub extern "C" fn gl_swap_buffers(ctx: *u8) -> i32 {
+    return 1;
+}
+
+fn opengl_swap_result() -> i32 {
+    unsafe {
+        let ctx = ptr::null::<u8>();
+        let _ = gl_make_current(ctx);
+        let swapped = gl_swap_buffers(ctx);
+        return swapped;
+    };
+}
+
+fn main() -> i32 {
+    let result = opengl_swap_result();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 187 187_opengl_context_swap"() {
+    let got = opengl_swap_result();
+    if got != 1 {
+        panic(187);
+    };
+}

@@ -1,0 +1,70 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Dyck 对峙：网格 DP == 卷积递推（n=4：14 对 14；n=5：42 对 42）。
+// 意对标 559 dyck × 556 cat_conv（两源单实现见各源；286 系对峙体例）。
+
+fn dyck(n: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let a = 0;
+    while a <= n {
+        let b = 0;
+        while b <= n {
+            if a + b > 0 {
+                if b <= a {
+                    let up = 0;
+                    if a > 0 { up = t[(a - 1) * w + b]; };
+                    let lf = 0;
+                    if b > 0 { lf = t[a * w + b - 1]; };
+                    t[a * w + b] = up + lf;
+                };
+            };
+            b = b + 1;
+        }
+        a = a + 1;
+    }
+    return t[n * w + n];
+}
+
+fn cat_conv(n: int) -> int {
+    let c: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        c.push(0);
+        i = i + 1;
+    }
+    c[0] = 1;
+    let m = 1;
+    while m <= n {
+        let acc = 0;
+        let j = 0;
+        while j < m {
+            acc = acc + c[j] * c[m - 1 - j];
+            j = j + 1;
+        }
+        c[m] = acc;
+        m = m + 1;
+    }
+    return c[n];
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", dyck(4), cat_conv(4), dyck(5), cat_conv(5));
+    return 0;
+}
+
+@test "basic 562 duel dyck"() {
+    if dyck(4) != 14 { panic(56201); };
+    if cat_conv(4) != 14 { panic(56202); };
+    if dyck(5) != 42 { panic(56203); };
+    if cat_conv(5) != 42 { panic(56204); };
+    if dyck(5) != cat_conv(5) { panic(56205); };
+}

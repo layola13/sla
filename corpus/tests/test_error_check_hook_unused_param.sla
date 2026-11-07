@@ -1,0 +1,19 @@
+// expect: MacroParamUnused
+// J-5 negative: with macro_param_audit attached, a macro parameter
+// that is never referenced in the body is a named diagnostic
+// (MacroParamUnused). The same macro without the hook declaration
+// checks clean — the hook is opt-in per file. Judged by standalone
+// `sla check` (see plugin_tests.zig registration); the legal
+// control is tests/test_unit_check_hook_audit.sla.
+
+@check_hook macro_param_audit;
+
+macro add_into(out: i64, x: i64, y: i64) {
+    out = x + x;
+}
+
+fn f() -> i64 {
+    let r: i64 = 0;
+    add_into(r, 1, 2);
+    return r;
+}

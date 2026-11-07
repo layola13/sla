@@ -1,0 +1,45 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 次对角列对峙：建表 vs n(n-1)（(8,7)：56 对 56；(9,8)：72 对 72）。
+// 意对标 842_lah_col29（列源互补；838 首列对峙体例合流）。
+
+fn lah(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn edge(n: int) -> int {
+    return n * (n - 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", lah(8, 7), edge(8), lah(9, 8), edge(9));
+    return 0;
+}
+
+@test "basic 843 duel lahcol29"() {
+    if lah(8, 7) != 56 { panic(84301); };
+    if edge(8) != 56 { panic(84302); };
+    if lah(9, 8) != 72 { panic(84303); };
+    if edge(9) != 72 { panic(84304); };
+}

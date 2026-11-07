@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 中央二项 C(18,9)=48620，C(20,10)=184756（Catalan 商式的分子源，同式再上两档）。
+// 意对标 729_central_binom（低位版互补；860 做商表对峙）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn catd(n: int) -> int {
+    return binom_mul(2 * n, n) / (n + 1);
+}
+
+fn main() -> i32 {
+    println("{},{}", binom_mul(18, 9), binom_mul(20, 10));
+    return 0;
+}
+
+@test "basic 859 central18"() {
+    if binom_mul(18, 9) != 48620 { panic(85901); };
+    if binom_mul(20, 10) != 184756 { panic(85902); };
+    if binom_mul(14, 7) != 3432 { panic(85903); };
+    if binom_mul(12, 6) != 924 { panic(85904); };
+}

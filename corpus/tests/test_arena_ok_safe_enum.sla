@@ -1,0 +1,13 @@
+// F2-A C1 corpus (positive): an enum whose payloads are flat
+// values is arena-safe; payloads are closure edges that stay
+// inside the value world.
+enum Shape { Txt(String), Num(i32) }
+
+fn ok_safe_enum() -> i32 {
+    arena {
+        let t: String = format("hi");
+        let s = Shape::Txt(t);
+        let n = Shape::Num(3);
+    }
+    return 0;
+}

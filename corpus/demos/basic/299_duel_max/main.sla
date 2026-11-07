@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 语句 vs 三元 max 对峙（134×242：7=7；297 的镜像版）。
+// 双实现一致性锁定（单实现见 134/242）。
+
+fn max_stmt(a: int, b: int) -> int {
+    if a > b {
+        return a;
+    };
+    return b;
+}
+
+fn max_expr(a: int, b: int) -> int {
+    return if a > b { a } else { b };
+}
+
+fn main() -> i32 {
+    println("{},{}", max_stmt(3, 7), max_expr(3, 7));
+    return 0;
+}
+
+@test "basic 299 duel max"() {
+    if max_stmt(3, 7) != max_expr(3, 7) { panic(29901); };
+    if max_expr(3, 7) != 7 { panic(29902); };
+}

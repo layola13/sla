@@ -1,0 +1,21 @@
+@import "crypto/hash.sal"
+
+@ffi_wrapper crypto_hash_gate(*state: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow state
+    round = load view+HashState_round as i32
+    lane = load view+HashState_lane as i32
+    sum = add round, lane
+    !lane
+    !round
+    !view
+    return sum
+
+@export crypto_hash_entry() -> i32:
+L_ENTRY:
+    state = alloc HashState_SIZE
+    store state+HashState_round, 298 as i32
+    store state+HashState_lane, 0 as i32
+    value = call @crypto_hash_gate(*state)
+    !state
+    return value

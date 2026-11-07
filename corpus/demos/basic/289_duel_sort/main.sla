@@ -1,0 +1,54 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 插入 vs 选择排序对峙（16×262：首 1=1，末 5=5，中 3=3）。
+// 双实现一致性锁定（单实现见 16/262）。
+
+fn sort_insert(a: [int; 5]) -> [int; 5] {
+    let s = a;
+    for i in 1..5 {
+        let k = s[i];
+        let j = i - 1;
+        while j >= 0 && s[j] > k {
+            s[j + 1] = s[j];
+            j = j - 1;
+        }
+        s[j + 1] = k;
+    }
+    return s;
+}
+
+fn sort_select(a: [int; 5]) -> [int; 5] {
+    let s = a;
+    let i = 0;
+    while i < 5 {
+        let m = i;
+        let j = i + 1;
+        while j < 5 {
+            if s[j] < s[m] { m = j; };
+            j = j + 1;
+        }
+        let t = s[i];
+        s[i] = s[m];
+        s[m] = t;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    let a = [3, 1, 4, 1, 5];
+    let si = sort_insert(a);
+    let ss = sort_select(a);
+    println("{},{}", si[0] + ss[0], si[4] + ss[4]);
+    return 0;
+}
+
+@test "basic 289 duel sort"() {
+    let a = [3, 1, 4, 1, 5];
+    let si = sort_insert(a);
+    let ss = sort_select(a);
+    if si[0] + ss[0] != 2 { panic(28901); };
+    if si[4] + ss[4] != 10 { panic(28902); };
+    if si[2] != ss[2] { panic(28903); };
+}

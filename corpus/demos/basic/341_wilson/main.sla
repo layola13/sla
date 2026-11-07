@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Wilson 定理判定（5→1，4→0）。
+// 阶乘（230 口径）×模（328 口径）对峙：(p-1)!+1 整除 p 即素数。
+
+fn fact(n: int) -> int {
+    let p = 1;
+    let i = 1;
+    while i <= n {
+        p = p * i;
+        i = i + 1;
+    }
+    return p;
+}
+
+fn is_wilson(n: int) -> int {
+    return if (fact(n - 1) + 1) % n == 0 { 1 } else { 0 };
+}
+
+fn main() -> i32 {
+    println("{},{}", is_wilson(5), is_wilson(4));
+    return 0;
+}
+
+@test "basic 341 wilson"() {
+    if is_wilson(5) != 1 { panic(34101); };
+    if is_wilson(4) != 0 { panic(34102); };
+    if is_wilson(7) != 1 { panic(34103); };
+}

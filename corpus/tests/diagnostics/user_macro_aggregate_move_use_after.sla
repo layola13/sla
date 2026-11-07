@@ -1,0 +1,14 @@
+@import "sa_std/core/box.sa"
+
+struct AggregateMoveHolder { value: Box<i64> }
+
+macro aggregate_move(out, value) {
+    out = AggregateMoveHolder { value: ^value };
+}
+
+fn reject_aggregate_macro_move_use_after() -> i64 {
+    let source = Box::new(42i64);
+    let holder = AggregateMoveHolder { value: Box::new(1i64) };
+    aggregate_move(holder, source);
+    *source
+}

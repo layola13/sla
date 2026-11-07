@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+
+fn let_else_unwrapped_value() -> i32 {
+    let value = Some(5);
+    let Some(x) = value else {
+        println("{}", 0);
+        return 0;
+    };
+
+    return x;
+}
+
+fn main() -> i32 {
+    let value = Some(5);
+    let Some(x) = value else {
+        println("{}", 0);
+        return 0;
+    };
+
+    println("{}", x);
+    return x;
+}
+
+@test "rosetta 105 105_let_else"() {
+    let got = let_else_unwrapped_value();
+    if got != 5 {
+        panic(105);
+    };
+}

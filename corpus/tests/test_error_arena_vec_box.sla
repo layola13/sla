@@ -1,0 +1,9 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: the Vec element edge is part of the type
+// closure - Vec<Box<..>> reaches Box and is not arena-safe.
+fn neg_vec_box() -> i32 {
+    arena {
+        let v: Vec<Box<i32>> = Vec::new();
+    }
+    return 0;
+}

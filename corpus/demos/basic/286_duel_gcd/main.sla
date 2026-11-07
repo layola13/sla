@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 取模 vs 减法 gcd 对峙（17×256：48,18→6=6，7,13→1=1）。
+// 双实现一致性锁定（对峙系列；单实现见 17/256）。
+
+fn gcd_mod(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn gcd_sub(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while x != y {
+        if x > y {
+            x = x - y;
+        } else {
+            y = y - x;
+        };
+    }
+    return x;
+}
+
+fn main() -> i32 {
+    println("{},{}", gcd_mod(48, 18), gcd_sub(48, 18));
+    return 0;
+}
+
+@test "basic 286 duel gcd"() {
+    if gcd_mod(48, 18) != gcd_sub(48, 18) { panic(28601); };
+    if gcd_sub(48, 18) != 6 { panic(28602); };
+    if gcd_mod(7, 13) != gcd_sub(7, 13) { panic(28603); };
+}

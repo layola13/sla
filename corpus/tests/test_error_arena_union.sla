@@ -1,0 +1,13 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: a union's active member is untracked, so its
+// closure cannot be verified; it is not arena-safe (2.2).
+union U { a: i32, b: i32 }
+
+fn id_u(x: U) -> U { return x; }
+
+fn neg_union(p: U) -> i32 {
+    arena {
+        let u = id_u(p);
+    }
+    return 0;
+}

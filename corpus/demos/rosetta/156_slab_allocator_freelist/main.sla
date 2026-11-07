@@ -1,0 +1,12 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn slab_freelist_sum() -> i32 { let node1 = 1; let node2 = 2; return node1 + node2; }
+fn main() -> i32 {
+    let node1 = 1;
+    let node2 = 2;
+    let result = node1 + node2;
+    println("{}", result);
+    return result;
+}
+@test "rosetta 156 156_slab_allocator_freelist"() { let got = slab_freelist_sum(); if got != 3 { panic(156); }; }

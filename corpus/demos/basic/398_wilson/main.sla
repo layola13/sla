@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 威尔逊定理测试（(p-1)! mod p == p-1 ⟺ 素数）。
+// 意对标 397 费马测试的阶乘版（397 互补；小 p 避阶乘溢出）。
+
+fn factmod(n: int, m: int) -> int {
+    let r = 1;
+    let i = 1;
+    while i <= n {
+        r = r * i % m;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn wilson(n: int) -> int {
+    if n < 2 { return 0; };
+    if factmod(n - 1, n) == n - 1 { return 1; };
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", wilson(5), wilson(7), wilson(6), wilson(4));
+    return 0;
+}
+
+@test "basic 398 wilson"() {
+    if wilson(5) != 1 { panic(39801); };
+    if wilson(7) != 1 { panic(39802); };
+    if wilson(6) != 0 { panic(39803); };
+    if wilson(4) != 0 { panic(39804); };
+}

@@ -1,0 +1,58 @@
+@divide(a: i64, b: i64) -> i64:
+L_ENTRY:
+    tmp_0 = 0
+    tmp_1 = eq b, tmp_0
+    is_zero = tmp_1
+    br is_zero -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !is_zero
+    panic(99)
+
+L_ELSE_1:
+    !is_zero
+    jmp L_MERGE_2
+
+L_MERGE_2:
+    tmp_4 = div a, b
+    !b
+    !a
+    return tmp_4
+
+@test "divide normal"():
+L_TEST_ENTRY_3:
+    tmp_5 = 10
+    tmp_6 = 2
+    tmp_7 = call @divide(tmp_5, tmp_6)
+    result = tmp_7
+    tmp_8 = 5
+    tmp_9 = eq result, tmp_8
+    ok = tmp_9
+    br ok -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !ok
+    jmp L_MERGE_6
+
+L_ELSE_5:
+    !ok
+    panic(1)
+
+L_MERGE_6:
+    !result
+    return
+
+@test should_panic "divide by zero panics"():
+L_TEST_ENTRY_7:
+    tmp_12 = 10
+    tmp_13 = 0
+    tmp_14 = call @divide(tmp_12, tmp_13)
+    _result = tmp_14
+    !_result
+    return
+
+@test ignored should_panic "ignored panic test"():
+L_TEST_ENTRY_8:
+    panic(42)
+    return
+

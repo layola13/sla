@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 下降阶乘 fall(n,x)=x·(x-1)…(x-n+1)
+//（fall(4,4)=24，fall(5,5)=120，fall(5,2)=20；579 做上升对峙）。
+// 意对标 577 rising（上升版互补；572 连乘同形）。
+
+fn falling(n: int, x: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < n {
+        r = r * (x - i);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", falling(4, 4), falling(5, 5), falling(2, 5));
+    return 0;
+}
+
+@test "basic 578 falling"() {
+    if falling(4, 4) != 24 { panic(57801); };
+    if falling(5, 5) != 120 { panic(57802); };
+    if falling(2, 5) != 20 { panic(57803); };
+    if falling(3, 1) != 0 { panic(57804); };
+}

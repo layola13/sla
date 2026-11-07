@@ -1,0 +1,33 @@
+@import "sa_std/ws_client.sai"
+@import "sa_std/string.sa"
+@import "sa_std/io/print.sai"
+@import "byteseq.sa"
+
+// D2 (client) — exercises the built-in WebSocket client against the demo
+// server: connects to ws://127.0.0.1:18082/ws, sends one text frame,
+// expects the echo back byte-for-byte, prints "d2 ws client ok".
+
+fn bytes_is(p_ptr: ptr, p_len: u64, lit_ptr: ptr, lit_len: u64) -> bool {
+    let slot = [0u64; 1];
+    BYTES_EQ(&slot, p_ptr, p_len, lit_ptr, lit_len);
+    return slot[0] == 1;
+}
+
+fn main() -> i32 {
+    let handle: u64 = 0;
+    let url = "ws://127.0.0.1:18082/ws";
+    if sa_std_ws_client_connect(STR_PTR(url), STR_LEN(url), &handle) != 0 { return 2; };
+    let msg = "ping-cxu";
+    if sa_std_ws_client_send_text(handle, STR_PTR(msg), STR_LEN(msg)) != 0 { return 3; };
+    let opcode: u64 = 0;
+    let bufh: u64 = 0;
+    if sa_std_ws_client_recv(handle, &opcode, &bufh) != 0 { return 4; };
+    let d_ptr: ptr = sa_std_ws_client_buffer_data(bufh);
+    let d_len = sa_std_ws_client_buffer_len(bufh);
+    let ok = bytes_is(d_ptr, d_len, STR_PTR(msg), STR_LEN(msg));
+    sa_std_ws_client_buffer_free(bufh);
+    sa_std_ws_client_close(handle, 1000, STR_PTR(""), 0);
+    if !ok { return 5; };
+    println("d2 ws client ok");
+    return 0;
+}

@@ -1,0 +1,92 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/hashset.sa"
+@import "sa_std/btree_map.sa"
+@import "sa_std/btree_set.sa"
+@import "sa_std/string.sa"
+@import "sa_std/core/option.sa"
+
+// DEF insert-consume (preserved side): the insert consumption fix
+// must not over-consume. Arguments the store itself copies stay
+// live: scalar keys/values/elements can be inserted repeatedly and
+// used afterwards, including in a loop. Owned arguments inserted
+// exactly once stay legal: the binding moves into the container and
+// the entry remains usable afterwards (including when the source
+// binding's scope ends at the insert's block — the container owns
+// the handle from the insert on). Heap-typed VALUES are deliberately
+// absent here: their SAB emission is a separate stock gap
+// (UnsupportedSabDirectFeature), registered by the fix line.
+//
+// Two stock lookup anomalies are deliberately NOT asserted here
+// (registered by the fix line with discriminator evidence; they
+// fail identically before and after this fix, on the stock
+// get/contains machinery the fix does not touch):
+//  - reading a value back with get() after the insert ran inside a
+//    loop (presence via is_some() is fine; the copied value is not);
+//  - get()/contains() with a freshly built equal String key in
+//    @test mode (the block-scope form below does verify a fresh-key
+//    read; fn-main text route also passes it).
+
+@test "insert pod args reused in a loop"() {
+    let m: HashMap<i32, i32> = HashMap::new();
+    let s: HashSet<i32> = HashSet::new();
+    let k = 7;
+    let v = 11;
+    let i = 0;
+    while i < 3 {
+        m.insert(k, v);
+        s.insert(k);
+        i = i + 1;
+    }
+    if len(m) != 1 { panic(74201); };
+    if !m.get(k).is_some() { panic(74202); };
+    if !s.contains(k) { panic(74203); };
+    if k + v != 18 { panic(74204); };
+}
+
+@test "insert pod args straight line get values"() {
+    let m: HashMap<i32, i32> = HashMap::new();
+    m.insert(7, 11);
+    m.insert(7, 11);
+    m.insert(9, 13);
+    if m.get(7).copied().unwrap_or(0) != 11 { panic(74205); };
+    if m.get(9).copied().unwrap_or(0) != 13 { panic(74206); };
+}
+
+@test "insert btree pod args stay live"() {
+    let b = BTreeMap::new();
+    let t = BTreeSet::new();
+    let v = 5;
+    b.insert("a", v);
+    b.insert("b", v);
+    t.insert("x");
+    t.insert("y");
+    if b.get("a").copied().unwrap_or(0) != 5 { panic(74207); };
+    if b.get("b").copied().unwrap_or(0) != 5 { panic(74208); };
+    if v != 5 { panic(74209); };
+}
+
+@test "insert owned string key in a block scope"() {
+    let m: HashMap<String, i32> = HashMap::new();
+    {
+        let k: String = format("scoped-key");
+        m.insert(k, 77);
+    }
+    let probe: String = format("scoped-key");
+    if m.get(probe).copied().unwrap_or(0) != 77 { panic(74210); };
+}
+
+@test "insert owned string set element once"() {
+    let s = HashSet::new();
+    let e: String = format("only-elem");
+    s.insert(e);
+    if len(s) != 1 { panic(74211); };
+}
+
+@test "insert distinct owned keys"() {
+    let m: HashMap<String, i32> = HashMap::new();
+    let a: String = format("a-key");
+    let b: String = format("b-key");
+    m.insert(a, 1);
+    m.insert(b, 2);
+    if len(m) != 2 { panic(74212); };
+}

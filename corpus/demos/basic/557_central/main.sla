@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 中心二项式 B(n)=C(2n,n)：乘法式逐项整除（350 范式）。
+// B(4..6)=70,252,924；558/351 供商底。
+// 意对标 350 binom（单值版延展；此处 `2n` 取顶）。
+
+fn central(n: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < n {
+        r = r * (2 * n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", central(4), central(5), central(6));
+    return 0;
+}
+
+@test "basic 557 central"() {
+    if central(4) != 70 { panic(55701); };
+    if central(5) != 252 { panic(55702); };
+    if central(6) != 924 { panic(55703); };
+    if central(0) != 1 { panic(55704); };
+}

@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+@import "sa_std/sync/mpsc.sa"
+
+fn round_trip() -> i32 {
+    let (tx, rx) = mpsc::channel();
+    tx.send(8).unwrap();
+    let value = rx.recv().unwrap();
+    tx.send(value + 1).unwrap();
+    return rx.recv().unwrap();
+}
+
+fn main() -> i32 {
+    let value = round_trip();
+    println("{}", value);
+    return value;
+}
+
+@test "rosetta 062 62_channel_pingpong"() {
+    let got = round_trip();
+    if got != 9 {
+        panic(62);
+    };
+}

@@ -1,0 +1,14 @@
+// Generated from build/sysroot.toml and include/sysroot/*.h.
+#def SYSROOT_LAYOUT_COUNT = 2
+
+@sysroot_layout_value() -> i32:
+L_ENTRY:
+    value = add 269, 1
+    !value
+    return 270
+
+@sysroot_layout_count() -> i32:
+L_ENTRY:
+    count = add 1, 1
+    !count
+    return SYSROOT_LAYOUT_COUNT

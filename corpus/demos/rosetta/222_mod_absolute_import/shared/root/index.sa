@@ -1,0 +1,8 @@
+@import "shared/root/codec/index.sa"
+
+@export shared_root_value() -> i32:
+L_ENTRY:
+    codec = call @shared_root_codec()
+    value = add codec, 200
+    !codec
+    return value

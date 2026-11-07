@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1062_nested_calls：调用嵌套组合（add(mul(2,3),mul(4,5))=26）。
+// 与 189（调用结果组数组）互补，此处为实参位嵌套。
+
+fn add(a: int, b: int) -> int {
+    return a + b;
+}
+
+fn mul(a: int, b: int) -> int {
+    return a * b;
+}
+
+fn main() -> i32 {
+    println("{}", add(mul(2, 3), mul(4, 5)));
+    return 0;
+}
+
+@test "basic 218 nested calls"() {
+    if add(mul(2, 3), mul(4, 5)) != 26 { panic(21801); };
+    if mul(2, 3) != 6 { panic(21802); };
+    if mul(4, 5) != 20 { panic(21803); };
+}

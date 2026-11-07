@@ -1,0 +1,54 @@
+// Regression: an array literal whose element type comes from an explicit
+// [T; N] annotation (elements written as untyped integer literals) must be
+// stored at T's stride. The SA lowering previously derived the element
+// size from the first element expression's own type (default int = i64),
+// so [u8; 2] = [13, 10] was stored at i64 stride and index >= 1 read
+// back 0 (BA2 http_proxy CRLF/expect case). Discriminating backend is
+// --test-backend sa (the SAB direct path handled index reads correctly
+// even before the fix). The iter().collect() consumption shape is also
+// fixed on the SA backend by the same change, but is not asserted here:
+// the SAB direct path traps on array iter().collect() for any literal
+// form (UnknownRegister, separate registered gap).
+
+@test "annotated u8 literal const index"() {
+    let arr: [u8; 2] = [13, 10];
+    if arr[0] != 13 {
+        panic(1);
+    };
+    if arr[1] != 10 {
+        panic(2);
+    };
+}
+
+@test "annotated u8 literal var index"() {
+    let expect: [u8; 7] = [72, 84, 84, 80, 47, 49, 46];
+    let i: u64 = 0;
+    while i < 7 {
+        let b: u8 = expect[i];
+        if i == 1 {
+            if b != 84 {
+                panic(11);
+            };
+        };
+        if i == 6 {
+            if b != 46 {
+                panic(16);
+            };
+        };
+        i = i + 1;
+    }
+}
+
+@test "annotated i32 literal index"() {
+    let v: [i32; 3] = [100, 200, 300];
+    if v[0] != 100 {
+        panic(21);
+    };
+    if v[1] != 200 {
+        panic(22);
+    };
+    if v[2] != 300 {
+        panic(23);
+    };
+}
+

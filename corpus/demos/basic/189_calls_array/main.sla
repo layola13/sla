@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1063_calls_in_array：调用结果组数组（60）。
+// 数组字面量元素可为任意求值表达式（调用、算术皆可），
+// 与字面量数组（08）口径一致。
+
+fn v(i: i32) -> i32 { return i * 10; }
+
+fn main() -> i32 {
+    let a: [i32; 3] = [v(1), v(2), v(3)];
+    println("{}", a[0] + a[1] + a[2]);
+    return 0;
+}
+
+@test "basic 189 calls array"() {
+    let a: [i32; 3] = [v(1), v(2), v(3)];
+    if a[0] + a[1] + a[2] != 60 { panic(18901); };
+    if a[2] != 30 { panic(18902); };
+}

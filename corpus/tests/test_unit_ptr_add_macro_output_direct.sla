@@ -1,0 +1,21 @@
+@import "tests/import_fixtures/pkgjson/ptr_helpers.sa"
+@import "sa_std/string.sa"
+
+struct SourceMapSlice {
+    ptr: ptr,
+    len: int,
+}
+
+fn source_map_base_name(source: ptr, source_len: int, start: int) -> SourceMapSlice {
+    let base = source;
+    SLA_PTR_ADD(base, source, start);
+    return SourceMapSlice { ptr: base, len: source_len - start };
+}
+
+@test "direct sab ptr add macro writes local output without redefining input param"() {
+    let text = "abc";
+    let slice = source_map_base_name(STR_PTR(text), STR_LEN(text), 1);
+    if slice.len != 2 {
+        panic(43322);
+    };
+}

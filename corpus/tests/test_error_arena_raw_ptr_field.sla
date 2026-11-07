@@ -1,0 +1,13 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: a raw pointer field can point anywhere,
+// including out of the block; the closure rejects it (2.2).
+struct RawWrap { p: *u8 }
+
+fn id_raw_wrap(w: RawWrap) -> RawWrap { return w; }
+
+fn neg_raw_ptr_field(p: RawWrap) -> i32 {
+    arena {
+        let w = id_raw_wrap(p);
+    }
+    return 0;
+}

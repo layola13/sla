@@ -1,0 +1,115 @@
+@import "sa_std/net_info.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Coverage shard 2: net_info empty constructors, iface flag
+// predicates and net_addr_prefix from sa_std/net_info.sla (registry
+// "declared, never probed"). Flag bit values are the file's own
+// NET_IFACE_FLAG_* constants (UP 1, BROADCAST 2, LOOPBACK 8,
+// POINTOPOINT 16, RUNNING 64, MULTICAST 4096).
+
+fn vb(p: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return v;
+}
+
+fn iface_with_flags(flags: u32) -> NetInterface {
+    // Built from the empty constructor + field assignment: imported
+    // structs are not literal-constructible from another file
+    // (round-1 parse evidence in RESULT.md).
+    let e = net_interface_empty();
+    e.name = vb(STR_PTR("x0"), 2);
+    e.index = 3;
+    e.flags = flags;
+    e.mtu = 1500;
+    return e;
+}
+
+@test "reg2 net_interface_empty"() {
+    let e = net_interface_empty();
+    if len(e.name) != 0 { panic(25201); };
+    if e.index != 0 { panic(25202); };
+    if e.flags != 0 { panic(25203); };
+    if e.mtu != 0 { panic(25204); };
+    if e.has_mac { panic(25205); };
+    if e.mac[0] != 0 || e.mac[5] != 0 { panic(25206); };
+}
+
+@test "reg2 net_iface_addr_empty"() {
+    let e = net_iface_addr_empty();
+    if len(e.name) != 0 { panic(25207); };
+    if e.addr.tag != 4 || e.addr.lo != 0 { panic(25208); };
+    if e.mask.tag != 4 || e.mask.lo != 0 { panic(25209); };
+    if e.prefix_len != 0 { panic(25210); };
+    if e.has_broadcast { panic(25211); };
+    if e.scope_id != 0 { panic(25212); };
+}
+
+@test "reg2 ni_entry_dummy"() {
+    let e = ni_entry_dummy();
+    if len(e.name) != 0 { panic(25213); };
+    if e.addr.tag != 4 || e.addr.lo != 0 { panic(25214); };
+    if e.prefix_len != 0 { panic(25215); };
+    if e.has_broadcast { panic(25216); };
+}
+
+@test "reg2 net_route_empty"() {
+    let r = net_route_empty();
+    if len(r.iface) != 0 { panic(25217); };
+    if r.prefix.len != 0 { panic(25218); };
+    if r.prefix.addr.tag != 4 || r.prefix.addr.lo != 0 { panic(25219); };
+    if r.gateway.lo != 0 { panic(25220); };
+    if r.has_gateway { panic(25221); };
+    if r.metric != 0 { panic(25222); };
+    if r.flags != 0 { panic(25223); };
+}
+
+@test "reg2 net_iface_is predicates on empty"() {
+    let e = net_interface_empty();
+    if net_iface_is_up(&e) { panic(25224); };
+    if net_iface_is_running(&e) { panic(25225); };
+    if net_iface_is_loopback(&e) { panic(25226); };
+    if net_iface_is_broadcast(&e) { panic(25227); };
+    if net_iface_is_pointopoint(&e) { panic(25228); };
+    if net_iface_is_multicast(&e) { panic(25229); };
+}
+
+@test "reg2 net_iface_is predicates on flags"() {
+    let lo = iface_with_flags(9); // UP | LOOPBACK
+    if !net_iface_is_up(&lo) { panic(25230); };
+    if !net_iface_is_loopback(&lo) { panic(25231); };
+    if net_iface_is_running(&lo) { panic(25232); };
+    if net_iface_is_broadcast(&lo) { panic(25233); };
+    if net_iface_is_pointopoint(&lo) { panic(25234); };
+    if net_iface_is_multicast(&lo) { panic(25235); };
+    let eth = iface_with_flags(4162); // MULTICAST | RUNNING | BROADCAST
+    if !net_iface_is_multicast(&eth) { panic(25236); };
+    if !net_iface_is_running(&eth) { panic(25237); };
+    if !net_iface_is_broadcast(&eth) { panic(25238); };
+    if net_iface_is_up(&eth) { panic(25239); };
+    if net_iface_is_loopback(&eth) { panic(25240); };
+    let p2p = iface_with_flags(16); // POINTOPOINT only
+    if !net_iface_is_pointopoint(&p2p) { panic(25241); };
+    if net_iface_is_up(&p2p) { panic(25242); };
+}
+
+@test "reg2 net_addr_prefix"() {
+    let entry = net_iface_addr_empty();
+    entry.name = vb(STR_PTR("eth0"), 4);
+    entry.addr = ip_addr_from_ipv4(3232235813);
+    entry.mask = ip_addr_from_ipv4(4294967040);
+    entry.prefix_len = 24;
+    entry.broadcast = ip_addr_from_ipv4(3232236031);
+    entry.has_broadcast = true;
+    let p = net_addr_prefix(&entry);
+    if p.len != 24 { panic(25243); };
+    if p.addr.lo != 3232235813 { panic(25244); }; // addr kept as given (not masked)
+    let e = net_iface_addr_empty();
+    let pe = net_addr_prefix(&e);
+    if pe.len != 0 || pe.addr.lo != 0 { panic(25245); };
+}

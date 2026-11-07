@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn max(a: i32, b: i32) -> i32 {
+    if a > b { a } else { b }
+}
+
+fn selected_max_value() -> i32 {
+    return max(10, 20);
+}
+
+fn main() -> i32 {
+    let result = selected_max_value();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 003 03_if_else"() {
+    let got = selected_max_value();
+    if got != 20 {
+        panic(3);
+    };
+};

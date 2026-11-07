@@ -1,0 +1,12 @@
+@test "unsigned high bit binary operations"() {
+    let max: u64 = 0u64 - 1u64;
+    let half: u64 = 9223372036854775807u64;
+
+    if max / 2u64 != half { panic(33301); };
+    if max % 256u64 != 255u64 { panic(33302); };
+    if max <= half { panic(33303); };
+    if max < half { panic(33304); };
+    if 0u64 >= max { panic(33305); };
+    if 0u64 > max { panic(33306); };
+    if max >> 63u64 != 1u64 { panic(33307); };
+}

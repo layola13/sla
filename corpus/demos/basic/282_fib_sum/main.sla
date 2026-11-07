@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 173_fib_loop 的求和版（237 为表版：前 8 项和 33）。
+// 双变量滚动（143 口径）+ 累加组合。
+
+fn main() -> i32 {
+    let fsum = 0;
+    let a = 0;
+    let b = 1;
+    let k = 0;
+    while k < 8 {
+        fsum = fsum + a;
+        let t = a + b;
+        a = b;
+        b = t;
+        k = k + 1;
+    }
+    println("{}", fsum);
+    return 0;
+}
+
+@test "basic 282 fib sum"() {
+    let fsum = 0;
+    let a = 0;
+    let b = 1;
+    let k = 0;
+    while k < 8 {
+        fsum = fsum + a;
+        let t = a + b;
+        a = b;
+        b = t;
+        k = k + 1;
+    }
+    if fsum != 33 { panic(28201); };
+}

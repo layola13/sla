@@ -1,0 +1,10 @@
+// expect: InvalidArgsCount
+// neg: macro called with fewer arguments than declared
+macro add2(a: i64, b: i64) {
+    a = a + b;
+}
+fn main() -> i64 {
+    let r: i64 = 0;
+    add2(r);
+    return r;
+}

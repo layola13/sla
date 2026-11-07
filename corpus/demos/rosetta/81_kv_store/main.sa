@@ -1,0 +1,105 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+@import "sa_std/btree_map.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+
+[MACRO] SLA_BTREE_MAP_INSERT_OPTION_U64 %out_opt, %map_reg, %key_reg, %value_reg
+    EXPAND BTREE_MAP_INSERT_OLD __sla_btree_insert_replaced_%out_opt, __sla_btree_insert_old_%out_opt, %map_reg, %key_reg, %value_reg
+    br __sla_btree_insert_replaced_%out_opt -> L_SLA_BTREE_INSERT_SOME_%out_opt, L_SLA_BTREE_INSERT_NONE_%out_opt
+L_SLA_BTREE_INSERT_SOME_%out_opt:
+    EXPAND OPTION_NEW_SOME %out_opt, __sla_btree_insert_old_%out_opt
+    !__sla_btree_insert_old_%out_opt
+    !__sla_btree_insert_replaced_%out_opt
+    jmp L_SLA_BTREE_INSERT_END_%out_opt
+L_SLA_BTREE_INSERT_NONE_%out_opt:
+    EXPAND OPTION_NEW_NONE %out_opt
+    !__sla_btree_insert_old_%out_opt
+    !__sla_btree_insert_replaced_%out_opt
+L_SLA_BTREE_INSERT_END_%out_opt:
+[END_MACRO]
+
+[MACRO] SLA_BTREE_MAP_TRY_GET_OPTION %out_opt, %map_reg, %key_reg
+    EXPAND BTREE_MAP_TRY_GET __sla_btree_get_ok_%out_opt, __sla_btree_get_value_%out_opt, %map_reg, %key_reg
+    br __sla_btree_get_ok_%out_opt -> L_SLA_BTREE_GET_SOME_%out_opt, L_SLA_BTREE_GET_NONE_%out_opt
+L_SLA_BTREE_GET_SOME_%out_opt:
+    __sla_btree_get_slot_%out_opt = stack_alloc 8
+    store __sla_btree_get_slot_%out_opt+0, __sla_btree_get_value_%out_opt as u64
+    EXPAND OPTION_NEW_SOME %out_opt, __sla_btree_get_slot_%out_opt
+    !__sla_btree_get_value_%out_opt
+    !__sla_btree_get_ok_%out_opt
+    jmp L_SLA_BTREE_GET_END_%out_opt
+L_SLA_BTREE_GET_NONE_%out_opt:
+    EXPAND OPTION_NEW_NONE %out_opt
+    !__sla_btree_get_value_%out_opt
+    !__sla_btree_get_ok_%out_opt
+L_SLA_BTREE_GET_END_%out_opt:
+[END_MACRO]
+@const SLA_FNPTR_VT_kv_lookup_alpha = vtable { call = @sla__kv_lookup_alpha }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__kv_lookup_alpha() -> i32:
+L_ENTRY:
+    EXPAND BTREE_MAP_NEW tmp_0
+    kv = tmp_0
+    @const SLA_STR_0 = utf8:"alpha"
+    tmp_2 = 5
+    tmp_1 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_1, &SLA_STR_0, tmp_2
+    !tmp_2
+    tmp_3 = 5
+    EXPAND SLA_BTREE_MAP_INSERT_OPTION_U64 tmp_4, kv, tmp_1, tmp_3
+    !tmp_3
+    !tmp_4
+    EXPAND BTREE_MAP_TRY_GET tmp_6, tmp_5, kv, tmp_1
+    br tmp_6 -> L_BTREE_MAP_INDEX_HIT_0, L_BTREE_MAP_INDEX_MISS_1
+
+L_BTREE_MAP_INDEX_MISS_1:
+    !tmp_6
+    panic(404)
+
+L_BTREE_MAP_INDEX_HIT_0:
+    !tmp_6
+    tmp_7 = tmp_5 as i32
+    EXPAND BTREE_MAP_FREE kv
+    return tmp_7
+
+@main() -> i32:
+L_ENTRY:
+    tmp_8 = call @sla__kv_lookup_alpha()
+    result = tmp_8
+    tmp_9 = call @sa_fmt_u64(result, 10)
+    tmp_10 = call @sa_fmt_buffer_data(tmp_9)
+    tmp_11 = call @sa_fmt_buffer_len(tmp_9)
+    tmp_12 = tmp_10
+    call @sa_print_bytes(&tmp_12, tmp_11)
+    call @sa_fmt_buffer_free(^tmp_9)
+    !tmp_12
+    !tmp_11
+    @const SLA_STR_1 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_1, 1)
+    return result
+
+@test "rosetta 081 81_kv_store"():
+L_TEST_ENTRY_2:
+    tmp_13 = call @sla__kv_lookup_alpha()
+    got = tmp_13
+    tmp_14 = 5
+    tmp_15 = ne got, tmp_14
+    !tmp_14
+    br tmp_15 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_15
+    panic(81)
+
+L_ELSE_4:
+    !tmp_15
+    jmp L_MERGE_5
+
+L_MERGE_5:
+    !got
+    return
+

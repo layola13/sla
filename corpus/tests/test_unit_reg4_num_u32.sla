@@ -1,0 +1,36 @@
+@import "sa_std/num_u32.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Registry shard 4 coverage: u32_hex_digit from sa_std/num_u32.sla
+// (SAB registry class=declared, never probed, zero corpus
+// references at census 2026-11-06). Maps a 4-bit value to its
+// single-character lowercase hex string.
+
+fn s4_eq(a: String, b: String) -> bool {
+    let pa: ptr = STR_PTR(a);
+    let pb: ptr = STR_PTR(b);
+    if len(a) != len(b) { return false; };
+    let i: u64 = 0;
+    while i < len(a) {
+        if PTR_BYTE_AT(pa, i) != PTR_BYTE_AT(pb, i) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+@test "reg4 u32 hex digit numeric range"() {
+    if !s4_eq(u32_hex_digit(0), format("0")) { panic(41501); };
+    if !s4_eq(u32_hex_digit(1), format("1")) { panic(41502); };
+    if !s4_eq(u32_hex_digit(5), format("5")) { panic(41503); };
+    if !s4_eq(u32_hex_digit(9), format("9")) { panic(41504); };
+}
+
+@test "reg4 u32 hex digit alpha range"() {
+    if !s4_eq(u32_hex_digit(10), format("a")) { panic(41511); };
+    if !s4_eq(u32_hex_digit(11), format("b")) { panic(41512); };
+    if !s4_eq(u32_hex_digit(12), format("c")) { panic(41513); };
+    if !s4_eq(u32_hex_digit(13), format("d")) { panic(41514); };
+    if !s4_eq(u32_hex_digit(14), format("e")) { panic(41515); };
+    if !s4_eq(u32_hex_digit(15), format("f")) { panic(41516); };
+}

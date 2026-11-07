@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 欧几里得步数（(240,46) 需 5 步，(48,18) 需 3 步）。
+// 意对标 347 gcd 的步数版（347 互补）。
+
+fn euclid_steps(a: int, b: int) -> int {
+    let c = 0;
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+        c = c + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", euclid_steps(240, 46), euclid_steps(48, 18), euclid_steps(17, 5));
+    return 0;
+}
+
+@test "basic 441 euclid steps"() {
+    if euclid_steps(240, 46) != 5 { panic(44101); };
+    if euclid_steps(48, 18) != 3 { panic(44102); };
+    if euclid_steps(17, 5) != 3 { panic(44103); };
+}

@@ -1,0 +1,61 @@
+fn if_else_pick_i32(cond: bool) -> i32 {
+    let value: i32 = if cond { 1 } else { 2 };
+    return value;
+}
+
+fn if_else_return_i32(cond: bool) -> i32 {
+    return if cond { 3 } else { 4 };
+}
+
+fn if_else_assigns_var(cond: bool) -> i32 {
+    var x: i32;
+    x = if cond { 8 } else { 9 };
+    return x;
+}
+
+fn if_else_nested_assigns_var(a: bool, b: bool) -> i32 {
+    var x: i32;
+    if a {
+        x = if b { 11 } else { 12 };
+    } else {
+        x = if b { 13 } else { 14 };
+    };
+    return x;
+}
+
+fn if_else_pick_bool(cond: bool) -> bool {
+    return if cond { true } else { false };
+}
+
+fn if_else_pick_f64(cond: bool) -> f64 {
+    return if cond { 1.5 } else { 2.5 };
+}
+
+fn if_else_statement_branch(cond: bool) -> i32 {
+    let x: i32 = 0;
+    if cond {
+        x = 21;
+    } else {
+        x = 22;
+    };
+    return x;
+}
+
+@test "if else can be used as expression and statement"() {
+    if if_else_pick_i32(true) != 1 { panic(17600); };
+    if if_else_pick_i32(false) != 2 { panic(17601); };
+    if if_else_return_i32(true) != 3 { panic(17602); };
+    if if_else_return_i32(false) != 4 { panic(17603); };
+    if if_else_assigns_var(true) != 8 { panic(17604); };
+    if if_else_assigns_var(false) != 9 { panic(17605); };
+    if if_else_nested_assigns_var(true, true) != 11 { panic(17606); };
+    if if_else_nested_assigns_var(true, false) != 12 { panic(17607); };
+    if if_else_nested_assigns_var(false, true) != 13 { panic(17608); };
+    if if_else_nested_assigns_var(false, false) != 14 { panic(17609); };
+    if if_else_pick_bool(true) != true { panic(17610); };
+    if if_else_pick_bool(false) { panic(17611); };
+    if if_else_pick_f64(true) != 1.5 { panic(17612); };
+    if if_else_pick_f64(false) != 2.5 { panic(17613); };
+    if if_else_statement_branch(true) != 21 { panic(17614); };
+    if if_else_statement_branch(false) != 22 { panic(17615); };
+}

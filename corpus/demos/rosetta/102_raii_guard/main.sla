@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+@import "sa_std/sync/mutex.sa"
+
+fn inspect(counter: &Mutex<i32>, skip: bool) -> i32 {
+    let guard = counter.lock().unwrap();
+    if skip {
+        let value = *guard;
+        return value;
+    };
+
+    let current = *guard;
+    let updated = current + 3;
+    *guard = updated;
+    return updated;
+}
+
+fn raii_guard_total() -> i32 {
+    let counter = Mutex::new(0);
+    let first = inspect(&counter, true);
+    let second = inspect(&counter, false);
+    return first + second;
+}
+
+fn main() -> i32 {
+    let counter = Mutex::new(0);
+    let first = inspect(&counter, true);
+    let second = inspect(&counter, false);
+    let result = first + second;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 102 102_raii_guard"() {
+    let got = raii_guard_total();
+    if got != 3 {
+        panic(102);
+    };
+}

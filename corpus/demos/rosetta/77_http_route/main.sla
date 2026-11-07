@@ -1,0 +1,53 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+struct Request {
+    method: ptr,
+    path: ptr,
+}
+
+fn route_status(req: Request) -> i32 {
+    let result = 404;
+    if str_eq(req.method, "GET") {
+        result = get_route_status(req.path);
+    };
+    if str_eq(req.method, "POST") {
+        result = post_route_status(req.path);
+    };
+    return result;
+}
+
+fn get_route_status(path: ptr) -> i32 {
+    if str_eq(path, "/health") {
+        return 200;
+    };
+    return 404;
+}
+
+fn post_route_status(path: ptr) -> i32 {
+    if str_eq(path, "/jobs") {
+        return 202;
+    };
+    return 404;
+}
+
+fn main() -> i32 {
+    let request = Request {
+        method: "POST",
+        path: "/jobs",
+    };
+    let status = route_status(request);
+    println("{}", status);
+    return status;
+};
+
+@test "rosetta 077 77_http_route"() {
+    let request = Request {
+        method: "POST",
+        path: "/jobs",
+    };
+    if route_status(request) != 202 {
+        panic(77);
+    };
+};

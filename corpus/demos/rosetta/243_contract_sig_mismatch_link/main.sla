@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_signature_mismatch_count() -> i32 {
+    let expected_args = 2;
+    let provided_args = 1;
+    return expected_args - provided_args;
+}
+
+fn main() -> i32 {
+    let expected_args = 2;
+    let provided_args = 1;
+    let result = expected_args - provided_args;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 243 contract sig mismatch link"() {
+    let got = contract_signature_mismatch_count();
+    if got != 1 { panic(243); };
+}

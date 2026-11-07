@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn eco_ptx_shader_kernels() -> i32 { let compute_kernel = 1; return compute_kernel; }
+fn main() -> i32 { let compute_kernel = 1; println("{}", compute_kernel); return compute_kernel; }
+@test "rosetta 296 eco gpu ptx shader"() { let got = eco_ptx_shader_kernels(); if got != 1 { panic(296); }; }

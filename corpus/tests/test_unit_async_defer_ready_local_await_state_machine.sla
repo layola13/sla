@@ -1,0 +1,32 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn await_local_defer_ready_value() -> i32 {
+    let delayed = future::defer_ready(39);
+    let value = delayed.await;
+    return value + 3;
+}
+
+fn local_defer_ready_await_resumes_on_second_poll() -> i32 {
+    let fut = await_local_defer_ready_value();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9751);
+    };
+    if task::is_ready(task) != false {
+        panic(9752);
+    };
+    if task::poll(task) != true {
+        panic(9753);
+    };
+    if task::is_ready(task) != true {
+        panic(9754);
+    };
+    return task::result(task);
+}
+
+@test "async local defer ready await resumes"() {
+    if local_defer_ready_await_resumes_on_second_poll() != 42 {
+        panic(9755);
+    };
+}

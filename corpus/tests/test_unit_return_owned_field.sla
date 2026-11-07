@@ -1,0 +1,30 @@
+@import "sa_std/vec.sa"
+
+struct OwnedFieldBox {
+    values: Vec<u8>,
+}
+
+fn owned_field_box_new() -> OwnedFieldBox {
+    let values: Vec<u8> = Vec::new();
+    values.push(11);
+    values.push(22);
+    return OwnedFieldBox { values: values };
+}
+
+fn owned_field_box_values() -> Vec<u8> {
+    let boxed = owned_field_box_new();
+    return boxed.values;
+}
+
+@test "returning owned field keeps field alive"() {
+    let values = owned_field_box_values();
+    if len(values) != 2 {
+        panic(44101);
+    };
+    if values[0] != 11 {
+        panic(44102);
+    };
+    if values[1] != 22 {
+        panic(44103);
+    };
+}

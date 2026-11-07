@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_resource_ownership_transfers() -> i32 {
+    let moved_resource = 1;
+    return moved_resource;
+}
+
+fn main() -> i32 {
+    let result = contract_resource_ownership_transfers();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 251 contract resource ownership"() {
+    let got = contract_resource_ownership_transfers();
+    if got != 1 { panic(251); };
+}

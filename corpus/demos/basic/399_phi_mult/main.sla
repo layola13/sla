@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// phi 乘性（gcd(m,n)=1 时 φ(mn)=φ(m)φ(n)：φ(12)=φ(4)φ(3)=4）。
+// 意对标 336 欧拉函数的乘性版（382 累和版互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn phi(n: int) -> int {
+    if n <= 1 { return 1; };
+    let c = 0;
+    let k = 1;
+    while k < n {
+        if gcd(k, n) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", phi(12), phi(4) * phi(3), phi(10));
+    return 0;
+}
+
+@test "basic 399 phi mult"() {
+    if phi(12) != 4 { panic(39901); };
+    if phi(4) * phi(3) != 4 { panic(39902); };
+    if phi(12) != phi(4) * phi(3) { panic(39903); };
+    if phi(10) != 4 { panic(39904); };
+}

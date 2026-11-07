@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn mod_iface_layers() -> i32 { let interface_layer = 1; let implementation_layer = 1; return interface_layer + implementation_layer; }
+fn main() -> i32 { let interface_layer = 1; let implementation_layer = 1; let result = interface_layer + implementation_layer; println("{}", result); return result; }
+@test "rosetta 228 mod iface separation"() { let got = mod_iface_layers(); if got != 2 { panic(228); }; }

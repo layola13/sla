@@ -1,0 +1,70 @@
+struct Item {
+    value: i32,
+}
+
+struct Holder {
+    item: Item,
+}
+
+fn replace_item(holder: Holder) -> Holder {
+    let next = Item { value: holder.item.value + 1 };
+    holder.item = next;
+    return holder;
+}
+
+@test "field assign moved local cleanup"() {
+    let out = replace_item(Holder { item: Item { value: 4 } });
+    if out.item.value != 5 { panic(1600); };
+}
+
+struct VecHolder {
+    values: Vec<i32>,
+}
+
+struct VecMeterHolder {
+    values: Vec<i32>,
+    beats: u8,
+}
+
+fn replace_vec_field(holder: VecHolder) -> VecHolder {
+    let next_values: Vec<i32> = Vec::new();
+    next_values.push(7);
+    holder.values = next_values;
+    return holder;
+}
+
+fn vec_meter_holder_new() -> VecMeterHolder {
+    let values: Vec<i32> = Vec::new();
+    return VecMeterHolder { values: values, beats: 4 };
+}
+
+fn vec_meter_holder_valid(holder: &VecMeterHolder) -> bool {
+    return holder.beats < 64;
+}
+
+fn clear_vec_field(holder: VecHolder) -> VecHolder {
+    let next_values: Vec<i32> = Vec::new();
+    holder.values = next_values;
+    return holder;
+}
+
+@test "field assign moved vec local cleanup"() {
+    let start_values: Vec<i32> = Vec::new();
+    start_values.push(1);
+    let out = replace_vec_field(VecHolder { values: start_values });
+    if len(out.values) as i64 != 1 { panic(1610); };
+    if out.values[0] != 7 { panic(1611); };
+}
+
+@test "field assign empty vec local cleanup"() {
+    let start_values: Vec<i32> = Vec::new();
+    start_values.push(1);
+    let out = clear_vec_field(VecHolder { values: start_values });
+    if len(out.values) as i64 != 0 { panic(1620); };
+}
+
+@test "field assign scalar on vec aggregate releases base temp"() {
+    let meter = vec_meter_holder_new();
+    meter.beats = 65;
+    if vec_meter_holder_valid(&meter) != false { panic(1630); };
+}

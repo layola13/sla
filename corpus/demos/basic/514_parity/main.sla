@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 奇偶校验位（bitcount 奇偶：7 → 1，15 → 0）。
+// 意对标 508 位计数的奇偶版（508 互补）。
+
+fn bitcount(n: int) -> int {
+    let c = 0;
+    let m = n;
+    while m != 0 {
+        m = m & (m - 1);
+        c = c + 1;
+    }
+    return c;
+}
+
+fn parity(n: int) -> int {
+    if bitcount(n) % 2 == 1 { return 1; };
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", parity(7), parity(15), parity(8));
+    return 0;
+}
+
+@test "basic 514 parity"() {
+    if parity(7) != 1 { panic(51401); };
+    if parity(15) != 0 { panic(51402); };
+    if parity(8) != 1 { panic(51403); };
+}

@@ -1,0 +1,21 @@
+@import "guest/startup.sal"
+
+@ffi_wrapper embedded_gate(*state: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow state
+    tag = load view+EmbeddedState_tag as i32
+    status = load view+EmbeddedState_status as i32
+    value = add tag, status
+    !status
+    !tag
+    !view
+    return value
+
+@export embedded_start() -> i32:
+L_ENTRY:
+    state = alloc EmbeddedState_SIZE
+    store state+EmbeddedState_tag, 293 as i32
+    store state+EmbeddedState_status, 0 as i32
+    value = call @embedded_gate(*state)
+    !state
+    return value

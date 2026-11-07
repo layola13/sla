@@ -1,0 +1,1 @@
+@extern log_emit(level: i32, msg: ptr, len: u64) -> i32

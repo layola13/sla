@@ -1,0 +1,78 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+// DEF-HASHMAP-XTALK regression (A-form): values inserted from a LOOP
+// (one insert call site serving every iteration) must stay attached
+// to their own key. The stock defect materialized the value into a
+// per-call-site stack cell and stored the cell's address in the std
+// pointer-identity table, so every entry aliased one cell and later
+// gets read recycled frame memory (hit, but wrong value; len always
+// right). Frame churn between the insert phase and the check phase
+// makes the recycling deterministic.
+
+fn churn(seed: i32) -> i32 {
+    let v: Vec<i32> = Vec::new();
+    let s: String = format("churn-{}-0123456789abcdef", seed);
+    let i: i32 = 0;
+    let acc: i32 = seed;
+    while i < 64 {
+        v.push(i * 3 + seed);
+        acc = acc + len(v);
+        i = i + 1;
+    }
+    return acc + len(s);
+}
+
+fn check_int(n: i32) -> i32 {
+    let m: HashMap<i32, i32> = HashMap::new();
+    let i: i32 = 0;
+    while i < n {
+        m.insert(i, i * 10);
+        i = i + 1;
+    }
+    if len(m) != n { return 1; };
+    let c = churn(n);
+    if c == 424242 { return 9; };
+    let j: i32 = 0;
+    while j < n {
+        let got = m.get(j);
+        if got.is_none() { return 2; };
+        if got.copied().unwrap_or(0) != j * 10 { return 3; };
+        j = j + 1;
+    }
+    return 0;
+}
+
+@test "xtalk loop n1"() { let s = check_int(1); if s != 0 { panic(76100 + s); }; }
+@test "xtalk loop n2"() { let s = check_int(2); if s != 0 { panic(76200 + s); }; }
+@test "xtalk loop n5"() { let s = check_int(5); if s != 0 { panic(76500 + s); }; }
+@test "xtalk loop n8"() { let s = check_int(8); if s != 0 { panic(76800 + s); }; }
+@test "xtalk loop n40"() { let s = check_int(40); if s != 0 { panic(76900 + s); }; }
+
+@test "xtalk single value 777"() {
+    let m: HashMap<i32, i32> = HashMap::new();
+    let k: i32 = 7;
+    let v: i32 = 777;
+    m.insert(k, v);
+    let c = churn(3);
+    if c == 424242 { panic(76009); };
+    if m.get(7).copied().unwrap_or(0) != 777 { panic(76001); };
+}
+
+@test "xtalk value via variable"() {
+    let m: HashMap<i32, i32> = HashMap::new();
+    let i: i32 = 0;
+    while i < 16 {
+        let v: i32 = i * 100 + 7;
+        m.insert(i, v);
+        i = i + 1;
+    }
+    let c = churn(5);
+    if c == 424242 { panic(76019); };
+    let j: i32 = 0;
+    while j < 16 {
+        if m.get(j).copied().unwrap_or(0) != j * 100 + 7 { panic(76011); };
+        j = j + 1;
+    }
+}

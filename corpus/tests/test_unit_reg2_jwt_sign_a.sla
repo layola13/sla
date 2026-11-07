@@ -1,0 +1,88 @@
+@import "sa_std/jwt.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Coverage shard 2 (round 3 split A of test_unit_reg2_jwt_sign):
+// the SAB-green set — jwt_sign_hs256 known answer, jwt_parts_fail,
+// jwt_check_times, jwt_sign_rs256 rejects bad key. Round 2: the
+// combined file's TEXT run aborted with MemoryLeak in
+// jwt_verify_rs256 before these could be individually confirmed on
+// the text backend. Assertions unchanged. Error codes are the file's
+// own constants: -201 FORMAT, -202 ALG, -203 SIGNATURE, -204 EXPIRED,
+// -205 NOT_YET_VALID, -206 CLAIM. The HS256 expectation is the
+// canonical jwt.io known-answer token (secret "your-256-bit-secret").
+
+fn vb(p: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return v;
+}
+
+fn vec_byte(v: &Vec<u8>, i: u64) -> u8 {
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let b: u8 = 0;
+    SLICE_GET(b, sl, i);
+    return b;
+}
+
+fn expect_vec(v: &Vec<u8>, want: ptr, want_len: u64, code: i32) {
+    if len(v) != want_len { panic(code); };
+    let i: u64 = 0;
+    while i < want_len {
+        if vec_byte(v, i) != PTR_BYTE_AT(want, i) { panic(code); };
+        i = i + 1;
+    }
+}
+
+fn claims_vec() -> Vec<u8> {
+    let c = "{\"sub\":\"1234567890\",\"name\":\"John Doe\",\"iat\":1516239022}";
+    return vb(STR_PTR(c), STR_LEN(c) as u64);
+}
+
+fn secret_vec() -> Vec<u8> {
+    let s = "your-256-bit-secret";
+    return vb(STR_PTR(s), STR_LEN(s) as u64);
+}
+
+@test "reg2 jwt_sign_hs256 known answer"() {
+    match jwt_sign_hs256(secret_vec(), claims_vec()) {
+        Ok(tok) => {
+            let want = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+            expect_vec(&tok, STR_PTR(want), STR_LEN(want) as u64, 24901);
+        },
+        Err(e) => { panic(24902); },
+    };
+}
+
+@test "reg2 jwt_parts_fail"() {
+    let f = jwt_parts_fail(-207);
+    if f.status != -207 { panic(24921); };
+    if len(f.input) != 0 { panic(24922); };
+    if len(f.payload) != 0 { panic(24923); };
+    if len(f.sig) != 0 { panic(24924); };
+}
+
+@test "reg2 jwt_check_times"() {
+    let exp = "{\"exp\":1}";
+    if jwt_check_times(&vb(STR_PTR(exp), STR_LEN(exp) as u64)) != -204 { panic(24925); };
+    let nbf = "{\"nbf\":9999999999}";
+    if jwt_check_times(&vb(STR_PTR(nbf), STR_LEN(nbf) as u64)) != -205 { panic(24926); };
+    let plain = "{\"sub\":\"x\"}";
+    if jwt_check_times(&vb(STR_PTR(plain), STR_LEN(plain) as u64)) != 0 { panic(24927); };
+    let future = "{\"exp\":4102444800}";
+    if jwt_check_times(&vb(STR_PTR(future), STR_LEN(future) as u64)) != 0 { panic(24928); };
+    let junk = "not json";
+    if jwt_check_times(&vb(STR_PTR(junk), STR_LEN(junk) as u64)) != -201 { panic(24929); };
+    // Per the file header: a string exp claim is CLAIM, never ignored.
+    let strclaim = "{\"exp\":\"soon\"}";
+    if jwt_check_times(&vb(STR_PTR(strclaim), STR_LEN(strclaim) as u64)) != -206 { panic(24930); };
+}
+
+// "reg2 jwt_sign_rs256 rejects bad key" lives in
+// test_unit_reg2_jwt_sign_rs256.sla (split out in round 4: it traps
+// MemoryLeak at @test exit on the text backend and would abort this
+// file's run).

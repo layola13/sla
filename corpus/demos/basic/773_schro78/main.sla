@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 大 Schröder 续高位 S(7)=8558，S(8)=41586（613 体例续高位；桥恒等大端）。
+// 意对标 613_schro6（S(6) 版互补；775 做三向收束）。
+
+fn sch(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 2; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k < ii {
+            s = s + t[k] * t[ii - 1 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn main() -> i32 {
+    println("{},{}", sch(7), sch(8));
+    return 0;
+}
+
+@test "basic 773 schro78"() {
+    if sch(7) != 8558 { panic(77301); };
+    if sch(8) != 41586 { panic(77302); };
+    if sch(6) != 1806 { panic(77303); };
+}

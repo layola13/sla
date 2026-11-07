@@ -1,0 +1,20 @@
+// REG2-D3 regression (general match path): a user-enum call-result
+// temporary used as a match scrutinee must be retired at the merge.
+
+enum D3Shape {
+    One(i32),
+    Two(i32),
+}
+
+fn d3_make_shape() -> D3Shape {
+    return D3Shape::One(5i32);
+}
+
+@test "reg2d3 match temp scrutinee user enum"() {
+    match d3_make_shape() {
+        D3Shape::One(n) => {
+            if n != 5 { panic(11); };
+        },
+        D3Shape::Two(n) => { panic(12); },
+    }
+}

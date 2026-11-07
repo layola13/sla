@@ -1,0 +1,75 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/core/slice.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_serializer_json = vtable { call = @sla__serializer_json }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__serializer_json() -> ptr:
+L_ENTRY:
+    EXPAND FORMAT_BEGIN tmp_0, 35
+    @const SLA_STR_0 = utf8:"{\"id\":"
+    tmp_1 = &SLA_STR_0
+    EXPAND FORMAT_PUSH_BYTES tmp_2, tmp_0, tmp_1, 6
+    !tmp_1
+    tmp_3 = 7
+    EXPAND FORMAT_PUSH_I64 tmp_4, tmp_0, tmp_3
+    !tmp_3
+    @const SLA_STR_1 = utf8:"}"
+    tmp_5 = &SLA_STR_1
+    EXPAND FORMAT_PUSH_BYTES tmp_6, tmp_0, tmp_5, 1
+    !tmp_5
+    json = tmp_0
+    return json
+
+@main() -> i32:
+L_ENTRY:
+    tmp_7 = call @sla__serializer_json()
+    json = tmp_7
+    EXPAND FORMAT_AS_STR tmp_8, json
+    EXPAND STRING_PTR tmp_9, tmp_8
+    EXPAND STRING_LEN tmp_10, tmp_8
+    call @sa_print_bytes(&tmp_9, tmp_10)
+    !tmp_9
+    !tmp_10
+    !tmp_8
+    @const SLA_STR_2 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_2, 1)
+    tmp_11 = 0
+    EXPAND FORMAT_FREE json
+    return tmp_11
+
+@test "rosetta 069 69_serializer"():
+L_TEST_ENTRY_0:
+    tmp_12 = call @sla__serializer_json()
+    json = tmp_12
+    @const SLA_STR_3 = utf8:"{\"id\":7}"
+    tmp_14 = 8
+    tmp_13 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_13, &SLA_STR_3, tmp_14
+    !tmp_14
+    EXPAND FORMAT_AS_STR tmp_15, json
+    EXPAND STR_EQ tmp_16, tmp_15, tmp_13
+    !tmp_15
+    tmp_17 = 1
+    tmp_18 = ne tmp_16, tmp_17
+    !tmp_16
+    !tmp_17
+    br tmp_18 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_18
+    panic(69)
+
+L_ELSE_2:
+    !tmp_18
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    EXPAND FORMAT_FREE json
+    return
+

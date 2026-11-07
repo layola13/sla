@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Catalan 卷积递推（Segner）：C(n+1)=Σ_{i=0}^{n} C(i)·C(n-i)
+//（C(4..6)=14,42,132；351 商式版互补，561 做对峙）。
+// 意对标 350 binom（乘法式版互补；此处为卷积式）。
+
+fn cat_conv(n: int) -> int {
+    let c: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        c.push(0);
+        i = i + 1;
+    }
+    c[0] = 1;
+    let m = 1;
+    while m <= n {
+        let acc = 0;
+        let j = 0;
+        while j < m {
+            acc = acc + c[j] * c[m - 1 - j];
+            j = j + 1;
+        }
+        c[m] = acc;
+        m = m + 1;
+    }
+    return c[n];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", cat_conv(4), cat_conv(5), cat_conv(6));
+    return 0;
+}
+
+@test "basic 556 catconv"() {
+    if cat_conv(4) != 14 { panic(55601); };
+    if cat_conv(5) != 42 { panic(55602); };
+    if cat_conv(6) != 132 { panic(55603); };
+    if cat_conv(3) != 5 { panic(55604); };
+}

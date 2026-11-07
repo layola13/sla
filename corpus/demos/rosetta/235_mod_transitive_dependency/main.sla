@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn transitive_dependency_reachable_items() -> i32 {
+    let leaf_export = 1;
+    return leaf_export;
+}
+
+fn main() -> i32 {
+    let result = transitive_dependency_reachable_items();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 235 mod transitive dependency"() {
+    let got = transitive_dependency_reachable_items();
+    if got != 1 {
+        panic(235);
+    };
+}

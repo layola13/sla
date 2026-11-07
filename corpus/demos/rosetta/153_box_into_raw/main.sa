@@ -1,0 +1,59 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/box.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_box_into_raw_value = vtable { call = @sla__box_into_raw_value }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__box_into_raw_value() -> i32:
+L_ENTRY:
+    tmp_0 = 9
+    EXPAND BOX_NEW tmp_1, tmp_0
+    boxed = tmp_1
+    EXPAND BOX_INTO_RAW tmp_2, boxed
+    raw = tmp_2
+    tmp_4 = load raw+0 as i32
+    tmp_3 = tmp_4
+    value = tmp_3
+    !raw
+    return value
+
+@main() -> i32:
+L_ENTRY:
+    tmp_5 = call @sla__box_into_raw_value()
+    result = tmp_5
+    tmp_6 = call @sa_fmt_u64(result, 10)
+    tmp_7 = call @sa_fmt_buffer_data(tmp_6)
+    tmp_8 = call @sa_fmt_buffer_len(tmp_6)
+    tmp_9 = tmp_7
+    call @sa_print_bytes(&tmp_9, tmp_8)
+    call @sa_fmt_buffer_free(^tmp_6)
+    !tmp_9
+    !tmp_8
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 153 153_box_into_raw"():
+L_TEST_ENTRY_0:
+    tmp_10 = call @sla__box_into_raw_value()
+    got = tmp_10
+    tmp_11 = 9
+    tmp_12 = ne got, tmp_11
+    !tmp_11
+    br tmp_12 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_12
+    panic(153)
+
+L_ELSE_2:
+    !tmp_12
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

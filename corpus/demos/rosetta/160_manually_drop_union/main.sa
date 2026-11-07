@@ -1,0 +1,62 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/mem.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_manually_drop_union_value = vtable { call = @sla__manually_drop_union_value }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__manually_drop_union_value() -> i32:
+L_ENTRY:
+    slot = alloc 8
+    tmp_0 = 11
+    tmp_1 = ptr_add slot, 0
+    EXPAND MANUALLY_DROP_U64_NEW tmp_1, tmp_0
+    !tmp_1
+    !tmp_0
+    tmp_3 = ptr_add slot, 0
+    EXPAND MANUALLY_DROP_U64_INTO_INNER tmp_4, tmp_3
+    !tmp_3
+    tmp_2 = tmp_4
+    value = tmp_2
+    !slot
+    return value
+
+@main() -> i32:
+L_ENTRY:
+    tmp_5 = call @sla__manually_drop_union_value()
+    result = tmp_5
+    tmp_6 = call @sa_fmt_u64(result, 10)
+    tmp_7 = call @sa_fmt_buffer_data(tmp_6)
+    tmp_8 = call @sa_fmt_buffer_len(tmp_6)
+    tmp_9 = tmp_7
+    call @sa_print_bytes(&tmp_9, tmp_8)
+    call @sa_fmt_buffer_free(^tmp_6)
+    !tmp_9
+    !tmp_8
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 160 160_manually_drop_union"():
+L_TEST_ENTRY_0:
+    tmp_10 = call @sla__manually_drop_union_value()
+    got = tmp_10
+    tmp_11 = 11
+    tmp_12 = ne got, tmp_11
+    !tmp_11
+    br tmp_12 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_12
+    panic(160)
+
+L_ELSE_2:
+    !tmp_12
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

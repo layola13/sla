@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/btree_set.sa"
+
+// 对标 tsgosa 1321_set_add_add 的 str 版（首个 BTreeSet demo：1,0,2）。
+// int 键见缺口 #16（拒识）；字符串键三线全绿。
+
+fn main() -> i32 {
+    let s = BTreeSet::new();
+    s.insert("b");
+    s.insert("a");
+    s.insert("a");
+    println("{},{},{}", if s.contains("a") { 1 } else { 0 }, if s.contains("z") { 1 } else { 0 }, len(s));
+    return 0;
+}
+
+@test "basic 269 btreeset str"() {
+    let s = BTreeSet::new();
+    s.insert("b");
+    s.insert("a");
+    s.insert("a");
+    if !s.contains("a") { panic(26901); };
+    if s.contains("z") { panic(26902); };
+    if len(s) != 2 { panic(26903); };
+}

@@ -1,0 +1,26 @@
+@import "sa_std/fmt.sai"
+@import "sa_std/time.sla"
+
+fn sleep_for_millis(delay_ms: u64) -> void {
+    thread::sleep(Duration::from_millis(delay_ms));
+}
+
+fn instant_now_ns() -> u64 {
+    let started = Instant::now();
+    return started.raw_ns();
+}
+
+fn elapsed_millis_since_ns(started_ns: u64) -> u64 {
+    let started = Instant::from_raw_ns(started_ns);
+    return started.elapsed().as_millis();
+}
+
+fn duration_millis(ms: u64) -> u64 {
+    return Duration::from_millis(ms).as_millis();
+}
+
+fn main() -> i32 {
+    sleep_for_millis(1);
+    println("{}", instant_now_ns());
+    return 0;
+};

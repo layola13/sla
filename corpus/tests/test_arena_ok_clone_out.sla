@@ -1,0 +1,15 @@
+// F2-A C1 corpus (positive): the sanctioned export is a fresh
+// ordinary-domain value produced from a borrow of the root -
+// the clone() shape (borrow in, new value out). The root itself
+// never leaves (design 1.5 / 3 R2).
+fn clone_vec(x: &Vec<String>) -> Vec<String> {
+    let out: Vec<String> = Vec::new();
+    return out;
+}
+
+fn ok_clone_out() -> Vec<String> {
+    arena {
+        let v: Vec<String> = Vec::new();
+        return clone_vec(&v);
+    }
+}

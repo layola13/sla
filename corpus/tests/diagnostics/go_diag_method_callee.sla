@@ -1,0 +1,14 @@
+struct GoDiagCounter {
+    n: u64,
+}
+
+impl GoDiagCounter {
+    fn bump(self) {
+    }
+}
+
+fn go_diag_method_main() -> i32 {
+    let c = GoDiagCounter { n: 0 };
+    let h = go c.bump();
+    return 0;
+}

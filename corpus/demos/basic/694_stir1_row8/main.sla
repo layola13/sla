@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Stirling 一类第 8 行 5040,13068,13132,6769,1960,322,28,1（行和 40320=8!；循环求和）。
+// 意对标 687_stir1_row7（低位行互补；同式高位行复算）。
+
+fn cst(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn csum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + cst(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", cst(8, 1), cst(8, 2), csum(8));
+    return 0;
+}
+
+@test "basic 694 stir1 row8"() {
+    if cst(8, 1) != 5040 { panic(69401); };
+    if cst(8, 2) != 13068 { panic(69402); };
+    if csum(8) != 40320 { panic(69403); };
+    if cst(8, 8) != 1 { panic(69404); };
+}

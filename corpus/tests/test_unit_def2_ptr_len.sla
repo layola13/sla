@@ -1,0 +1,55 @@
+// DEF-2 regression corpus: raw ptr parameters and len(), mirrored 1:1
+// from heng species.sla's fnv entry points (fnv1a64 / fnv1a64_lit /
+// fnv1a64_view, species.sla:185-212), the shape that pinned species to
+// the SAB backend. On the 6004af4 basepoint the text backend emits
+// STRING_LEN (a slice len@8 field load) for a bare pointer argument,
+// reading string bytes as a length (panic 1211 + signal 11); the shared
+// plan (planLenRawPtrReceiver) requires a CSTR_LEN NUL scan for genuine
+// pointers and the slice length field only for inferred `let s = "lit"`
+// bindings. Expected on BOTH backends: all routes agree.
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+
+fn fnv_view(sp: ptr, sn: u64) -> u64 {
+    // Offset basis 14695981039346656037 exceeds the integer literal
+    // lexical limit; assembled from halves exactly as species.sla:197.
+    let hi: u64 = 3421674724;
+    let lo: u64 = 2216829733;
+    let h: u64 = hi * 4294967296 + lo;
+    let i: u64 = 0;
+    while i < sn {
+        h = (h ^ (PTR_READ_U8(PTR_BYTE_ADD(sp, i)) as u64)) * 1099511628211;
+        i = i + 1;
+    }
+    return h;
+}
+
+fn fnv_str(s: String) -> u64 {
+    return fnv_view(STR_PTR(s), STR_LEN(s) as u64);
+}
+
+fn fnv_lit(s: ptr) -> u64 {
+    return fnv_view(s, len(s));
+}
+
+fn len_of(p: ptr) -> u64 {
+    return len(p);
+}
+
+@test "def2 len of literal ptr"() {
+    if len_of(STR_PTR("hello")) != 5 { panic(1211); };
+}
+
+@test "def2 fnv literal route matches explicit view"() {
+    if fnv_lit(STR_PTR("hello")) != fnv_view(STR_PTR("hello"), 5) { panic(1212); };
+}
+
+@test "def2 fnv string route matches literal route"() {
+    if fnv_str(format("hello")) != fnv_lit(STR_PTR("hello")) { panic(1213); };
+}
+
+@test "def2 fnv empty is offset basis"() {
+    let hi: u64 = 3421674724;
+    let lo: u64 = 2216829733;
+    if fnv_lit(STR_PTR("")) != hi * 4294967296 + lo { panic(1214); };
+}

@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 698_top_const_arr：顶层常量数组跨函数读（63,20,3）。
+// 顶层 `const` 数组双后端正常（见 133）；顶层 `const` 结构体不可用
+//（缺口 #19），顶层 `let` 不可解析（ExpectedDeclaration）。
+
+const SCORES: [i32; 3] = [10, 20, 30];
+
+fn total() -> i32 {
+    return SCORES[0] + SCORES[1] + SCORES[2] + len(SCORES);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", total(), SCORES[1], len(SCORES));
+    return 0;
+}
+
+@test "basic 136 top const arr"() {
+    if total() != 63 { panic(13601); };
+    if SCORES[1] != 20 { panic(13602); };
+    if len(SCORES) != 3 { panic(13603); };
+}

@@ -1,0 +1,10 @@
+@export log_emit(level: i32, msg: ptr, len: u64) -> i32:
+L_ENTRY:
+    ok = eq level, 257
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 257
+
+L_ERR:
+    return 0

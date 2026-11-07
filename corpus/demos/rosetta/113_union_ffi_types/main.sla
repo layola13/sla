@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+union Payload {
+    i: i32,
+    b: u8,
+}
+
+fn union_payload_i32() -> i32 {
+    let payload = Payload { i: 36 };
+    let value = unsafe { payload.i };
+    return value;
+}
+
+fn main() -> i32 {
+    let result = union_payload_i32();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 113 113_union_ffi_types"() {
+    let got = union_payload_i32();
+    if got != 36 {
+        panic(113);
+    };
+};

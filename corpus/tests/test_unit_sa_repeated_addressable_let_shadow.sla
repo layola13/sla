@@ -1,0 +1,39 @@
+struct ShadowExp {
+    k: int,
+    reg: int,
+}
+
+fn shadow_exp_init() -> ShadowExp {
+    return ShadowExp { k: 0, reg: 0 };
+}
+
+fn shadow_store(out: &ShadowExp, value: int) {
+    out.k = value;
+    out.reg = value + 10;
+}
+
+fn shadow_constructor_shape(flag: int) -> int {
+    let total = 0;
+    if flag == 1 {
+        let tab_e = shadow_exp_init();
+        shadow_store(&tab_e, 3);
+        total = total + tab_e.reg;
+    };
+    if flag == 2 {
+        let tab_e = shadow_exp_init();
+        shadow_store(&tab_e, 5);
+        total = total + tab_e.reg;
+    };
+    if flag == 3 {
+        let tab_e = shadow_exp_init();
+        shadow_store(&tab_e, 7);
+        total = total + tab_e.reg;
+    };
+    return total;
+}
+
+@test "sa text repeated addressable let names get fresh slots"() {
+    if shadow_constructor_shape(1) != 13 { panic(44301); };
+    if shadow_constructor_shape(2) != 15 { panic(44302); };
+    if shadow_constructor_shape(3) != 17 { panic(44303); };
+}

@@ -1,0 +1,50 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/string.sa"
+@import "sa_std/core/option.sa"
+
+// SAB map String KEY routing (DEF-SAB-AUDIT follow-up registration,
+// item 2/3 notes): HashMap<String, _> must key on string CONTENT on
+// the SAB backend — insert via MAP_INSERT_STR and fresh-key lookup
+// via MAP_TRY_GET_STR (the DEF-INSERT-GETMISS SAB twins:
+// lowering_rules.mapInsertPlan / mapIndexPlan and genMapGetCall's
+// routing through the shared index plan). A fresh equal-content key
+// must hit; an absent key must miss; re-inserting an equal-content
+// key must overwrite, not duplicate.
+
+@test "sab map string key i32 value fresh get"() {
+    let m: HashMap<String, i32> = HashMap::new();
+    let k: String = format("the-key");
+    m.insert(k, 42);
+    let probe: String = format("the-key");
+    let got = m.get(probe);
+    if got.is_none() { panic(74811); };
+    if got.copied().unwrap_or_default() != 42 { panic(74812); };
+    let absent: String = format("absent-key");
+    if m.get(absent).is_some() { panic(74813); };
+}
+
+@test "sab map string key overwrite fresh key"() {
+    let m: HashMap<String, i32> = HashMap::new();
+    let k1: String = format("dup-key");
+    m.insert(k1, 1);
+    let k2: String = format("dup-key");
+    m.insert(k2, 2);
+    if len(m) != 1 { panic(74821); };
+    let probe: String = format("dup-key");
+    if m.get(probe).copied().unwrap_or_default() != 2 { panic(74822); };
+}
+
+@test "sab map string key string value fresh get"() {
+    let m: HashMap<String, String> = HashMap::new();
+    let k: String = format("the-key");
+    let v: String = format("the-value");
+    m.insert(k, v);
+    let probe: String = format("the-key");
+    let got = m.get(probe);
+    if got.is_none() { panic(74831); };
+    // Roundtrip-use: the taken-out value's content must be intact
+    // (this shape sig11'd on pristine text at the audit pin; the
+    // DEF-HASHMAP-XTALK A-form fix has since landed).
+    let s = got.copied().unwrap_or_default();
+    if len(s) != 9 { panic(74832); };
+}

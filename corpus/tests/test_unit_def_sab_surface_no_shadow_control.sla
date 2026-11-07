@@ -1,0 +1,23 @@
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/cell.sa"
+@import "sa_std/vec.sa"
+
+// Control for DEF-SAB-SURFACE-GET-SHADOW: with no user function of the
+// same name in scope, std-surface calls must keep lowering through the
+// surface rules on both backends (guards against an over-broad shadow
+// guard breaking genuine surface calls).
+
+@test "surface cell set and get still work"() {
+    let c = Cell::new(3);
+    c.set(9);
+    if c.get() != 9 { panic(75311); };
+}
+
+@test "surface len and arc deref still work"() {
+    let v: Vec<i32> = Vec::new();
+    v.push(1);
+    v.push(2);
+    if len(v) != 2 { panic(75312); };
+    let a = Arc::new(7);
+    if *a != 7 { panic(75313); };
+}

@@ -1,0 +1,15 @@
+fn add(a: i32, b: i32) -> i32 {
+    let c = a + b;
+    return c;
+};
+
+fn main() -> i32 {
+    let x = add(2, 3);
+    return x;
+};
+
+@test "direct sab add"() {
+    let got = add(2, 3);
+    let ok = got == 5;
+    if ok { } else { panic(1); };
+};

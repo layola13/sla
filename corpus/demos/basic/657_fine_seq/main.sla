@@ -1,0 +1,45 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Fine 序列前 7 项 1,0,1,2,6,18,57（和 85；前缀和循环求和）。
+// 意对标 656_fine（单值版互补；同式序列复算）。
+
+fn fsho(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 0; };
+    let ii = 2;
+    while ii <= n {
+        t[ii] = (2 * (2 * ii - 1) * (2 * t[ii - 1] + t[ii - 2]) - t[ii - 1] * (ii + 1)) / (2 * (ii + 1));
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn fseq(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + fsho(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", fsho(0), fsho(1), fseq(6));
+    return 0;
+}
+
+@test "basic 657 fine seq"() {
+    if fseq(6) != 85 { panic(65701); };
+    if fsho(0) != 1 { panic(65702); };
+    if fsho(1) != 0 { panic(65703); };
+    if fseq(4) != 10 { panic(65704); };
+}

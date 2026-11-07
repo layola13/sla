@@ -1,0 +1,12 @@
+// expect: FalliblePayloadUnsupported
+@import "import_fixtures/fallible_abi_fixture.sai"
+
+// A_min ABI layout gate: the Result materialization reads the
+// fallible cell's payload slot with a fixed primitive layout, so a
+// fallible extern whose payload type has no such layout is rejected
+// at the call instead of being silently materialized with a fallback
+// pointer layout.
+fn call_unsupported_payload() -> u64 {
+    let r = sa_fixture_fallible_vec(1);
+    return 0;
+}

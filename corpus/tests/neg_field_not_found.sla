@@ -1,0 +1,7 @@
+// expect: FieldNotFound
+// neg: reading a field the struct does not declare
+struct S { a: i32 }
+fn main() -> i32 {
+    let s = S { a: 1 };
+    return s.b;
+}

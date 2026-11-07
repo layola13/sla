@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 902_switch_call：switch 直接以调用结果作 scrutinee（2）。
+// 写法与 33/107 同口径（一臂 return，其余赋值 + 尾 return 的变体：
+// 此处全臂赋值 + 尾 return，SAB FallthroughForbidden 门已过）。
+
+fn kind(v: i32) -> i32 { return v; }
+
+fn main() -> i32 {
+    let r: i32 = 0;
+    switch kind(2) {
+        1 => { r = 1; },
+        2 => { r = 2; },
+        default => {},
+    };
+    println("{}", r);
+    return 0;
+}
+
+@test "basic 151 switch call"() {
+    let r: i32 = 0;
+    switch kind(2) {
+        1 => { r = 1; },
+        2 => { r = 2; },
+        default => {},
+    };
+    if r != 2 { panic(15101); };
+    let s: i32 = 0;
+    switch kind(9) {
+        1 => { s = 1; },
+        2 => { s = 2; },
+        default => {},
+    };
+    if s != 0 { panic(15102); };
+}

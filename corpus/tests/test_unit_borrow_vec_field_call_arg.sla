@@ -1,0 +1,53 @@
+@import "sa_std/vec.sa"
+
+struct VecFieldHolder {
+    values: Vec<u8>,
+}
+
+fn vec_field_first_is_track(source: &Vec<u8>) -> bool {
+    if len(source) != 5 {
+        return false;
+    };
+    if source[0] != 116 {
+        return false;
+    };
+    if source[1] != 114 {
+        return false;
+    };
+    if source[2] != 97 {
+        return false;
+    };
+    if source[3] != 99 {
+        return false;
+    };
+    if source[4] != 107 {
+        return false;
+    };
+    return true;
+}
+
+fn vec_field_make_track() -> Vec<u8> {
+    let values: Vec<u8> = Vec::new();
+    values.push(116);
+    values.push(114);
+    values.push(97);
+    values.push(99);
+    values.push(107);
+    return values;
+}
+
+@test "borrow vec field call arg matches local vec borrow"() {
+    let local = vec_field_make_track();
+    if vec_field_first_is_track(&local) != true {
+        panic(42001);
+    };
+
+    let field_values = vec_field_make_track();
+    let holder = VecFieldHolder { values: field_values };
+    if holder.values[0] != 116 {
+        panic(42002);
+    };
+    if vec_field_first_is_track(&holder.values) != true {
+        panic(42003);
+    };
+}

@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_pre_compile_hook_count() -> i32 { let schema_check = 1; return schema_check; }
+fn main() -> i32 { let schema_check = 1; println("{}", schema_check); return schema_check; }
+@test "rosetta 266 build pre compile hook"() { let got = build_pre_compile_hook_count(); if got != 1 { panic(266); }; }

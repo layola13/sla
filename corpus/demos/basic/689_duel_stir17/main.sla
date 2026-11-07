@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Stirling 一类双实现对峙：建表 vs 递归（(7,2)：1764 对 1764；(7,3)：1624 对 1624）。
+// 意对标 686_stir17 × 递归版（两源单实现见各源；286 系对峙体例）。
+
+fn cst(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn rcs(n: int, k: int) -> int {
+    if k == 0 {
+        if n == 0 { return 1; };
+        return 0;
+    };
+    if k > n { return 0; };
+    if k == n { return 1; };
+    return rcs(n - 1, k - 1) + (n - 1) * rcs(n - 1, k);
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", cst(7, 2), rcs(7, 2), cst(7, 3), rcs(7, 3));
+    return 0;
+}
+
+@test "basic 689 duel stir17"() {
+    if cst(7, 2) != 1764 { panic(68901); };
+    if rcs(7, 2) != 1764 { panic(68902); };
+    if cst(7, 3) != 1624 { panic(68903); };
+    if rcs(7, 3) != 1624 { panic(68904); };
+}

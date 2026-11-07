@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 二项式系数（乘法式逐项整除：r = r*(n-i)/(i+1)）。
+// 意对标 137 tri 公式系的组合版（325 成员版互补）。
+
+fn binom(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", binom(10, 3), binom(5, 2), binom(6, 0));
+    return 0;
+}
+
+@test "basic 350 binom"() {
+    if binom(10, 3) != 120 { panic(35001); };
+    if binom(5, 2) != 10 { panic(35002); };
+    if binom(6, 0) != 1 { panic(35003); };
+    if binom(10, 7) != 120 { panic(35004); };
+}

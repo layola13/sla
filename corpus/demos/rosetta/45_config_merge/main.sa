@@ -1,0 +1,54 @@
+@rosetta_045_value() -> i64:
+L_ENTRY:
+    tmp_0 = 14
+    tmp_1 = 2
+    tmp_2 = mul tmp_0, tmp_1
+    tmp_3 = 45
+    tmp_4 = add tmp_2, tmp_3
+    base = tmp_4
+    tmp_5 = 72
+    threshold = tmp_5
+    tmp_6 = sgt base, threshold
+    br tmp_6 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_6
+    tmp_7 = sub base, threshold
+    !threshold
+    !base
+    return tmp_7
+
+L_ELSE_1:
+    !tmp_6
+    tmp_8 = sub threshold, base
+    !threshold
+    !base
+    return tmp_8
+
+
+@main() -> i64:
+L_ENTRY:
+    tmp_10 = call @rosetta_045_value()
+    result = tmp_10
+    return result
+
+@test "rosetta 045 45_config_merge"():
+L_TEST_ENTRY_3:
+    tmp_11 = call @rosetta_045_value()
+    got = tmp_11
+    tmp_12 = 1
+    tmp_13 = ne got, tmp_12
+    br tmp_13 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_13
+    panic(45)
+
+L_ELSE_5:
+    !tmp_13
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !got
+    return
+

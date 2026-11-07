@@ -1,0 +1,54 @@
+@import "sla_std/cmp.sla"
+
+@derive(ord)
+struct SortKey {
+    major: i64,
+    minor: i64,
+}
+
+fn make_key(major: i64, minor: i64) -> SortKey {
+    return SortKey { major: major, minor: minor };
+}
+
+@test "spaceship compares signed integers as Ordering"() {
+    let less = 1 <=> 2;
+    if less.is_lt() != true { panic(33000); };
+    if ordering_value(less) != -1 { panic(33001); };
+
+    let equal = 2 <=> 2;
+    if equal.is_eq() != true { panic(33002); };
+    if ordering_value(equal) != 0 { panic(33003); };
+
+    let greater = 3 <=> 2;
+    if greater.is_gt() != true { panic(33004); };
+    if ordering_value(greater) != 1 { panic(33005); };
+}
+
+@test "spaceship compares derived struct lexicographically"() {
+    let a = make_key(1, 9);
+    let b = make_key(2, 0);
+    let c = make_key(2, 3);
+    let d = make_key(2, 3);
+
+    let first_field = a <=> b;
+    if first_field.is_lt() != true { panic(33010); };
+
+    let second_field = c <=> b;
+    if second_field.is_gt() != true { panic(33011); };
+
+    let same = c <=> d;
+    if same.is_eq() != true { panic(33012); };
+}
+
+@test "Ordering helper methods live in sla std"() {
+    let less = Ordering::less();
+    let equal = Ordering::equal();
+    let greater = Ordering::greater();
+
+    if less.is_lt() != true { panic(33020); };
+    if equal.is_eq() != true { panic(33021); };
+    if greater.is_gt() != true { panic(33022); };
+    if less.reverse().is_gt() != true { panic(33023); };
+    if equal.then(greater).is_gt() != true { panic(33024); };
+    if less.then(greater).is_lt() != true { panic(33025); };
+}

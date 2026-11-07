@@ -1,0 +1,16 @@
+// expect: MacroExpressionOutputUntyped
+// J-4 negative: expression-position use of a macro whose leading
+// output parameter declares no type (J-3) is rejected with
+// MacroExpressionOutputUntyped — the result type must come from the
+// declaration, never from inference. Judged by standalone
+// `sla check` (see plugin_tests.zig registration); the legal control
+// is tests/test_unit_macro_expr_output.sla checking clean.
+
+macro doubled(out_result, x: i64) {
+    out_result = x + x;
+}
+
+fn f() -> i64 {
+    let y = doubled(3);
+    return y;
+}

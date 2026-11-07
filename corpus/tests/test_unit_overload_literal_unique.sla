@@ -1,0 +1,12 @@
+// Untyped literals adapt to the same-class candidate: an integer
+// literal matches only the integer member, a float literal only the
+// float member, so both calls resolve uniquely with no annotation.
+// Baseline: Redeclaration error at the second definition.
+
+fn pick(x: i32) -> i32 { return 1; }
+fn pick(x: f64) -> i32 { return 2; }
+
+@test "overload literal unique candidate"() {
+    if pick(7) != 1 { panic(301); };
+    if pick(2.5) != 2 { panic(302); };
+};

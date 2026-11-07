@@ -1,0 +1,18 @@
+@import "consumer/../layout/tls.sal"
+@import "consumer/../bridge/tls_bridge.sa"
+
+@tls_consumer_value() -> i32:
+L_ENTRY:
+    tls = alloc TLS_SIZE
+    store tls+TLS_value, 0 as i32
+    value = call @tls_write(&tls)
+    ok = eq value, 258
+    !value
+    !tls
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 258
+
+L_ERR:
+    return 0

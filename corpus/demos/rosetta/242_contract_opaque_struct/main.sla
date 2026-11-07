@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_opaque_handle_count() -> i32 {
+    let public_constructor = 1;
+    return public_constructor;
+}
+
+fn main() -> i32 {
+    let result = contract_opaque_handle_count();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 242 contract opaque struct"() {
+    let got = contract_opaque_handle_count();
+    if got != 1 { panic(242); };
+}

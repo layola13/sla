@@ -1,0 +1,11 @@
+// expect: ArenaDomain
+// F2-A C1 corpus: design 3 R3 (red item) - moving an
+// ordinary-domain deep value INTO an arena binding is rejected;
+// its sub-allocations would never be released by the block exit.
+fn neg_move_in() -> i32 {
+    let h: Vec<String> = Vec::new();
+    arena {
+        let inner = h;
+    }
+    return 0;
+}

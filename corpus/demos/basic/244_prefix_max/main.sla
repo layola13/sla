@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 121_second_max 的前缀版（22 为单遍最大/次大版：运行最大表尾 5，次项 3）。
+// 运行极值（134 的比较口径）+ 入表组合。
+
+fn main() -> i32 {
+    let a: Vec<i32> = Vec::new();
+    a.push(3);
+    a.push(1);
+    a.push(4);
+    a.push(1);
+    a.push(5);
+    let pmax: Vec<i32> = Vec::new();
+    let best = a[0];
+    for i in 0..len(a) {
+        if a[i] > best { best = a[i]; };
+        pmax.push(best);
+    }
+    println("{},{}", pmax[4], pmax[1]);
+    return 0;
+}
+
+@test "basic 244 prefix max"() {
+    let a: Vec<i32> = Vec::new();
+    a.push(3);
+    a.push(1);
+    a.push(4);
+    a.push(1);
+    a.push(5);
+    let pmax: Vec<i32> = Vec::new();
+    let best = a[0];
+    for i in 0..len(a) {
+        if a[i] > best { best = a[i]; };
+        pmax.push(best);
+    }
+    if len(pmax) != 5 { panic(24401); };
+    if pmax[4] != 5 { panic(24402); };
+    if pmax[1] != 3 { panic(24403); };
+}

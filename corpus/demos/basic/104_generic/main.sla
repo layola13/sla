@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 34_generic_fn：泛型恒等（5, true, 7）。
+// 原用例另有 `id("hi")` 字符串实例，字符串泛型未经验证，此处取 int + bool
+// 两具化（单态化去重见 monomorphizer，探针已验证双后端）。
+
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", id<int>(5), id<bool>(true), id<int>(7));
+    return 0;
+}
+
+@test "basic 104 generic"() {
+    if id<int>(5) != 5 { panic(10401); };
+    if id<bool>(true) != true { panic(10402); };
+    if id<int>(7) != 7 { panic(10403); };
+}

@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/sync/atomic.sal"
+@import "sa_std/sync/atomic.sa"
+@import "sa_std/core/result.sa"
+
+fn spin_lock_roundtrip() -> i32 {
+    let lock = AtomicI32::new(0);
+
+    while lock.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_err() {
+    }
+
+    lock.store(0, Ordering::Release);
+    return 1;
+}
+
+fn main() -> i32 {
+    let lock = AtomicI32::new(0);
+
+    while lock.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_err() {
+    }
+
+    lock.store(0, Ordering::Release);
+    println("{}", 1);
+    return 1;
+}
+
+@test "rosetta 108 108_atomic_spin_lock"() {
+    let got = spin_lock_roundtrip();
+    if got != 1 {
+        panic(108);
+    }
+}

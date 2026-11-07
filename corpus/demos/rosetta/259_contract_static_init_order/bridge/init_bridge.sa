@@ -1,0 +1,11 @@
+@export init_first() -> i32:
+L_ENTRY:
+    value = add 1, 0
+    !value
+    return 1
+
+@export init_second() -> i32:
+L_ENTRY:
+    value = add 258, 0
+    !value
+    return 258

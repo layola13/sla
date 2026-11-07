@@ -1,0 +1,16 @@
+@import "workspace/shared/index.sa"
+@import "workspace/members/app/index.sa"
+@import "workspace/members/tool/index.sa"
+
+@workspace_total() -> i32:
+L_ENTRY:
+    base = call @workspace_base_value()
+    shared = call @shared_config_value()
+    app = call @app_package_value(shared)
+    tool = call @tool_package_value(base)
+    value = add app, tool
+    !base
+    !shared
+    !app
+    !tool
+    return value

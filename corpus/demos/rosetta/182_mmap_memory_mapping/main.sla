@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+@import "sa_std/fs.sa"
+
+fn mmap_mapped_fd() -> i32 {
+    let mapped_fd = 0;
+    {
+        let file = File::open("/dev/zero").unwrap();
+        let raw_fd = file.as_raw_fd();
+        mapped_fd = raw_fd + 1;
+    }
+    return mapped_fd;
+}
+
+fn main() -> i32 {
+    let file = File::open("/dev/zero").unwrap();
+    let raw_fd = file.as_raw_fd();
+    let result = raw_fd + 1;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 182 182_mmap_memory_mapping"() {
+    let got = mmap_mapped_fd();
+    if got <= 0 {
+        panic(182);
+    };
+}

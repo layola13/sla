@@ -1,0 +1,384 @@
+// Smoke wave 1: register-2 externs from fmt.sai, env.sai, compress.sai,
+// text/regex.sai, net.sai (ws_unmask), io.sai. Panic codes 56xxx.
+@import "sla_std/wrap/fmt.sla"
+@import "sla_std/wrap/env.sla"
+@import "sla_std/wrap/compress.sla"
+@import "sla_std/wrap/text/regex.sla"
+@import "sla_std/wrap/net.sla"
+@import "sla_std/wrap/io.sla"
+@import "sla_std/wrap/process.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+
+// ---------- fmt ----------
+// sa_fmt_bool / sa_fmt_bool_into live in test_smoke1_i1gap.sla:
+// their i1 parameter is unreachable from SLA (GAP-I1-ARG).
+
+@test "smoke1 sa_fmt_i64_into"() {
+    let buf = [0u8; 64];
+    let olen = [0u64; 4];
+    let s1bp1: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc = sla_fmt_i64_into(0 - 42, 10, s1bp1, 64, &olen[0]);
+    if rc != 0 { panic(56020); };
+    if olen[0] != 3 { panic(56021); };
+    if buf[0] != 45 { panic(56022); };
+    if buf[1] != 52 { panic(56023); };
+    if buf[2] != 50 { panic(56024); };
+}
+
+@test "smoke1 sa_fmt_u64_into"() {
+    let buf = [0u8; 64];
+    let olen = [0u64; 4];
+    let s1bp2: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc = sla_fmt_u64_into(255, 16, s1bp2, 64, &olen[0]);
+    if rc != 0 { panic(56030); };
+    if olen[0] != 2 { panic(56031); };
+    if buf[0] != 102 { panic(56032); };
+    if buf[1] != 102 { panic(56033); };
+}
+
+@test "smoke1 sa_fmt_f64_into"() {
+    let buf = [0u8; 64];
+    let olen = [0u64; 4];
+    let s1bp3: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc = sla_fmt_f64_into(2.5, 1, s1bp3, 64, &olen[0]);
+    if rc != 0 { panic(56040); };
+    if olen[0] != 3 { panic(56041); };
+    if buf[0] != 50 { panic(56042); };
+    if buf[1] != 46 { panic(56043); };
+    if buf[2] != 53 { panic(56044); };
+}
+
+@test "smoke1 sa_fmt_bytes_into"() {
+    let buf = [0u8; 64];
+    let olen = [0u64; 4];
+    let s1bp4: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc = sla_fmt_bytes_into(STR_PTR("hi"), STR_LEN("hi"), s1bp4, 64, &olen[0]);
+    if rc != 0 { panic(56060); };
+    if olen[0] != 2 { panic(56061); };
+    if buf[0] != 104 { panic(56062); };
+    if buf[1] != 105 { panic(56063); };
+}
+
+@test "smoke1 sa_fmt_buffer_len"() {
+    let b = sla_fmt_i64(12345, 10);
+    if b == 0 { panic(56070); };
+    if sla_fmt_buffer_len(b) != 5 { panic(56071); };
+    sla_fmt_buffer_free(^b);
+}
+
+@test "smoke1 sa_fmt_buffer_free"() {
+    let b = sla_fmt_i64(7, 10);
+    if sla_fmt_buffer_len(b) != 1 { panic(56080); };
+    let rc = sla_fmt_buffer_free(^b);
+    if rc != 0 { panic(56081); };
+}
+
+@test "smoke1 sa_fmt_buffer_write_to"() {
+    let rec = [0u64; 2];
+    let a0: u64 = 0;
+    PTR_ADDR(a0, STR_PTR("/bin/cat"));
+    rec[0] = a0;
+    rec[1] = STR_LEN("/bin/cat");
+    let proc = [0u64; 4];
+    let sin = [0u64; 4];
+    let sout = [0u64; 4];
+    let serr = [0u64; 4];
+    let s1bp5: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn_bidi(s1bp5, 1, &proc[0], &sin[0], &sout[0], &serr[0]);
+    if rc != 0 { panic(56090); };
+    let b = sla_fmt_i64(4242, 10);
+    let rc2 = sla_fmt_buffer_write_to(b, sin[0]);
+    if rc2 != 0 { panic(56091); };
+    sla_fmt_buffer_free(^b);
+    sla_io_close(sin[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc3 = sla_io_read(sout[0], &buf[0], 64, &rd[0]);
+    if rc3 != 0 { panic(56092); };
+    if rd[0] != 4 { panic(56093); };
+    if buf[0] != 52 { panic(56094); };
+    if buf[3] != 50 { panic(56095); };
+    let code = [0u64; 4];
+    sla_std_process_wait(proc[0], &code[0]);
+    if code[0] != 0 { panic(56096); };
+    sla_std_process_close(proc[0]);
+}
+
+// ---------- env ----------
+@test "smoke1 sa_env_buffer_len"() {
+    let b = sla_env_get(STR_PTR("PATH"), STR_LEN("PATH"));
+    if b == 0 { panic(56100); };
+    if sla_env_buffer_len(b) == 0 { panic(56101); };
+    sla_env_buffer_free(^b);
+}
+
+@test "smoke1 sa_env_buffer_free"() {
+    let b = sla_env_get(STR_PTR("PATH"), STR_LEN("PATH"));
+    if sla_env_buffer_len(b) == 0 { panic(56110); };
+    let rc = sla_env_buffer_free(^b);
+    if rc != 0 { panic(56111); };
+}
+
+// ---------- compress ----------
+@test "smoke1 sa_std_compress_buffer_len"() {
+    let cell = [0u64; 4];
+    let rc = sla_std_compress_encode(1, STR_PTR("hello hello hello"), STR_LEN("hello hello hello"), &cell[0]);
+    if rc != 0 { panic(56120); };
+    if cell[0] == 0 { panic(56121); };
+    if sla_std_compress_buffer_len(cell[0]) == 0 { panic(56122); };
+    sla_std_compress_buffer_free(^cell[0]);
+}
+
+@test "smoke1 sa_std_compress_buffer_data"() {
+    let cell = [0u64; 4];
+    let rc = sla_std_compress_encode(1, STR_PTR("hello hello hello"), STR_LEN("hello hello hello"), &cell[0]);
+    if rc != 0 { panic(56130); };
+    let p = sla_std_compress_buffer_data(cell[0]);
+    if p == (0 as ptr) { panic(56131); };
+    // Round trip: decode the encoded bytes back to the original text.
+    let out = [0u64; 4];
+    let rc2 = sla_std_compress_decode(1, p, sla_std_compress_buffer_len(cell[0]), &out[0]);
+    if rc2 != 0 { panic(56132); };
+    if sla_std_compress_buffer_len(out[0]) != 17 { panic(56133); };
+    let p2 = sla_std_compress_buffer_data(out[0]);
+    if PTR_BYTE_AT(p2, 0) != 104 { panic(56134); };
+    if PTR_BYTE_AT(p2, 16) != 111 { panic(56135); };
+    sla_std_compress_buffer_free(^cell[0]);
+    sla_std_compress_buffer_free(^out[0]);
+}
+
+@test "smoke1 sa_std_compress_buffer_free"() {
+    let cell = [0u64; 4];
+    let rc = sla_std_compress_encode(1, STR_PTR("data"), STR_LEN("data"), &cell[0]);
+    if rc != 0 { panic(56140); };
+    let rc2 = sla_std_compress_buffer_free(^cell[0]);
+    if rc2 != 0 { panic(56141); };
+}
+
+// ---------- regex ----------
+@test "smoke1 sa_regex_replace"() {
+    let re = sla_regex_compile(STR_PTR("o"), STR_LEN("o"), 0);
+    if re == 0 { panic(56150); };
+    let b = sla_regex_replace(re, STR_PTR("hello world"), STR_LEN("hello world"), STR_PTR("0"), STR_LEN("0"));
+    if b == 0 { panic(56151); };
+    if sla_regex_buffer_len(b) != 11 { panic(56152); };
+}
+
+@test "smoke1 sa_regex_replace_all"() {
+    let re = sla_regex_compile(STR_PTR("o"), STR_LEN("o"), 0);
+    if re == 0 { panic(56160); };
+    let b = sla_regex_replace_all(re, STR_PTR("hello world"), STR_LEN("hello world"), STR_PTR("0"), STR_LEN("0"));
+    if b == 0 { panic(56161); };
+    if sla_regex_buffer_len(b) != 11 { panic(56162); };
+}
+
+@test "smoke1 sa_regex_buffer_len"() {
+    let re = sla_regex_compile(STR_PTR("l"), STR_LEN("l"), 0);
+    if re == 0 { panic(56170); };
+    let b = sla_regex_replace_all(re, STR_PTR("hello"), STR_LEN("hello"), STR_PTR("L"), STR_LEN("L"));
+    if b == 0 { panic(56171); };
+    // Basic regex (cflags 0): "l" matches each l; "hello" -> "heLLo" (5 bytes).
+    if sla_regex_buffer_len(b) != 5 { panic(56172); };
+}
+
+// ---------- ws_unmask (net.sai, register-2 via FULL_REPORT 4.2) ----------
+@test "smoke1 sa_std_ws_unmask"() {
+    // RFC 6455 section 5.7 example: masking key 37 fa 21 3d turns
+    // "Hello" into 7f 9f 4d 51 58; unmask must restore it.
+    let payload = [0u8; 5];
+    payload[0] = 127;
+    payload[1] = 159;
+    payload[2] = 77;
+    payload[3] = 81;
+    payload[4] = 88;
+    let maskcell = [0u64; 4];
+    maskcell[0] = 1025636919;
+    let mbp: ptr = PTR_BYTE_ADD(&payload, 0);
+    let rc = sla_std_ws_unmask(mbp, 5, &maskcell[0]);
+    if rc != 0 { panic(56180); };
+    if payload[0] != 72 { panic(56181); };
+    if payload[1] != 101 { panic(56182); };
+    if payload[2] != 108 { panic(56183); };
+    if payload[4] != 111 { panic(56184); };
+}
+
+// ---------- io ----------
+@test "smoke1 sa_io_write"() {
+    let rec = [0u64; 2];
+    let a0: u64 = 0;
+    PTR_ADDR(a0, STR_PTR("/bin/cat"));
+    rec[0] = a0;
+    rec[1] = STR_LEN("/bin/cat");
+    let proc = [0u64; 4];
+    let sin = [0u64; 4];
+    let sout = [0u64; 4];
+    let serr = [0u64; 4];
+    let s1bp7: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn_bidi(s1bp7, 1, &proc[0], &sin[0], &sout[0], &serr[0]);
+    if rc != 0 { panic(56190); };
+    let wr = [0u64; 4];
+    let rc2 = sla_io_write(sin[0], STR_PTR("hello\n"), STR_LEN("hello\n"), &wr[0]);
+    if rc2 != 0 { panic(56191); };
+    if wr[0] != 6 { panic(56192); };
+    sla_io_close(sin[0]);
+    let code = [0u64; 4];
+    sla_std_process_wait(proc[0], &code[0]);
+    sla_std_process_close(proc[0]);
+}
+
+@test "smoke1 sa_io_write_all"() {
+    let rec = [0u64; 2];
+    let a0: u64 = 0;
+    PTR_ADDR(a0, STR_PTR("/bin/cat"));
+    rec[0] = a0;
+    rec[1] = STR_LEN("/bin/cat");
+    let proc = [0u64; 4];
+    let sin = [0u64; 4];
+    let sout = [0u64; 4];
+    let serr = [0u64; 4];
+    let s1bp8: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn_bidi(s1bp8, 1, &proc[0], &sin[0], &sout[0], &serr[0]);
+    if rc != 0 { panic(56200); };
+    let rc2 = sla_io_write_all(sin[0], STR_PTR("abc"), STR_LEN("abc"));
+    if rc2 != 0 { panic(56201); };
+    sla_io_close(sin[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc3 = sla_io_read(sout[0], &buf[0], 64, &rd[0]);
+    if rc3 != 0 { panic(56202); };
+    if rd[0] != 3 { panic(56203); };
+    if buf[0] != 97 { panic(56204); };
+    let code = [0u64; 4];
+    sla_std_process_wait(proc[0], &code[0]);
+    sla_std_process_close(proc[0]);
+}
+
+@test "smoke1 sa_io_read"() {
+    let rec = [0u64; 4];
+    let a0: u64 = 0;
+    PTR_ADDR(a0, STR_PTR("/bin/echo"));
+    rec[0] = a0;
+    rec[1] = STR_LEN("/bin/echo");
+    let a1: u64 = 0;
+    PTR_ADDR(a1, STR_PTR("hi"));
+    rec[2] = a1;
+    rec[3] = STR_LEN("hi");
+    let proc = [0u64; 4];
+    let sout = [0u64; 4];
+    let serr = [0u64; 4];
+    let s1bp9: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn_stream(s1bp9, 2, &proc[0], &sout[0], &serr[0]);
+    if rc != 0 { panic(56210); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc2 = sla_io_read(sout[0], &buf[0], 64, &rd[0]);
+    if rc2 != 0 { panic(56211); };
+    if rd[0] != 3 { panic(56212); };
+    if buf[0] != 104 { panic(56213); };
+    if buf[2] != 10 { panic(56214); };
+    let code = [0u64; 4];
+    sla_std_process_wait(proc[0], &code[0]);
+    sla_std_process_close(proc[0]);
+}
+
+@test "smoke1 sa_io_read_exact"() {
+    let rec = [0u64; 4];
+    let a0: u64 = 0;
+    PTR_ADDR(a0, STR_PTR("/bin/echo"));
+    rec[0] = a0;
+    rec[1] = STR_LEN("/bin/echo");
+    let a1: u64 = 0;
+    PTR_ADDR(a1, STR_PTR("hi"));
+    rec[2] = a1;
+    rec[3] = STR_LEN("hi");
+    let proc = [0u64; 4];
+    let sout = [0u64; 4];
+    let serr = [0u64; 4];
+    let s1bp10: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn_stream(s1bp10, 2, &proc[0], &sout[0], &serr[0]);
+    if rc != 0 { panic(56220); };
+    let buf = [0u8; 64];
+    let s1bp11: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc2 = sla_io_read_exact(sout[0], s1bp11, 3);
+    if rc2 != 0 { panic(56221); };
+    if buf[0] != 104 { panic(56222); };
+    if buf[2] != 10 { panic(56223); };
+    // A second exact read must fail: the stream is at EOF.
+    let s1bp12: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc3 = sla_io_read_exact(sout[0], s1bp12, 1);
+    if rc3 == 0 { panic(56224); };
+    let code = [0u64; 4];
+    sla_std_process_wait(proc[0], &code[0]);
+    sla_std_process_close(proc[0]);
+}
+
+@test "smoke1 sa_io_read_line"() {
+    // PARTIAL (W1-DEF-IO-BUFFER-API): read_line itself works (rc 0,
+    // nonzero handle), but the handle it returns is a registry id
+    // while sa_io_buffer_len expects a raw SaIoBuffer struct pointer,
+    // so the line's content/length cannot be verified through the
+    // documented API. The full chain lives in the defect minim
+    // (test_smoke1_defect_io_buffer.sla) and stays red; this entry
+    // does NOT clear this wave.
+    let rec = [0u64; 4];
+    let a0: u64 = 0;
+    PTR_ADDR(a0, STR_PTR("/bin/echo"));
+    rec[0] = a0;
+    rec[1] = STR_LEN("/bin/echo");
+    let a1: u64 = 0;
+    PTR_ADDR(a1, STR_PTR("line1"));
+    rec[2] = a1;
+    rec[3] = STR_LEN("line1");
+    let proc = [0u64; 4];
+    let sout = [0u64; 4];
+    let serr = [0u64; 4];
+    let rbp: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn_stream(rbp, 2, &proc[0], &sout[0], &serr[0]);
+    if rc != 0 { panic(56230); };
+    let bufh = [0u64; 4];
+    let rc2 = sla_io_read_line(sout[0], 1024, &bufh[0]);
+    if rc2 != 0 { panic(56231); };
+    if bufh[0] == 0 { panic(56232); };
+    let code = [0u64; 4];
+    sla_std_process_wait(proc[0], &code[0]);
+    sla_std_process_close(proc[0]);
+}
+
+
+
+@test "smoke1 sa_io_flush"() {
+    let h = sla_io_stderr();
+    let rc = sla_io_flush(h);
+    if rc != 0 { panic(56260); };
+}
+
+@test "smoke1 sa_io_close"() {
+    let rec = [0u64; 2];
+    let a0: u64 = 0;
+    PTR_ADDR(a0, STR_PTR("/bin/cat"));
+    rec[0] = a0;
+    rec[1] = STR_LEN("/bin/cat");
+    let proc = [0u64; 4];
+    let sin = [0u64; 4];
+    let sout = [0u64; 4];
+    let serr = [0u64; 4];
+    let s1bp16: ptr = PTR_BYTE_ADD(&rec, 0);
+    let rc = sla_std_process_spawn_bidi(s1bp16, 1, &proc[0], &sin[0], &sout[0], &serr[0]);
+    if rc != 0 { panic(56270); };
+    sla_io_write_all(sin[0], STR_PTR("q"), STR_LEN("q"));
+    let rc2 = sla_io_close(sin[0]);
+    if rc2 != 0 { panic(56271); };
+    // After closing stdin, cat exits; stdout reaches EOF.
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc3 = sla_io_read(sout[0], &buf[0], 64, &rd[0]);
+    if rc3 != 0 { panic(56272); };
+    if rd[0] != 1 { panic(56273); };
+    if buf[0] != 113 { panic(56274); };
+    let code = [0u64; 4];
+    sla_std_process_wait(proc[0], &code[0]);
+    if code[0] != 0 { panic(56275); };
+    sla_std_process_close(proc[0]);
+}

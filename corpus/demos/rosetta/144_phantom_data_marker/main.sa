@@ -1,0 +1,54 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_phantom_marker_id = vtable { call = @sla__phantom_marker_id }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__phantom_marker_id() -> i32:
+L_ENTRY:
+    w = alloc 4
+    tmp_0 = 7
+    store w+0, tmp_0 as i32
+    tmp_1 = load w+0 as i32
+    !w
+    return tmp_1
+
+@main() -> i32:
+L_ENTRY:
+    tmp_2 = call @sla__phantom_marker_id()
+    result = tmp_2
+    tmp_3 = call @sa_fmt_u64(result, 10)
+    tmp_4 = call @sa_fmt_buffer_data(tmp_3)
+    tmp_5 = call @sa_fmt_buffer_len(tmp_3)
+    tmp_6 = tmp_4
+    call @sa_print_bytes(&tmp_6, tmp_5)
+    call @sa_fmt_buffer_free(^tmp_3)
+    !tmp_6
+    !tmp_5
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 144 144_phantom_data_marker"():
+L_TEST_ENTRY_0:
+    tmp_7 = call @sla__phantom_marker_id()
+    got = tmp_7
+    tmp_8 = 7
+    tmp_9 = ne got, tmp_8
+    !tmp_8
+    br tmp_9 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_9
+    panic(144)
+
+L_ELSE_2:
+    !tmp_9
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

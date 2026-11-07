@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+@import "sa_std/hashmap.sa"
+
+fn main() -> i32 {
+    let cache = HashMap::new();
+    cache.insert("a", 3);
+    let hit = cache.get("a").copied().unwrap_or_default();
+    println("{}", hit);
+    return hit;
+}
+
+@test "rosetta 053 cache hits"() {
+    let cache = HashMap::new();
+    cache.insert("a", 3);
+    let hit = cache.get("a").copied().unwrap_or_default();
+    if hit != 3 {
+        panic(53);
+    };
+}

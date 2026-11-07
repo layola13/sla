@@ -1,0 +1,427 @@
+// Smoke wave 1: register-2 externs in sa_std/encoding/json.sai.
+// Node handles come from sla_json_parse (real documents), writer handles
+// from sla_json_writer_new. Panic codes 52xxx.
+// Kind codes (sci sa_std.zig): null 0, bool 1, integer 2, float 3,
+// number_string 4, string 5, array 6, object 7.
+@import "sla_std/wrap/encoding/json.sla"
+@import "sla_std/wrap/fs.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+fn s1_doc() -> u64 {
+    let n = sla_json_parse(STR_PTR("{\"name\":\"sla\",\"n\":42,\"f\":2.5,\"b\":true,\"z\":null,\"arr\":[1,2,3],\"obj\":{\"k\":\"v\"}}"), STR_LEN("{\"name\":\"sla\",\"n\":42,\"f\":2.5,\"b\":true,\"z\":null,\"arr\":[1,2,3],\"obj\":{\"k\":\"v\"}}"));
+    if n == 0 { panic(52001); };
+    return n;
+}
+
+fn s1_streq(p: ptr, l: u64, lit: ptr, litl: u64) -> bool {
+    if l != litl { return false; };
+    let i: u64 = 0;
+    while i < l {
+        if PTR_BYTE_AT(p, i) != PTR_BYTE_AT(lit, i) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn s1_get(node: u64, key: ptr, key_len: u64, code: i32) -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_json_object_get(node, key, key_len, &cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+@test "smoke1 sa_json_kind"() {
+    let doc = s1_doc();
+    if sla_json_kind(doc) != 7 { panic(52010); };
+    let arr = sla_json_parse(STR_PTR("[1]"), STR_LEN("[1]"));
+    if sla_json_kind(arr) != 6 { panic(52011); };
+    let s = sla_json_parse(STR_PTR("\"x\""), STR_LEN("\"x\""));
+    if sla_json_kind(s) != 5 { panic(52012); };
+    let i = sla_json_parse(STR_PTR("42"), STR_LEN("42"));
+    if sla_json_kind(i) != 2 { panic(52013); };
+}
+
+@test "smoke1 sa_json_object_get"() {
+    let doc = s1_doc();
+    let arr = s1_get(doc, STR_PTR("arr"), STR_LEN("arr"), 52020);
+    if sla_json_kind(arr) != 6 { panic(52022); };
+}
+
+@test "smoke1 sa_json_array_get"() {
+    let doc = s1_doc();
+    let arr = s1_get(doc, STR_PTR("arr"), STR_LEN("arr"), 52030);
+    let cell = [0u64; 4];
+    let rc = sla_json_array_get(arr, 1, &cell[0]);
+    if rc != 0 { panic(52032); };
+    let v = [0u64; 4];
+    let rc2 = sla_json_as_i64(cell[0], &v[0]);
+    if rc2 != 0 { panic(52033); };
+    if v[0] != 2 { panic(52034); };
+}
+
+@test "smoke1 sa_json_object_key_at"() {
+    let obj = sla_json_parse(STR_PTR("{}"), STR_LEN("{}"));
+    if obj == 0 { panic(52040); };
+    sla_json_object_set_string(obj, STR_PTR("alpha"), STR_LEN("alpha"), STR_PTR("1"), STR_LEN("1"));
+    sla_json_object_set_string(obj, STR_PTR("beta"), STR_LEN("beta"), STR_PTR("2"), STR_LEN("2"));
+    let p0 = [0u64; 4];
+    let l0 = [0u64; 4];
+    let rc = sla_json_object_key_at(obj, 0, &p0[0], &l0[0]);
+    if rc != 0 { panic(52041); };
+    let p1 = [0u64; 4];
+    let l1 = [0u64; 4];
+    let rc2 = sla_json_object_key_at(obj, 1, &p1[0], &l1[0]);
+    if rc2 != 0 { panic(52042); };
+    let ptr0: ptr = (p0[0] as ptr);
+    let ptr1: ptr = (p1[0] as ptr);
+    let ab = s1_streq(ptr0, l0[0], STR_PTR("alpha"), STR_LEN("alpha")) && s1_streq(ptr1, l1[0], STR_PTR("beta"), STR_LEN("beta"));
+    let ba = s1_streq(ptr0, l0[0], STR_PTR("beta"), STR_LEN("beta")) && s1_streq(ptr1, l1[0], STR_PTR("alpha"), STR_LEN("alpha"));
+    if ab == false {
+        if ba == false { panic(52043); };
+    };
+}
+
+@test "smoke1 sa_json_object_get_string"() {
+    let doc = s1_doc();
+    let p = [0u64; 4];
+    let l = [0u64; 4];
+    let rc = sla_json_object_get_string(doc, STR_PTR("name"), STR_LEN("name"), &p[0], &l[0]);
+    if rc != 0 { panic(52050); };
+    let sp: ptr = (p[0] as ptr);
+    if s1_streq(sp, l[0], STR_PTR("sla"), STR_LEN("sla")) == false { panic(52051); };
+}
+
+@test "smoke1 sa_json_object_get_bool"() {
+    let doc = s1_doc();
+    let v = [0u64; 4];
+    let rc = sla_json_object_get_bool(doc, STR_PTR("b"), STR_LEN("b"), &v[0]);
+    if rc != 0 { panic(52060); };
+    if v[0] != 1 { panic(52061); };
+}
+
+@test "smoke1 sa_json_object_get_i64"() {
+    let doc = s1_doc();
+    let v = [0u64; 4];
+    let rc = sla_json_object_get_i64(doc, STR_PTR("n"), STR_LEN("n"), &v[0]);
+    if rc != 0 { panic(52070); };
+    if v[0] != 42 { panic(52071); };
+}
+
+@test "smoke1 sa_json_object_get_f64"() {
+    let doc = s1_doc();
+    let v = [0u64; 4];
+    let rc = sla_json_object_get_f64(doc, STR_PTR("f"), STR_LEN("f"), &v[0]);
+    if rc != 0 { panic(52080); };
+    if v[0] == 0 { panic(52081); };
+}
+
+@test "smoke1 sa_json_as_f64"() {
+    let i = sla_json_parse(STR_PTR("42"), STR_LEN("42"));
+    let v = [0u64; 4];
+    let rc = sla_json_as_f64(i, &v[0]);
+    if rc != 0 { panic(52090); };
+    if v[0] == 0 { panic(52091); };
+    let bits42 = v[0];
+    let z = sla_json_parse(STR_PTR("0"), STR_LEN("0"));
+    let rc2 = sla_json_as_f64(z, &v[0]);
+    if rc2 != 0 { panic(52092); };
+    if v[0] != 0 { panic(52093); };
+    let h = sla_json_parse(STR_PTR("42.5"), STR_LEN("42.5"));
+    sla_json_as_f64(h, &v[0]);
+    if v[0] == bits42 { panic(52094); };
+    if v[0] == 0 { panic(52095); };
+}
+
+@test "smoke1 sa_json_as_i64"() {
+    let doc = s1_doc();
+    let n = s1_get(doc, STR_PTR("n"), STR_LEN("n"), 52100);
+    let v = [0u64; 4];
+    let rc = sla_json_as_i64(n, &v[0]);
+    if rc != 0 { panic(52101); };
+    if v[0] != 42 { panic(52102); };
+}
+
+@test "smoke1 sa_json_as_bool"() {
+    let t = sla_json_parse(STR_PTR("true"), STR_LEN("true"));
+    let v = [0u64; 4];
+    let rc = sla_json_as_bool(t, &v[0]);
+    if rc != 0 { panic(52110); };
+    if v[0] != 1 { panic(52111); };
+    let f = sla_json_parse(STR_PTR("false"), STR_LEN("false"));
+    let rc2 = sla_json_as_bool(f, &v[0]);
+    if rc2 != 0 { panic(52112); };
+    if v[0] != 0 { panic(52113); };
+}
+
+@test "smoke1 sa_json_object_set_string"() {
+    let obj = sla_json_parse(STR_PTR("{}"), STR_LEN("{}"));
+    let rc = sla_json_object_set_string(obj, STR_PTR("k"), STR_LEN("k"), STR_PTR("v"), STR_LEN("v"));
+    if rc != 0 { panic(52120); };
+    let p = [0u64; 4];
+    let l = [0u64; 4];
+    let rc2 = sla_json_object_get_string(obj, STR_PTR("k"), STR_LEN("k"), &p[0], &l[0]);
+    if rc2 != 0 { panic(52121); };
+    let sp: ptr = (p[0] as ptr);
+    if s1_streq(sp, l[0], STR_PTR("v"), STR_LEN("v")) == false { panic(52122); };
+}
+
+@test "smoke1 sa_json_object_set_i64"() {
+    let obj = sla_json_parse(STR_PTR("{}"), STR_LEN("{}"));
+    let rc = sla_json_object_set_i64(obj, STR_PTR("n"), STR_LEN("n"), 7);
+    if rc != 0 { panic(52130); };
+    let v = [0u64; 4];
+    sla_json_object_get_i64(obj, STR_PTR("n"), STR_LEN("n"), &v[0]);
+    if v[0] != 7 { panic(52131); };
+}
+
+@test "smoke1 sa_json_object_set_f64"() {
+    let obj = sla_json_parse(STR_PTR("{}"), STR_LEN("{}"));
+    let rc = sla_json_object_set_f64(obj, STR_PTR("f"), STR_LEN("f"), 2.5);
+    if rc != 0 { panic(52140); };
+    let v = [0u64; 4];
+    sla_json_object_get_f64(obj, STR_PTR("f"), STR_LEN("f"), &v[0]);
+    if v[0] == 0 { panic(52141); };
+    let rc2 = sla_json_object_set_f64(obj, STR_PTR("f"), STR_LEN("f"), 0.0);
+    if rc2 != 0 { panic(52142); };
+    sla_json_object_get_f64(obj, STR_PTR("f"), STR_LEN("f"), &v[0]);
+    if v[0] != 0 { panic(52143); };
+}
+
+@test "smoke1 sa_json_object_set_bool"() {
+    let obj = sla_json_parse(STR_PTR("{}"), STR_LEN("{}"));
+    let rc = sla_json_object_set_bool(obj, STR_PTR("b"), STR_LEN("b"), 1);
+    if rc != 0 { panic(52150); };
+    let v = [0u64; 4];
+    sla_json_object_get_bool(obj, STR_PTR("b"), STR_LEN("b"), &v[0]);
+    if v[0] != 1 { panic(52151); };
+}
+
+@test "smoke1 sa_json_object_set_null"() {
+    let obj = sla_json_parse(STR_PTR("{}"), STR_LEN("{}"));
+    let rc = sla_json_object_set_null(obj, STR_PTR("z"), STR_LEN("z"));
+    if rc != 0 { panic(52160); };
+    let child = s1_get(obj, STR_PTR("z"), STR_LEN("z"), 52161);
+    if sla_json_kind(child) != 0 { panic(52162); };
+}
+
+@test "smoke1 sa_json_object_set_node"() {
+    let obj = sla_json_parse(STR_PTR("{}"), STR_LEN("{}"));
+    let child = sla_json_parse(STR_PTR("[1]"), STR_LEN("[1]"));
+    let rc = sla_json_object_set_node(obj, STR_PTR("arr"), STR_LEN("arr"), child);
+    if rc != 0 { panic(52170); };
+    let got = s1_get(obj, STR_PTR("arr"), STR_LEN("arr"), 52171);
+    if sla_json_kind(got) != 6 { panic(52172); };
+}
+
+@test "smoke1 sa_json_object_remove"() {
+    let obj = sla_json_parse(STR_PTR("{\"a\":1,\"b\":2}"), STR_LEN("{\"a\":1,\"b\":2}"));
+    let rc = sla_json_object_remove(obj, STR_PTR("a"), STR_LEN("a"));
+    if rc != 0 { panic(52180); };
+    let cell = [0u64; 4];
+    let rc2 = sla_json_object_get(obj, STR_PTR("a"), STR_LEN("a"), &cell[0]);
+    if rc2 == 0 { panic(52181); };
+    let cnt = [0u64; 4];
+    sla_json_value_count(obj, &cnt[0]);
+    if cnt[0] != 1 { panic(52182); };
+}
+
+@test "smoke1 sa_json_array_push_string"() {
+    let arr = sla_json_parse(STR_PTR("[]"), STR_LEN("[]"));
+    let rc = sla_json_array_push_string(arr, STR_PTR("x"), STR_LEN("x"));
+    if rc != 0 { panic(52190); };
+    let cell = [0u64; 4];
+    sla_json_array_get(arr, 0, &cell[0]);
+    if sla_json_kind(cell[0]) != 5 { panic(52191); };
+    if sla_json_string_len(cell[0]) != 1 { panic(52192); };
+}
+
+@test "smoke1 sa_json_array_push_i64"() {
+    let arr = sla_json_parse(STR_PTR("[]"), STR_LEN("[]"));
+    sla_json_array_push_i64(arr, 5);
+    let rc = sla_json_array_push_i64(arr, 6);
+    if rc != 0 { panic(52200); };
+    let cnt = [0u64; 4];
+    sla_json_value_count(arr, &cnt[0]);
+    if cnt[0] != 2 { panic(52201); };
+    let cell = [0u64; 4];
+    sla_json_array_get(arr, 1, &cell[0]);
+    let v = [0u64; 4];
+    sla_json_as_i64(cell[0], &v[0]);
+    if v[0] != 6 { panic(52202); };
+}
+
+@test "smoke1 sa_json_array_push_f64"() {
+    let arr = sla_json_parse(STR_PTR("[]"), STR_LEN("[]"));
+    let rc = sla_json_array_push_f64(arr, 1.5);
+    if rc != 0 { panic(52210); };
+    let cell = [0u64; 4];
+    sla_json_array_get(arr, 0, &cell[0]);
+    if sla_json_kind(cell[0]) != 3 { panic(52211); };
+}
+
+@test "smoke1 sa_json_array_push_bool"() {
+    let arr = sla_json_parse(STR_PTR("[]"), STR_LEN("[]"));
+    let rc = sla_json_array_push_bool(arr, 1);
+    if rc != 0 { panic(52220); };
+    let cell = [0u64; 4];
+    sla_json_array_get(arr, 0, &cell[0]);
+    let v = [0u64; 4];
+    sla_json_as_bool(cell[0], &v[0]);
+    if v[0] != 1 { panic(52221); };
+}
+
+@test "smoke1 sa_json_array_push_null"() {
+    let arr = sla_json_parse(STR_PTR("[]"), STR_LEN("[]"));
+    let rc = sla_json_array_push_null(arr);
+    if rc != 0 { panic(52230); };
+    let cell = [0u64; 4];
+    sla_json_array_get(arr, 0, &cell[0]);
+    if sla_json_kind(cell[0]) != 0 { panic(52231); };
+}
+
+@test "smoke1 sa_json_array_push_node"() {
+    let arr = sla_json_parse(STR_PTR("[]"), STR_LEN("[]"));
+    let child = sla_json_parse(STR_PTR("{}"), STR_LEN("{}"));
+    let rc = sla_json_array_push_node(arr, child);
+    if rc != 0 { panic(52240); };
+    let cell = [0u64; 4];
+    sla_json_array_get(arr, 0, &cell[0]);
+    if sla_json_kind(cell[0]) != 7 { panic(52241); };
+}
+
+@test "smoke1 sa_json_string_len"() {
+    let s = sla_json_parse(STR_PTR("\"hello\""), STR_LEN("\"hello\""));
+    if s == 0 { panic(52250); };
+    if sla_json_string_len(s) != 5 { panic(52251); };
+}
+
+@test "smoke1 sa_json_value_count"() {
+    let doc = s1_doc();
+    let cnt = [0u64; 4];
+    let rc = sla_json_value_count(doc, &cnt[0]);
+    if rc != 0 { panic(52260); };
+    if cnt[0] != 7 { panic(52261); };
+    let arr = s1_get(doc, STR_PTR("arr"), STR_LEN("arr"), 52262);
+    let rc2 = sla_json_value_count(arr, &cnt[0]);
+    if rc2 != 0 { panic(52263); };
+    if cnt[0] != 3 { panic(52264); };
+}
+
+@test "smoke1 sa_json_stringify"() {
+    let doc = s1_doc();
+    let cell = [0u64; 4];
+    let rc = sla_json_stringify(doc, &cell[0]);
+    if rc != 0 { panic(52270); };
+    if cell[0] == 0 { panic(52271); };
+    if sla_json_buffer_len(cell[0]) == 0 { panic(52272); };
+}
+
+@test "smoke1 sa_json_buffer_len"() {
+    let doc = sla_json_parse(STR_PTR("{\"a\":1}"), STR_LEN("{\"a\":1}"));
+    let cell = [0u64; 4];
+    let rc = sla_json_stringify(doc, &cell[0]);
+    if rc != 0 { panic(52280); };
+    let n = sla_json_buffer_len(cell[0]);
+    if n < 7 { panic(52281); };
+    // Deterministic: re-stringify gives the same length.
+    let cell2 = [0u64; 4];
+    sla_json_stringify(doc, &cell2[0]);
+    if sla_json_buffer_len(cell2[0]) != n { panic(52282); };
+}
+
+@test "smoke1 sa_json_writer_field_node"() {
+    let w = [0u64; 4];
+    let rc = sla_json_writer_new(0, 0, 0, 0, 0, &w[0]);
+    if rc != 0 { panic(52290); };
+    sla_json_writer_begin_object(w[0]);
+    let child = sla_json_parse(STR_PTR("[1,2]"), STR_LEN("[1,2]"));
+    let rc2 = sla_json_writer_field_node(w[0], STR_PTR("child"), STR_LEN("child"), child);
+    if rc2 != 0 { panic(52291); };
+    sla_json_writer_end_object(w[0]);
+    let out = [0u64; 4];
+    let rc3 = sla_json_writer_finish(w[0], &out[0]);
+    if rc3 != 0 { panic(52292); };
+    if sla_json_buffer_len(out[0]) < 15 { panic(52293); };
+    sla_json_writer_free(^w[0]);
+    sla_std_close(child);
+}
+
+@test "smoke1 sa_json_writer_write_node"() {
+    let w = [0u64; 4];
+    let rc = sla_json_writer_new(0, 0, 0, 0, 0, &w[0]);
+    if rc != 0 { panic(52300); };
+    sla_json_writer_begin_array(w[0]);
+    let child = sla_json_parse(STR_PTR("{\"a\":1}"), STR_LEN("{\"a\":1}"));
+    let rc2 = sla_json_writer_write_node(w[0], child);
+    if rc2 != 0 { panic(52301); };
+    sla_json_writer_end_array(w[0]);
+    let out = [0u64; 4];
+    let rc3 = sla_json_writer_finish(w[0], &out[0]);
+    if rc3 != 0 { panic(52302); };
+    if sla_json_buffer_len(out[0]) < 9 { panic(52303); };
+    sla_json_writer_free(^w[0]);
+    sla_std_close(child);
+}
+
+@test "smoke1 sa_json_stream_next"() {
+    // Token codes (SA_JSON_TOKEN_*): OBJECT_BEGIN 0, OBJECT_END 1,
+    // ARRAY_BEGIN 2, ARRAY_END 3, TRUE 4, FALSE 5, NULL 6, NUMBER 7,
+    // STRING 9, END_OF_DOCUMENT 15.
+    let s = sla_json_stream_new(STR_PTR("{\"a\":[1,true,false,null,\"s\"]}"), STR_LEN("{\"a\":[1,true,false,null,\"s\"]}"));
+    if s == 0 { panic(52310); };
+    if sla_json_stream_next(s) != 0 { panic(52311); };
+    if sla_json_stream_next(s) != 9 { panic(52312); };
+    if sla_json_stream_next(s) != 2 { panic(52313); };
+    if sla_json_stream_next(s) != 7 { panic(52314); };
+    if sla_json_stream_next(s) != 4 { panic(52315); };
+    if sla_json_stream_next(s) != 5 { panic(52316); };
+    if sla_json_stream_next(s) != 6 { panic(52317); };
+    if sla_json_stream_next(s) != 9 { panic(52318); };
+    if sla_json_stream_next(s) != 3 { panic(52319); };
+    if sla_json_stream_next(s) != 1 { panic(52320); };
+    if sla_json_stream_next(s) != 15 { panic(52321); };
+    sla_std_close(s);
+}
+
+@test "smoke1 sa_json_stream_get_slice_len"() {
+    let s = sla_json_stream_new(STR_PTR("[\"abc\",12]"), STR_LEN("[\"abc\",12]"));
+    if s == 0 { panic(52330); };
+    if sla_json_stream_next(s) != 2 { panic(52331); };
+    // Structural tokens carry no text slice.
+    if sla_json_stream_get_slice_len(s) != 0 { panic(52332); };
+    if sla_json_stream_next(s) != 9 { panic(52333); };
+    if sla_json_stream_get_slice_len(s) != 3 { panic(52334); };
+    if sla_json_stream_next(s) != 7 { panic(52335); };
+    if sla_json_stream_get_slice_len(s) != 2 { panic(52336); };
+    if sla_json_stream_next(s) != 3 { panic(52337); };
+    sla_std_close(s);
+}
+
+@test "smoke1 sa_json_scanner_next"() {
+    let cell = [0u64; 4];
+    let rc = sla_json_scanner_new(&cell[0]);
+    if rc != 0 { panic(52340); };
+    sla_json_scanner_feed(cell[0], STR_PTR("[1]"), STR_LEN("[1]"));
+    sla_json_scanner_end_input(cell[0]);
+    // SaJsonToken record: kind u32 @ cell0 low half, text_ptr @ cell1,
+    // text_len @ cell2.
+    let tok = [0u64; 3];
+    let rc2 = sla_json_scanner_next(cell[0], &tok[0]);
+    if rc2 != 0 { panic(52341); };
+    if tok[0] != 2 { panic(52342); };
+    let rc3 = sla_json_scanner_next(cell[0], &tok[0]);
+    if rc3 != 0 { panic(52343); };
+    if tok[0] != 7 { panic(52344); };
+    if tok[2] != 1 { panic(52345); };
+    if tok[1] == 0 { panic(52346); };
+    if PTR_BYTE_AT((tok[1] as ptr), 0) != 49 { panic(52347); };
+    let rc4 = sla_json_scanner_next(cell[0], &tok[0]);
+    if rc4 != 0 { panic(52348); };
+    if tok[0] != 3 { panic(52349); };
+    let rc5 = sla_json_scanner_next(cell[0], &tok[0]);
+    if rc5 != 0 { panic(52350); };
+    if tok[0] != 15 { panic(52351); };
+    sla_json_scanner_free(^cell[0]);
+}

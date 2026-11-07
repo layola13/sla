@@ -1,0 +1,29 @@
+// Sla unit test framework demo - should_panic tests
+// Run with: sa sla test tests/test_unit_panic.sla
+
+fn divide(a: int, b: int) -> int {
+    let is_zero = b == 0;
+    if is_zero {
+        panic(99);
+    } else {
+    };
+    return a / b;
+}
+
+// ─── @test blocks ─────────────────────────────────────────────
+
+@test "divide normal"() {
+    let result = divide(10, 2);
+    let ok = result == 5;
+    if ok { } else { panic(1); };
+}
+
+@test should_panic "divide by zero panics"() {
+    // This test PASSES if the body panics
+    let _result = divide(10, 0);
+}
+
+@test ignored should_panic "ignored panic test"() {
+    // Skipped unless --include-ignored
+    panic(42);
+}

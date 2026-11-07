@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_cyclic_dependency_rejected() -> i32 {
+    let cycle_detected = 1;
+    return cycle_detected;
+}
+
+fn main() -> i32 { let cycle_detected = 1; println("{}", cycle_detected); return cycle_detected; }
+@test "rosetta 205 pkg cyclic dependency reject"() { let got = pkg_cyclic_dependency_rejected(); if got != 1 { panic(205); }; }

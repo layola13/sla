@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 完全数判定（6→1，12→0，28→1）。
+// 意对标 tsgosa 183_prime_upto 的因子和版（46 为素数版）：真因子和恒等。
+
+fn divsum(n: int) -> int {
+    let s = 0;
+    let d = 1;
+    while d < n {
+        if n % d == 0 { s = s + d; };
+        d = d + 1;
+    }
+    return s;
+}
+
+fn is_perfect(n: int) -> int {
+    return if divsum(n) == n { 1 } else { 0 };
+}
+
+fn main() -> i32 {
+    println("{},{},{}", is_perfect(6), is_perfect(12), is_perfect(28));
+    return 0;
+}
+
+@test "basic 334 perfect"() {
+    if is_perfect(6) != 1 { panic(33401); };
+    if is_perfect(12) != 0 { panic(33402); };
+    if is_perfect(28) != 1 { panic(33403); };
+}

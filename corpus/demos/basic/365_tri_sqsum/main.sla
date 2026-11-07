@@ -1,0 +1,42 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 平方和三向对峙（循环 vs 公式 vs 尾累加变体：10 → 385）。
+// 意对标 288 循环公式对峙的平方和版（359 互补）。
+
+fn sq_loop(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        s = s + i * i;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn sq_form(n: int) -> int {
+    return n * (n + 1) * (2 * n + 1) / 6;
+}
+
+fn sq_acc(n: int) -> int {
+    let s = 0;
+    let i = n;
+    while i >= 1 {
+        s = s + i * i;
+        i = i - 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", sq_loop(10), sq_form(10), sq_acc(10));
+    return 0;
+}
+
+@test "basic 365 tri sqsum"() {
+    if sq_loop(10) != 385 { panic(36501); };
+    if sq_form(10) != 385 { panic(36502); };
+    if sq_acc(10) != 385 { panic(36503); };
+    if sq_loop(10) != sq_form(10) { panic(36504); };
+    if sq_form(10) != sq_acc(10) { panic(36505); };
+}

@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 377_funexpr_rec：具名递归（fact(5)=120，fib(10)=55）。
+// 原用例为函数表达式自引用，SLA 用普通具名函数递归表达同一语义
+//（与 18/49 的迭代口径互补，探针已验证双后端）。
+
+fn fact(n: i32) -> i32 {
+    if n <= 1 { return 1; };
+    return n * fact(n - 1);
+}
+
+fn fib(n: i32) -> i32 {
+    if n <= 1 { return n; };
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn main() -> i32 {
+    println("{},{}", fact(5), fib(10));
+    return 0;
+}
+
+@test "basic 120 recurse"() {
+    if fact(5) != 120 { panic(12001); };
+    if fact(0) != 1 { panic(12002); };
+    if fib(10) != 55 { panic(12003); };
+}

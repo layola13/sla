@@ -1,0 +1,83 @@
+// 309 - Try Block Macro
+// SA: 用 RESULT_UNWRAP 宏模拟 Rust 的 try { expr? }
+// 卫生宏保证 _tag/_ok 每次展开独立
+
+@import "sa_std/io/print.sai"
+@const MSG_OK = utf8:"30\n"
+@const MSG_ERR = utf8:"error\n"
+
+#def Result_SIZE = 8
+
+// MAKE_OK: 创建 Ok(%val)
+[MACRO] MAKE_OK %out, %val
+    store %out+0, 1 as u32
+    store %out+4, %val as i32
+[END_MACRO]
+
+// RESULT_UNWRAP: 检查 Result tag 并分支
+// %out: 接收值, %res: Result 指针, %default: 默认值
+// %l_ok/%l_done: 跳转标签
+[MACRO] RESULT_UNWRAP %out, %res, %default, %l_ok, %l_done
+    _tag = load %res+0 as u32
+    _ok = eq _tag, 1
+    !_tag
+    br _ok -> %l_ok, %l_done
+[END_MACRO]
+
+// RESULT_OK_BODY: Ok 分支加载值
+[MACRO] RESULT_OK_BODY %out, %res, %l_done
+    %out = load %res+4 as i32
+    jmp %l_done
+[END_MACRO]
+
+// RESULT_ERR_BODY: Err 分支返回默认值
+[MACRO] RESULT_ERR_BODY %out, %default, %l_done
+    %out = add %default, 0
+[END_MACRO]
+
+@compute() -> i32:
+L_ENTRY:
+    res_a = alloc Result_SIZE
+    EXPAND MAKE_OK res_a, 10
+
+    res_b = alloc Result_SIZE
+    EXPAND MAKE_OK res_b, 20
+
+    // unwrap res_a
+    EXPAND RESULT_UNWRAP val_a, res_a, 0, L_RA_OK, L_RA_ERR
+L_RA_OK:
+    EXPAND RESULT_OK_BODY val_a, res_a, L_RA_DONE
+L_RA_ERR:
+    EXPAND RESULT_ERR_BODY val_a, 0, L_RA_DONE
+L_RA_DONE:
+
+    // unwrap res_b
+    EXPAND RESULT_UNWRAP val_b, res_b, 0, L_RB_OK, L_RB_ERR
+L_RB_OK:
+    EXPAND RESULT_OK_BODY val_b, res_b, L_RB_DONE
+L_RB_ERR:
+    EXPAND RESULT_ERR_BODY val_b, 0, L_RB_DONE
+L_RB_DONE:
+
+    !res_a
+    !res_b
+
+    total = add val_a, val_b
+    !val_a
+    !val_b
+    return total
+
+@main() -> i32:
+L_ENTRY:
+    result = call @compute()
+    ok = eq result, 30
+    !result
+    br ok -> L_OK, L_ERR
+L_OK:
+    !ok
+    call @sa_print_bytes(&MSG_OK, 3)
+    return 0
+L_ERR:
+    !ok
+    call @sa_print_bytes(&MSG_ERR, 6)
+    return 1

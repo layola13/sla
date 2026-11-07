@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn mod_prelude_symbol_count() -> i32 { let option_symbol = 1; let result_symbol = 1; let println_symbol = 1; return option_symbol + result_symbol + println_symbol; }
+fn main() -> i32 { let option_symbol = 1; let result_symbol = 1; let println_symbol = 1; let result = option_symbol + result_symbol + println_symbol; println("{}", result); return result; }
+@test "rosetta 230 mod std prelude"() { let got = mod_prelude_symbol_count(); if got != 3 { panic(230); }; }

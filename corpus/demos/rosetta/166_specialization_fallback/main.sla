@@ -1,0 +1,11 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+fn specialization_score_sum() -> i32 { let specialized_score = 2; let fallback_score = 0; return specialized_score + fallback_score; }
+fn main() -> i32 {
+    let specialized_score = 2;
+    let fallback_score = 0;
+    let result = specialized_score + fallback_score;
+    println("{}", result);
+    return result;
+}
+@test "rosetta 166 166_specialization_fallback"() { let got = specialization_score_sum(); if got != 2 { panic(166); }; }

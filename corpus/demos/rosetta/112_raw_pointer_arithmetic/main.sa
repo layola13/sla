@@ -1,0 +1,68 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/ptr.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_raw_pointer_third_value = vtable { call = @sla__raw_pointer_third_value }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__raw_pointer_third_value() -> i32:
+L_ENTRY:
+    data = alloc 16
+    tmp_0 = 1
+    store data+0, tmp_0 as i32
+    tmp_1 = 2
+    store data+4, tmp_1 as i32
+    tmp_2 = 3
+    store data+8, tmp_2 as i32
+    tmp_3 = 4
+    store data+12, tmp_3 as i32
+    tmp_5 = 2
+    tmp_6 = mul tmp_5, 4
+    tmp_7 = ptr_add data, tmp_6
+    !tmp_6
+    !tmp_5
+    tmp_8 = load tmp_7+0 as i32
+    tmp_4 = tmp_8
+    third = tmp_4
+    !data
+    return third
+
+@main() -> i32:
+L_ENTRY:
+    tmp_9 = call @sla__raw_pointer_third_value()
+    result = tmp_9
+    tmp_10 = call @sa_fmt_u64(result, 10)
+    tmp_11 = call @sa_fmt_buffer_data(tmp_10)
+    tmp_12 = call @sa_fmt_buffer_len(tmp_10)
+    tmp_13 = tmp_11
+    call @sa_print_bytes(&tmp_13, tmp_12)
+    call @sa_fmt_buffer_free(^tmp_10)
+    !tmp_13
+    !tmp_12
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 112 112_raw_pointer_arithmetic"():
+L_TEST_ENTRY_0:
+    tmp_14 = call @sla__raw_pointer_third_value()
+    got = tmp_14
+    tmp_15 = 3
+    tmp_16 = ne got, tmp_15
+    !tmp_15
+    br tmp_16 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_16
+    panic(112)
+
+L_ELSE_2:
+    !tmp_16
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

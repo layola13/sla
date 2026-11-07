@@ -1,0 +1,16 @@
+@import "consumer/../bridge/allocator_bridge.sa"
+
+@allocator_consumer_value() -> i32:
+L_ENTRY:
+    handle = alloc 4
+    store handle+0, 255 as i32
+    value = call @allocator_swap(handle)
+    ok = eq value, 256
+    !value
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 255
+
+L_ERR:
+    return 0

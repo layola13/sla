@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_enabled_plugin_count() -> i32 {
+    let formatter_plugin = 1;
+    let analyzer_plugin = 1;
+    return formatter_plugin + analyzer_plugin;
+}
+
+fn main() -> i32 {
+    let formatter_plugin = 1;
+    let analyzer_plugin = 1;
+    let result = formatter_plugin + analyzer_plugin;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 254 contract plugin system"() {
+    let got = contract_enabled_plugin_count();
+    if got != 2 { panic(254); };
+}

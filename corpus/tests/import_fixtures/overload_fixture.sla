@@ -1,0 +1,8 @@
+// Import fixture: an overload set exported from another .sla module.
+// The importing file resolves calls against all three members; member
+// bodies must survive the registry body materialization (which is
+// keyed by plain name and therefore materializes the whole module).
+
+pub fn imp_pick(x: i32) -> i32 { return 1; }
+pub fn imp_pick(x: f64) -> i32 { return 2; }
+pub fn imp_pick(x: i32, y: i32) -> i32 { return 3; }

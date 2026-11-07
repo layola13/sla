@@ -1,0 +1,59 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Bell 双实现对峙（Stirling 求和 vs 二项递推：B(5)=52 双边）。
+// 意对标 453 Trib 对峙的集合版（451 互补）。
+
+fn stirling2(n: int, k: int) -> int {
+    if n == 0 { return 0; };
+    if k == 0 { return 0; };
+    if k == 1 { return 1; };
+    if k > n { return 0; };
+    if k == n { return 1; };
+    return k * stirling2(n - 1, k) + stirling2(n - 1, k - 1);
+}
+
+fn bell_stir(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + stirling2(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn binom(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn bell_binom(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let k = 0;
+    while k < n {
+        s = s + binom(n - 1, k) * bell_binom(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", bell_stir(5), bell_binom(5));
+    return 0;
+}
+
+@test "basic 454 duel bell"() {
+    if bell_stir(5) != 52 { panic(45401); };
+    if bell_binom(5) != 52 { panic(45402); };
+    if bell_stir(5) != bell_binom(5) { panic(45403); };
+    if bell_binom(4) != 15 { panic(45404); };
+}

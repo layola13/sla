@@ -1,0 +1,94 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Stirling 二类三向：建表行和 × 递归行和 × Bell 数（n=7：877 三锁）。
+// 意对标 697_stir2_row7（行源互补；605 三向体例收束二类续高位族）。
+
+fn svt(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + nn * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn rs2(n: int, k: int) -> int {
+    if k == 0 {
+        if n == 0 { return 1; };
+        return 0;
+    };
+    if k > n { return 0; };
+    if k == n { return 1; };
+    return rs2(n - 1, k - 1) + k * rs2(n - 1, k);
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn bell(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let k = 0;
+    while k <= n - 1 {
+        s = s + binom_mul(n - 1, k) * bell(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn bsum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + svt(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn brsum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + rs2(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", bsum(7), brsum(7), bell(7));
+    return 0;
+}
+
+@test "basic 705 tri stir2"() {
+    if bsum(7) != 877 { panic(70501); };
+    if brsum(7) != 877 { panic(70502); };
+    if bell(7) != 877 { panic(70503); };
+    if bsum(6) != 203 { panic(70504); };
+}

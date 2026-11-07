@@ -1,0 +1,57 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Catalan 对峙：卷积递推 == 商式 B(n)/(n+1)（n=5：42 对 42；n=6：132 对 132）。
+// 意对标 556 cat_conv × 351 catalan（两源单实现见各源；286 系对峙体例）。
+
+fn cat_conv(n: int) -> int {
+    let c: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        c.push(0);
+        i = i + 1;
+    }
+    c[0] = 1;
+    let m = 1;
+    while m <= n {
+        let acc = 0;
+        let j = 0;
+        while j < m {
+            acc = acc + c[j] * c[m - 1 - j];
+            j = j + 1;
+        }
+        c[m] = acc;
+        m = m + 1;
+    }
+    return c[n];
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn cat_div(n: int) -> int {
+    return binom_mul(2 * n, n) / (n + 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", cat_conv(5), cat_div(5), cat_conv(6), cat_div(6));
+    return 0;
+}
+
+@test "basic 561 duel cat"() {
+    if cat_conv(5) != 42 { panic(56101); };
+    if cat_div(5) != 42 { panic(56102); };
+    if cat_conv(6) != 132 { panic(56103); };
+    if cat_div(6) != 132 { panic(56104); };
+    if cat_conv(6) != cat_div(6) { panic(56105); };
+}

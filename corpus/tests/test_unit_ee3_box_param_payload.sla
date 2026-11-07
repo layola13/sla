@@ -1,0 +1,78 @@
+// DEF-EE3 (CLAIMS: by-value Box parameter drop / Box<i64> scalar
+// *payload read): a callee reading its own by-value Box parameter
+// payload aborted on the text backend with signal 6 (glibc double
+// free) while SAB was green. The smart-pointer binding drop frees
+// the box cell through a private `add` alias and the generic `!name`
+// tail then raw-freed the parameter's ingress register a second
+// time. By-value Box parameters are now adopted into a body-local
+// register at function entry (same form as the DEF-4 refcount
+// adoption), so the drop composes like a let binding's.
+// Pre-fix: every @test below that drops a by-value Box parameter
+// aborts on the text backend (signal 6); SAB is green throughout.
+// The struct control case (E-E4) was already dual-green pre-fix.
+
+fn ee3_read_twice(b: Box<i64>) -> i64 {
+    let first = *b;
+    let second = *b;
+    return first + second;
+}
+
+fn ee3_read_once(b: Box<i64>) -> i64 {
+    return *b;
+}
+
+fn ee3_drop_only(b: Box<i64>) -> i64 {
+    return 0;
+}
+
+fn ee3_read_nested(b: Box<Box<i64>>) -> i64 {
+    let first = **b;
+    let second = **b;
+    return first + second;
+}
+
+fn ee3_read_string(b: Box<String>) -> i64 {
+    return (*b).len() as i64;
+}
+
+struct Ee3BoxWrap {
+    tag: i64,
+    payload: Box<i64>,
+}
+
+fn ee3_wrap_tag(w: Ee3BoxWrap) -> i64 {
+    return w.tag + *w.payload;
+}
+
+@test "ee3 box param read twice"() {
+    if ee3_read_twice(Box::new(20)) != 40 { panic(311); };
+    let b: Box<i64> = Box::new(20);
+    if ee3_read_twice(b) != 40 { panic(312); };
+}
+
+@test "ee3 box param read once"() {
+    if ee3_read_once(Box::new(41)) != 41 { panic(313); };
+}
+
+@test "ee3 box param drop only"() {
+    if ee3_drop_only(Box::new(30)) != 0 { panic(314); };
+}
+
+@test "ee3 box param nested payload"() {
+    if ee3_read_nested(Box::new(Box::new(22))) != 44 { panic(315); };
+}
+
+@test "ee3 box param string payload"() {
+    if ee3_read_string(Box::new(format("hello"))) != 5 { panic(316); };
+}
+
+@test "ee3 box field struct control"() {
+    let w = Ee3BoxWrap {
+        tag: 1,
+        payload: Box::new(10),
+    };
+    if ee3_wrap_tag(w) != 11 { panic(317); };
+    // w stayed live across the by-value pass: payload must be intact.
+    if *w.payload != 10 { panic(318); };
+    if ee3_wrap_tag(w) != 11 { panic(319); };
+}

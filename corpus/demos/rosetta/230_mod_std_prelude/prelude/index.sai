@@ -1,0 +1,2 @@
+@extern prelude_seed_contract() -> i32
+@extern prelude_value_contract() -> i32

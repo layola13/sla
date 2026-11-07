@@ -1,0 +1,37 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 离散对数小例（3^x≡6 mod 7 → x=3；无解返 0）。
+// 意对标 485 本原根的逆问题版（485 互补）。
+
+fn powmod(base: int, exp: int, m: int) -> int {
+    let r = 1;
+    let b = base % m;
+    let e = exp;
+    while e > 0 {
+        if e % 2 == 1 { r = r * b % m; };
+        b = b * b % m;
+        e = e / 2;
+    }
+    return r;
+}
+
+fn dlog(a: int, b: int, p: int) -> int {
+    let x = 0;
+    while x < p {
+        if powmod(a, x, p) == b % p { return x; };
+        x = x + 1;
+    }
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", dlog(3, 6, 7), dlog(2, 4, 7), dlog(2, 3, 7));
+    return 0;
+}
+
+@test "basic 503 dlog"() {
+    if dlog(3, 6, 7) != 3 { panic(50301); };
+    if dlog(2, 4, 7) != 2 { panic(50302); };
+    if dlog(2, 3, 7) != 0 { panic(50303); };
+}

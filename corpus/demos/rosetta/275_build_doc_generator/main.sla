@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_generated_doc_pages() -> i32 { let api_page = 1; let guide_page = 1; return api_page + guide_page; }
+fn main() -> i32 { let api_page = 1; let guide_page = 1; let result = api_page + guide_page; println("{}", result); return result; }
+@test "rosetta 275 build doc generator"() { let got = build_generated_doc_pages(); if got != 2 { panic(275); }; }

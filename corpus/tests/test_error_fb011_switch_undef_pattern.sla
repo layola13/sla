@@ -1,0 +1,10 @@
+// expect: UndefinedVariable
+// FB-011: a switch pattern expression naming an undefined identifier
+// must be diagnosed (patterns were previously never checked).
+fn f(x: i64) -> i64 {
+    switch x {
+        y + undefined_name => { return 1; },
+        default => { return 0; },
+    };
+    return 0;
+}

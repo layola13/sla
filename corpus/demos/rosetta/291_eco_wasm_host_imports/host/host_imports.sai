@@ -1,0 +1,2 @@
+@extern host_log(tag: i32) -> i32
+@extern host_clock_ms() -> i32

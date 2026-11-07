@@ -1,0 +1,17 @@
+@import "sa_std/vec.sa"
+
+// DEF SAB walker count offset: the SAB deep-drop element walker
+// (sab_codegen emitVecElementDrops) computed the loop count offset
+// by calling fieldLayout() on Vec -- a decl-less handle type -- and
+// silently swallowed the error into the literal 8. In the sa_std Vec
+// ABI +8 is CAP, not LEN (+16), so the SAB walker iterated [0, cap)
+// and dropped uninitialised slots as boxed element pointers whenever
+// cap > len (SIGSEGV; text backend was immune because it emits the
+// symbolic +Vec_len offset). This file pins one cell of the cap/len
+// shape matrix: only the OUTER Vec has spare capacity at drop time (len 63 / cap 64), inner rows exact (4 / 4) -- red on SAB before the fix (signal 11), green after. The oracle is survival + exact lens after
+// post-drop allocation churn (SAB-direct cannot lower struct element
+// field reads yet, same as the parent corpus case).
+struct Row { name: Vec<u8>, n: u64, data: Vec<u8>, rows: Vec<Vec<u8>> }
+fn bytes_of(seed: u8, n: u64) -> Vec<u8> { let v: Vec<u8> = Vec::new(); let i: u64 = 0; while i < n { v.push(seed + (i % 7) as u8); i = i + 1; } return v; }
+fn make_row(k: u64) -> Row { let inner: Vec<Vec<u8>> = Vec::new(); let r: u64 = 0; while r < 4 { inner.push(bytes_of(40 + (k % 9) as u8, 24)); r = r + 1; } return Row { name: bytes_of(97, 16), n: k, data: bytes_of(65, 32), rows: inner }; }
+@test "deep drop vec struct elems cap spare outer"() { let v: Vec<Row> = Vec::new(); let i: u64 = 0; while i < 63 { v.push(make_row(i)); i = i + 1; } if len(v) != 63 { panic(1); }; v = Vec::new(); if len(v) != 0 { panic(2); }; let w: Vec<Row> = Vec::new(); let k: u64 = 0; while k < 64 { w.push(make_row(1000 + k)); k = k + 1; } if len(w) != 64 { panic(3); }; w = Vec::new(); if len(w) != 0 { panic(4); }; println("SURVIVED"); }

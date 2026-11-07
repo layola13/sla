@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Stirling 一类第 7 行 720,1764,1624,735,175,21,1（行和 5040=7!；行和循环求和）。
+// 意对标 686_stir17（单格版互补；同式行复算）。
+
+fn cst(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn csum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + cst(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", cst(7, 1), cst(7, 2), csum(7));
+    return 0;
+}
+
+@test "basic 687 stir1 row7"() {
+    if cst(7, 1) != 720 { panic(68701); };
+    if cst(7, 2) != 1764 { panic(68702); };
+    if csum(7) != 5040 { panic(68703); };
+    if cst(7, 7) != 1 { panic(68704); };
+}

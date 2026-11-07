@@ -1,0 +1,29 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn await_local_join2_sum() -> i32 {
+    let left = future::ready(19);
+    let right = future::ready(23);
+    let pair = future::join2(left, right).await;
+    let left_value = future::pair_left(pair);
+    let right_value = future::pair_right(pair);
+    return left_value + right_value;
+}
+
+fn poll_local_join2_await_sum() -> i32 {
+    let fut = await_local_join2_sum();
+    let task = task::new(fut);
+    if task::poll(task) != true {
+        panic(9711);
+    };
+    if task::is_ready(task) != true {
+        panic(9712);
+    };
+    return task::result(task);
+}
+
+@test "async await local join2 ready state"() {
+    if poll_local_join2_await_sum() != 42 {
+        panic(9713);
+    };
+}

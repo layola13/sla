@@ -1,0 +1,99 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_cancellation_safe_value = vtable { call = @sla__cancellation_safe_value }
+@const SLA_FNPTR_VT_reserve_slot = vtable { call = @sla__reserve_slot }
+@const SLA_FNPTR_VT_commit_slot = vtable { call = @sla__commit_slot }
+@const SLA_FNPTR_VT_cancel_cleanup = vtable { call = @sla__cancel_cleanup }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__cancellation_safe_value() -> i32:
+L_ENTRY:
+    tmp_0 = 4
+    tmp_1 = call @sla__reserve_slot(tmp_0)
+    !tmp_0
+    reserved = tmp_1
+    tmp_2 = 1
+    tmp_3 = call @sla__commit_slot(reserved, tmp_2)
+    !tmp_2
+    committed = tmp_3
+    tmp_4 = 0
+    tmp_5 = call @sla__cancel_cleanup(committed, tmp_4)
+    !tmp_4
+    !reserved
+    !committed
+    return tmp_5
+
+@sla__reserve_slot(value: i32) -> i32:
+L_ENTRY:
+    return value
+
+@sla__commit_slot(value: i32, commit: u8) -> i32:
+L_ENTRY:
+    br commit -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !commit
+    return value
+
+L_ELSE_1:
+    !commit
+    tmp_6 = 0
+    !value
+    return tmp_6
+
+
+@sla__cancel_cleanup(value: i32, cancelled: u8) -> i32:
+L_ENTRY:
+    br cancelled -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !cancelled
+    tmp_8 = 0
+    !value
+    return tmp_8
+
+L_ELSE_4:
+    !cancelled
+    return value
+
+
+@main() -> i32:
+L_ENTRY:
+    tmp_10 = call @sla__cancellation_safe_value()
+    result = tmp_10
+    tmp_11 = call @sa_fmt_u64(result, 10)
+    tmp_12 = call @sa_fmt_buffer_data(tmp_11)
+    tmp_13 = call @sa_fmt_buffer_len(tmp_11)
+    tmp_14 = tmp_12
+    call @sa_print_bytes(&tmp_14, tmp_13)
+    call @sa_fmt_buffer_free(^tmp_11)
+    !tmp_14
+    !tmp_13
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 139 139_cancellation_safety"():
+L_TEST_ENTRY_6:
+    tmp_15 = call @sla__cancellation_safe_value()
+    got = tmp_15
+    tmp_16 = 4
+    tmp_17 = ne got, tmp_16
+    !tmp_16
+    br tmp_17 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_17
+    panic(139)
+
+L_ELSE_8:
+    !tmp_17
+    jmp L_MERGE_9
+
+L_MERGE_9:
+    !got
+    return
+

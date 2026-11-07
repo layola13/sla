@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/cell.sa"
+
+struct ThreadLocalSlot {
+    thread_id: i32,
+    value: Cell<i32>,
+}
+
+fn current_thread_slot() -> ThreadLocalSlot {
+    return ThreadLocalSlot {
+        thread_id: 1,
+        value: Cell::new(6),
+    };
+}
+
+fn thread_local_cell_value() -> i32 {
+    let slot = current_thread_slot();
+    slot.value.set(slot.value.get() + 2);
+    if slot.thread_id == 1 {
+        return slot.value.get();
+    } else {
+        return 0;
+    };
+}
+
+fn main() -> i32 {
+    let slot = current_thread_slot();
+    slot.value.set(slot.value.get() + 2);
+    let result = if slot.thread_id == 1 {
+        slot.value.get()
+    } else {
+        0
+    };
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 124 124_thread_local_storage"() {
+    let got = thread_local_cell_value();
+    if got != 8 {
+        panic(124);
+    };
+};

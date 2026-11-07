@@ -1,0 +1,20 @@
+@import "sa_std/core/box.sa"
+
+struct BoxFromRawPayload {
+    value: i32,
+}
+
+fn box_from_raw_drop_payload(raw: *u8) -> void {
+    let typed = raw as *BoxFromRawPayload;
+    let boxed = unsafe { Box::from_raw(typed) };
+}
+
+fn box_into_raw_erased_payload() -> *u8 {
+    let boxed = Box::new(BoxFromRawPayload { value: 41 });
+    let raw = Box::into_raw(boxed) as *u8;
+    return raw;
+}
+
+@test "box from raw drop glue lowers direct"() {
+    if 1 != 1 { panic(51001); };
+}

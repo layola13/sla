@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 157_label_nested（outer label + continue outer，t=3）语义。
+// 注意（POTENTIAL_ISSUES #9）：SLA 不支持 `outer:` label（parse 报 SyntaxError），
+// 此处 j==1 时用 break 跳出内层，语义等价（每轮外层恰贡献 1 次计数）。
+
+fn label_sum() -> i32 {
+    let t: i32 = 0;
+    for i in 0..3 {
+        for j in 0..3 {
+            if j == 1 {
+                break;
+            };
+            t = t + 1;
+        }
+    }
+    return t;
+}
+
+fn main() -> i32 {
+    println("{}", label_sum());
+    return 0;
+}
+
+@test "basic 48 nested break"() {
+    if label_sum() != 3 { panic(4801); };
+}

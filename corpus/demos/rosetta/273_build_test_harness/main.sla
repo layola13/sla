@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_test_harness_cases() -> i32 { let unit_test = 1; let integration_test = 1; return unit_test + integration_test; }
+fn main() -> i32 { let unit_test = 1; let integration_test = 1; let result = unit_test + integration_test; println("{}", result); return result; }
+@test "rosetta 273 build test harness"() { let got = build_test_harness_cases(); if got != 2 { panic(273); }; }

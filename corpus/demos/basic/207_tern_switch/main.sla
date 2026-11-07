@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 942_ternary_switch：三元表达式作 switch 判别式（真→7，假→0）。
+// 与 151（调用结果判别）互补；`switch` 臂仍用 `=>` 块，无 `break`。
+
+fn pick(f: bool) -> i32 {
+    let r = 0;
+    switch if f { 1 } else { 0 } {
+        1 => {
+            r = 7;
+        },
+        default => {},
+    };
+    return r;
+}
+
+fn main() -> i32 {
+    println("{}", pick(true));
+    return 0;
+}
+
+@test "basic 207 tern switch"() {
+    if pick(true) != 7 { panic(20701); };
+    if pick(false) != 0 { panic(20702); };
+}

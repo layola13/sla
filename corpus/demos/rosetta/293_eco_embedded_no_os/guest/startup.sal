@@ -1,0 +1,3 @@
+#def EmbeddedState_SIZE = 8
+#def EmbeddedState_tag = +0
+#def EmbeddedState_status = +4

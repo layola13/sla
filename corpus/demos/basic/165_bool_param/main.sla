@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1044_bool_param：布尔参数取反（0,1）。
+// 条件须严格布尔（129），三元 `b ? 0 : 1` 写法见 06。
+
+fn neg(b: bool) -> i32 {
+    if b { return 0; };
+    return 1;
+}
+
+fn main() -> i32 {
+    println("{},{}", neg(true), neg(false));
+    return 0;
+}
+
+@test "basic 165 bool param"() {
+    if neg(true) != 0 { panic(16501); };
+    if neg(false) != 1 { panic(16502); };
+}

@@ -1,0 +1,14 @@
+// Generated from build/windows/target.toml.
+#def WINDOWS_PROFILE_COUNT = 2
+
+@windows_profile_value() -> i32:
+L_ENTRY:
+    value = add 268, 1
+    !value
+    return 269
+
+@windows_profile_count() -> i32:
+L_ENTRY:
+    count = add 1, 1
+    !count
+    return WINDOWS_PROFILE_COUNT

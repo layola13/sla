@@ -1,0 +1,11 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_workspace_inherited_fields() -> i32 {
+    let inherited_version = 1;
+    let inherited_license = 1;
+    return inherited_version + inherited_license;
+}
+
+fn main() -> i32 { let inherited_version = 1; let inherited_license = 1; let result = inherited_version + inherited_license; println("{}", result); return result; }
+@test "rosetta 211 pkg workspace inheritance"() { let got = pkg_workspace_inherited_fields(); if got != 2 { panic(211); }; }

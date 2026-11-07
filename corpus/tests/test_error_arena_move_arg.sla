@@ -1,0 +1,12 @@
+// expect: ArenaEscape
+// F2-A C1 corpus: escape route 3 - passing an arena-owned
+// value by value to a function moves it out of its domain;
+// only borrow passes are allowed (design 3).
+fn consume(x: Vec<String>) -> i32 { return 0; }
+
+fn neg_move_arg() -> i32 {
+    arena {
+        let v: Vec<String> = Vec::new();
+        return consume(v);
+    }
+}

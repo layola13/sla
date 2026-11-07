@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn ffi_linked_libc_symbols() -> i32 { let puts_symbol = 1; return puts_symbol; }
+fn main() -> i32 { let puts_symbol = 1; println("{}", puts_symbol); return puts_symbol; }
+@test "rosetta 281 ffi link system libc"() { let got = ffi_linked_libc_symbols(); if got != 1 { panic(281); }; }

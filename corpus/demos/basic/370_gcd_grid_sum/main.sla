@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// gcd 网格和（3×3 网格和为 12）。
+// 意对标 363 单表版的网格版（363 互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn gcd_grid_sum(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        let j = 1;
+        while j <= n {
+            s = s + gcd(i, j);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", gcd_grid_sum(3), gcd_grid_sum(2));
+    return 0;
+}
+
+@test "basic 370 gcd grid sum"() {
+    if gcd_grid_sum(3) != 12 { panic(37001); };
+    if gcd_grid_sum(2) != 5 { panic(37002); };
+    if gcd_grid_sum(1) != 1 { panic(37003); };
+}

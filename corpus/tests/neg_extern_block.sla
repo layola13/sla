@@ -1,0 +1,6 @@
+// expect: ExternBlockRequiresExtern
+// neg: bare block at declaration level without extern
+{
+    fn helper() -> i32;
+}
+fn main() -> i32 { return 0; }

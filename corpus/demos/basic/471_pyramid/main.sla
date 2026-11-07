@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 方锥数（S(n)=n(n+1)(2n+1)/6：S(5)=55）。
+// 意对标 359 平方和循环的闭式版（359 互补）。
+
+fn pyramid(n: int) -> int {
+    return n * (n + 1) * (2 * n + 1) / 6;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", pyramid(5), pyramid(4), pyramid(1));
+    return 0;
+}
+
+@test "basic 471 pyramid"() {
+    if pyramid(5) != 55 { panic(47101); };
+    if pyramid(4) != 30 { panic(47102); };
+    if pyramid(1) != 1 { panic(47103); };
+}

@@ -1,0 +1,5 @@
+@export lint_unused_seed() -> i32:
+L_ENTRY:
+    value = add 1, 0
+    !value
+    return 1

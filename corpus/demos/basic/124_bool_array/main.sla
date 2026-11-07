@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 388_boolkw：布尔透传 + 布尔数组（true,2,true）。
+// 与 14/104 的布尔口径一致；数组侧为 `bool` 元素新覆盖。
+
+fn is_yes(x: bool) -> bool {
+    return x;
+}
+
+fn main() -> i32 {
+    let b: bool = true;
+    let bs = [true, false];
+    println("{},{},{}", is_yes(b), len(bs), bs[0]);
+    return 0;
+}
+
+@test "basic 124 bool array"() {
+    let b: bool = true;
+    if is_yes(b) != true { panic(12401); };
+    if is_yes(false) != false { panic(12402); };
+    let bs = [true, false];
+    if len(bs) != 2 { panic(12403); };
+    if bs[0] != true { panic(12404); };
+    if bs[1] != false { panic(12405); };
+}

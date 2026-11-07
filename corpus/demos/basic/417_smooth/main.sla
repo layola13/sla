@@ -1,0 +1,35 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// y-光滑数（素因子皆 ≤y：36 是 5-光滑，42 否）。
+// 意对标 416 楔形数的界版（416 互补；425 做三向）。
+
+fn is_smooth(n: int, y: int) -> int {
+    if n < 1 { return 0; };
+    if n == 1 { return 1; };
+    let m = n;
+    let d = 2;
+    while d * d <= m {
+        if m % d == 0 {
+            if d > y { return 0; };
+            while m % d == 0 { m = m / d; }
+        };
+        d = d + 1;
+    }
+    if m > 1 {
+        if m > y { return 0; };
+    };
+    return 1;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", is_smooth(36, 5), is_smooth(42, 5), is_smooth(49, 7));
+    return 0;
+}
+
+@test "basic 417 smooth"() {
+    if is_smooth(36, 5) != 1 { panic(41701); };
+    if is_smooth(42, 5) != 0 { panic(41702); };
+    if is_smooth(49, 7) != 1 { panic(41703); };
+    if is_smooth(49, 5) != 0 { panic(41704); };
+}

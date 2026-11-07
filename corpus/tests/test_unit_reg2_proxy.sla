@@ -1,0 +1,171 @@
+@import "sa_std/http_proxy.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Coverage shard 2: http_proxy entries from sa_std/http_proxy.sla
+// (registry "declared, never probed"). String builders and the
+// per-target decision are pinned byte-for-byte / field-for-field:
+// decision reasons are the file's own constants (1 VIA_PROXY,
+// 2 NO_PROXY_CONFIGURED, 3 BYPASSED_NO_PROXY, 4 BYPASSED_LOOPBACK).
+// The two transport entries cannot be given a live handle without a
+// network peer, so they are pinned on the invalid-handle shape: the
+// write/close status must be a failure, never success.
+
+fn expect_str(got: String, want: ptr, want_len: u64, code: i32) {
+    if len(got) != want_len { panic(code); };
+    let gp: ptr = STR_PTR(got);
+    let i: u64 = 0;
+    while i < want_len {
+        if PTR_BYTE_AT(gp, i) != PTR_BYTE_AT(want, i) { panic(code); };
+        i = i + 1;
+    }
+}
+
+@test "reg2 proxy_dec_len"() {
+    if proxy_dec_len(0) != 1 { panic(25401); };
+    if proxy_dec_len(7) != 1 { panic(25402); };
+    if proxy_dec_len(10) != 2 { panic(25403); };
+    if proxy_dec_len(999) != 3 { panic(25404); };
+    if proxy_dec_len(4294967295) != 10 { panic(25405); };
+}
+
+@test "reg2 proxy_dec_digits"() {
+    let d0 = proxy_dec_digits(0);
+    if d0[0] != 48 { panic(25406); };
+    let d = proxy_dec_digits(123);
+    if d[0] != 49 || d[1] != 50 || d[2] != 51 { panic(25407); };
+    let d9 = proxy_dec_digits(90);
+    if d9[0] != 57 || d9[1] != 48 { panic(25408); };
+    let big = proxy_dec_digits(4294967295);
+    if big[0] != 52 || big[9] != 53 { panic(25409); }; // "4294967295"
+}
+
+@test "reg2 proxy_append_byte"() {
+    let w1 = "A";
+    expect_str(proxy_append_byte(format(""), 65), STR_PTR(w1), STR_LEN(w1) as u64, 25410);
+    let w2 = "abc";
+    expect_str(proxy_append_byte(format("ab"), 99), STR_PTR(w2), STR_LEN(w2) as u64, 25411);
+}
+
+@test "reg2 proxy_append_str"() {
+    let w1 = "foobar";
+    expect_str(proxy_append_str(format("foo"), format("bar")), STR_PTR(w1), STR_LEN(w1) as u64, 25412);
+    let w2 = "";
+    expect_str(proxy_append_str(format(""), format("")), STR_PTR(w2), STR_LEN(w2) as u64, 25413);
+}
+
+@test "reg2 proxy_append_range"() {
+    let w1 = "hello";
+    expect_str(proxy_append_range(format(""), STR_PTR("xxhello"), 2, 5), STR_PTR(w1), STR_LEN(w1) as u64, 25414);
+    let w2 = ">he";
+    expect_str(proxy_append_range(format(">"), STR_PTR("hello"), 0, 2), STR_PTR(w2), STR_LEN(w2) as u64, 25415);
+    let w3 = "ab";
+    expect_str(proxy_append_range(format("ab"), STR_PTR("hello"), 0, 0), STR_PTR(w3), STR_LEN(w3) as u64, 25416);
+}
+
+@test "reg2 proxy_crlf"() {
+    let c = proxy_crlf();
+    if len(c) != 2 { panic(25417); };
+    let p: ptr = STR_PTR(c);
+    if PTR_BYTE_AT(p, 0) != 13 { panic(25418); };
+    if PTR_BYTE_AT(p, 1) != 10 { panic(25419); };
+}
+
+@test "reg2 proxy_check_percent"() {
+    if !proxy_check_percent(STR_PTR("abc"), 0, 3) { panic(25420); };
+    if !proxy_check_percent(STR_PTR("a%41b"), 0, 5) { panic(25421); };
+    if proxy_check_percent(STR_PTR("a%4"), 0, 3) { panic(25422); }; // truncated escape
+    if proxy_check_percent(STR_PTR("a%zz"), 0, 4) { panic(25423); }; // non-hex escape
+    if proxy_check_percent(STR_PTR("%"), 0, 1) { panic(25424); };
+    if proxy_check_percent(STR_PTR("100%"), 0, 4) { panic(25425); }; // trailing bare %
+    if !proxy_check_percent(STR_PTR("xx%20yy"), 2, 3) { panic(25426); }; // offset window
+}
+
+@test "reg2 proxy_build_authority"() {
+    let w1 = "example.com:8080";
+    expect_str(proxy_build_authority(format("example.com"), 8080), STR_PTR(w1), STR_LEN(w1) as u64, 25427);
+    let w2 = "127.0.0.1:80";
+    expect_str(proxy_build_authority(format("127.0.0.1"), 80), STR_PTR(w2), STR_LEN(w2) as u64, 25428);
+    let w3 = "[::1]:443";
+    expect_str(proxy_build_authority(format("::1"), 443), STR_PTR(w3), STR_LEN(w3) as u64, 25429);
+}
+
+@test "reg2 proxy_basic_auth_finish"() {
+    let w1 = "Basic dXNlcjpwYXNz";
+    expect_str(proxy_basic_auth_finish(format("user:pass")), STR_PTR(w1), STR_LEN(w1) as u64, 25430);
+    let w2 = "Basic dTpw";
+    expect_str(proxy_basic_auth_finish(format("u:p")), STR_PTR(w2), STR_LEN(w2) as u64, 25431);
+}
+
+@test "reg2 proxy_build_connect_request"() {
+    let plain = proxy_build_connect_request(format("example.com"), 443, false, format(""), format(""), false);
+    let want = "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n";
+    expect_str(plain, STR_PTR(want), STR_LEN(want) as u64, 25432);
+    let auth = proxy_build_connect_request(format("example.com"), 443, true, format("user"), format("pass"), true);
+    let want_auth = "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\nProxy-Authorization: Basic dXNlcjpwYXNz\r\n\r\n";
+    expect_str(auth, STR_PTR(want_auth), STR_LEN(want_auth) as u64, 25433);
+}
+
+@test "reg2 proxy_decide_for"() {
+    // No proxy configured.
+    match proxy_decide_for(format(""), format(""), 1, format("example.com"), 80) {
+        Ok(d) => {
+            if d.use_proxy { panic(25434); };
+            if d.reason != 2 { panic(25435); };
+        },
+        Err(e) => { panic(25436); },
+    };
+    // Whitespace-only proxy value trims to unconfigured.
+    match proxy_decide_for(format("  "), format(""), 1, format("example.com"), 80) {
+        Ok(d) => { if d.reason != 2 { panic(25437); }; },
+        Err(e) => { panic(25438); },
+    };
+    // Plain case: via proxy, parsed kind/port pinned.
+    match proxy_decide_for(format("http://proxy.local:3128"), format(""), 1, format("example.com"), 80) {
+        Ok(d) => {
+            if !d.use_proxy { panic(25439); };
+            if d.reason != 1 { panic(25440); };
+            if d.proxy.kind != 1 { panic(25441); };
+            if d.proxy.port != 3128 { panic(25442); };
+        },
+        Err(e) => { panic(25443); },
+    };
+    // Loopback target bypasses.
+    match proxy_decide_for(format("http://proxy.local:3128"), format(""), 1, format("127.0.0.1"), 80) {
+        Ok(d) => {
+            if d.use_proxy { panic(25444); };
+            if d.reason != 4 { panic(25445); };
+        },
+        Err(e) => { panic(25446); },
+    };
+    // no_proxy match bypasses; a different host does not.
+    match proxy_decide_for(format("http://proxy.local:3128"), format("example.com"), 1, format("example.com"), 80) {
+        Ok(d) => {
+            if d.use_proxy { panic(25447); };
+            if d.reason != 3 { panic(25448); };
+        },
+        Err(e) => { panic(25449); },
+    };
+    match proxy_decide_for(format("http://proxy.local:3128"), format("example.com"), 1, format("other.com"), 80) {
+        Ok(d) => {
+            if !d.use_proxy { panic(25450); };
+            if d.reason != 1 { panic(25451); };
+        },
+        Err(e) => { panic(25452); },
+    };
+}
+
+@test "reg2 proxy_close_transport invalid handle"() {
+    // Kind 99 is neither TCP(1) nor TLS(2): falls to the plain close;
+    // handle 0 is invalid, so the status must not be success (0).
+    let st: i32 = proxy_close_transport(99, 0);
+    if st == 0 { panic(25453); };
+}
+
+@test "reg2 proxy_connect_exchange invalid handle"() {
+    // The write to an invalid handle fails before any response head
+    // can be read: status carries the write failure, http_status 0.
+    let head = proxy_connect_exchange(1, 0, format("CONNECT example.com:443 HTTP/1.1\r\n\r\n"));
+    if head.status == 0 { panic(25454); };
+    if head.http_status != 0 { panic(25455); };
+}

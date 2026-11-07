@@ -1,0 +1,12 @@
+@import "sa_std/string.sa"
+
+fn str_literal_ptr_len_roundtrip(data: ptr, len_value: int) -> int {
+    return len_value;
+}
+
+@test "sa nested str ptr literal macro arg has type"() {
+    let len_value = str_literal_ptr_len_roundtrip(STR_PTR("literal"), STR_LEN("literal"));
+    if len_value != 7 {
+        panic(43301);
+    };
+}

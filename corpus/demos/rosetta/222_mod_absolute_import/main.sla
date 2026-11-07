@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn mod_absolute_import_segments() -> i32 { let crate_root = 1; let item = 1; return crate_root + item; }
+fn main() -> i32 { let crate_root = 1; let item = 1; let result = crate_root + item; println("{}", result); return result; }
+@test "rosetta 222 mod absolute import"() { let got = mod_absolute_import_segments(); if got != 2 { panic(222); }; }

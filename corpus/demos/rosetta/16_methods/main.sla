@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Vec2 {
+    x: i32,
+    y: i32,
+}
+
+impl Vec2 {
+    fn square_len(&self) -> i32 {
+        let xx = self.x * self.x;
+        let yy = self.y * self.y;
+        return xx + yy;
+    }
+}
+
+fn main() -> i32 {
+    let v = Vec2 { x: 3, y: 4 };
+    println("{}", v.square_len());
+    return 0;
+};
+
+@test "rosetta 016 methods"() {
+    let v = Vec2 { x: 3, y: 4 };
+    if v.square_len() != 25 {
+        panic(16);
+    };
+};

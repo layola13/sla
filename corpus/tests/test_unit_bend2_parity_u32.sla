@@ -1,0 +1,130 @@
+// Bend2 P1-6 parity corpus: U32 group (base.bend @faeb02e, 52 clauses).
+// Our surface: SLA u32 operators + `<=>`/Ordering (sla_std/cmp.sla) +
+// derived entries in sa_std/num_u32.sla. Overflow of plain +,-,* traps
+// in our build (Bend wraps); the wrapping cases therefore live on the
+// pow entry (u64-masked) and are noted in the parity table, not here.
+@import "sa_std/string.sa"
+@import "sa_std/num_u32.sla"
+@import "sla_std/cmp.sla"
+
+fn to_nat(x: u32) -> u64 {
+    return x as u64;
+}
+
+fn from_nat(n: u64) -> u32 {
+    return n as u32;
+}
+
+@test "bend2 u32 inc add sub mul"() {
+    let a: u32 = 40;
+    if a + 1 != 41 { panic(71001); };
+    if a + 2 != 42 { panic(71002); };
+    if a - 15 != 25 { panic(71003); };
+    if a * 3 != 120 { panic(71004); };
+}
+
+@test "bend2 u32 bit ops"() {
+    let a: u32 = 12;
+    let b: u32 = 10;
+    if (a & b) != 8 { panic(71005); };
+    if (a | b) != 14 { panic(71006); };
+    if (a ^ b) != 6 { panic(71007); };
+    // U32.not has no ! or ~ form on u32 here; xor-with-ones is the entry.
+    if (a ^ 4294967295) != 4294967283 { panic(71008); };
+}
+
+@test "bend2 u32 shifts"() {
+    let a: u32 = 3;
+    if (a << 1) != 6 { panic(71009); };
+    if (a << 5) != 96 { panic(71010); };
+    let b: u32 = 96;
+    if (b >> 1) != 48 { panic(71011); };
+    if (b >> 2) != 24 { panic(71012); };
+    let c: u32 = 2147483648;
+    if (c >> 31) != 1 { panic(71013); };
+}
+
+@test "bend2 u32 divmod"() {
+    let a: u32 = 17;
+    let b: u32 = 5;
+    if a / b != 3 { panic(71014); };
+    if a % b != 2 { panic(71015); };
+    // Zero-divisor semantics (Bend: div by 0 is 0, mod by 0 is the
+    // dividend) hold on the text backend — asserted by the probe
+    // evidence in probes/split/probe_u4.sla — but the SAB backend
+    // currently emits an unguarded divide (SIGFPE), a backend
+    // divergence registered by P1-6. Kept out of this dual-backend
+    // corpus; the parity table carries the split verdict.
+}
+
+@test "bend2 u32 cmp and predicates"() {
+    let a: u32 = 3;
+    let b: u32 = 5;
+    if (a <=> b).is_lt() != true { panic(71018); };
+    if (a <=> a).is_eq() != true { panic(71019); };
+    if (b <=> a).is_gt() != true { panic(71020); };
+    if (a <=> b).is_le() != true { panic(71021); };
+    if (b <=> a).is_ge() != true { panic(71022); };
+    if !(a < b) { panic(71023); };
+    if !(a != b) { panic(71024); };
+    if !(a == a) { panic(71025); };
+    let z: u32 = 0;
+    if z != 0 { panic(71026); };
+    if u32_is_even(4) != true { panic(71027); };
+    if u32_is_even(7) != false { panic(71028); };
+}
+
+@test "bend2 u32 nat conversions"() {
+    if to_nat(300) != 300 { panic(71029); };
+    if from_nat(300) != 300 { panic(71030); };
+    // Bend from_nat builds by repeated inc over a wrapping U32.
+    if from_nat(4294967296) != 0 { panic(71031); };
+}
+
+@test "bend2 u32 derived entries"() {
+    if u32_popcount(0) != 0 { panic(71032); };
+    if u32_popcount(4294967295) != 32 { panic(71033); };
+    if u32_popcount(3855) != 8 { panic(71034); };
+    if u32_ctz(0) != 32 { panic(71035); };
+    if u32_ctz(8) != 3 { panic(71036); };
+    if u32_ctz(7) != 0 { panic(71037); };
+    if u32_log2(0) != 0 { panic(71038); };
+    if u32_log2(1) != 0 { panic(71039); };
+    if u32_log2(64) != 6 { panic(71040); };
+    if u32_log2(4294967295) != 31 { panic(71041); };
+    if u32_pow(2, 10) != 1024 { panic(71042); };
+    if u32_pow(3, 0) != 1 { panic(71043); };
+    if u32_pow(2, 32) != 0 { panic(71044); };
+    if u32_min(3, 5) != 3 { panic(71045); };
+    if u32_max(3, 5) != 5 { panic(71046); };
+    if u32_clamp(15, 0, 10) != 10 { panic(71047); };
+    if u32_clamp(7, 0, 10) != 7 { panic(71048); };
+}
+
+@test "bend2 u32 show read hex"() {
+    let a: u32 = 4294967295;
+    if !str_eq(format("{}", a), "4294967295") { panic(71049); };
+    let z: u32 = 0;
+    if !str_eq(format("{}", z), "0") { panic(71050); };
+    if !str_eq(u32_hex(255), "ff") { panic(71051); };
+    if !str_eq(u32_hex(16), "10") { panic(71052); };
+    if !str_eq(u32_hex(0), "") { panic(71053); };
+    if !str_eq(u32_hex(2748), "abc") { panic(71054); };
+    // Bind Option results before unwrapping: chained calls on a
+    // call result inline in a condition trip a codegen temporary bug.
+    let s1: String = format("123");
+    let r1 = u32_read(&s1);
+    if r1.unwrap_or(0) != 123 { panic(71055); };
+    let s2: String = format("");
+    let r2 = u32_read(&s2);
+    if r2.is_some() { panic(71056); };
+    let s3: String = format("12a");
+    let r3 = u32_read(&s3);
+    if r3.is_some() { panic(71057); };
+    let s4: String = format("4294967296");
+    let r4 = u32_read(&s4);
+    if r4.is_some() { panic(71058); };
+    let s5: String = format("4294967295");
+    let r5 = u32_read(&s5);
+    if r5.unwrap_or(0) != 4294967295 { panic(71059); };
+}

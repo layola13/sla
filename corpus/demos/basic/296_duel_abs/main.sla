@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 语句 vs 表达式 abs 对峙（100×06：-5→5=5）。
+// 双实现一致性锁定（单实现见 100/06）。
+
+fn abs_stmt(x: int) -> int {
+    if x < 0 {
+        return 0 - x;
+    };
+    return x;
+}
+
+fn abs_expr(x: int) -> int {
+    return if x < 0 { 0 - x } else { x };
+}
+
+fn main() -> i32 {
+    println("{},{}", abs_stmt(0 - 5), abs_expr(0 - 5));
+    return 0;
+}
+
+@test "basic 296 duel abs"() {
+    if abs_stmt(0 - 5) != abs_expr(0 - 5) { panic(29601); };
+    if abs_expr(0 - 5) != 5 { panic(29602); };
+    if abs_stmt(3) != abs_expr(3) { panic(29603); };
+}

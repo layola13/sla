@@ -1,0 +1,738 @@
+// E_res corpus: borrow-return views over move-only handle newtypes.
+//
+// The wrapper functions below are written in exactly the form
+// gen_wrap.py emits for the E_res handle families (owner retyped to a
+// move-only newtype, borrow externs become `-> &[u8][owner]` views
+// produced by the __slice_view intrinsic), so this file doubles as the
+// form proof for the generated wrap batch.  Positive verdicts: the
+// view's length/content agree with the len sibling, repeated views
+// are stable while the owner is untouched, and the owner can still be
+// freed after the last view use.
+@import "sa_std/env.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/fs.sai"
+@import "sa_std/io.sai"
+@import "sa_std/net.sai"
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+@import "sa_std/encoding/json.sai"
+@import "sa_std/text/regex.sai"
+
+struct FsReadBuffer {
+    raw: u64,
+}
+
+fn sla_fs_read_file(path: ptr, path_len: u64, max_bytes: u64) -> FsReadBuffer! {
+    let r = sa_fs_read_file(path, path_len, max_bytes);
+    match r {
+        Ok(h) => {
+            return Ok(FsReadBuffer { raw: h });
+        },
+        Err(e) => {
+            return Err(e);
+        },
+    };
+}
+
+fn sla_fs_read_buffer_data(buffer: &FsReadBuffer) -> &[u8][buffer] {
+    return __slice_view(sa_fs_read_buffer_data(buffer.raw), sa_fs_read_buffer_len(buffer.raw));
+}
+
+fn sla_fs_read_buffer_len(buffer: &FsReadBuffer) -> u64 {
+    return sa_fs_read_buffer_len(buffer.raw);
+}
+
+fn sla_fs_read_buffer_free(^buffer: FsReadBuffer) -> i32 {
+    return sa_fs_read_buffer_free(buffer.raw);
+}
+
+struct FsDirEntries {
+    raw: u64,
+}
+
+fn sla_fs_read_dir_entries(path: ptr, path_len: u64, max_entries: u64) -> FsDirEntries! {
+    let r = sa_fs_read_dir_entries(path, path_len, max_entries);
+    match r {
+        Ok(h) => {
+            return Ok(FsDirEntries { raw: h });
+        },
+        Err(e) => {
+            return Err(e);
+        },
+    };
+}
+
+struct FsDirBuffer {
+    raw: u64,
+}
+
+fn sla_fs_read_dir_json(path: ptr, path_len: u64, max_entries: u64) -> FsDirBuffer! {
+    let r = sa_fs_read_dir_json(path, path_len, max_entries);
+    match r {
+        Ok(h) => {
+            return Ok(FsDirBuffer { raw: h });
+        },
+        Err(e) => {
+            return Err(e);
+        },
+    };
+}
+
+fn sla_fs_dir_buffer_data(buffer: &FsDirBuffer) -> &[u8][buffer] {
+    return __slice_view(sa_fs_dir_buffer_data(buffer.raw), sa_fs_dir_buffer_len(buffer.raw));
+}
+
+fn sla_fs_dir_buffer_len(buffer: &FsDirBuffer) -> u64 {
+    return sa_fs_dir_buffer_len(buffer.raw);
+}
+
+fn sla_fs_dir_buffer_free(^buffer: FsDirBuffer) -> i32 {
+    return sa_fs_dir_buffer_free(buffer.raw);
+}
+
+fn sla_fs_dir_entries_len(entries: &FsDirEntries) -> u64 {
+    return sa_fs_dir_entries_len(entries.raw);
+}
+
+fn sla_fs_dir_entries_free(^entries: FsDirEntries) -> i32 {
+    return sa_fs_dir_entries_free(entries.raw);
+}
+
+struct FsDirEntry {
+    raw: u64,
+}
+
+fn sla_fs_dir_entry_name_ptr(entry: &FsDirEntry) -> &[u8][entry] {
+    return __slice_view(sa_fs_dir_entry_name_ptr(entry.raw), sa_fs_dir_entry_name_len(entry.raw));
+}
+
+fn sla_fs_dir_entry_file_name_ptr(entry: &FsDirEntry) -> &[u8][entry] {
+    return __slice_view(sa_fs_dir_entry_file_name_ptr(entry.raw), sa_fs_dir_entry_file_name_len(entry.raw));
+}
+
+fn sla_fs_dir_entry_free(^entry: FsDirEntry) -> i32 {
+    return sa_fs_dir_entry_free(entry.raw);
+}
+
+struct JsonNode {
+    raw: u64,
+}
+
+fn sla_json_parse(json_bytes: ptr, len: u64) -> JsonNode {
+    return JsonNode { raw: sa_json_parse(json_bytes, len) };
+}
+
+fn sla_json_string_ptr(node: &JsonNode) -> &[u8][node] {
+    return __slice_view(sa_json_string_ptr(node.raw), sa_json_string_len(node.raw));
+}
+
+fn sla_json_free(^node: JsonNode) -> i32! {
+    return sa_json_free(node.raw);
+}
+
+struct JsonBuffer {
+    raw: u64,
+}
+
+fn sla_json_buffer_data(buffer: &JsonBuffer) -> &[u8][buffer] {
+    return __slice_view(sa_json_buffer_data(buffer.raw), sa_json_buffer_len(buffer.raw));
+}
+
+fn sla_json_buffer_free(^buffer: JsonBuffer) -> i32! {
+    return sa_json_buffer_free(buffer.raw);
+}
+
+struct JsonStream {
+    raw: u64,
+}
+
+fn sla_json_stream_new(json_bytes: ptr, len: u64) -> JsonStream {
+    return JsonStream { raw: sa_json_stream_new(json_bytes, len) };
+}
+
+fn sla_json_stream_get_slice_ptr(stream: &JsonStream) -> &[u8][stream] {
+    return __slice_view(sa_json_stream_get_slice_ptr(stream.raw), sa_json_stream_get_slice_len(stream.raw));
+}
+
+fn sla_json_stream_free(^stream: JsonStream) -> i32! {
+    return sa_json_stream_free(stream.raw);
+}
+
+struct NetAddr {
+    raw: u64,
+}
+
+fn sla_net_tcp_listener_local_addr(listener: u64) -> NetAddr! {
+    let r = sa_net_tcp_listener_local_addr(listener);
+    match r {
+        Ok(h) => {
+            return Ok(NetAddr { raw: h });
+        },
+        Err(e) => {
+            return Err(e);
+        },
+    };
+}
+
+fn sla_net_addr_host(addr: &NetAddr) -> &[u8][addr] {
+    return __slice_view(sa_net_addr_host(addr.raw), sa_net_addr_host_len(addr.raw));
+}
+
+fn sla_net_addr_port(addr: &NetAddr) -> u32 {
+    return sa_net_addr_port(addr.raw);
+}
+
+fn sla_net_addr_free(^addr: NetAddr) -> i32! {
+    return sa_net_addr_free(addr.raw);
+}
+
+fn sla_net_unix_addr_path_ptr(addr: &NetAddr) -> &[u8][addr] {
+    return __slice_view(sa_net_unix_addr_path_ptr(addr.raw), sa_net_unix_addr_path_len(addr.raw));
+}
+
+struct RegexMatch {
+    raw: u64,
+}
+
+fn sla_regex_match(regex: u64, text: ptr, text_len: u64) -> RegexMatch {
+    return RegexMatch { raw: sa_regex_match(regex, text, text_len) };
+}
+
+fn sla_regex_group_ptr(match_v: &RegexMatch, group_idx: u32) -> &[u8][match_v] {
+    return __slice_view(sa_regex_group_ptr(match_v.raw, group_idx), sa_regex_group_len(match_v.raw, group_idx));
+}
+
+fn sla_regex_match_free(^match_v: RegexMatch) -> i32! {
+    return sa_regex_match_free(match_v.raw);
+}
+
+struct RegexBuffer {
+    raw: u64,
+}
+
+fn sla_regex_replace(regex: u64, text: ptr, text_len: u64, replacement: ptr, replacement_len: u64) -> RegexBuffer {
+    return RegexBuffer { raw: sa_regex_replace(regex, text, text_len, replacement, replacement_len) };
+}
+
+fn sla_regex_buffer_data(buffer: &RegexBuffer) -> &[u8][buffer] {
+    return __slice_view(sa_regex_buffer_data(buffer.raw), sa_regex_buffer_len(buffer.raw));
+}
+
+fn sla_regex_buffer_free(^buffer: RegexBuffer) -> i32! {
+    return sa_regex_buffer_free(buffer.raw);
+}
+
+struct RegexSplitList {
+    raw: u64,
+}
+
+fn sla_regex_split(regex: u64, text: ptr, text_len: u64, limit: u64) -> RegexSplitList {
+    return RegexSplitList { raw: sa_regex_split(regex, text, text_len, limit) };
+}
+
+fn sla_regex_split_ptr(list: &RegexSplitList, index: u64) -> &[u8][list] {
+    return __slice_view(sa_regex_split_ptr(list.raw, index), sa_regex_split_len(list.raw, index));
+}
+
+fn sla_regex_split_free(^list: RegexSplitList) -> i32! {
+    return sa_regex_split_free(list.raw);
+}
+
+fn sla_regex_match_list_free(^list: RegexSplitList) -> i32! {
+    return sa_regex_match_list_free(list.raw);
+}
+
+struct EnvBuffer {
+    raw: u64,
+}
+
+fn sla_env_get(key: ptr, key_len: u64) -> EnvBuffer {
+    return EnvBuffer { raw: sa_env_get(key, key_len) };
+}
+
+fn sla_env_buffer_data(buffer: &EnvBuffer) -> &[u8][buffer] {
+    return __slice_view(sa_env_buffer_data(buffer.raw), sa_env_buffer_len(buffer.raw));
+}
+
+fn sla_env_buffer_free(^buffer: EnvBuffer) -> i32 {
+    return sa_env_buffer_free(buffer.raw);
+}
+
+struct FmtBuffer {
+    raw: u64,
+}
+
+fn sla_fmt_i64(value: i64, base: u32) -> FmtBuffer {
+    return FmtBuffer { raw: sa_fmt_i64(value, base) };
+}
+
+fn sla_fmt_buffer_data(buffer: &FmtBuffer) -> &[u8][buffer] {
+    return __slice_view(sa_fmt_buffer_data(buffer.raw), sa_fmt_buffer_len(buffer.raw));
+}
+
+fn sla_fmt_buffer_free(^buffer: FmtBuffer) -> i32 {
+    return sa_fmt_buffer_free(buffer.raw);
+}
+
+fn view_eq(view: &[u8], expected: ptr, expected_len: u64) -> bool {
+    if view.len() != expected_len {
+        return false;
+    };
+    let i: u64 = 0;
+    while i < expected_len {
+        if view[i] != PTR_READ_U8(PTR_BYTE_ADD(expected, i)) {
+            return false;
+        };
+        i = i + 1;
+    }
+    return true;
+}
+
+@test "e_res fs read buffer view is stable and frees after last use"() {
+    let path = "e_res_rb_tmp.txt";
+    let data = "borrowed bytes";
+    if sa_fs_write_file(STR_PTR(path), STR_LEN(path), STR_PTR(data), STR_LEN(data)) != 0 {
+        panic(47101);
+    };
+    let r = sla_fs_read_file(STR_PTR(path), STR_LEN(path), 4096);
+    let owner: FsReadBuffer = FsReadBuffer { raw: 0 };
+    match r {
+        Ok(h) => {
+            owner = h;
+        },
+        Err(e) => {
+            panic(47102);
+        },
+    };
+    if sla_fs_read_buffer_len(&owner) != STR_LEN(data) {
+        panic(47103);
+    };
+    let view = sla_fs_read_buffer_data(&owner);
+    if !view_eq(&view, STR_PTR(data), STR_LEN(data)) {
+        panic(47104);
+    };
+    let again = sla_fs_read_buffer_data(&owner);
+    if !view_eq(&again, STR_PTR(data), STR_LEN(data)) {
+        panic(47105);
+    };
+    if sla_fs_read_buffer_free(^owner) != 0 {
+        panic(47106);
+    };
+}
+
+@test "e_res fs dir entries and entry name views"() {
+    let dir = ".";
+    let r = sla_fs_read_dir_entries(STR_PTR(dir), STR_LEN(dir), 512);
+    let entries: FsDirEntries = FsDirEntries { raw: 0 };
+    match r {
+        Ok(h) => {
+            entries = h;
+        },
+        Err(e) => {
+            panic(47111);
+        },
+    };
+    if sla_fs_dir_entries_len(&entries) == 0 {
+        panic(47112);
+    };
+    let jr = sla_fs_read_dir_json(STR_PTR(dir), STR_LEN(dir), 512);
+    let jbuf: FsDirBuffer = FsDirBuffer { raw: 0 };
+    match jr {
+        Ok(h) => {
+            jbuf = h;
+        },
+        Err(e) => {
+            panic(47113);
+        },
+    };
+    let blob = sla_fs_dir_buffer_data(&jbuf);
+    if blob.len() == 0 {
+        panic(47120);
+    };
+    if blob[0] != 91 && blob[0] != 123 {
+        panic(47121);
+    };
+    if sla_fs_dir_buffer_free(^jbuf) != 0 {
+        panic(47122);
+    };
+    let cell: u64 = 0;
+    if sa_std_fs_dir_entries_get(entries.raw, 0, &cell) != 0 {
+        panic(47114);
+    };
+    if cell == 0 {
+        panic(47115);
+    };
+    let entry = FsDirEntry { raw: cell };
+    let name = sla_fs_dir_entry_name_ptr(&entry);
+    if name.len() == 0 {
+        panic(47116);
+    };
+    let fname = sla_fs_dir_entry_file_name_ptr(&entry);
+    if fname.len() == 0 {
+        panic(47117);
+    };
+    if sla_fs_dir_entry_free(^entry) != 0 {
+        panic(47118);
+    };
+    if sla_fs_dir_entries_free(^entries) != 0 {
+        panic(47119);
+    };
+}
+
+@test "e_res json node string view"() {
+    let doc = "{\"s\":\"abc\",\"n\":7}";
+    let root = sla_json_parse(STR_PTR(doc), STR_LEN(doc));
+    if root.raw == 0 {
+        panic(47121);
+    };
+    let child_cell: u64 = 0;
+    let key = "s";
+    if sa_json_object_get(root.raw, STR_PTR(key), STR_LEN(key), &child_cell) != 0 {
+        panic(47122);
+    };
+    if child_cell == 0 {
+        panic(47123);
+    };
+    let child = JsonNode { raw: child_cell };
+    let view = sla_json_string_ptr(&child);
+    let expected = "abc";
+    if !view_eq(&view, STR_PTR(expected), STR_LEN(expected)) {
+        panic(47124);
+    };
+    let fr = sla_json_free(^root);
+    match fr {
+        Ok(p) => {
+            if p != 0 {
+                panic(47125);
+            };
+        },
+        Err(e) => {
+            panic(47126);
+        },
+    };
+}
+
+@test "e_res json buffer view from writer"() {
+    let writer_cell: u64 = 0;
+    if sa_json_writer_new(0, 0, 0, 0, 0, &writer_cell) != 0 {
+        panic(47131);
+    };
+    if writer_cell == 0 {
+        panic(47132);
+    };
+    if sa_json_writer_begin_object(writer_cell) != 0 {
+        panic(47133);
+    };
+    let k = "k";
+    let v = "vv";
+    if sa_json_writer_field_string(writer_cell, STR_PTR(k), STR_LEN(k), STR_PTR(v), STR_LEN(v)) != 0 {
+        panic(47134);
+    };
+    if sa_json_writer_end_object(writer_cell) != 0 {
+        panic(47135);
+    };
+    let buf_cell = sa_json_writer_finish_buffer(writer_cell);
+    if buf_cell == 0 {
+        panic(47137);
+    };
+    let buffer = JsonBuffer { raw: buf_cell };
+    let view = sla_json_buffer_data(&buffer);
+    if view.len() == 0 {
+        panic(47138);
+    };
+    if view[0] != 123 {
+        panic(47139);
+    };
+    let fr = sla_json_buffer_free(^buffer);
+    match fr {
+        Ok(p) => {
+            if p != 0 {
+                panic(47140);
+            };
+        },
+        Err(e) => {
+            panic(47141);
+        },
+    };
+}
+
+@test "e_res json stream slice view"() {
+    let doc = "[1, 22]";
+    let stream = sla_json_stream_new(STR_PTR(doc), STR_LEN(doc));
+    if stream.raw == 0 {
+        panic(47151);
+    };
+    let saw_slice = false;
+    let steps: u64 = 0;
+    while steps < 16 {
+        let tok = sa_json_stream_next(stream.raw);
+        if tok == 0 {
+            break;
+        };
+        let view = sla_json_stream_get_slice_ptr(&stream);
+        if view.len() > 0 {
+            saw_slice = true;
+        };
+        steps = steps + 1;
+    }
+    if !saw_slice {
+        panic(47152);
+    };
+    let fr = sla_json_stream_free(^stream);
+    match fr {
+        Ok(p) => {
+            if p != 0 {
+                panic(47153);
+            };
+        },
+        Err(e) => {
+            panic(47154);
+        },
+    };
+}
+
+@test "e_res net addr host view from listener"() {
+    let host = "127.0.0.1";
+    let rb = sa_net_tcp_listener_bind(STR_PTR(host), STR_LEN(host), 0);
+    let listener: u64 = 0;
+    match rb {
+        Ok(h) => {
+            listener = h;
+        },
+        Err(e) => {
+            panic(47161);
+        },
+    };
+    let ra = sla_net_tcp_listener_local_addr(listener);
+    let addr: NetAddr = NetAddr { raw: 0 };
+    match ra {
+        Ok(h) => {
+            addr = h;
+        },
+        Err(e) => {
+            panic(47162);
+        },
+    };
+    let view = sla_net_addr_host(&addr);
+    if !view_eq(&view, STR_PTR(host), STR_LEN(host)) {
+        panic(47163);
+    };
+    if sla_net_addr_port(&addr) == 0 {
+        panic(47164);
+    };
+    let fr = sla_net_addr_free(^addr);
+    match fr {
+        Ok(p) => {
+            if p != 0 {
+                panic(47165);
+            };
+        },
+        Err(e) => {
+            panic(47166);
+        },
+    };
+    let lc = sa_net_tcp_listener_close(listener);
+    match lc {
+        Ok(p) => {
+            if p != 0 {
+                panic(47167);
+            };
+        },
+        Err(e) => {
+            panic(47168);
+        },
+    };
+}
+
+@test "e_res net unix addr path view"() {
+    let path = "e_res_unix.sock";
+    let cell: u64 = 0;
+    if sa_std_net_unix_addr_from_pathname(STR_PTR(path), STR_LEN(path), &cell) != 0 {
+        panic(47171);
+    };
+    if cell == 0 {
+        panic(47172);
+    };
+    let addr = NetAddr { raw: cell };
+    let view = sla_net_unix_addr_path_ptr(&addr);
+    if view.len() == 0 {
+        panic(47173);
+    };
+    let fr = sla_net_addr_free(^addr);
+    match fr {
+        Ok(p) => {
+            if p != 0 {
+                panic(47174);
+            };
+        },
+        Err(e) => {
+            panic(47175);
+        },
+    };
+}
+
+@test "e_res regex match group view"() {
+    let pat = "123";
+    let regex = sa_regex_compile(STR_PTR(pat), STR_LEN(pat), 0);
+    if regex == 0 {
+        panic(47181);
+    };
+    let text = "123abc";
+    let m_raw = sa_regex_match(regex, STR_PTR(text), STR_LEN(text));
+    if m_raw == 0 {
+        panic(47182);
+    };
+    let m = RegexMatch { raw: m_raw };
+    let view = sla_regex_group_ptr(&m, 0);
+    let expected = "123";
+    if !view_eq(&view, STR_PTR(expected), STR_LEN(expected)) {
+        panic(47183);
+    };
+    let fr = sla_regex_match_free(^m);
+    match fr {
+        Ok(p) => {
+            if p != 0 {
+                panic(47184);
+            };
+        },
+        Err(e) => {
+            panic(47185);
+        },
+    };
+    let rf = sa_regex_free(regex);
+    match rf {
+        Ok(p) => {
+            if p != 0 {
+                panic(47186);
+            };
+        },
+        Err(e) => {
+            panic(47187);
+        },
+    };
+}
+
+@test "e_res regex replace buffer view"() {
+    let pat = "123";
+    let regex = sa_regex_compile(STR_PTR(pat), STR_LEN(pat), 0);
+    if regex == 0 {
+        panic(47191);
+    };
+    let text = "123abc";
+    let rep = "X";
+    let buffer_raw = sa_regex_replace(regex, STR_PTR(text), STR_LEN(text), STR_PTR(rep), STR_LEN(rep));
+    if buffer_raw == 0 {
+        panic(47192);
+    };
+    let buffer = RegexBuffer { raw: buffer_raw };
+    let view = sla_regex_buffer_data(&buffer);
+    let expected = "Xabc";
+    if !view_eq(&view, STR_PTR(expected), STR_LEN(expected)) {
+        panic(47193);
+    };
+    let fr = sla_regex_buffer_free(^buffer);
+    match fr {
+        Ok(p) => {
+            if p != 0 {
+                panic(47194);
+            };
+        },
+        Err(e) => {
+            panic(47195);
+        },
+    };
+    let rf = sa_regex_free(regex);
+    match rf {
+        Ok(p) => {
+            if p != 0 {
+                panic(47196);
+            };
+        },
+        Err(e) => {
+            panic(47197);
+        },
+    };
+}
+
+@test "e_res regex split views"() {
+    let pat = ",";
+    let regex = sa_regex_compile(STR_PTR(pat), STR_LEN(pat), 0);
+    if regex == 0 {
+        panic(47201);
+    };
+    let text = "a,b,c";
+    let list_raw = sa_regex_split(regex, STR_PTR(text), STR_LEN(text), 0);
+    if list_raw == 0 {
+        panic(47202);
+    };
+    let list = RegexSplitList { raw: list_raw };
+    if sa_regex_split_count(list.raw) != 3 {
+        panic(47203);
+    };
+    let first = sla_regex_split_ptr(&list, 0);
+    let ea = "a";
+    if !view_eq(&first, STR_PTR(ea), STR_LEN(ea)) {
+        panic(47204);
+    };
+    let third = sla_regex_split_ptr(&list, 2);
+    let ec = "c";
+    if !view_eq(&third, STR_PTR(ec), STR_LEN(ec)) {
+        panic(47205);
+    };
+    let fr = sla_regex_split_free(^list);
+    match fr {
+        Ok(p) => {
+            if p != 0 {
+                panic(47206);
+            };
+        },
+        Err(e) => {
+            panic(47207);
+        },
+    };
+    let rf = sa_regex_free(regex);
+    match rf {
+        Ok(p) => {
+            if p != 0 {
+                panic(47208);
+            };
+        },
+        Err(e) => {
+            panic(47209);
+        },
+    };
+}
+
+@test "e_res env buffer view"() {
+    let key = "SLA_E_RES_KEY";
+    let value = "e_res_value";
+    if sa_env_set_var(STR_PTR(key), STR_LEN(key), STR_PTR(value), STR_LEN(value)) != 0 {
+        panic(47211);
+    };
+    let buffer = sla_env_get(STR_PTR(key), STR_LEN(key));
+    if buffer.raw == 0 {
+        panic(47212);
+    };
+    let view = sla_env_buffer_data(&buffer);
+    if !view_eq(&view, STR_PTR(value), STR_LEN(value)) {
+        panic(47213);
+    };
+    if sla_env_buffer_free(^buffer) != 0 {
+        panic(47214);
+    };
+}
+
+@test "e_res fmt buffer view"() {
+    let buffer = sla_fmt_i64(-42, 10);
+    if buffer.raw == 0 {
+        panic(47221);
+    };
+    let view = sla_fmt_buffer_data(&buffer);
+    let expected = "-42";
+    if !view_eq(&view, STR_PTR(expected), STR_LEN(expected)) {
+        panic(47222);
+    };
+    if sla_fmt_buffer_free(^buffer) != 0 {
+        panic(47223);
+    };
+}

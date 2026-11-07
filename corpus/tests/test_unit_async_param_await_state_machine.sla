@@ -1,0 +1,41 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn await_param(fut: future<i32>) -> i32 {
+    let value = fut.await;
+    return value + 1;
+}
+
+fn await_ready_param_value() -> i32 {
+    let fut = await_param(future::ready(40));
+    let task = task::new(fut);
+    if task::poll(task) != true {
+        panic(9521);
+    };
+    if task::is_ready(task) != true {
+        panic(9522);
+    };
+    return task::result(task);
+}
+
+fn await_pending_param_stays_pending() -> bool {
+    let fut = await_param(future::pending::<i32>());
+    let task = task::new(fut);
+    let ready = task::poll(task);
+    if ready == true {
+        return false;
+    };
+    return task::is_ready(task) == false;
+}
+
+@test "async await ready future parameter"() {
+    if await_ready_param_value() != 41 {
+        panic(9523);
+    };
+}
+
+@test "async await pending future parameter stays pending"() {
+    if await_pending_param_stays_pending() != true {
+        panic(9524);
+    };
+}

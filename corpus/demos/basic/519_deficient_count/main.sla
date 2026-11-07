@@ -1,0 +1,42 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 亏数计数（σ(n)<2n；<=20 有 16 个）。
+// 意对标 378 丰数版的亏版（378/389 互补；521 做三向）。
+
+fn sigma(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        if n % i == 0 { s = s + i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn is_deficient(n: int) -> int {
+    if n < 1 { return 0; };
+    if sigma(n) < 2 * n { return 1; };
+    return 0;
+}
+
+fn deficient_count(limit: int) -> int {
+    let c = 0;
+    let k = 1;
+    while k <= limit {
+        if is_deficient(k) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", deficient_count(20), is_deficient(8), is_deficient(12));
+    return 0;
+}
+
+@test "basic 519 deficient count"() {
+    if deficient_count(20) != 16 { panic(51901); };
+    if is_deficient(8) != 1 { panic(51902); };
+    if is_deficient(12) != 0 { panic(51903); };
+}

@@ -1,0 +1,48 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 枚举数组面（149 的容器版：长 2，下标 match 消费得 1）。
+// `match` 下标 scrutinee（149 为变量版）+ Vec 存取组合。
+
+enum Color { R = 0, G = 1, B = 2 }
+
+fn main() -> i32 {
+    let e: Vec<Color> = Vec::new();
+    e.push(Color::R);
+    e.push(Color::G);
+    let r = 0;
+    match e[0] {
+        Color::R => {
+            r = 1;
+        },
+        Color::G => {
+            r = 2;
+        },
+        Color::B => {
+            r = 3;
+        },
+    };
+    println("{},{}", len(e), r);
+    return 0;
+}
+
+@test "basic 272 vec enum"() {
+    let e: Vec<Color> = Vec::new();
+    e.push(Color::R);
+    e.push(Color::G);
+    if len(e) != 2 { panic(27201); };
+    let r = 0;
+    match e[1] {
+        Color::R => {
+            r = 1;
+        },
+        Color::G => {
+            r = 2;
+        },
+        Color::B => {
+            r = 3;
+        },
+    };
+    if r != 2 { panic(27202); };
+}

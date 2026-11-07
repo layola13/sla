@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Motzkin 数（M(5)=21；M(n)=M(n-1)+ΣM(k)M(n-2-k)）。
+// 意对标 351 Catalan 的不交弦版（351 互补）。
+
+fn motzkin(n: int) -> int {
+    if n == 0 { return 1; };
+    if n == 1 { return 1; };
+    let s = motzkin(n - 1);
+    let k = 0;
+    while k <= n - 2 {
+        s = s + motzkin(k) * motzkin(n - 2 - k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", motzkin(5), motzkin(4), motzkin(2));
+    return 0;
+}
+
+@test "basic 462 motzkin"() {
+    if motzkin(5) != 21 { panic(46201); };
+    if motzkin(4) != 9 { panic(46202); };
+    if motzkin(2) != 2 { panic(46203); };
+}

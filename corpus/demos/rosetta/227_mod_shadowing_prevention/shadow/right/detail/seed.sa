@@ -1,0 +1,4 @@
+@export right_seed_value() -> i32:
+L_ENTRY:
+    value = add 2, 0
+    return value

@@ -1,0 +1,6 @@
+@import "src/profiles/release/helpers/index.sa"
+
+@release_package_value() -> i32:
+L_ENTRY:
+    value = call @release_helper_value()
+    return value

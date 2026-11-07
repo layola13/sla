@@ -1,0 +1,15 @@
+@import "prelude/index.sai"
+@import "prelude/index.sal"
+@import "prelude/core/seed.sa"
+
+@export prelude_value() -> i32:
+L_ENTRY:
+    slot = alloc Prelude_SIZE
+    seed = call @prelude_seed()
+    store slot+Prelude_value, seed as i32
+    loaded = load slot+Prelude_value as i32
+    value = add loaded, 200
+    !seed
+    !loaded
+    !slot
+    return value

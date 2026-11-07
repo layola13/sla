@@ -1,0 +1,8 @@
+@import "shadow/right/layout.sal"
+@import "shadow/right/detail/seed.sa"
+
+@right_value() -> i32:
+L_ENTRY:
+    seed = call @right_seed_value()
+    value = add SHADOW_SIZE, seed
+    return value

@@ -1,0 +1,17 @@
+@import "consumer/../layout/public.sal"
+@import "consumer/../bridge/opaque_bridge.sa"
+
+@opaque_consumer_value() -> i32:
+L_ENTRY:
+    opaque = alloc Opaque_SIZE
+    value = call @opaque_bridge_value(&opaque)
+    ok = eq value, 242
+    !value
+    !opaque
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 242
+
+L_ERR:
+    return 0

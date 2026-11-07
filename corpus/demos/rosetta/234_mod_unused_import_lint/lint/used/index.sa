@@ -1,0 +1,8 @@
+@import "lint/used/detail/seed.sa"
+
+@export lint_used_value() -> i32:
+L_ENTRY:
+    seed = call @lint_used_seed()
+    value = add seed, 200
+    !seed
+    return value

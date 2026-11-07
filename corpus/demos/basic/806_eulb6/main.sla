@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian-B 续高位 B(6,1)=722，B(6,2)=10543，B(6,3)=23548（同式再上两行）。
+// 意对标 676_eulb（n≤5 版互补；809 做建表/交错和对峙）。
+
+fn eub(n: int, m: int) -> int {
+    let w = m + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + m {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= m {
+            t[mm * w + nn] = (2 * nn + 1) * t[(mm - 1) * w + nn] + (2 * mm - 2 * nn + 1) * t[(mm - 1) * w + nn - 1];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + m];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", eub(6, 1), eub(6, 2), eub(6, 3));
+    return 0;
+}
+
+@test "basic 806 eulb6"() {
+    if eub(6, 1) != 722 { panic(80601); };
+    if eub(6, 2) != 10543 { panic(80602); };
+    if eub(6, 3) != 23548 { panic(80603); };
+    if eub(5, 2) != 1682 { panic(80604); };
+}

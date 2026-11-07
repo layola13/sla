@@ -1,0 +1,59 @@
+@import "sa_std/core/arc.sa"
+@import "sa_std/sync/atomic.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/core/result.sa"
+
+// Regression (DEF-6): inline `barrier.clone()` as the argument of a
+// call inside a thread::spawn closure body. The parser leaves
+// `associated_target` null for instance method calls, so the
+// escaped-capture walkers treated the method name `clone` as a free
+// variable in call position:
+//  - SAB (sab_codegen): the name had no type, so lowering failed
+//    outright with error.MissingType (the build-exe path; the test
+//    path reaches it because the spawn sits under a @test root).
+//  - SA-text (codegen): the name was recorded as a typeless fn-ptr
+//    capture, which poisoned the capture summary and flipped the
+//    execution plan to inline_join — the worker ran synchronously
+//    on the calling thread.
+// Both walkers now only consider call names that resolve to a value
+// in scope (free function, macro, internal symbol, or an in-scope
+// local). The named form — `let left = barrier.clone();` outside the
+// closure, as in test_unit_arc_atomic_spawn_barrier — never hit it.
+// The inline spawn is last and `barrier` is captured exactly once:
+// capturing one non-copy local into several spawns is a separate,
+// still-open ownership question (see the closure-captured Arc risk
+// handed to the deep-drop line), not part of this regression.
+// Pre-fix: SAB error.MissingType. Post-fix: passes on both backends.
+
+fn inline_clone_worker(barrier: Arc<AtomicI32>) -> i32 {
+    let _old = (*barrier).fetch_add(1, Ordering::SeqCst);
+    while (*barrier).load(Ordering::SeqCst) < 3 {
+    }
+    return 1;
+}
+
+fn inline_clone_barrier_count() -> i32 {
+    let barrier = Arc::new(AtomicI32::new(0));
+
+    let middle = barrier.clone();
+    let right = barrier.clone();
+
+    let b = thread::spawn(^|| inline_clone_worker(middle));
+    let c = thread::spawn(^|| inline_clone_worker(right));
+    let a = thread::spawn(^|| inline_clone_worker(barrier.clone()));
+
+    let av = a.join().unwrap();
+    let bv = b.join().unwrap();
+    let cv = c.join().unwrap();
+    return av + bv + cv;
+}
+
+fn main() -> i32 {
+    return inline_clone_barrier_count();
+};
+
+@test "thread spawn inline clone in closure"() {
+    if inline_clone_barrier_count() != 3 {
+        panic(9606);
+    };
+}

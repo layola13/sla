@@ -1,0 +1,21 @@
+@import "registry/publish.sal"
+
+@ffi_wrapper registry_publish_gate(*pkg: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow pkg
+    name = load view+Package_name as i32
+    version = load view+Package_version as i32
+    result = add name, version
+    !version
+    !name
+    !view
+    return result
+
+@export registry_publish_entry() -> i32:
+L_ENTRY:
+    pkg = alloc Package_SIZE
+    store pkg+Package_name, 300 as i32
+    store pkg+Package_version, 0 as i32
+    value = call @registry_publish_gate(*pkg)
+    !pkg
+    return value

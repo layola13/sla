@@ -1,0 +1,55 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Ballot 第 4 行 1,4,9,14,14（行和 42=Catalan(5)；行和循环求和）。
+// 意对标 646_ballot（单格版互补；同式行复算）。
+
+fn btab(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn] + t[mm * w + nn - 1];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn bsum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + btab(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", btab(4, 1), btab(4, 2), btab(4, 4));
+    return 0;
+}
+
+@test "basic 647 ballot row"() {
+    if btab(4, 1) != 4 { panic(64701); };
+    if btab(4, 2) != 9 { panic(64702); };
+    if btab(4, 4) != 14 { panic(64703); };
+    if bsum(4) != 42 { panic(64704); };
+}

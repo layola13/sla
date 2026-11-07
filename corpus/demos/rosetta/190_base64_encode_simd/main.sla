@@ -1,0 +1,46 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+fn encode_block(input: &[u8; 3]) -> [u8; 4] {
+    let b64: [u8; 64] = [
+        65u8, 66, 67, 68, 69, 70, 71, 72,
+        73, 74, 75, 76, 77, 78, 79, 80,
+        81, 82, 83, 84, 85, 86, 87, 88,
+        89, 90, 97, 98, 99, 100, 101, 102,
+        103, 104, 105, 106, 107, 108, 109, 110,
+        111, 112, 113, 114, 115, 116, 117, 118,
+        119, 120, 121, 122, 48, 49, 50, 51,
+        52, 53, 54, 55, 56, 57, 43, 47,
+    ];
+    let q0 = input[0] / 4;
+    let q1 = (input[0] % 4) * 16 + input[1] / 16;
+    let q2 = (input[1] % 16) * 4 + input[2] / 64;
+    let q3 = input[2] % 64;
+    return [
+        b64[q0 as usize],
+        b64[q1 as usize],
+        b64[q2 as usize],
+        b64[q3 as usize],
+    ];
+}
+
+fn encoded_text() -> String {
+    let input: [u8; 3] = [77u8, 97, 110];
+    let encoded = encode_block(&input);
+    let text = encoded.iter().collect<String>();
+    return text;
+}
+
+fn main() -> i32 {
+    let text = encoded_text();
+    println("{}", text);
+    return 0;
+}
+
+@test "rosetta 190 190_base64_encode_simd"() {
+    let text = encoded_text();
+    if str_eq(text, "TWFu") != true {
+        panic(190);
+    };
+}

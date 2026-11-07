@@ -1,0 +1,4 @@
+// expect: FileNotFound
+// neg: @import of a missing sla_std file
+@import "sla_std/definitely_missing_zzz.sla";
+fn main() -> i32 { return 0; }

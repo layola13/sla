@@ -1,0 +1,135 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_handle_request = vtable { call = @sla__handle_request }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__handle_request(req: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load req+0 as u8
+    tmp_1 = 1
+    tmp_2 = ne tmp_0, tmp_1
+    !tmp_0
+    !tmp_1
+    br tmp_2 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_2
+    tmp_3 = 401
+    !req
+    return tmp_3
+
+L_ELSE_1:
+    !tmp_2
+    tmp_4 = load req+1 as u8
+    tmp_5 = 1
+    tmp_6 = ne tmp_4, tmp_5
+    !tmp_4
+    !tmp_5
+    br tmp_6 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_6
+    tmp_7 = 404
+    !req
+    return tmp_7
+
+L_ELSE_4:
+    !tmp_6
+    tmp_8 = load req+2 as u8
+    tmp_9 = 1
+    tmp_10 = ne tmp_8, tmp_9
+    !tmp_8
+    !tmp_9
+    br tmp_10 -> L_THEN_6, L_ELSE_7
+
+L_THEN_6:
+    !tmp_10
+    tmp_11 = 503
+    !req
+    return tmp_11
+
+L_ELSE_7:
+    !tmp_10
+    tmp_12 = load req+3 as u8
+    tmp_13 = 1
+    tmp_14 = eq tmp_12, tmp_13
+    !tmp_12
+    !tmp_13
+    br tmp_14 -> L_THEN_9, L_ELSE_10
+
+L_THEN_9:
+    !tmp_14
+    tmp_15 = 429
+    !req
+    return tmp_15
+
+L_ELSE_10:
+    !tmp_14
+    tmp_16 = 200
+    !req
+    return tmp_16
+
+
+
+
+
+@main() -> i32:
+L_ENTRY:
+    req = alloc 4
+    tmp_21 = 1
+    store req+0, tmp_21 as u8
+    tmp_22 = 1
+    store req+1, tmp_22 as u8
+    tmp_23 = 1
+    store req+2, tmp_23 as u8
+    tmp_24 = 0
+    store req+3, tmp_24 as u8
+    tmp_25 = call @sla__handle_request(req)
+    result = tmp_25
+    tmp_26 = call @sa_fmt_u64(result, 10)
+    tmp_27 = call @sa_fmt_buffer_data(tmp_26)
+    tmp_28 = call @sa_fmt_buffer_len(tmp_26)
+    tmp_29 = tmp_27
+    call @sa_print_bytes(&tmp_29, tmp_28)
+    call @sa_fmt_buffer_free(^tmp_26)
+    !tmp_29
+    !tmp_28
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    !req
+    return result
+
+@test "rosetta 100 100_full_app"():
+L_TEST_ENTRY_12:
+    req = alloc 4
+    tmp_30 = 1
+    store req+0, tmp_30 as u8
+    tmp_31 = 1
+    store req+1, tmp_31 as u8
+    tmp_32 = 1
+    store req+2, tmp_32 as u8
+    tmp_33 = 0
+    store req+3, tmp_33 as u8
+    tmp_34 = call @sla__handle_request(req)
+    got = tmp_34
+    tmp_35 = 200
+    tmp_36 = ne got, tmp_35
+    !tmp_35
+    br tmp_36 -> L_THEN_13, L_ELSE_14
+
+L_THEN_13:
+    !tmp_36
+    panic(100)
+
+L_ELSE_14:
+    !tmp_36
+    jmp L_MERGE_15
+
+L_MERGE_15:
+    !req
+    !got
+    return
+

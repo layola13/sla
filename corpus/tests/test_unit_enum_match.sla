@@ -1,0 +1,59 @@
+// Sla enum and match smoke tests.
+
+enum Message {
+    Quit,
+    Move { x: int, y: int },
+}
+
+fn process_msg(^msg: Message) -> int {
+    match msg {
+        Message::Quit => {
+            return 0;
+        },
+        Message::Move { x, y } => {
+            return x + y;
+        },
+    };
+}
+
+@test "enum move match"() {
+    let msg = Message::Move { x: 10, y: 20 };
+    let result = process_msg(^msg);
+    if result != 30 {
+        panic(1);
+    };
+}
+
+@test "enum unit match"() {
+    let msg = Message::Quit;
+    let result = process_msg(^msg);
+    if result != 0 {
+        panic(2);
+    };
+}
+
+enum Pick {
+    Have { x: i32 },
+    Lack,
+}
+
+fn pick_value(^e: Pick) -> i32 {
+    match e {
+        Pick::Have { x } => { 7 },
+        Pick::Lack => { -1 },
+    };
+}
+
+// Locks the genMatch previous-flag fix: multi-fallthrough converging arms
+// diverged at merge (PhiStateConflict) before flags were released on the
+// not-taken path. Green on both backends.
+@test "enum converging match strict sab parity"() {
+    let a = Pick::Have { x: 7 };
+    if pick_value(^a) != 7 {
+        panic(3);
+    };
+    let b = Pick::Lack;
+    if pick_value(^b) != -1 {
+        panic(4);
+    };
+}

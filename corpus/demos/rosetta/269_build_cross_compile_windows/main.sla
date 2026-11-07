@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_windows_target_count() -> i32 { let x86_64_pc_windows_msvc = 1; return x86_64_pc_windows_msvc; }
+fn main() -> i32 { let x86_64_pc_windows_msvc = 1; println("{}", x86_64_pc_windows_msvc); return x86_64_pc_windows_msvc; }
+@test "rosetta 269 build cross compile windows"() { let got = build_windows_target_count(); if got != 1 { panic(269); }; }

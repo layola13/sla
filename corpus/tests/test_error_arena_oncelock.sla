@@ -1,0 +1,11 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: OnceLock is a synchronization primitive; it
+// can never be an arena root (design 2.2).
+fn id_once(x: OnceLock<i32>) -> OnceLock<i32> { return x; }
+
+fn neg_oncelock(p: OnceLock<i32>) -> i32 {
+    arena {
+        let o = id_once(p);
+    }
+    return 0;
+}

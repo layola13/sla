@@ -1,0 +1,74 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__Vec2_square_len(&self: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load self+0 as i32
+    tmp_1 = load self+0 as i32
+    tmp_2 = mul tmp_0, tmp_1
+    !tmp_0
+    !tmp_1
+    tmp_3 = load self+4 as i32
+    tmp_4 = load self+4 as i32
+    tmp_5 = mul tmp_3, tmp_4
+    !tmp_3
+    !tmp_4
+    tmp_6 = add tmp_2, tmp_5
+    !tmp_2
+    !tmp_5
+    !self
+    return tmp_6
+
+@main() -> i32:
+L_ENTRY:
+    v = alloc 8
+    tmp_7 = 3
+    store v+0, tmp_7 as i32
+    tmp_8 = 4
+    store v+4, tmp_8 as i32
+    tmp_9 = call @sla__Vec2_square_len(&v)
+    tmp_10 = call @sa_fmt_u64(tmp_9, 10)
+    tmp_11 = call @sa_fmt_buffer_data(tmp_10)
+    tmp_12 = call @sa_fmt_buffer_len(tmp_10)
+    tmp_13 = tmp_11
+    call @sa_print_bytes(&tmp_13, tmp_12)
+    call @sa_fmt_buffer_free(^tmp_10)
+    !tmp_13
+    !tmp_12
+    !tmp_9
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_14 = 0
+    !v
+    return tmp_14
+
+@test "rosetta 016 methods"():
+L_TEST_ENTRY_0:
+    v = alloc 8
+    tmp_15 = 3
+    store v+0, tmp_15 as i32
+    tmp_16 = 4
+    store v+4, tmp_16 as i32
+    tmp_17 = call @sla__Vec2_square_len(&v)
+    tmp_18 = 25
+    tmp_19 = ne tmp_17, tmp_18
+    !tmp_17
+    !tmp_18
+    br tmp_19 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_19
+    panic(16)
+
+L_ELSE_2:
+    !tmp_19
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !v
+    return
+

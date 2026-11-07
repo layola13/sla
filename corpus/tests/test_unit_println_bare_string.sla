@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+// #4b: single-argument `println` with a string-like value prints the value
+// instead of a bare newline (covers the `println(format(...))` shape that
+// backtick templates desugar to; output verified via build-exe: `v=3`).
+fn main() -> i32 {
+    println(format("v={}", 3));
+    return 0;
+}
+
+@test "unit println bare string"() {
+    let s = format("w={}", 6);
+    println(s);
+    if !str_eq(s, "w=6") {
+        panic(4001);
+    };
+}

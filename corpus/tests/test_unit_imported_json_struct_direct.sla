@@ -1,0 +1,37 @@
+@import "sa_std/string.sa"
+@import "sa_std/encoding/json.sa"
+@import "import_fixtures/pkgjson/json_helpers.sa"
+
+struct ImportedJsonEntry {
+    present: bool,
+    entry_ptr: ptr,
+    entry_len: int,
+}
+
+struct ImportedJsonKey {
+    ptr: ptr,
+}
+
+fn imported_json_struct(data: ptr, data_len: int) -> ImportedJsonEntry {
+    let root = JSON_PARSE(data, data_len);
+    let t = SLA_JSON_OBJECT_GET(root, STR_PTR("types"), STR_LEN("types"));
+    return ImportedJsonEntry { present: true, entry_ptr: SLA_JSON_STRING_PTR(t), entry_len: SLA_JSON_STRING_LEN(t) };
+}
+
+fn imported_json_struct_field_key(data: ptr, data_len: int) -> int {
+    let root = JSON_PARSE(data, data_len);
+    let key = ImportedJsonKey { ptr: STR_PTR("types") };
+    let t = SLA_JSON_OBJECT_GET(root, key.ptr, STR_LEN("types"));
+    return JSON_KIND(t);
+}
+
+@test "imported json struct direct sab"() {
+    let entry = imported_json_struct("{\"types\":\"x\"}", 13);
+    if entry.present != true { panic(39041); };
+    if entry.entry_len != 1 { panic(39042); };
+}
+
+@test "imported json struct field key direct sab"() {
+    let kind = imported_json_struct_field_key("{\"types\":\"x\"}", 13);
+    if kind != 5 { panic(39043); };
+}

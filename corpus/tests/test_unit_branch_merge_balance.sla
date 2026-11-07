@@ -1,0 +1,116 @@
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+// Follow-up line (family 1): SAB if-merge compensation for a value
+// consumed on exactly one branch must dispose of the value DEEPLY on
+// the other branch. Before the fix the balancing drop on the
+// non-consuming exit was a shallow `move_` (Vec struct freed, heap
+// buffer leaked). The emission-level assertions live in
+// plugin_tests.zig ("sab if merge balance drops owned values
+// deeply"); these tests pin the runtime behaviour on both backends,
+// including a loop guard: a misplaced deep drop double-frees and the
+// referee traps, a missing one is caught by the emission tests.
+
+fn fub_take_string(s: String) -> u64 {
+    return len(s);
+}
+
+fn fub_take_vec(v: Vec<u8>) -> u64 {
+    return len(v);
+}
+
+fn fub_touchs(s: &String) -> u64 {
+    return len(s);
+}
+
+fn fub_param_branch(s: String, c: bool) -> u64 {
+    let n: u64 = 0;
+    if c {
+        n = fub_take_string(s);
+    };
+    return n;
+}
+
+@test "if merge string consumed in then"() {
+    let s: String = format("hello world hello!");
+    let c: bool = true;
+    let n: u64 = 0;
+    if c {
+        n = fub_take_string(s);
+    };
+    if n != 18 {
+        panic(7001);
+    };
+}
+
+@test "if merge string consumed in else"() {
+    let s: String = format("hello world hello!");
+    let c: bool = false;
+    let n: u64 = 0;
+    if c {
+    } else {
+        n = fub_take_string(s);
+    };
+    if n != 18 {
+        panic(7002);
+    };
+}
+
+@test "if merge vec consumed in then"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(1);
+    v.push(2);
+    let c: bool = true;
+    let n: u64 = 0;
+    if c {
+        n = fub_take_vec(v);
+    };
+    if n != 2 {
+        panic(7003);
+    };
+}
+
+@test "if merge param consumed in one branch"() {
+    let a: String = format("hello world hello!");
+    if fub_param_branch(a, true) != 18 {
+        panic(7004);
+    };
+    let b: String = format("hello world hello!");
+    if fub_param_branch(b, false) != 0 {
+        panic(7005);
+    };
+}
+
+@test "if merge string survives both branches"() {
+    let s: String = format("hello world hello!");
+    let c: bool = true;
+    if c {
+        let k: u64 = fub_touchs(&s);
+        if k != 18 {
+            panic(7006);
+        };
+    };
+    if fub_touchs(&s) != 18 {
+        panic(7007);
+    };
+    let n: u64 = fub_take_string(s);
+    if n != 18 {
+        panic(7008);
+    };
+}
+
+@test "if merge balance in a loop stays sound"() {
+    let k: i32 = 0;
+    let total: u64 = 0;
+    while k < 20000 {
+        let s: String = format("hello world hello!");
+        let c: bool = k % 2 == 0;
+        if c {
+            total = total + fub_take_string(s);
+        };
+        k = k + 1;
+    }
+    if total != 180000 {
+        panic(7009);
+    };
+}

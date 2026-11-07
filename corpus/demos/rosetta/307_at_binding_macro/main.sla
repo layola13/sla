@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn transform(x: i32) -> i32 {
+    if x >= 1 {
+        if x <= 5 { return x * 10; };
+    };
+    if x >= 6 {
+        if x <= 10 { return x * 100; };
+    } else {
+        return 0;
+    };
+    return 0;
+}
+
+fn main() -> i32 {
+    let a = transform(3);
+    let b = transform(8);
+    let c = transform(15);
+    println("{},{},{}", a, b, c);
+    if a != 30 { return 1; };
+    if b != 800 { return 1; };
+    if c != 0 { return 1; };
+    return 0;
+}
+
+@test "rosetta 307 at binding macro"() {
+    if transform(3) != 30 { panic(307); };
+    if transform(8) != 800 { panic(308); };
+    if transform(15) != 0 { panic(309); };
+}

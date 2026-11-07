@@ -1,0 +1,18 @@
+struct Entity {
+    id: i32,
+    gen: i32,
+}
+
+struct Slot {
+    entity_id: i32,
+}
+
+fn copy_entity_field(slot: Slot, entity: Entity) -> i32 {
+    slot.entity_id = entity.id;
+    return entity.gen + slot.entity_id;
+}
+
+@test "struct field copy does not move owner"() {
+    let got = copy_entity_field(Slot { entity_id: 0 }, Entity { id: 7, gen: 3 });
+    if got != 10 { panic(1500); };
+}

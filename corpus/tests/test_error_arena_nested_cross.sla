@@ -1,0 +1,13 @@
+// expect: ArenaDomain
+// F2-A C1 corpus: design 3 R6 - nested arena blocks are
+// independent domains; moving a deep value across the boundary
+// in either direction needs an explicit clone (Jev U4 = A).
+fn neg_nested_cross() -> i32 {
+    arena {
+        let a: Vec<String> = Vec::new();
+        arena {
+            let b = a;
+        }
+    }
+    return 0;
+}

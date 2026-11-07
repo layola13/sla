@@ -1,0 +1,51 @@
+// Regression (zozi-spike ZOZI-1): typed-pointer equality was rejected by
+// the checker. `*S == *S`, `*S != *S`, and the FFI staple
+// `handle == ptr::null::<S>()` all failed checkExpr with
+// error.TypeMismatch at binary_expr, while `*u8 == *u8` passed.
+// Root cause: the eq/ne dispatch enters the struct-value comparison path
+// via structDeclForType, which unwraps pointers, so pointer-to-struct
+// operands were judged by typeIsEq of the *pointer* type (always false).
+// The fix adds a pointer-identity fast path for eq/ne when both operands
+// are pointer-like and typesEqual.
+//
+// On the pristine baseline this file fails type checking
+// (error.TypeMismatch); with the fix it must pass on both backends.
+// Assertions are behavioral: identity must hold for the same address and
+// fail for distinct addresses, for both a defined struct and an opaque
+// struct (the FFI handle shape).
+
+@import "sa_std/ptr.sa"
+
+struct Handle { tag: i32 }
+struct OpaqueHandle;
+
+fn id_handle(p: *Handle) -> *Handle { return p; }
+fn id_opaque(p: *OpaqueHandle) -> *OpaqueHandle { return p; }
+
+@test "typed pointer eq identity and null"() {
+    let a = Handle { tag: 1 };
+    let b = Handle { tag: 2 };
+    let ha = id_handle(&a);
+    let hb = id_handle(&b);
+    if !(ha == ha) { panic(101); };
+    if ha == hb { panic(102); };
+    if !(ha != hb) { panic(103); };
+    // Identity, not pointee value: two distinct objects with equal
+    // field values must still compare unequal by pointer.
+    let a2 = Handle { tag: 1 };
+    let ha2 = id_handle(&a2);
+    if ha == ha2 { panic(107); };
+    if !(ha != ha2) { panic(108); };
+    if ha == ptr::null::<Handle>() { panic(104); };
+    if !(ha != ptr::null::<Handle>()) { panic(105); };
+    let nh: *Handle = ptr::null::<Handle>();
+    if !(nh == ptr::null::<Handle>()) { panic(106); };
+}
+
+@test "opaque pointer eq identity and null"() {
+    let nh: *OpaqueHandle = ptr::null::<OpaqueHandle>();
+    if !(nh == ptr::null::<OpaqueHandle>()) { panic(201); };
+    if nh != ptr::null::<OpaqueHandle>() { panic(202); };
+    let back = id_opaque(nh);
+    if !(back == nh) { panic(203); };
+}

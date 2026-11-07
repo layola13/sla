@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Sylvester 数列（s(n)=s(n-1)²-s(n-1)+1：s(4)=1807）。
+// 意对标 446 Jacobsthal 的乘积递推版（446 互补）。
+
+fn sylv(n: int) -> int {
+    if n == 0 { return 2; };
+    let s = 2;
+    let i = 0;
+    while i < n {
+        s = s * s - s + 1;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", sylv(4), sylv(3), sylv(0));
+    return 0;
+}
+
+@test "basic 457 sylvester"() {
+    if sylv(4) != 1807 { panic(45701); };
+    if sylv(3) != 43 { panic(45702); };
+    if sylv(0) != 2 { panic(45703); };
+}

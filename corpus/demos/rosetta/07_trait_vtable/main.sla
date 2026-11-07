@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/trait_object.sa"
+
+trait Draw {
+    fn draw(&self) -> i32;
+}
+
+struct Button {
+    id: i32,
+}
+
+impl Draw for Button {
+    fn draw(&self) -> i32 {
+        self.id
+    }
+}
+
+fn render(&item: dyn Draw) -> i32 {
+    item.draw()
+}
+
+fn main() -> i32 {
+    let button = Button { id: 77 };
+    let result = render(&button);
+    println("{}", result);
+    return 0;
+}
+
+@test "rosetta 007 trait vtable"() {
+    let button = Button { id: 77 };
+    let result = render(&button);
+    if result != 77 {
+        panic(7);
+    };
+}

@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Motzkin 续高位四 M(12)=15511（M(11)=5798 对 5798；卷积和 9713）。
+// 意对标 876_motz11（n=11 版互补；880 做高位对峙）。
+
+fn moz(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k <= ii - 2 {
+            s = s + t[k] * t[ii - 2 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn main() -> i32 {
+    println("{},{}", moz(12), moz(11));
+    return 0;
+}
+
+@test "basic 879 motz12"() {
+    if moz(12) != 15511 { panic(87901); };
+    if moz(11) != 5798 { panic(87902); };
+    if moz(10) != 2188 { panic(87903); };
+    if moz(12) - moz(11) != 9713 { panic(87904); };
+}

@@ -1,0 +1,11 @@
+@import "versions/v1/index.sa"
+@import "versions/v2/index.sa"
+
+@export versioned_value() -> i32:
+L_ENTRY:
+    v1 = call @v1_value()
+    v2 = call @v2_value()
+    value = add v1, v2
+    !v1
+    !v2
+    return value

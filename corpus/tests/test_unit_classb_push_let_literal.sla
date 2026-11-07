@@ -1,0 +1,78 @@
+@import "sa_std/vec.sa"
+@import "sa_std/growvec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/io/print.sai"
+
+// classb regression (defect 1): pushing a let-bound struct literal by
+// identifier must store an independent copy of the value. The baseline
+// compiler stored the binding's own heap record, then released that
+// record at the end of the binding's scope, so every slot aliased one
+// recycled chunk: all elements read back the last-written fields (and
+// the read values were allocator garbage like 202905 0).
+
+struct CbItem { key: i32, val: i32 }
+
+@test "classb push let-bound struct literal stores a copy"() {
+    let v: Vec<CbItem> = Vec::new();
+    let i: i32 = 0;
+    while i < 10 {
+        let it: CbItem = CbItem { key: i, val: i * 100 };
+        v.push(it);
+        i = i + 1;
+    }
+    if v.len() != 10 { panic(9101); };
+    let j: i32 = 0;
+    let sum: i32 = 0;
+    while j < 10 {
+        sum = sum + v[j].key * 1000 + v[j].val;
+        j = j + 1;
+    }
+    // sum = sum_{j=0..9} (j*1000 + j*100) = 1100 * 45 = 49500
+    if sum != 49500 { panic(9102); };
+}
+
+@test "classb push keeps the source binding usable"() {
+    let v: Vec<CbItem> = Vec::new();
+    let it: CbItem = CbItem { key: 7, val: 70 };
+    v.push(it);
+    if it.key != 7 { panic(9103); };
+    if it.val != 70 { panic(9104); };
+    if v[0].key != 7 { panic(9105); };
+    it.key = 9;
+    if v[0].key != 7 { panic(9106); };
+}
+
+@test "classb repeated pushes of one binding stay independent"() {
+    let v: Vec<CbItem> = Vec::new();
+    let a: CbItem = CbItem { key: 1, val: 10 };
+    v.push(a);
+    a.key = 5;
+    a.val = 50;
+    v.push(a);
+    if v.len() != 2 { panic(9107); };
+    if v[0].key != 1 { panic(9108); };
+    if v[0].val != 10 { panic(9109); };
+    if v[1].key != 5 { panic(9110); };
+    if v[1].val != 50 { panic(9111); };
+    if a.key != 5 { panic(9112); };
+}
+
+@test "classb growvec push let-bound struct literal stores a copy"() {
+    let g: GrowVec<CbItem> = GrowVec::with_max(1024);
+    let i: i32 = 0;
+    while i < 6 {
+        let it: CbItem = CbItem { key: i + 40, val: i + 400 };
+        g.push(it);
+        i = i + 1;
+    }
+    if g.len() != 6 { panic(9113); };
+    let j: i32 = 0;
+    let sum: i32 = 0;
+    while j < 6 {
+        sum = sum + g[j].key + g[j].val;
+        j = j + 1;
+    }
+    // sum = sum_{j=0..5} (j+40 + j+400) = 2*15 + 6*440 = 2670
+    if sum != 2670 { panic(9114); };
+}

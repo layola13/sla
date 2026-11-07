@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn ffi_objective_c_framework_count() -> i32 { let foundation = 1; return foundation; }
+fn main() -> i32 { let foundation = 1; println("{}", foundation); return foundation; }
+@test "rosetta 285 ffi objective c framework"() { let got = ffi_objective_c_framework_count(); if got != 1 { panic(285); }; }

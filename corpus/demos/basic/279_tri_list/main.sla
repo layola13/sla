@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 137_tri 的表版（71 为单值版：前 5 三角数，末项 15）。
+// 公式（245 口径）+ 逐项入表组合。
+
+fn main() -> i32 {
+    let tris: Vec<i32> = Vec::new();
+    let t = 1;
+    while t <= 5 {
+        tris.push(t * (t + 1) / 2);
+        t = t + 1;
+    }
+    println("{},{}", len(tris), tris[4]);
+    return 0;
+}
+
+@test "basic 279 tri list"() {
+    let tris: Vec<i32> = Vec::new();
+    let t = 1;
+    while t <= 5 {
+        tris.push(t * (t + 1) / 2);
+        t = t + 1;
+    }
+    if len(tris) != 5 { panic(27901); };
+    if tris[4] != 15 { panic(27902); };
+    if tris[0] != 1 { panic(27903); };
+}

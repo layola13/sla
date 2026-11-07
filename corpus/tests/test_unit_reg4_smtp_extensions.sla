@@ -1,0 +1,77 @@
+@import "sa_std/smtp.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Registry shard 4 coverage: SMTP extension matching from
+// sa_std/smtp.sla (SAB registry class=declared, never probed,
+// zero corpus references at census 2026-11-06).
+// Entries: smtp_extensions_contain, smtp_client_has_extension.
+// A line's token is the text up to its first space or '=';
+// matching is ASCII case-insensitive.
+
+fn v4_of(s: String) -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    let p: ptr = STR_PTR(s);
+    let i: u64 = 0;
+    while i < len(s) {
+        out.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn name_slice(s: String) -> Vec<u8> {
+    return v4_of(s);
+}
+
+@test "reg4 smtp extensions contain first tokens only"() {
+    let ext = v4_of(format("STARTTLS\nAUTH PLAIN LOGIN\nSIZE 35882577\nHELP"));
+    let n1 = name_slice(format("STARTTLS"));
+    let s1: Slice<u8> = VEC_AS_SLICE(n1);
+    if smtp_extensions_contain(&ext, &s1) != true { panic(42301); };
+    let n2 = name_slice(format("starttls"));
+    let s2: Slice<u8> = VEC_AS_SLICE(n2);
+    if smtp_extensions_contain(&ext, &s2) != true { panic(42302); };
+    let n3 = name_slice(format("AUTH"));
+    let s3: Slice<u8> = VEC_AS_SLICE(n3);
+    if smtp_extensions_contain(&ext, &s3) != true { panic(42303); };
+    // PLAIN is a parameter of AUTH, not a line token: no match.
+    let n4 = name_slice(format("PLAIN"));
+    let s4: Slice<u8> = VEC_AS_SLICE(n4);
+    if smtp_extensions_contain(&ext, &s4) != false { panic(42304); };
+    let n5 = name_slice(format("SIZE"));
+    let s5: Slice<u8> = VEC_AS_SLICE(n5);
+    if smtp_extensions_contain(&ext, &s5) != true { panic(42305); };
+    // Last line has no trailing newline and still counts.
+    let n6 = name_slice(format("HELP"));
+    let s6: Slice<u8> = VEC_AS_SLICE(n6);
+    if smtp_extensions_contain(&ext, &s6) != true { panic(42306); };
+    let n7 = name_slice(format("8BITMIME"));
+    let s7: Slice<u8> = VEC_AS_SLICE(n7);
+    if smtp_extensions_contain(&ext, &s7) != false { panic(42307); };
+}
+
+@test "reg4 smtp extensions contain equals separator"() {
+    let ext = v4_of(format("AUTH=PLAIN\n"));
+    let n1 = name_slice(format("AUTH"));
+    let s1: Slice<u8> = VEC_AS_SLICE(n1);
+    if smtp_extensions_contain(&ext, &s1) != true { panic(42311); };
+    let empty: Vec<u8> = Vec::new();
+    if smtp_extensions_contain(&empty, &s1) != false { panic(42312); };
+}
+
+@test "reg4 smtp client has extension reads client field"() {
+    // Built via smtp_empty_client + field assignment: struct
+    // literals of imported types are rejected by the parser
+    // (SyntaxError at the '{', see min_ce1/min_ce2 in RESULT.md).
+    let c = smtp_empty_client();
+    c.extensions = v4_of(format("STARTTLS\nAUTH"));
+    let n1 = name_slice(format("auth"));
+    let s1: Slice<u8> = VEC_AS_SLICE(n1);
+    if smtp_client_has_extension(&c, &s1) != true { panic(42321); };
+    let n2 = name_slice(format("NOPE"));
+    let s2: Slice<u8> = VEC_AS_SLICE(n2);
+    if smtp_client_has_extension(&c, &s2) != false { panic(42322); };
+    let e = smtp_empty_client();
+    if smtp_client_has_extension(&e, &s1) != false { panic(42323); };
+}

@@ -1,0 +1,47 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 费马素性测试（2^(n-1) mod n；341 为伪素数：测试称素实则 11×31）。
+// 意对标 356 素数判定的概率版（341 反例记档，403 做对峙）。
+
+fn powmod(base: int, exp: int, m: int) -> int {
+    let r = 1;
+    let b = base % m;
+    let e = exp;
+    while e > 0 {
+        if e % 2 == 1 { r = r * b % m; };
+        b = b * b % m;
+        e = e / 2;
+    }
+    return r;
+}
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn fermat2(n: int) -> int {
+    if n < 2 { return 0; };
+    if powmod(2, n - 1, n) == 1 { return 1; };
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", fermat2(7), fermat2(9), fermat2(341), is_prime(341));
+    return 0;
+}
+
+@test "basic 397 fermat"() {
+    if fermat2(7) != 1 { panic(39701); };
+    if fermat2(9) != 0 { panic(39702); };
+    if fermat2(341) != 1 { panic(39703); };
+    if is_prime(341) != 0 { panic(39704); };
+}

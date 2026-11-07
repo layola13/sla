@@ -1,0 +1,6 @@
+{
+  global:
+    cxx_name_probe;
+  local:
+    *;
+};

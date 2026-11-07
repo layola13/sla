@@ -1,0 +1,1 @@
+@extern take_ownership(handle: ptr) -> i32

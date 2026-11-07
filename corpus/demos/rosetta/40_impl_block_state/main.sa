@@ -1,0 +1,73 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__Account_deposit(self: ptr, amount: i32) -> ptr:
+L_ENTRY:
+    tmp_0 = alloc 4
+    tmp_1 = load self+0 as i32
+    tmp_2 = add tmp_1, amount
+    !tmp_1
+    store tmp_0+0, tmp_2 as i32
+    !self
+    !amount
+    return tmp_0
+
+@main() -> i32:
+L_ENTRY:
+    account = alloc 4
+    tmp_3 = 10
+    store account+0, tmp_3 as i32
+    tmp_4 = 5
+    tmp_5 = call @sla__Account_deposit(account, tmp_4)
+    !tmp_4
+    updated = tmp_5
+    tmp_6 = load updated+0 as i32
+    tmp_7 = call @sa_fmt_u64(tmp_6, 10)
+    tmp_8 = call @sa_fmt_buffer_data(tmp_7)
+    tmp_9 = call @sa_fmt_buffer_len(tmp_7)
+    tmp_10 = tmp_8
+    call @sa_print_bytes(&tmp_10, tmp_9)
+    call @sa_fmt_buffer_free(^tmp_7)
+    !tmp_10
+    !tmp_9
+    !tmp_6
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_11 = 0
+    !updated
+    !account
+    return tmp_11
+
+@test "rosetta 040 impl block state"():
+L_TEST_ENTRY_0:
+    account = alloc 4
+    tmp_12 = 10
+    store account+0, tmp_12 as i32
+    tmp_13 = 5
+    tmp_14 = call @sla__Account_deposit(account, tmp_13)
+    !tmp_13
+    updated = tmp_14
+    tmp_15 = load updated+0 as i32
+    tmp_16 = 15
+    tmp_17 = ne tmp_15, tmp_16
+    !tmp_15
+    !tmp_16
+    br tmp_17 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_17
+    panic(40)
+
+L_ELSE_2:
+    !tmp_17
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !updated
+    !account
+    return
+

@@ -1,0 +1,37 @@
+@import "sa_std/thread.sa"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/core/result.sa"
+
+struct TinyWorld {
+    value: i32,
+}
+
+fn fn_ptr_thread_pair_first(world: Arc<*TinyWorld>) -> i32 {
+    return 1;
+}
+
+fn fn_ptr_thread_pair_second(world: Arc<*TinyWorld>) -> i32 {
+    return 2;
+}
+
+fn fn_ptr_thread_run_pair(
+    world: TinyWorld,
+    first: fn(Arc<*TinyWorld>) -> i32,
+    second: fn(Arc<*TinyWorld>) -> i32,
+) -> i32 {
+    let boxed = Box::new(world);
+    let raw = Box::into_raw(boxed);
+    let shared = Arc::new(raw);
+    let first_ptr = shared.clone();
+    let second_ptr = shared.clone();
+    let a = thread::spawn(^|| first(first_ptr));
+    let b = thread::spawn(^|| second(second_ptr));
+    return a.join().unwrap() + b.join().unwrap();
+}
+
+@test "thread closures capture function pointer pair"() {
+    let world = TinyWorld { value: 20 };
+    let got = fn_ptr_thread_run_pair(world, fn_ptr_thread_pair_first, fn_ptr_thread_pair_second);
+    if got != 3 { panic(51201); };
+}

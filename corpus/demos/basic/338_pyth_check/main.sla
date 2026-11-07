@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 勾股判定（3,4,5→1；3,4,6→0）。
+// 意对标 tsgosa 347_math_sqrt 的判定应用（321 口径之平方和版）。
+
+fn is_pyth(a: int, b: int, c: int) -> int {
+    return if a * a + b * b == c * c { 1 } else { 0 };
+}
+
+fn main() -> i32 {
+    println("{},{}", is_pyth(3, 4, 5), is_pyth(3, 4, 6));
+    return 0;
+}
+
+@test "basic 338 pyth check"() {
+    if is_pyth(3, 4, 5) != 1 { panic(33801); };
+    if is_pyth(3, 4, 6) != 0 { panic(33802); };
+    if is_pyth(5, 12, 13) != 1 { panic(33803); };
+}

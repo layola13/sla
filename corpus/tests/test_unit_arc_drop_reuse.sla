@@ -1,0 +1,40 @@
+// DEF-ARC-DROP regression R2 (Jev route A ruling): once the last
+// handle is gone the allocation must return to the allocator — a
+// freshly allocated box of the same size class must land on the
+// identical address (single-threaded LIFO bin reuse). Pre-fix on
+// the native backend, drops never freed, so successive allocations
+// never reuse an address and the equalities below fail.
+//
+// The box address is the handle value itself, read through the
+// std PTR_ADDR macro (ptr.sa: bitcast ptr -> u64, non-consuming).
+
+@import "sa_std/ptr.sa"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/core/result.sa"
+
+fn arc_box_addr() -> u64 {
+    let a = Arc::new(41);
+    return PTR_ADDR(a);
+}
+
+fn box_cell_addr() -> u64 {
+    let b = Box::new(41);
+    return PTR_ADDR(b);
+}
+
+@test "def_arc_drop freed arc box storage is reused"() {
+    let a1 = arc_box_addr();
+    if a1 == 0 { panic(7501); };
+    let a2 = arc_box_addr();
+    if a2 != a1 { panic(7502); };
+    let a3 = arc_box_addr();
+    if a3 != a1 { panic(7503); };
+}
+
+@test "def_arc_drop freed box cell storage is reused"() {
+    let b1 = box_cell_addr();
+    if b1 == 0 { panic(7511); };
+    let b2 = box_cell_addr();
+    if b2 != b1 { panic(7512); };
+}

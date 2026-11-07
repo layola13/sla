@@ -1,0 +1,81 @@
+// 307 - @ Bindings in Patterns
+// SA: 用 BIND_RANGE 宏模拟 Rust 的 n @ 1..=5 绑定模式
+// BIND_RANGE 同时绑定值并检查范围，命中后可使用绑定值
+
+@import "sa_std/io/print.sai"
+
+@const RESULT_OK = utf8:"30,800,0\n"
+@const RESULT_ERR = utf8:"error\n"
+
+// BIND_RANGE: 将 %val 绑定到 %bound 并检查 %lo <= %val <= %hi
+[MACRO] BIND_RANGE %out, %bound, %val, %lo, %hi, %label_yes, %label_no
+    %bound = add %val, 0
+    _br_lo = sle %lo, %bound
+    _br_hi = sle %bound, %hi
+    %out = and _br_lo, _br_hi
+    !_br_lo
+    !_br_hi
+    br %out -> %label_yes, %label_no
+[END_MACRO]
+
+@transform(x: i32) -> i32:
+L_ENTRY:
+    // match x { n @ 1..=5 => n * 10, n @ 6..=10 => n * 100, _ => 0 }
+    EXPAND BIND_RANGE _br_in, n1, x, 1, 5, L_SMALL, L_CHECK_MED
+
+L_SMALL:
+    // n @ 1..=5 matched → n * 10
+    !_br_in
+    result_sm = mul n1, 10
+    !n1
+    !x
+    return result_sm
+
+L_CHECK_MED:
+    !_br_in
+    !n1
+    EXPAND BIND_RANGE _br_in, n2, x, 6, 10, L_MEDIUM, L_DEFAULT
+
+L_MEDIUM:
+    // n @ 6..=10 matched → n * 100
+    !_br_in
+    result_md = mul n2, 100
+    !n2
+    !x
+    return result_md
+
+L_DEFAULT:
+    !_br_in
+    !n2
+    !x
+    return 0
+
+@main() -> i32:
+L_ENTRY:
+    a = call @transform(3)
+    b = call @transform(8)
+    c = call @transform(15)
+
+    ok_a = eq a, 30
+    ok_b = eq b, 800
+    ok_c = eq c, 0
+    ok0 = and ok_a, ok_b
+    ok = and ok0, ok_c
+    !a
+    !b
+    !c
+    !ok_a
+    !ok_b
+    !ok_c
+    !ok0
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    !ok
+    call @sa_print_bytes(&RESULT_OK, 8)
+    return 0
+
+L_ERR:
+    !ok
+    call @sa_print_bytes(&RESULT_ERR, 6)
+    return 1

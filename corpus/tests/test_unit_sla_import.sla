@@ -1,0 +1,19 @@
+// Verifies cross-file `.sla` import: types and functions declared in
+// import_fixtures/shapes.sla are usable here, including struct literals
+// (`ImportedPoint { ... }`) which require the parser to know the imported
+// type names during its forward pass.
+@import "import_fixtures/shapes.sla"
+
+fn point_sum(p: ImportedPoint) -> i32 {
+    return p.x + p.y;
+}
+
+@test "imported struct literal and field access"() {
+    let p = ImportedPoint { x: 10, y: 20 };
+    if point_sum(p) != 30 { panic(1); };
+}
+
+@test "imported function call"() {
+    let r = ImportedRect { w: 4, h: 5 };
+    if imported_area(r) != 20 { panic(2); };
+}

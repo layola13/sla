@@ -1,0 +1,60 @@
+@import "sa_std/io/print.sai"
+@len(word: ptr) -> i64:
+L_ENTRY:
+    tmp_0 = 4
+    !word
+    return tmp_0
+
+@rosetta_015_value() -> i64:
+L_ENTRY:
+    @const SLA_STR_0 = utf8:"rust"
+    word = &SLA_STR_0
+    tmp_2 = call @len(word)
+    length = tmp_2
+    !word
+    return length
+
+@main() -> i64:
+L_ENTRY:
+    tmp_3 = call @rosetta_015_value()
+    result = tmp_3
+    tmp_4 = 4
+    tmp_5 = ne result, tmp_4
+    br tmp_5 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_5
+    panic(15)
+
+L_ELSE_1:
+    !tmp_5
+    jmp L_MERGE_2
+
+L_MERGE_2:
+    @const SLA_STR_1 = utf8:"4\n"
+    tmp_9 = 2
+    call @sa_print_bytes(&SLA_STR_1, tmp_9)
+    tmp_10 = 0
+    !result
+    return tmp_10
+
+@test "rosetta 015 string bytes"():
+L_TEST_ENTRY_3:
+    tmp_11 = call @rosetta_015_value()
+    got = tmp_11
+    tmp_12 = 4
+    tmp_13 = ne got, tmp_12
+    br tmp_13 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_13
+    panic(15)
+
+L_ELSE_5:
+    !tmp_13
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !got
+    return
+

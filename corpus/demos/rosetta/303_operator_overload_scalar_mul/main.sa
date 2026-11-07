@@ -1,0 +1,183 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/ops.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_vec3_scalar_product_score = vtable { call = @sla__vec3_scalar_product_score }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__vec3_scalar_product_score() -> i32:
+L_ENTRY:
+    a = alloc 12
+    tmp_0 = 1
+    store a+0, tmp_0 as f32
+    tmp_1 = 2
+    store a+4, tmp_1 as f32
+    tmp_2 = 3
+    store a+8, tmp_2 as f32
+    tmp_3 = alloc 12
+    tmp_4 = 4
+    tmp_5 = load a+0 as f32
+    tmp_6 = mul tmp_5, tmp_4
+    store tmp_3+0, tmp_6 as f32
+    tmp_7 = load a+4 as f32
+    tmp_8 = mul tmp_7, tmp_4
+    store tmp_3+4, tmp_8 as f32
+    tmp_9 = load a+8 as f32
+    tmp_10 = mul tmp_9, tmp_4
+    store tmp_3+8, tmp_10 as f32
+    !tmp_4
+    b = tmp_3
+    tmp_11 = load b+0 as f32
+    tmp_12 = 4
+    tmp_13 = ne tmp_11, tmp_12
+    !tmp_11
+    !tmp_12
+    br tmp_13 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_13
+    tmp_14 = 0
+    !b
+    !a
+    return tmp_14
+
+L_ELSE_1:
+    !tmp_13
+    jmp L_MERGE_2
+
+L_MERGE_2:
+    tmp_16 = load b+4 as f32
+    tmp_17 = 8
+    tmp_18 = ne tmp_16, tmp_17
+    !tmp_16
+    !tmp_17
+    br tmp_18 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_18
+    tmp_19 = 0
+    !b
+    !a
+    return tmp_19
+
+L_ELSE_4:
+    !tmp_18
+    jmp L_MERGE_5
+
+L_MERGE_5:
+    tmp_21 = load b+8 as f32
+    tmp_22 = 12
+    tmp_23 = ne tmp_21, tmp_22
+    !tmp_21
+    !tmp_22
+    br tmp_23 -> L_THEN_6, L_ELSE_7
+
+L_THEN_6:
+    !tmp_23
+    tmp_24 = 0
+    !b
+    !a
+    return tmp_24
+
+L_ELSE_7:
+    !tmp_23
+    jmp L_MERGE_8
+
+L_MERGE_8:
+    tmp_26 = 4812
+    !b
+    !a
+    return tmp_26
+
+@main() -> i32:
+L_ENTRY:
+    tmp_27 = call @sla__vec3_scalar_product_score()
+    result = tmp_27
+    tmp_28 = call @sa_fmt_u64(result, 10)
+    tmp_29 = call @sa_fmt_buffer_data(tmp_28)
+    tmp_30 = call @sa_fmt_buffer_len(tmp_28)
+    tmp_31 = tmp_29
+    call @sa_print_bytes(&tmp_31, tmp_30)
+    call @sa_fmt_buffer_free(^tmp_28)
+    !tmp_31
+    !tmp_30
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 303 operator_overload_scalar_mul"():
+L_TEST_ENTRY_9:
+    a = alloc 12
+    tmp_32 = 1
+    store a+0, tmp_32 as f32
+    tmp_33 = 2
+    store a+4, tmp_33 as f32
+    tmp_34 = 3
+    store a+8, tmp_34 as f32
+    tmp_35 = alloc 12
+    tmp_36 = 4
+    tmp_37 = load a+0 as f32
+    tmp_38 = mul tmp_37, tmp_36
+    store tmp_35+0, tmp_38 as f32
+    tmp_39 = load a+4 as f32
+    tmp_40 = mul tmp_39, tmp_36
+    store tmp_35+4, tmp_40 as f32
+    tmp_41 = load a+8 as f32
+    tmp_42 = mul tmp_41, tmp_36
+    store tmp_35+8, tmp_42 as f32
+    !tmp_36
+    b = tmp_35
+    tmp_43 = load b+0 as f32
+    tmp_44 = 4
+    tmp_45 = ne tmp_43, tmp_44
+    !tmp_43
+    !tmp_44
+    br tmp_45 -> L_THEN_10, L_ELSE_11
+
+L_THEN_10:
+    !tmp_45
+    panic(303)
+
+L_ELSE_11:
+    !tmp_45
+    jmp L_MERGE_12
+
+L_MERGE_12:
+    tmp_48 = load b+4 as f32
+    tmp_49 = 8
+    tmp_50 = ne tmp_48, tmp_49
+    !tmp_48
+    !tmp_49
+    br tmp_50 -> L_THEN_13, L_ELSE_14
+
+L_THEN_13:
+    !tmp_50
+    panic(304)
+
+L_ELSE_14:
+    !tmp_50
+    jmp L_MERGE_15
+
+L_MERGE_15:
+    tmp_53 = load b+8 as f32
+    tmp_54 = 12
+    tmp_55 = ne tmp_53, tmp_54
+    !tmp_53
+    !tmp_54
+    br tmp_55 -> L_THEN_16, L_ELSE_17
+
+L_THEN_16:
+    !tmp_55
+    panic(305)
+
+L_ELSE_17:
+    !tmp_55
+    jmp L_MERGE_18
+
+L_MERGE_18:
+    !b
+    !a
+    return
+

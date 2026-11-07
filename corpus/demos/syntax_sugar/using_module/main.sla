@@ -1,0 +1,17 @@
+mod score_math {
+    pub fn add_bonus(value: i32, bonus: i32) -> i32 {
+        return value + bonus;
+    }
+
+    pub fn double(value: i32) -> i32 {
+        return value + value;
+    }
+}
+
+using score_math;
+
+@test "using module turns functions into chainable calls"() {
+    let base: i32 = 10;
+    let score = base.add_bonus(5).double();
+    if score != 30 { panic(34000); };
+}

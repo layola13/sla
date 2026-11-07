@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Stirling 一类首列对峙：建表 vs 阶乘直算（(7,1)：720 对 720；(8,1)：5040 对 5040）。
+// 意对标 691_stir1_col1 × 230_fact_iter（首列源与阶乘源合流）。
+
+fn cst(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn fact(n: int) -> int {
+    let r = 1;
+    let i = 1;
+    while i <= n {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", cst(7, 1), fact(6), cst(8, 1), fact(7));
+    return 0;
+}
+
+@test "basic 692 duel col1"() {
+    if cst(7, 1) != 720 { panic(69201); };
+    if fact(6) != 720 { panic(69202); };
+    if cst(8, 1) != 5040 { panic(69203); };
+    if fact(7) != 5040 { panic(69204); };
+}

@@ -1,0 +1,1 @@
+@extern plugin_dispatch(tag: i32) -> i32

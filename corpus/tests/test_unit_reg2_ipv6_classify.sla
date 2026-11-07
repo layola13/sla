@@ -1,0 +1,70 @@
+@import "sa_std/ip.sla"
+
+// Coverage shard 2: ipv6_is_* classification family from sa_std/ip.sla
+// (registry "declared, never probed"). Addresses are built with
+// ipv6_from_segments (segment values in the comments); expected values
+// follow the ranges documented at each predicate in ip.sla.
+
+@test "reg2 ipv6_is_unspecified"() {
+    if !ipv6_is_unspecified(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 0)) { panic(24401); };
+    if ipv6_is_unspecified(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 1)) { panic(24402); };
+}
+
+@test "reg2 ipv6_is_loopback"() {
+    if !ipv6_is_loopback(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 1)) { panic(24403); }; // ::1
+    if ipv6_is_loopback(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 0)) { panic(24404); };
+    if ipv6_is_loopback(ipv6_from_segments(65152, 0, 0, 0, 0, 0, 0, 1)) { panic(24405); }; // fe80::1
+}
+
+@test "reg2 ipv6_is_multicast"() {
+    if !ipv6_is_multicast(ipv6_from_segments(65282, 0, 0, 0, 0, 0, 0, 1)) { panic(24406); }; // ff02::1
+    if ipv6_is_multicast(ipv6_from_segments(8193, 3512, 0, 0, 0, 0, 0, 1)) { panic(24407); }; // 2001:db8::1
+}
+
+@test "reg2 ipv6_is_unique_local"() {
+    if !ipv6_is_unique_local(ipv6_from_segments(64768, 0, 0, 0, 0, 0, 0, 1)) { panic(24408); }; // fd00::1
+    if !ipv6_is_unique_local(ipv6_from_segments(64512, 0, 0, 0, 0, 0, 0, 1)) { panic(24409); }; // fc00::1
+    if ipv6_is_unique_local(ipv6_from_segments(65152, 0, 0, 0, 0, 0, 0, 1)) { panic(24410); }; // fe80::1
+}
+
+@test "reg2 ipv6_is_unicast_link_local"() {
+    if !ipv6_is_unicast_link_local(ipv6_from_segments(65152, 0, 0, 0, 0, 0, 0, 1)) { panic(24411); }; // fe80::1
+    if !ipv6_is_unicast_link_local(ipv6_from_segments(65215, 0, 0, 0, 0, 0, 0, 1)) { panic(24412); }; // febf::1
+    if ipv6_is_unicast_link_local(ipv6_from_segments(65216, 0, 0, 0, 0, 0, 0, 1)) { panic(24413); }; // fec0::1
+    if ipv6_is_unicast_link_local(ipv6_from_segments(64768, 0, 0, 0, 0, 0, 0, 1)) { panic(24414); }; // fd00::1
+}
+
+@test "reg2 ipv6_is_documentation"() {
+    if !ipv6_is_documentation(ipv6_from_segments(8193, 3512, 0, 0, 0, 0, 0, 1)) { panic(24415); }; // 2001:db8::1
+    if ipv6_is_documentation(ipv6_from_segments(8193, 3513, 0, 0, 0, 0, 0, 1)) { panic(24416); }; // 2001:db9::1
+}
+
+@test "reg2 ipv6_is_benchmarking"() {
+    if !ipv6_is_benchmarking(ipv6_from_segments(8193, 2, 0, 0, 0, 0, 0, 1)) { panic(24417); }; // 2001:2::1
+    if ipv6_is_benchmarking(ipv6_from_segments(8193, 2, 1, 0, 0, 0, 0, 1)) { panic(24418); }; // seg2 != 0
+    if ipv6_is_benchmarking(ipv6_from_segments(8193, 3, 0, 0, 0, 0, 0, 1)) { panic(24419); }; // 2001:3::1
+}
+
+@test "reg2 ipv6_is_ipv4_mapped"() {
+    if !ipv6_is_ipv4_mapped(ipv6_from_segments(0, 0, 0, 0, 0, 65535, 49320, 1)) { panic(24420); }; // ::ffff:192.168.0.1
+    if ipv6_is_ipv4_mapped(ipv6_from_segments(0, 0, 0, 0, 0, 65534, 49320, 1)) { panic(24421); }; // ::fffe:...
+    if ipv6_is_ipv4_mapped(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 1)) { panic(24422); }; // ::1
+}
+
+@test "reg2 ipv6_is_unicast"() {
+    if !ipv6_is_unicast(ipv6_from_segments(8193, 3512, 0, 0, 0, 0, 0, 1)) { panic(24423); }; // 2001:db8::1
+    if !ipv6_is_unicast(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 1)) { panic(24424); }; // ::1 (impl: !multicast && !unspecified)
+    if ipv6_is_unicast(ipv6_from_segments(65282, 0, 0, 0, 0, 0, 0, 1)) { panic(24425); }; // ff02::1
+    if ipv6_is_unicast(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 0)) { panic(24426); }; // ::
+}
+
+@test "reg2 ipv6_is_global"() {
+    if !ipv6_is_global(ipv6_from_segments(9734, 18176, 18176, 0, 0, 0, 0, 4369)) { panic(24427); }; // 2606:4700:4700::1111
+    if ipv6_is_global(ipv6_from_segments(8193, 3512, 0, 0, 0, 0, 0, 1)) { panic(24428); }; // 2001:db8::1 documentation
+    if ipv6_is_global(ipv6_from_segments(65152, 0, 0, 0, 0, 0, 0, 1)) { panic(24429); }; // fe80::1
+    if ipv6_is_global(ipv6_from_segments(64786, 0, 0, 0, 0, 0, 0, 1)) { panic(24430); }; // fd12::1 unique local
+    if ipv6_is_global(ipv6_from_segments(65282, 0, 0, 0, 0, 0, 0, 1)) { panic(24431); }; // ff02::1
+    if ipv6_is_global(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 1)) { panic(24432); }; // ::1
+    if ipv6_is_global(ipv6_from_segments(256, 0, 0, 0, 0, 0, 0, 1)) { panic(24433); }; // 100::1 discard-only
+    if ipv6_is_global(ipv6_from_segments(8193, 2, 0, 0, 0, 0, 0, 1)) { panic(24434); }; // 2001:2::1 benchmarking
+}

@@ -1,0 +1,8 @@
+@import "chain/step.sa"
+
+@helper_value() -> i32:
+L_ENTRY:
+    step = call @step_value()
+    value = add step, 200
+    !step
+    return value

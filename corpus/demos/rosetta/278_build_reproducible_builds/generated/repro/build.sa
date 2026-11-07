@@ -1,0 +1,14 @@
+// Generated from build/repro/seed.toml and cache/repro/fingerprint.txt.
+#def REPRO_ARTIFACT_COUNT = 2
+
+@repro_build_value() -> i32:
+L_ENTRY:
+    value = add 277, 1
+    !value
+    return 278
+
+@repro_build_count() -> i32:
+L_ENTRY:
+    count = add 1, 1
+    !count
+    return REPRO_ARTIFACT_COUNT

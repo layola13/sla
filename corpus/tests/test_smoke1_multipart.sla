@@ -1,0 +1,202 @@
+// Smoke wave 1: register-2 externs in sa_std/multipart.sai.
+// Parse family works on a hand-built body with fixed boundary; builder
+// family round-trips builder -> finish -> parse. Panic codes 55xxx.
+@import "sla_std/wrap/multipart.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+
+fn s1_contains(p: ptr, l: u64, lit: ptr, litl: u64) -> bool {
+    if l < litl { return false; };
+    let i: u64 = 0;
+    let last = l - litl;
+    while i <= last {
+        let j: u64 = 0;
+        let ok = true;
+        while j < litl {
+            if PTR_BYTE_AT(p, i + j) != PTR_BYTE_AT(lit, j) { ok = false; };
+            j = j + 1;
+        }
+        if ok { return true; };
+        i = i + 1;
+    }
+    return false;
+}
+
+fn s1_streq(p: ptr, l: u64, lit: ptr, litl: u64) -> bool {
+    if l != litl { return false; };
+    let i: u64 = 0;
+    while i < l {
+        if PTR_BYTE_AT(p, i) != PTR_BYTE_AT(lit, i) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn s1_body() -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_std_multipart_parse(STR_PTR("--X1\r\nContent-Disposition: form-data; name=\"field1\"\r\n\r\nvalue1\r\n--X1\r\nContent-Disposition: form-data; name=\"file1\"; filename=\"a.txt\"\r\nContent-Type: text/plain\r\n\r\nhello\r\n--X1--\r\n"), STR_LEN("--X1\r\nContent-Disposition: form-data; name=\"field1\"\r\n\r\nvalue1\r\n--X1\r\nContent-Disposition: form-data; name=\"file1\"; filename=\"a.txt\"\r\nContent-Type: text/plain\r\n\r\nhello\r\n--X1--\r\n"), STR_PTR("multipart/form-data; boundary=X1"), STR_LEN("multipart/form-data; boundary=X1"), &cell[0]);
+    if rc != 0 { panic(55001); };
+    if cell[0] == 0 { panic(55002); };
+    return cell[0];
+}
+
+@test "smoke1 sa_std_multipart_free"() {
+    let h = s1_body();
+    let rc = sla_std_multipart_free(^h);
+    if rc != 0 { panic(55010); };
+}
+
+@test "smoke1 sa_std_multipart_count"() {
+    let h = s1_body();
+    if sla_std_multipart_count(h) != 2 { panic(55020); };
+    sla_std_multipart_free(^h);
+}
+
+@test "smoke1 sa_std_multipart_part_name"() {
+    let h = s1_body();
+    let buf = [0u8; 128];
+    let olen = [0u64; 4];
+    let rc = sla_std_multipart_part_name(h, 0, &buf[0], 128, &olen[0]);
+    if rc != 0 { panic(55030); };
+    let s1bp1: ptr = PTR_BYTE_ADD(&buf, 0);
+    if s1_streq(s1bp1, olen[0], STR_PTR("field1"), STR_LEN("field1")) == false { panic(55031); };
+    let rc2 = sla_std_multipart_part_name(h, 1, &buf[0], 128, &olen[0]);
+    if rc2 != 0 { panic(55032); };
+    let s1bp2: ptr = PTR_BYTE_ADD(&buf, 0);
+    if s1_streq(s1bp2, olen[0], STR_PTR("file1"), STR_LEN("file1")) == false { panic(55033); };
+    sla_std_multipart_free(^h);
+}
+
+@test "smoke1 sa_std_multipart_part_filename"() {
+    let h = s1_body();
+    let buf = [0u8; 128];
+    let olen = [0u64; 4];
+    let rc = sla_std_multipart_part_filename(h, 1, &buf[0], 128, &olen[0]);
+    if rc != 0 { panic(55040); };
+    let s1bp3: ptr = PTR_BYTE_ADD(&buf, 0);
+    if s1_streq(s1bp3, olen[0], STR_PTR("a.txt"), STR_LEN("a.txt")) == false { panic(55041); };
+    sla_std_multipart_free(^h);
+}
+
+@test "smoke1 sa_std_multipart_part_content_type"() {
+    let h = s1_body();
+    let buf = [0u8; 128];
+    let olen = [0u64; 4];
+    let rc = sla_std_multipart_part_content_type(h, 1, &buf[0], 128, &olen[0]);
+    if rc != 0 { panic(55050); };
+    let s1bp4: ptr = PTR_BYTE_ADD(&buf, 0);
+    if s1_streq(s1bp4, olen[0], STR_PTR("text/plain"), STR_LEN("text/plain")) == false { panic(55051); };
+    sla_std_multipart_free(^h);
+}
+
+@test "smoke1 sa_std_multipart_part_header"() {
+    let h = s1_body();
+    let buf = [0u8; 256];
+    let olen = [0u64; 4];
+    let rc = sla_std_multipart_part_header(h, 1, STR_PTR("Content-Type"), STR_LEN("Content-Type"), &buf[0], 256, &olen[0]);
+    if rc != 0 { panic(55060); };
+    if olen[0] == 0 { panic(55061); };
+    let s1bp5: ptr = PTR_BYTE_ADD(&buf, 0);
+    if s1_contains(s1bp5, olen[0], STR_PTR("text/plain"), STR_LEN("text/plain")) == false { panic(55062); };
+    sla_std_multipart_free(^h);
+}
+
+@test "smoke1 sa_std_multipart_part_body"() {
+    let h = s1_body();
+    let p = [0u64; 4];
+    let l = [0u64; 4];
+    let rc = sla_std_multipart_part_body(h, 0, &p[0], &l[0]);
+    if rc != 0 { panic(55070); };
+    if s1_streq((p[0] as ptr), l[0], STR_PTR("value1"), STR_LEN("value1")) == false { panic(55071); };
+    let rc2 = sla_std_multipart_part_body(h, 1, &p[0], &l[0]);
+    if rc2 != 0 { panic(55072); };
+    if s1_streq((p[0] as ptr), l[0], STR_PTR("hello"), STR_LEN("hello")) == false { panic(55073); };
+    sla_std_multipart_free(^h);
+}
+
+fn s1_builder(code: i32) -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_std_multipart_builder_new(&cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+@test "smoke1 sa_std_multipart_builder_free"() {
+    let b = s1_builder(55080);
+    let rc = sla_std_multipart_builder_free(^b);
+    if rc != 0 { panic(55082); };
+}
+
+@test "smoke1 sa_std_multipart_builder_add_field"() {
+    let b = s1_builder(55090);
+    let rc = sla_std_multipart_builder_add_field(b, STR_PTR("f1"), STR_LEN("f1"), STR_PTR("v1"), STR_LEN("v1"));
+    if rc != 0 { panic(55091); };
+    let out = [0u64; 4];
+    let rc2 = sla_std_multipart_builder_finish(b, &out[0]);
+    if rc2 != 0 { panic(55092); };
+    if sla_std_multipart_buffer_len(out[0]) == 0 { panic(55093); };
+    sla_std_multipart_buffer_free(^out[0]);
+}
+
+@test "smoke1 sa_std_multipart_builder_add_file"() {
+    let b = s1_builder(55100);
+    let rc = sla_std_multipart_builder_add_file(b, STR_PTR("file1"), STR_LEN("file1"), STR_PTR("a.txt"), STR_LEN("a.txt"), STR_PTR("text/plain"), STR_LEN("text/plain"), STR_PTR("hello"), STR_LEN("hello"));
+    if rc != 0 { panic(55101); };
+    let out = [0u64; 4];
+    sla_std_multipart_builder_finish(b, &out[0]);
+    if sla_std_multipart_buffer_len(out[0]) == 0 { panic(55102); };
+    sla_std_multipart_buffer_free(^out[0]);
+}
+
+@test "smoke1 sa_std_multipart_builder_boundary"() {
+    let b = s1_builder(55110);
+    let buf = [0u8; 128];
+    let olen = [0u64; 4];
+    let rc = sla_std_multipart_builder_boundary(b, &buf[0], 128, &olen[0]);
+    if rc != 0 { panic(55111); };
+    if olen[0] == 0 { panic(55112); };
+    sla_std_multipart_builder_free(^b);
+}
+
+@test "smoke1 sa_std_multipart_builder_content_type"() {
+    let b = s1_builder(55120);
+    let buf = [0u8; 256];
+    let olen = [0u64; 4];
+    let rc = sla_std_multipart_builder_content_type(b, &buf[0], 256, &olen[0]);
+    if rc != 0 { panic(55121); };
+    let s1bp6: ptr = PTR_BYTE_ADD(&buf, 0);
+    if s1_contains(s1bp6, olen[0], STR_PTR("multipart/form-data"), STR_LEN("multipart/form-data")) == false { panic(55122); };
+    sla_std_multipart_builder_free(^b);
+}
+
+@test "smoke1 sa_std_multipart_builder_finish"() {
+    let b = s1_builder(55130);
+    sla_std_multipart_builder_add_field(b, STR_PTR("f1"), STR_LEN("f1"), STR_PTR("v1"), STR_LEN("v1"));
+    let out = [0u64; 4];
+    let rc = sla_std_multipart_builder_finish(b, &out[0]);
+    if rc != 0 { panic(55131); };
+    if out[0] == 0 { panic(55132); };
+    if sla_std_multipart_buffer_len(out[0]) == 0 { panic(55133); };
+    sla_std_multipart_buffer_free(^out[0]);
+}
+
+@test "smoke1 sa_std_multipart_buffer_len"() {
+    let b = s1_builder(55140);
+    sla_std_multipart_builder_add_field(b, STR_PTR("f1"), STR_LEN("f1"), STR_PTR("v1"), STR_LEN("v1"));
+    let out = [0u64; 4];
+    sla_std_multipart_builder_finish(b, &out[0]);
+    let n = sla_std_multipart_buffer_len(out[0]);
+    if n < 40 { panic(55141); };
+    sla_std_multipart_buffer_free(^out[0]);
+}
+
+@test "smoke1 sa_std_multipart_buffer_free"() {
+    let b = s1_builder(55150);
+    sla_std_multipart_builder_add_field(b, STR_PTR("f1"), STR_LEN("f1"), STR_PTR("v1"), STR_LEN("v1"));
+    let out = [0u64; 4];
+    sla_std_multipart_builder_finish(b, &out[0]);
+    let rc = sla_std_multipart_buffer_free(^out[0]);
+    if rc != 0 { panic(55151); };
+}

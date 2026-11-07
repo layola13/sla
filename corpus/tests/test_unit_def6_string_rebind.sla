@@ -1,0 +1,84 @@
+// DEF-6 regression corpus: plain owned-String rebind in the SA-text
+// backend. `u = format("mol")` on an existing String binding used to
+// lower through a `store u+0, ^tmp` idiom that writes the new handle
+// into the OLD String object's first word instead of rebinding the
+// variable — the binding keeps reading the old object's length (and
+// the new object leaks/corrupts). SAB was always correct. No borrow,
+// field access, or branch-merge state is involved in the straight-line
+// shape; the branch shape additionally crosses a control-flow join.
+// Sibling shapes (Vec rebind, repeated rebind, rebind-then-read of
+// the displaced value's sibling binding) are mapped in the same file.
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+fn straight_len() -> u64 {
+    let u = format("kg");
+    u = format("mol");
+    return STR_LEN(u) as u64;
+}
+
+@test "def6 string straight-line rebind"() {
+    if straight_len() != 3 { panic(1801); };
+}
+
+fn branch_len(c: bool) -> u64 {
+    let u = format("kg");
+    if c { u = format("mol"); };
+    return STR_LEN(u) as u64;
+}
+
+@test "def6 string rebind across branch merge"() {
+    if branch_len(false) != 2 { panic(1802); };
+    if branch_len(true) != 3 { panic(1803); };
+}
+
+fn chain_len() -> u64 {
+    let u = format("kg");
+    u = format("mol");
+    u = format("g");
+    return STR_LEN(u) as u64;
+}
+
+@test "def6 string repeated rebind chain"() {
+    if chain_len() != 1 { panic(1804); };
+}
+
+fn rebind_keeps_other() -> u64 {
+    let keep = format("ampere");
+    let u = format("kg");
+    u = format("mol");
+    return (STR_LEN(keep) + STR_LEN(u)) as u64;
+}
+
+@test "def6 string rebind does not disturb sibling binding"() {
+    if rebind_keeps_other() != 9 { panic(1805); };
+}
+
+fn vec_rebind_len() -> u64 {
+    let v: Vec<u8> = Vec::new();
+    v.push(1);
+    v.push(2);
+    let w: Vec<u8> = Vec::new();
+    w.push(7);
+    w.push(8);
+    w.push(9);
+    v = w;
+    return len(v) as u64;
+}
+
+@test "def6 vec rebind"() {
+    if vec_rebind_len() != 3 { panic(1806); };
+}
+
+fn branch_rebind_content(c: bool) -> u64 {
+    let u = format("kg");
+    if c { u = format("mol"); };
+    let b = u.as_bytes();
+    return (b[0] as u64) * 1000 + (STR_LEN(u) as u64);
+}
+
+@test "def6 string rebind reads new content"() {
+    // 'k' = 107, 'm' = 109.
+    if branch_rebind_content(false) != 107002 { panic(1807); };
+    if branch_rebind_content(true) != 109003 { panic(1808); };
+}

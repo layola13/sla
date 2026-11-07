@@ -1,0 +1,5 @@
+@export private_seed() -> i32:
+L_ENTRY:
+    value = add 3, 0
+    !value
+    return 3

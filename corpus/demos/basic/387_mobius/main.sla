@@ -1,0 +1,35 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 莫比乌斯函数 μ（μ(6)=1，μ(30)=-1，μ(12)=0）。
+// 意对标 386 去重计数的符号版（386 互补）。
+
+fn mobius(n: int) -> int {
+    if n == 1 { return 1; };
+    let c = 0;
+    let m = n;
+    let d = 2;
+    while d * d <= m {
+        if m % d == 0 {
+            c = c + 1;
+            m = m / d;
+            if m % d == 0 { return 0; };
+        };
+        d = d + 1;
+    }
+    if m > 1 { c = c + 1; };
+    if c % 2 == 0 { return 1; };
+    return 0 - 1;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", mobius(1), mobius(6), mobius(30), mobius(12));
+    return 0;
+}
+
+@test "basic 387 mobius"() {
+    if mobius(1) != 1 { panic(38701); };
+    if mobius(6) != 1 { panic(38702); };
+    if mobius(30) != 0 - 1 { panic(38703); };
+    if mobius(12) != 0 { panic(38704); };
+}

@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1011_arr_param_twice 的定长改写（true）。
+// 原用例两次传不同长度数组（SLA 定长类型下不可表达，见 #1），
+// 此处取单次等长传参：f64 数组形参求和（与 116 的 i32 版互补）。
+
+fn fsum(a: [f64; 3]) -> f64 {
+    return a[0] + a[1] + a[2];
+}
+
+fn main() -> i32 {
+    let a = [1.5, 2.5, 3.0];
+    println("{}", fsum(a) == 7.0);
+    return 0;
+}
+
+@test "basic 194 f64 param"() {
+    let a = [1.5, 2.5, 3.0];
+    if fsum(a) != 7.0 { panic(19401); };
+}

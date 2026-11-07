@@ -1,0 +1,85 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 有序 Bell 双实现对峙：二项递推 vs 加权和（n=6：4683 对 4683；n=7：47293 对 47293）。
+// 加权和 F(n)=sum k!S(n,k)（n=7：1+126+1806+8400+16800+15120+5040=47293）。
+// 意对标 736_fub7 × 加权和版（两源单实现见各源；591 体例续高位）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn fub(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let k = 0;
+    while k <= n - 1 {
+        s = s + binom_mul(n, k) * fub(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn fact(n: int) -> int {
+    let r = 1;
+    let i = 1;
+    while i <= n {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn svt(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + nn * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn fubw(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + fact(k) * svt(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", fub(6), fubw(6), fub(7), fubw(7));
+    return 0;
+}
+
+@test "basic 739 duel fub7"() {
+    if fub(6) != 4683 { panic(73901); };
+    if fubw(6) != 4683 { panic(73902); };
+    if fub(7) != 47293 { panic(73903); };
+    if fubw(7) != 47293 { panic(73904); };
+}

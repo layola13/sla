@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn mod_layout_injected_field_count() -> i32 { let injected_layout_field = 1; return injected_layout_field; }
+fn main() -> i32 { let result = mod_layout_injected_field_count(); println("{}", result); return result; }
+@test "rosetta 229 mod layout injection"() { let got = mod_layout_injected_field_count(); if got != 1 { panic(229); }; }

@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+enum State {
+    Idle,
+    Running,
+    Done,
+}
+
+fn main() -> i32 {
+    let state = State::Done;
+    match state {
+        State::Idle => {
+            println("0");
+        },
+        State::Running => {
+            println("1");
+        },
+        State::Done => {
+            println("2");
+        },
+    };
+    return 0;
+}
+
+@test "rosetta 056 state machine"() {
+    let state = State::Done;
+    let code = match state {
+        State::Idle => { 0 },
+        State::Running => { 1 },
+        State::Done => { 2 },
+    };
+    if code != 2 {
+        panic(56);
+    };
+}

@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_exported_const_count() -> i32 {
+    let abi_version_const = 1;
+    return abi_version_const;
+}
+
+fn main() -> i32 {
+    let result = contract_exported_const_count();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 250 contract const export"() {
+    let got = contract_exported_const_count();
+    if got != 1 { panic(250); };
+}

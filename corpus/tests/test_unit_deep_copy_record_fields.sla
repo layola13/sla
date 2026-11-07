@@ -1,0 +1,49 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+
+// DEF-deep-copy: the record copy routine (preserved by-value call
+// arguments) clones residual field types instead of handle-copying
+// them — array fields clone element-wise and tuple fields clone like
+// structs. Detectors mutate through the copy and require the source
+// to stay put. Box/Rc field shapes are covered by the line's
+// text-route probes: on the SAB backend those round-trip shapes fail
+// with UnsupportedSabDirectFeature on the pristine plugin already
+// (no deref involved), a pre-existing coverage gap.
+
+struct ArrDeep { vs: [Vec<u8>; 2], n: i32 }
+
+fn ida(x: ArrDeep) -> ArrDeep {
+    return x;
+}
+
+@test "deep copy record array field elements are cloned"() {
+    let v0: Vec<u8> = Vec::new();
+    v0.push(200 as u8);
+    let v1: Vec<u8> = Vec::new();
+    v1.push(201 as u8);
+    let a: ArrDeep = ArrDeep { vs: [v0, v1], n: 300 };
+    let b: ArrDeep = ida(a);
+    b.vs[0].push(202 as u8);
+    if a.vs[0].len() != 1 { panic(2961); };
+    if b.vs[0].len() != 2 { panic(2962); };
+    if a.vs[1].len() != 1 { panic(2963); };
+}
+
+struct TupDeep { t: (Vec<u8>, i32), n: i32 }
+
+fn idt(x: TupDeep) -> TupDeep {
+    return x;
+}
+
+@test "deep copy record tuple field is cloned"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(200 as u8);
+    v.push(201 as u8);
+    let a: TupDeep = TupDeep { t: (v, 5), n: 300 };
+    let b: TupDeep = idt(a);
+    b.t.0.push(202 as u8);
+    if a.t.0.len() != 2 { panic(2964); };
+    if b.t.0.len() != 3 { panic(2965); };
+    if b.t.1 != 5 { panic(2966); };
+}

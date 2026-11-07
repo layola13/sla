@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 三层嵌套写（87 为双层版：42）。
+// 穿透赋值 + 回读（195/224 为读版，此处为写版）。
+
+struct L3 { v: i32 }
+struct L2 { mid: L3 }
+struct L1 { top: L2 }
+
+fn main() -> i32 {
+    let o = L1 { top: L2 { mid: L3 { v: 1 } } };
+    o.top.mid.v = 42;
+    println("{}", o.top.mid.v);
+    return 0;
+}
+
+@test "basic 270 deep write"() {
+    let o = L1 { top: L2 { mid: L3 { v: 1 } } };
+    o.top.mid.v = 42;
+    if o.top.mid.v != 42 { panic(27001); };
+}

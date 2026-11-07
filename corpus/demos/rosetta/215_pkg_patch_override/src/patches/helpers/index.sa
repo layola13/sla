@@ -1,0 +1,7 @@
+@import "src/patches/helpers/patch.sal"
+@import "src/patches/helpers/override.sa"
+
+@patches_helper_value() -> i32:
+L_ENTRY:
+    value = call @override_patch_value()
+    return value

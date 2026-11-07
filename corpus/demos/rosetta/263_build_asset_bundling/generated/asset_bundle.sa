@@ -1,0 +1,6 @@
+// Generated from bundle/manifest.toml and assets/text/*.txt.
+@asset_bundle_value() -> i32:
+L_ENTRY:
+    value = add 262, 1
+    !value
+    return 263

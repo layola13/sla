@@ -1,0 +1,83 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/future.sa"
+@import "sa_std/core/waker.sa"
+@import "sa_std/pin.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/sync/mutex.sa"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/result.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/time.sla"
+
+// Rosetta 315: async task pool across OS threads.
+// Each async fn call yields a future value that can be moved into a thread
+// closure; the worker drives it to completion with loop-block_on while its
+// .await points suspend (future::defer_ready) and resume. Results come back
+// through Arc<Mutex<i32>>; main joins both workers and adds a local drive.
+
+fn pool_now_ns() -> u64 {
+    let started = Instant::now();
+    return started.raw_ns();
+}
+
+async fn job(x: i32) -> i32 {
+    let v = future::defer_ready(x).await;
+    let w = future::defer_ready(v * 10).await;
+    return w;
+}
+
+fn drive_job(x: i32) -> i32 {
+    let t = task::new(job(x));
+    let deadline = pool_now_ns() + 2000000000;
+    while pool_now_ns() < deadline {
+        if task::poll(t) == true {
+            return task::result(t);
+        };
+        THREAD_SLEEP_MS(1);
+    }
+    panic(315);
+}
+
+fn get_cell(c: Arc<Mutex<i32> >) -> i32 {
+    let g = (*c).lock().unwrap();
+    return *g;
+}
+
+fn pool_worker(x: i32, out: Arc<Mutex<i32> >) {
+    let r = drive_job(x);
+    let g = (*out).lock().unwrap();
+    *g = r;
+}
+
+fn thread_pool_await_total() -> i32 {
+    let c1: Arc<Mutex<i32> > = Arc::new(Mutex::new(0));
+    let c2: Arc<Mutex<i32> > = Arc::new(Mutex::new(0));
+
+    let w_c1 = c1.clone();
+    let h1 = thread::spawn(^|| pool_worker(1, w_c1));
+    let w_c2 = c2.clone();
+    let h2 = thread::spawn(^|| pool_worker(2, w_c2));
+
+    // main drives its own job concurrently
+    let local = drive_job(3);
+
+    h1.join().unwrap();
+    h2.join().unwrap();
+
+    return get_cell(c1) + get_cell(c2) + local;
+}
+
+fn main() -> i32 {
+    let result = thread_pool_await_total();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 315 315_async_thread_pool"() {
+    let got = thread_pool_await_total();
+    if got != 10 + 20 + 30 {
+        panic(315);
+    };
+};

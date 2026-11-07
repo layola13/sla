@@ -1,0 +1,47 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1053_deep_break：三层嵌套 break（40）。
+// 32 覆盖单层 break，此处为三层 + 内外双条件（k==2 内断，j==3 外断）；
+// label 不支持（#9），内外断均用裸 break（语义与 TS 一致）。
+
+fn main() -> i32 {
+    let t = 0;
+    let i = 0;
+    while i < 5 {
+        let j = 0;
+        while j < 5 {
+            let k = 0;
+            while k < 5 {
+                if k == 2 { break; };
+                t = t + 1;
+                k = k + 1;
+            }
+            if j == 3 { break; };
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 161 deep break"() {
+    let t = 0;
+    let i = 0;
+    while i < 5 {
+        let j = 0;
+        while j < 5 {
+            let k = 0;
+            while k < 5 {
+                if k == 2 { break; };
+                t = t + 1;
+                k = k + 1;
+            }
+            if j == 3 { break; };
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    if t != 40 { panic(16101); };
+}

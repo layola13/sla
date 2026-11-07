@@ -1,0 +1,11 @@
+@import "src/helpers/index.sa"
+@import "src/../build/generated/index.sa"
+
+@src_package_value() -> i32:
+L_ENTRY:
+    base = call @src_helper_value()
+    artifact = call @generated_artifact_offset()
+    value = add base, artifact
+    !base
+    !artifact
+    return value

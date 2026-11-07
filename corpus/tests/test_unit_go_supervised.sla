@@ -1,0 +1,126 @@
+// Goroutine syntax batch P4: supervised spawn, trap readback,
+// and the std supervisor. Trap sources are runtime traps:
+// close-of-closed is code 4, send-on-closed is code 1.
+
+@import "sa_std/globals.sai"
+@import "sa_std/task.sai"
+@import "sa_std/string.sai"
+@import "sa_std/ptr.sa"
+@import "sa_std/supervisor.sla"
+
+fn sup_clean_worker(arg: u64) {
+    let out: u64 = 0;
+    let rc = sa_global_u64_add("sup_ctr", 8, 5, &out);
+    if rc != 0 { panic(9701); };
+}
+
+@test "go supervised spawn joins ok on clean exit"() {
+    let rc0 = sa_global_u64_set("sup_ctr", 8, 0);
+    if rc0 != 0 { panic(9702); };
+    let h = go supervised sup_clean_worker(0);
+    let status = sa_task_join(h);
+    if status != 0 { panic(9703); };
+    let v: u64 = 0;
+    let rc = sa_global_u64_get("sup_ctr", 8, &v);
+    if rc != 0 { panic(9704); };
+    if v != 5 { panic(9705); };
+}
+
+fn sup_trap_worker(arg: u64) {
+    let ch: Chan<u64> = Chan::new(0);
+    ch.close();
+    ch.close();
+}
+
+@test "supervised trap is held and read back via trap_info"() {
+    let h = go supervised sup_trap_worker(0);
+    let status = sa_task_join(h);
+    if status != 100 { panic(9710); };
+    // Held: a second join reports the trap again.
+    let status2 = sa_task_join(h);
+    if status2 != 100 { panic(9711); };
+    let code: i32 = 0;
+    let msg_ptr: ptr = PTR_NULL();
+    let msg_len: u64 = 0;
+    let irc = sa_task_trap_info(h, &code, &msg_ptr, &msg_len);
+    if irc != 0 { panic(9712); };
+    if code != 4 { panic(9713); };
+    if msg_len != 23 { panic(9714); };
+    // Byte-content readback via the string.sai codepoint surface
+    // (sa_mem_copy is an SA-level std function and is not callable
+    // from SLA source; the message is "close of closed channel").
+    let cp0: i32 = 0;
+    let cl0: u64 = 0;
+    let crc0 = sa_str_utf8_char_at_byte(msg_ptr, msg_len, 0, &cp0, &cl0);
+    if crc0 != 0 { panic(9715); };
+    if cp0 != 99 { panic(9715); };
+    let cp6: i32 = 0;
+    let cl6: u64 = 0;
+    let crc6 = sa_str_utf8_char_at_byte(msg_ptr, msg_len, 6, &cp6, &cl6);
+    if crc6 != 0 { panic(9716); };
+    if cp6 != 111 { panic(9716); };
+    // Consumed: the handle is invalid now.
+    let code2: i32 = 0;
+    let p2: ptr = PTR_NULL();
+    let l2: u64 = 0;
+    let irc2 = sa_task_trap_info(h, &code2, &p2, &l2);
+    if irc2 == 0 { panic(9717); };
+}
+
+fn sup_flaky_worker(arg: u64) {
+    let n: u64 = 0;
+    let rc = sa_global_u64_add("sup_attempts", 8, 1, &n);
+    if rc != 0 { panic(9720); };
+    if n <= 2 {
+        let ch: Chan<u64> = Chan::new(0);
+        ch.close();
+        ch.close();
+    };
+    let out: u64 = 0;
+    let rc2 = sa_global_u64_add("sup_done", 8, 100, &out);
+    if rc2 != 0 { panic(9721); };
+}
+
+@test "supervise restarts a trapping child until it succeeds"() {
+    let r0 = sa_global_u64_set("sup_attempts", 8, 0);
+    if r0 != 0 { panic(9722); };
+    let r1 = sa_global_u64_set("sup_done", 8, 0);
+    if r1 != 0 { panic(9723); };
+    let notify: Chan<(u64, i32)> = Chan::new(8);
+    let policy = supervise_policy(3, 60000);
+    let result = supervise(sup_flaky_worker, 0, policy, notify);
+    if result != 0 { panic(9724); };
+    let (m1, ok1) = notify.recv();
+    if m1.1 != 4 { panic(9725); };
+    let (m2, ok2) = notify.recv();
+    if m2.1 != 4 { panic(9726); };
+    let (m3, ok3) = notify.recv();
+    if m3.1 != 0 { panic(9727); };
+    if m1.0 == m2.0 { panic(9728); };
+    let done_v: u64 = 0;
+    let rc = sa_global_u64_get("sup_done", 8, &done_v);
+    if rc != 0 { panic(9729); };
+    if done_v != 100 { panic(9730); };
+    notify.destroy();
+}
+
+fn sup_doomed_worker(arg: u64) {
+    let ch: Chan<u64> = Chan::new(0);
+    ch.close();
+    ch.close();
+}
+
+@test "supervise gives up after the restart budget"() {
+    let notify: Chan<(u64, i32)> = Chan::new(8);
+    let policy = supervise_policy(1, 60000);
+    let result = supervise(sup_doomed_worker, 0, policy, notify);
+    if result != 100 { panic(9740); };
+    let (m1, ok1) = notify.recv();
+    if m1.1 != 4 { panic(9741); };
+    let (m2, ok2) = notify.recv();
+    if m2.1 != 4 { panic(9742); };
+    let (m3, ok3) = notify.recv();
+    if m3.1 != -1 { panic(9743); };
+    if m3.0 != m2.0 { panic(9744); };
+    notify.destroy();
+}

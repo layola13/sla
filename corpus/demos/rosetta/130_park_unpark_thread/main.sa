@@ -1,0 +1,151 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_publish_thread = vtable { call = @sla__publish_thread }
+@const SLA_FNPTR_VT_park_thread = vtable { call = @sla__park_thread }
+@const SLA_FNPTR_VT_unpark_thread = vtable { call = @sla__unpark_thread }
+@const SLA_FNPTR_VT_resume_after_unpark = vtable { call = @sla__resume_after_unpark }
+@const SLA_FNPTR_VT_park_unpark_result = vtable { call = @sla__park_unpark_result }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__publish_thread() -> ptr:
+L_ENTRY:
+    tmp_0 = alloc 3
+    tmp_1 = 1
+    store tmp_0+0, tmp_1 as u8
+    tmp_2 = 0
+    store tmp_0+1, tmp_2 as u8
+    tmp_3 = 0
+    store tmp_0+2, tmp_3 as u8
+    return tmp_0
+
+@sla__park_thread(state: ptr) -> ptr:
+L_ENTRY:
+    tmp_4 = alloc 3
+    tmp_5 = load state+0 as u8
+    store tmp_4+0, tmp_5 as u8
+    tmp_6 = 1
+    store tmp_4+1, tmp_6 as u8
+    tmp_7 = load state+2 as u8
+    store tmp_4+2, tmp_7 as u8
+    !state
+    return tmp_4
+
+@sla__unpark_thread(state: ptr) -> ptr:
+L_ENTRY:
+    tmp_8 = alloc 3
+    tmp_9 = load state+0 as u8
+    store tmp_8+0, tmp_9 as u8
+    tmp_10 = load state+1 as u8
+    store tmp_8+1, tmp_10 as u8
+    tmp_11 = 1
+    store tmp_8+2, tmp_11 as u8
+    !state
+    return tmp_8
+
+@sla__resume_after_unpark(state: ptr) -> i32:
+L_ENTRY:
+    tmp_12 = load state+0 as u8
+    tmp_13 = 1
+    tmp_14 = eq tmp_12, tmp_13
+    !tmp_12
+    !tmp_13
+    br tmp_14 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_14
+    tmp_15 = load state+1 as u8
+    tmp_16 = 1
+    tmp_17 = eq tmp_15, tmp_16
+    !tmp_15
+    !tmp_16
+    br tmp_17 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_17
+    tmp_18 = load state+2 as u8
+    tmp_19 = 1
+    tmp_20 = eq tmp_18, tmp_19
+    !tmp_18
+    !tmp_19
+    br tmp_20 -> L_THEN_6, L_ELSE_7
+
+L_THEN_6:
+    !tmp_20
+    tmp_21 = 1
+    !state
+    return tmp_21
+
+L_ELSE_7:
+    !tmp_20
+    tmp_22 = 0
+    !state
+    return tmp_22
+
+
+L_ELSE_4:
+    !tmp_17
+    tmp_24 = 0
+    !state
+    return tmp_24
+
+
+L_ELSE_1:
+    !tmp_14
+    tmp_26 = 0
+    !state
+    return tmp_26
+
+
+@sla__park_unpark_result() -> i32:
+L_ENTRY:
+    tmp_28 = call @sla__publish_thread()
+    published = tmp_28
+    tmp_29 = call @sla__park_thread(published)
+    parked = tmp_29
+    tmp_30 = call @sla__unpark_thread(parked)
+    unparked = tmp_30
+    tmp_31 = call @sla__resume_after_unpark(unparked)
+    !published
+    !parked
+    return tmp_31
+
+@main() -> i32:
+L_ENTRY:
+    tmp_32 = call @sla__park_unpark_result()
+    result = tmp_32
+    tmp_33 = call @sa_fmt_u64(result, 10)
+    tmp_34 = call @sa_fmt_buffer_data(tmp_33)
+    tmp_35 = call @sa_fmt_buffer_len(tmp_33)
+    tmp_36 = tmp_34
+    call @sa_print_bytes(&tmp_36, tmp_35)
+    call @sa_fmt_buffer_free(^tmp_33)
+    !tmp_36
+    !tmp_35
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 130 130_park_unpark_thread"():
+L_TEST_ENTRY_9:
+    tmp_37 = call @sla__park_unpark_result()
+    got = tmp_37
+    tmp_38 = 1
+    tmp_39 = ne got, tmp_38
+    !tmp_38
+    br tmp_39 -> L_THEN_10, L_ELSE_11
+
+L_THEN_10:
+    !tmp_39
+    panic(130)
+
+L_ELSE_11:
+    !tmp_39
+    jmp L_MERGE_12
+
+L_MERGE_12:
+    !got
+    return
+

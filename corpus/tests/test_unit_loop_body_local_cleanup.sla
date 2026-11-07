@@ -1,0 +1,87 @@
+fn loop_body_local_cleanup(limit: int) -> int {
+    let i = 0;
+    while i < limit {
+        let c = i;
+        if c == 0 {
+            i = i + 1;
+        } else {
+            if c == 1 {
+                i = i + 1;
+            } else {
+                break;
+            };
+        };
+    }
+    return i;
+}
+
+fn sequential_loop_local_cleanup(limit: int) -> int {
+    let first = 0;
+    while first < limit {
+        let c = first;
+        if c == 0 {
+            first = first + 1;
+        } else {
+            break;
+        };
+    }
+
+    let second = 0;
+    while second < limit {
+        let c = second;
+        if c == 0 {
+            second = second + 1;
+        } else {
+            break;
+        };
+    }
+    return first + second;
+}
+
+fn loop_local_scalar_break_cleanup(limit: int) -> int {
+    let i = 0;
+    while i < limit {
+        let next = i;
+        if i == 0 {
+            next = i + 1;
+        } else {
+            if i == 1 {
+                next = i + 2;
+            } else {
+                break;
+            };
+        };
+        if next == i { break; };
+        i = next;
+    }
+    return i;
+}
+
+fn loop_local_scalar_backedge_assignment(limit: int) -> int {
+    let i = limit;
+    while i > 0 {
+        let next = i - 1;
+        i = next;
+    }
+    return i;
+}
+
+@test "while body locals are cleaned before natural loop backedge"() {
+    let got = loop_body_local_cleanup(5);
+    if got != 2 { panic(43001); };
+}
+
+@test "sequential while locals with the same source name stay distinct"() {
+    let got = sequential_loop_local_cleanup(3);
+    if got != 2 { panic(43002); };
+}
+
+@test "while scalar local cleaned consistently across break and backedge"() {
+    let got = loop_local_scalar_break_cleanup(5);
+    if got != 3 { panic(43003); };
+}
+
+@test "while scalar assignment rhs is cleaned once on backedge"() {
+    let got = loop_local_scalar_backedge_assignment(5);
+    if got != 0 { panic(43004); };
+}

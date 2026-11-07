@@ -1,0 +1,14 @@
+// expect: ExpectedDeclaration
+// J-1 guard: registration is load-bearing. Without a preceding
+// `@sublanguage shader;`, a `shader` declaration is not recognised
+// at all — this file must keep failing with ExpectedDeclaration on
+// both the baseline and the J-1 build. Judged by standalone
+// `sla check` (see plugin_tests.zig registration).
+
+shader Base {
+    priority 0;
+}
+
+fn f() -> i64 {
+    return 0;
+}

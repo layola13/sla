@@ -1,0 +1,6 @@
+// expect: InvalidCharacter
+// neg: integer literal with unknown suffix 5zz
+fn main() -> i32 {
+    let x = 5zz;
+    return 0;
+}

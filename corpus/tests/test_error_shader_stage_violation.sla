@@ -1,0 +1,15 @@
+// expect: ShaderStageViolation
+// J-1 negative (stage rules, DESIGN.md 6.2): an @input may only be
+// read in the vertex stage. Reading `position` in the fragment
+// stage is ShaderStageViolation. Judged by standalone `sla check`
+// (see plugin_tests.zig registration); the legal control is
+// tests/test_unit_sublanguage_shader.sla checking clean.
+
+@sublanguage shader;
+
+shader Bad {
+    @input position: vec3;
+    fragment {
+        frag_color = vec4(position, 1.0);
+    }
+}

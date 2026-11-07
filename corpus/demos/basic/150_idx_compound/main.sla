@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 908_arr_compound + 940_compound_var_idx：下标复合赋值（6,13）。
+// 下标作复合赋值目标双后端正常（字面量下标 + 变量下标双覆盖；
+// 字段目标见 #12，`<<=` 等无 token 见 119）。
+
+fn main() -> i32 {
+    let a: [i32; 3] = [1, 2, 3];
+    a[0] += 5;
+    let k = 2;
+    a[k] += 10;
+    println("{},{}", a[0], a[2]);
+    return 0;
+}
+
+@test "basic 150 idx compound"() {
+    let a: [i32; 3] = [1, 2, 3];
+    a[0] += 5;
+    if a[0] != 6 { panic(15001); };
+    let k = 2;
+    a[k] += 10;
+    if a[2] != 13 { panic(15002); };
+    if a[1] != 2 { panic(15003); };
+}

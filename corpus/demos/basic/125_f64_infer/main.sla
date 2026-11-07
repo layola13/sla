@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 311_float_infer：f64 类型推断 + 混合运算比较（1）。
+// 无注解浮点字面量即 `f64`（与 90/108/109/110 同口径）。
+
+fn main() -> i32 {
+    let a = 1.5;
+    let b = -2.5;
+    b = b + a;
+    let r = 0;
+    if b > -2.0 { r = 1; };
+    println("{}", r);
+    return 0;
+}
+
+@test "basic 125 f64 infer"() {
+    let a = 1.5;
+    let b = -2.5;
+    b = b + a;
+    if b != -1.0 { panic(12501); };
+    if b > -2.0 { } else { panic(12502); };
+}

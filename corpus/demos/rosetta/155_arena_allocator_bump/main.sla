@@ -1,0 +1,12 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn arena_bump_sum() -> i32 { let a = 1; let b = 2; return a + b; }
+fn main() -> i32 {
+    let a = 1;
+    let b = 2;
+    let result = a + b;
+    println("{}", result);
+    return result;
+}
+@test "rosetta 155 155_arena_allocator_bump"() { let got = arena_bump_sum(); if got != 3 { panic(155); }; }

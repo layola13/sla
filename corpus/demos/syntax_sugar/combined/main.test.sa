@@ -1,0 +1,381 @@
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@import "sa_std/cmp.sa"
+@const SLA_FNPTR_VT_ordering_value = vtable { call = @sla__ordering_value }
+@const SLA_FNPTR_VT_score_math__add_bonus = vtable { call = @sla__score_math__add_bonus }
+@const SLA_FNPTR_VT_score_math__double = vtable { call = @sla__score_math__double }
+@const SLA_FNPTR_VT_entity_math__add_delta = vtable { call = @sla__entity_math__add_delta }
+@const SLA_FNPTR_VT_move_right = vtable { call = @sla__move_right }
+@sla__Ordering_less() -> ptr:
+L_ENTRY:
+    tmp_0 = alloc 8
+    tmp_1 = 0
+    tmp_2 = 1
+    tmp_3 = sub tmp_1, tmp_2
+    !tmp_1
+    !tmp_2
+    store tmp_0+0, tmp_3 as i64
+    !tmp_3
+    return tmp_0
+
+@sla__Ordering_equal() -> ptr:
+L_ENTRY:
+    tmp_4 = alloc 8
+    tmp_5 = 0
+    store tmp_4+0, tmp_5 as i64
+    !tmp_5
+    return tmp_4
+
+@sla__Ordering_greater() -> ptr:
+L_ENTRY:
+    tmp_6 = alloc 8
+    tmp_7 = 1
+    store tmp_6+0, tmp_7 as i64
+    !tmp_7
+    return tmp_6
+
+@sla__Ordering_is_lt(self: ptr) -> u8:
+L_ENTRY:
+    tmp_8 = load self+0 as i64
+    tmp_9 = 0
+    tmp_10 = 1
+    tmp_11 = sub tmp_9, tmp_10
+    !tmp_9
+    !tmp_10
+    tmp_12 = eq tmp_8, tmp_11
+    !tmp_8
+    !tmp_11
+    !self
+    return tmp_12
+
+@sla__Ordering_is_eq(self: ptr) -> u8:
+L_ENTRY:
+    tmp_13 = load self+0 as i64
+    tmp_14 = 0
+    tmp_15 = eq tmp_13, tmp_14
+    !tmp_13
+    !tmp_14
+    !self
+    return tmp_15
+
+@sla__Ordering_is_gt(self: ptr) -> u8:
+L_ENTRY:
+    tmp_16 = load self+0 as i64
+    tmp_17 = 1
+    tmp_18 = eq tmp_16, tmp_17
+    !tmp_16
+    !tmp_17
+    !self
+    return tmp_18
+
+@sla__Ordering_is_le(self: ptr) -> u8:
+L_ENTRY:
+    tmp_19 = load self+0 as i64
+    tmp_20 = 0
+    tmp_21 = sle tmp_19, tmp_20
+    !tmp_19
+    !tmp_20
+    !self
+    return tmp_21
+
+@sla__Ordering_is_ge(self: ptr) -> u8:
+L_ENTRY:
+    tmp_22 = load self+0 as i64
+    tmp_23 = 0
+    tmp_24 = sge tmp_22, tmp_23
+    !tmp_22
+    !tmp_23
+    !self
+    return tmp_24
+
+@sla__Ordering_reverse(self: ptr) -> ptr:
+L_ENTRY:
+    tmp_25 = load self+0 as i64
+    tmp_26 = 0
+    tmp_27 = slt tmp_25, tmp_26
+    !tmp_25
+    !tmp_26
+    br tmp_27 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_27
+    tmp_28 = call @sla__Ordering_greater()
+    !self
+    return tmp_28
+
+L_ELSE_1:
+    !tmp_27
+    jmp L_MERGE_2
+
+L_MERGE_2:
+    tmp_30 = load self+0 as i64
+    tmp_31 = 0
+    tmp_32 = sgt tmp_30, tmp_31
+    !tmp_30
+    !tmp_31
+    br tmp_32 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_32
+    tmp_33 = call @sla__Ordering_less()
+    !self
+    return tmp_33
+
+L_ELSE_4:
+    !tmp_32
+    jmp L_MERGE_5
+
+L_MERGE_5:
+    tmp_35 = call @sla__Ordering_equal()
+    !self
+    return tmp_35
+
+@sla__Ordering_then(self: ptr, other: ptr) -> ptr:
+L_ENTRY:
+    tmp_36 = load self+0 as i64
+    tmp_37 = 0
+    tmp_38 = eq tmp_36, tmp_37
+    !tmp_36
+    !tmp_37
+    br tmp_38 -> L_THEN_6, L_ELSE_7
+
+L_THEN_6:
+    !tmp_38
+    !self
+    return other
+
+L_ELSE_7:
+    !tmp_38
+    jmp L_MERGE_8
+
+L_MERGE_8:
+    !other
+    return self
+
+@sla__ordering_value(ordering: ptr) -> i64:
+L_ENTRY:
+    tmp_40 = load ordering+0 as i64
+    !ordering
+    return tmp_40
+
+@sla__score_math__add_bonus(value: i32, bonus: i32) -> i32:
+L_ENTRY:
+    tmp_41 = add value, bonus
+    return tmp_41
+
+@sla__score_math__double(value: i32) -> i32:
+L_ENTRY:
+    tmp_42 = add value, value
+    return tmp_42
+
+@sla__entity_math__add_delta(value: i32, delta: i32) -> i32:
+L_ENTRY:
+    tmp_43 = add value, delta
+    return tmp_43
+
+@sla__move_right(transform: ptr, dx: i32) -> ptr:
+L_ENTRY:
+    tmp_44 = alloc 12
+    tmp_45 = load transform+4 as i32
+    store tmp_44+4, tmp_45 as i32
+    tmp_46 = load transform+8 as i32
+    store tmp_44+8, tmp_46 as i32
+    tmp_47 = load transform+0 as i32
+    tmp_48 = call @sla__entity_math__add_delta(tmp_47, dx)
+    !tmp_47
+    store tmp_44+0, tmp_48 as i32
+    !tmp_48
+    !transform
+    return tmp_44
+
+@test "using struct update and spaceship compose"():
+L_TEST_ENTRY_9:
+    original = alloc 12
+    tmp_49 = 10
+    store original+0, tmp_49 as i32
+    !tmp_49
+    tmp_50 = 20
+    store original+4, tmp_50 as i32
+    !tmp_50
+    tmp_51 = 3
+    store original+8, tmp_51 as i32
+    !tmp_51
+    tmp_52 = 7
+    tmp_53 = call @sla__move_right(original, tmp_52)
+    !tmp_52
+    moved = tmp_53
+    tmp_54 = load moved+0 as i32
+    tmp_55 = 17
+    tmp_56 = ne tmp_54, tmp_55
+    !tmp_54
+    !tmp_55
+    br tmp_56 -> L_THEN_10, L_ELSE_11
+
+L_THEN_10:
+    !tmp_56
+    panic(34300)
+
+L_ELSE_11:
+    !tmp_56
+    jmp L_MERGE_12
+
+L_MERGE_12:
+    tmp_59 = load moved+4 as i32
+    tmp_60 = 20
+    tmp_61 = ne tmp_59, tmp_60
+    !tmp_59
+    !tmp_60
+    br tmp_61 -> L_THEN_13, L_ELSE_14
+
+L_THEN_13:
+    !tmp_61
+    panic(34301)
+
+L_ELSE_14:
+    !tmp_61
+    jmp L_MERGE_15
+
+L_MERGE_15:
+    tmp_64 = load moved+8 as i32
+    tmp_65 = 3
+    tmp_66 = ne tmp_64, tmp_65
+    !tmp_64
+    !tmp_65
+    br tmp_66 -> L_THEN_16, L_ELSE_17
+
+L_THEN_16:
+    !tmp_66
+    panic(34302)
+
+L_ELSE_17:
+    !tmp_66
+    jmp L_MERGE_18
+
+L_MERGE_18:
+    tmp_69 = load moved+0 as i32
+    tmp_70 = 5
+    tmp_71 = call @sla__score_math__add_bonus(tmp_69, tmp_70)
+    !tmp_69
+    !tmp_70
+    tmp_72 = call @sla__score_math__double(tmp_71)
+    !tmp_71
+    chained = tmp_72
+    tmp_73 = 44
+    tmp_74 = ne chained, tmp_73
+    !tmp_73
+    br tmp_74 -> L_THEN_19, L_ELSE_20
+
+L_THEN_19:
+    !tmp_74
+    panic(34305)
+
+L_ELSE_20:
+    !tmp_74
+    jmp L_MERGE_21
+
+L_MERGE_21:
+    first = alloc 16
+    tmp_77 = 4
+    store first+0, tmp_77 as i64
+    !tmp_77
+    tmp_78 = 1
+    store first+8, tmp_78 as i64
+    !tmp_78
+    second = alloc 16
+    tmp_79 = 4
+    store second+0, tmp_79 as i64
+    !tmp_79
+    tmp_80 = 2
+    store second+8, tmp_80 as i64
+    !tmp_80
+    tmp_81 = alloc 8
+    store tmp_81+0, CMP_ORDERING_EQUAL as i64
+    tmp_82 = load first+0 as i64
+    tmp_83 = load second+0 as i64
+    tmp_84 = slt tmp_82, tmp_83
+    br tmp_84 -> L_SPACESHIP_STRUCT_LESS_23, L_SPACESHIP_STRUCT_CHECK_GREATER_24
+
+L_SPACESHIP_STRUCT_LESS_23:
+    store tmp_81+0, CMP_ORDERING_LESS as i64
+    jmp L_SPACESHIP_STRUCT_DONE_22
+
+L_SPACESHIP_STRUCT_CHECK_GREATER_24:
+    tmp_85 = sgt tmp_82, tmp_83
+    br tmp_85 -> L_SPACESHIP_STRUCT_GREATER_25, L_SPACESHIP_STRUCT_NEXT_26
+
+L_SPACESHIP_STRUCT_GREATER_25:
+    store tmp_81+0, CMP_ORDERING_GREATER as i64
+    jmp L_SPACESHIP_STRUCT_DONE_22
+
+L_SPACESHIP_STRUCT_NEXT_26:
+    tmp_86 = load first+8 as i64
+    tmp_87 = load second+8 as i64
+    tmp_88 = slt tmp_86, tmp_87
+    br tmp_88 -> L_SPACESHIP_STRUCT_LESS_27, L_SPACESHIP_STRUCT_CHECK_GREATER_28
+
+L_SPACESHIP_STRUCT_LESS_27:
+    store tmp_81+0, CMP_ORDERING_LESS as i64
+    jmp L_SPACESHIP_STRUCT_DONE_22
+
+L_SPACESHIP_STRUCT_CHECK_GREATER_28:
+    tmp_89 = sgt tmp_86, tmp_87
+    br tmp_89 -> L_SPACESHIP_STRUCT_GREATER_29, L_SPACESHIP_STRUCT_NEXT_30
+
+L_SPACESHIP_STRUCT_GREATER_29:
+    store tmp_81+0, CMP_ORDERING_GREATER as i64
+    jmp L_SPACESHIP_STRUCT_DONE_22
+
+L_SPACESHIP_STRUCT_NEXT_30:
+L_SPACESHIP_STRUCT_DONE_22:
+    order = tmp_81
+    tmp_90 = call @sla__Ordering_is_lt(order)
+    tmp_91 = 1
+    tmp_92 = ne tmp_90, tmp_91
+    !tmp_90
+    !tmp_91
+    br tmp_92 -> L_THEN_31, L_ELSE_32
+
+L_THEN_31:
+    !tmp_92
+    panic(34303)
+
+L_ELSE_32:
+    !tmp_92
+    jmp L_MERGE_33
+
+L_MERGE_33:
+    tmp_95 = call @sla__Ordering_greater()
+    tmp_96 = call @sla__Ordering_then(order, tmp_95)
+    !tmp_95
+    tmp_97 = call @sla__Ordering_is_lt(tmp_96)
+    !tmp_96
+    tmp_98 = 1
+    tmp_99 = ne tmp_97, tmp_98
+    !tmp_97
+    !tmp_98
+    br tmp_99 -> L_THEN_34, L_ELSE_35
+
+L_THEN_34:
+    !tmp_99
+    panic(34304)
+
+L_ELSE_35:
+    !tmp_99
+    jmp L_MERGE_36
+
+L_MERGE_36:
+    !second
+    !first
+    !original
+    !order
+    !moved
+    !chained
+    return
+

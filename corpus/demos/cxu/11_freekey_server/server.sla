@@ -1,0 +1,224 @@
+// D11: free-key service — the CXU free-key pool distilled.
+// A tiny key-pool service over the v2 http_server API (D2):
+//   GET  /key     -> next healthy key, round-robin (JSON)
+//   POST /report  -> body "key-a fail" / "key-a ok": two consecutive
+//                    failures mark a key down; ok restores it
+//   GET  /health  -> {"up":N,"down":M}
+//   POST /reset   -> counters, failures and rotation cleared
+// Rate limit: after 6 issued keys, /key answers 429 until /reset.
+// Exactly twelve requests (run.sh's scripted sequence), then the
+// server prints "d11 freekey ok" and exits.
+@import "sa_std/http_server.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/io/print.sai"
+@import "byteseq.sa"
+@import "append.sa"
+
+struct Pool {
+    rr: u64,
+    issues: u64,
+    fails: [u64; 3],
+    down: [u64; 3],
+}
+
+struct HB {
+    bytes: [u8; 64],
+    len: u64,
+}
+
+fn path_is(p_ptr: ptr, p_len: u64, lit_ptr: ptr, lit_len: u64) -> bool {
+    let slot = [0u64; 1];
+    BYTES_EQ(&slot, p_ptr, p_len, lit_ptr, lit_len);
+    return slot[0] == 1;
+}
+
+fn respond(req: ptr, status: i32, body: ptr, body_len: u64) -> i32 {
+    let resp: ptr = PTR_NULL();
+    if sa_http_server_resp_new_v2(req, status, &resp) != 0 {
+        return 30;
+    };
+    sa_http_server_resp_add_header_v2(resp, STR_PTR("content-type"), STR_LEN("content-type"), STR_PTR("application/json"), STR_LEN("application/json"));
+    if sa_http_server_resp_send_v2(resp, body, body_len, 5000) != 0 {
+        return 31;
+    };
+    sa_http_server_resp_free_v2(resp);
+    return 0;
+}
+
+// respond variant for bodies assembled in an HB accumulator: the
+// buffer address only ever flows into extern calls here (a plain ptr
+// parameter of an SLA fn would reject the capability argument).
+fn respond_hb(req: ptr, status: i32, acc: &HB) -> i32 {
+    let resp: ptr = PTR_NULL();
+    if sa_http_server_resp_new_v2(req, status, &resp) != 0 {
+        return 30;
+    };
+    sa_http_server_resp_add_header_v2(resp, STR_PTR("content-type"), STR_LEN("content-type"), STR_PTR("application/json"), STR_LEN("application/json"));
+    if sa_http_server_resp_send_v2(resp, &acc.bytes, acc.len, 5000) != 0 {
+        return 31;
+    };
+    sa_http_server_resp_free_v2(resp);
+    return 0;
+}
+
+fn append_lit(acc: &HB, lit: ptr, lit_len: u64) -> void {
+    APPEND_BYTES(&acc.bytes, acc.len, lit, lit_len);
+    acc.len = acc.len + lit_len;
+}
+
+// Handles /key: rotation over healthy keys with the issue limit.
+fn serve_key(req: ptr, pool: &Pool) -> i32 {
+    if pool.issues >= 6 {
+        let body = "{\"error\":\"rate_limited\"}";
+        return respond(req, 429, STR_PTR(body), STR_LEN(body));
+    };
+    let chosen: u64 = 3;
+    let tries: u64 = 0;
+    while tries < 3 {
+        let idx = pool.rr;
+        pool.rr = pool.rr + 1;
+        if pool.rr >= 3 {
+            pool.rr = 0;
+        };
+        tries = tries + 1;
+        if pool.down[idx] == 0 {
+            chosen = idx;
+            tries = 3;
+        };
+    }
+    if chosen == 3 {
+        let body = "{\"error\":\"no_healthy_keys\"}";
+        return respond(req, 503, STR_PTR(body), STR_LEN(body));
+    };
+    pool.issues = pool.issues + 1;
+    if chosen == 0 {
+        let body = "{\"key\":\"key-a\",\"pool\":\"free\"}";
+        return respond(req, 200, STR_PTR(body), STR_LEN(body));
+    };
+    if chosen == 1 {
+        let body = "{\"key\":\"key-b\",\"pool\":\"free\"}";
+        return respond(req, 200, STR_PTR(body), STR_LEN(body));
+    };
+    let body = "{\"key\":\"key-c\",\"pool\":\"free\"}";
+    return respond(req, 200, STR_PTR(body), STR_LEN(body));
+}
+
+fn serve_health(req: ptr, pool: &Pool) -> i32 {
+    let up: u64 = 0;
+    if pool.down[0] == 0 {
+        up = up + 1;
+    };
+    if pool.down[1] == 0 {
+        up = up + 1;
+    };
+    if pool.down[2] == 0 {
+        up = up + 1;
+    };
+    let down = 3 - up;
+    let acc = HB { bytes: [0u8; 64], len: 0 };
+    append_lit(&acc, STR_PTR("{\"up\":"), STR_LEN("{\"up\":"));
+    acc.bytes[acc.len] = (48 + up) as u8;
+    acc.len = acc.len + 1;
+    append_lit(&acc, STR_PTR(",\"down\":"), STR_LEN(",\"down\":"));
+    acc.bytes[acc.len] = (48 + down) as u8;
+    acc.len = acc.len + 1;
+    append_lit(&acc, STR_PTR("}"), STR_LEN("}"));
+    return respond_hb(req, 200, &acc);
+}
+
+// Handles /report: body is exactly "key-N fail" or "key-N ok".
+fn serve_report(req: ptr, pool: &Pool) -> i32 {
+    let b_ptr: ptr = PTR_NULL();
+    let b_len: u64 = 0;
+    if sa_http_server_req_get_body(req, &b_ptr, &b_len) != 0 {
+        return 32;
+    };
+    let idx: u64 = 3;
+    let failed: u64 = 0;
+    if path_is(b_ptr, b_len, STR_PTR("key-a fail"), STR_LEN("key-a fail")) || path_is(b_ptr, b_len, STR_PTR("key-a ok"), STR_LEN("key-a ok")) {
+        idx = 0;
+    };
+    if path_is(b_ptr, b_len, STR_PTR("key-b fail"), STR_LEN("key-b fail")) || path_is(b_ptr, b_len, STR_PTR("key-b ok"), STR_LEN("key-b ok")) {
+        idx = 1;
+    };
+    if path_is(b_ptr, b_len, STR_PTR("key-c fail"), STR_LEN("key-c fail")) || path_is(b_ptr, b_len, STR_PTR("key-c ok"), STR_LEN("key-c ok")) {
+        idx = 2;
+    };
+    if path_is(b_ptr, b_len, STR_PTR("key-a fail"), STR_LEN("key-a fail")) || path_is(b_ptr, b_len, STR_PTR("key-b fail"), STR_LEN("key-b fail")) || path_is(b_ptr, b_len, STR_PTR("key-c fail"), STR_LEN("key-c fail")) {
+        failed = 1;
+    };
+    if idx == 3 {
+        let body = "{\"error\":\"bad_report\"}";
+        return respond(req, 400, STR_PTR(body), STR_LEN(body));
+    };
+    if failed == 1 {
+        pool.fails[idx] = pool.fails[idx] + 1;
+        if pool.fails[idx] >= 2 {
+            pool.down[idx] = 1;
+        };
+    };
+    if failed == 0 {
+        pool.fails[idx] = 0;
+        pool.down[idx] = 0;
+    };
+    let body = "{\"reported\":true}";
+    return respond(req, 200, STR_PTR(body), STR_LEN(body));
+}
+
+fn serve_reset(req: ptr, pool: &Pool) -> i32 {
+    pool.rr = 0;
+    pool.issues = 0;
+    pool.fails[0] = 0;
+    pool.fails[1] = 0;
+    pool.fails[2] = 0;
+    pool.down[0] = 0;
+    pool.down[1] = 0;
+    pool.down[2] = 0;
+    let body = "{\"reset\":true}";
+    return respond(req, 200, STR_PTR(body), STR_LEN(body));
+}
+
+fn main() -> i32 {
+    let pool = Pool { rr: 0, issues: 0, fails: [0; 3], down: [0; 3] };
+    let srv: ptr = PTR_NULL();
+    if sa_http_server_new_v2(&srv) != 0 {
+        return 2;
+    };
+    if sa_http_server_start_v2(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 18084) != 0 {
+        return 3;
+    };
+    let handled: u64 = 0;
+    while handled < 12 {
+        let req: ptr = PTR_NULL();
+        if sa_http_server_accept_v2(srv, 30000, &req) != 0 {
+            return 4;
+        };
+        let p_ptr: ptr = PTR_NULL();
+        let p_len: u64 = 0;
+        if sa_http_server_req_get_path(req, &p_ptr, &p_len) != 0 {
+            return 5;
+        };
+        let rc: i32 = 0;
+        if path_is(p_ptr, p_len, STR_PTR("/key"), STR_LEN("/key")) {
+            rc = serve_key(req, &pool);
+        } else if path_is(p_ptr, p_len, STR_PTR("/health"), STR_LEN("/health")) {
+            rc = serve_health(req, &pool);
+        } else if path_is(p_ptr, p_len, STR_PTR("/report"), STR_LEN("/report")) {
+            rc = serve_report(req, &pool);
+        } else if path_is(p_ptr, p_len, STR_PTR("/reset"), STR_LEN("/reset")) {
+            rc = serve_reset(req, &pool);
+        } else {
+            let body = "{\"error\":\"not_found\"}";
+            rc = respond(req, 404, STR_PTR(body), STR_LEN(body));
+        };
+        sa_http_server_req_free_v2(req);
+        if rc != 0 {
+            return rc;
+        };
+        handled = handled + 1;
+    }
+    sa_http_server_free_v2(srv);
+    println("d11 freekey ok");
+    return 0;
+}

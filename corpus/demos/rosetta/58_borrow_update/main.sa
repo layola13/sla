@@ -1,0 +1,68 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/cell.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_bump = vtable { call = @sla__bump }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__bump(value: ptr):
+L_ENTRY:
+    EXPAND CELL_GET tmp_0, value
+    current = tmp_0
+    tmp_1 = 1
+    tmp_2 = add current, tmp_1
+    !tmp_1
+    EXPAND CELL_SET value, tmp_2
+    !tmp_2
+    !current
+    return
+
+@main() -> i32:
+L_ENTRY:
+    tmp_3 = 9
+    value = stack_alloc Cell_SIZE
+    EXPAND CELL_SET value, tmp_3
+    !tmp_3
+    call @sla__bump(value)
+    EXPAND CELL_GET tmp_4, value
+    tmp_5 = call @sa_fmt_u64(tmp_4, 10)
+    tmp_6 = call @sa_fmt_buffer_data(tmp_5)
+    tmp_7 = call @sa_fmt_buffer_len(tmp_5)
+    tmp_8 = tmp_6
+    call @sa_print_bytes(&tmp_8, tmp_7)
+    call @sa_fmt_buffer_free(^tmp_5)
+    !tmp_8
+    !tmp_7
+    !tmp_4
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_9 = 0
+    return tmp_9
+
+@test "rosetta 058 borrow update"():
+L_TEST_ENTRY_0:
+    tmp_10 = 9
+    value = stack_alloc Cell_SIZE
+    EXPAND CELL_SET value, tmp_10
+    !tmp_10
+    call @sla__bump(value)
+    EXPAND CELL_GET tmp_11, value
+    tmp_12 = 10
+    tmp_13 = ne tmp_11, tmp_12
+    !tmp_11
+    !tmp_12
+    br tmp_13 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_13
+    panic(58)
+
+L_ELSE_2:
+    !tmp_13
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    return
+

@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_sysroot_layer_count() -> i32 { let core_layer = 1; let std_layer = 1; return core_layer + std_layer; }
+fn main() -> i32 { let core_layer = 1; let std_layer = 1; let result = core_layer + std_layer; println("{}", result); return result; }
+@test "rosetta 270 build sysroot custom"() { let got = build_sysroot_layer_count(); if got != 2 { panic(270); }; }

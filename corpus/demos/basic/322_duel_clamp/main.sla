@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 语句 vs 三元夹逼对峙（26×174：5=5，另断言下上界）。
+// 双实现一致性锁定（单实现见 26/174）。
+
+fn clamp_stmt(v: int, lo: int, hi: int) -> int {
+    if v < lo { return lo; };
+    if v > hi { return hi; };
+    return v;
+}
+
+fn clamp_expr(x: int, lo: int, hi: int) -> int {
+    return if x < lo { lo } else if x > hi { hi } else { x };
+}
+
+fn main() -> i32 {
+    println("{}", clamp_stmt(5, 1, 10));
+    return 0;
+}
+
+@test "basic 322 duel clamp"() {
+    if clamp_stmt(5, 1, 10) != clamp_expr(5, 1, 10) { panic(32201); };
+    if clamp_stmt(-3, 1, 10) != clamp_expr(-3, 1, 10) { panic(32202); };
+    if clamp_stmt(99, 1, 10) != clamp_expr(99, 1, 10) { panic(32203); };
+}

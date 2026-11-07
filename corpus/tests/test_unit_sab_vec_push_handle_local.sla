@@ -1,0 +1,45 @@
+@import "sa_std/vec.sa"
+@import "sa_std/growvec.sa"
+@import "sa_std/growvec.sai"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+
+// DEF-SAB-BORROW-RESIDUAL regression: on the SAB backend, pushing a
+// heap-handle LOCAL (a Vec<u8> value held in a local binding) into a
+// Vec/GrowVec stored the handle word in the container but never
+// marked the local consumed (the DEF-ZRANGE consumption only covered
+// non-local temps). The local's exit drop then freed the element
+// cell a second time, on top of the container's element drop
+// (double free: signal 6 / signal 11 at scope exit). The SA-text
+// backend consumes the local correctly.
+
+@test "vec push vec local consumed once"() {
+    let args: Vec<Vec<u8>> = Vec::new();
+    let a: Vec<u8> = Vec::new();
+    a.push(65);
+    args.push(a);
+    if len(args) != 1 { panic(46101); };
+    if len(args[0]) != 1 { panic(46102); };
+}
+
+@test "vec push two vec locals consumed once"() {
+    let args: Vec<Vec<u8>> = Vec::new();
+    let a: Vec<u8> = Vec::new();
+    a.push(65);
+    args.push(a);
+    let b: Vec<u8> = Vec::new();
+    b.push(66);
+    b.push(67);
+    args.push(b);
+    if len(args) != 2 { panic(46103); };
+    if len(args[1]) != 2 { panic(46104); };
+}
+
+@test "growvec push vec local consumed once"() {
+    let args: GrowVec<Vec<u8>> = GrowVec::with_max(16);
+    let a: Vec<u8> = Vec::new();
+    a.push(65);
+    args.push(a);
+    if len(args) != 1 { panic(46105); };
+    if len(args[0]) != 1 { panic(46106); };
+}

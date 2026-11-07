@@ -1,0 +1,6 @@
+@import "lib/impl/index.sa"
+
+@export sa_library_dynamic_value() -> i32:
+L_ENTRY:
+    value = call @library_impl_value()
+    return value

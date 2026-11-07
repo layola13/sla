@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 790_top_obj_bool：布尔字段结构体（3,3）。
+// 原用例为顶层常量（SLA 顶层只容 `const` 且结构体常量不可用，见 #19），
+// 此处用局部绑定表达（与 114 的整数字段互补，124 覆盖布尔数组）。
+
+struct B { f: bool, n: i32 }
+
+fn main() -> i32 {
+    let o = B { f: true, n: 3 };
+    let r = 0;
+    if o.f { r = o.n; };
+    println("{},{}", o.n, r);
+    return 0;
+}
+
+@test "basic 144 struct bool"() {
+    let o = B { f: true, n: 3 };
+    if o.n != 3 { panic(14401); };
+    if o.f != true { panic(14402); };
+    let p = B { f: false, n: 7 };
+    if p.f != false { panic(14403); };
+    if p.n != 7 { panic(14404); };
+}

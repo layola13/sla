@@ -1,0 +1,63 @@
+// FS-9 regression: closure literals bound through a plain alias
+// (`let g = f;`) must stay callable through the alias name.
+// Before the fix, codegen registered closure literals only under
+// their defining name, so a call through an alias fell through to
+// the imported-macro fallback: the SA-text backend emitted invalid
+// SA (EXPAND on the stub register, result register never defined)
+// and the SAB backend emitted a call to an undeclared callee.
+// Direct calls through the defining name always worked (inlined).
+
+fn closure_alias_basic() -> int {
+    let offset = 5;
+    let f = |x: int| x + offset;
+    let g = f;
+    return g(10);
+}
+
+fn closure_alias_chain() -> int {
+    let offset = 1;
+    let f = |x: int| x + offset;
+    let g = f;
+    let h = g;
+    return h(41);
+}
+
+fn closure_alias_delayed() -> int {
+    let offset = 100;
+    let f = |x: int| x + offset;
+    let g = f;
+    let y = 23;
+    return g(y);
+}
+
+fn closure_alias_two_captures() -> int {
+    let a = 3;
+    let b = 4;
+    let f = |x: int| x * a + b;
+    let g = f;
+    return g(10);
+}
+
+@test "closure called through plain alias"() {
+    if closure_alias_basic() != 15 {
+        panic(1);
+    };
+}
+
+@test "closure called through alias chain"() {
+    if closure_alias_chain() != 42 {
+        panic(2);
+    };
+}
+
+@test "closure alias called after intervening bindings"() {
+    if closure_alias_delayed() != 123 {
+        panic(3);
+    };
+}
+
+@test "closure alias with two captures"() {
+    if closure_alias_two_captures() != 34 {
+        panic(4);
+    };
+}

@@ -1,0 +1,30 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+// Regression (DEF async cluster 3, LOOP-POLL): a loop-shaped future whose
+// in-flight child future sits in state+8 must survive across polls. The
+// second poll enters the completion segment and reads that child back.
+// Pre-fix this segfaulted (signal 11) on the second poll; the one-poll
+// shape passed, which masked the defect.
+
+async fn spin_repoll(tag: i32) -> i32 {
+    let i: i32 = 0;
+    while i < 1 {
+        let tick: i32 = future::defer_ready(0).await;
+        i = i + 1 + tick;
+    }
+    return tag;
+}
+
+@test "loop repoll after pending completes"() {
+    let t = task::new(spin_repoll(7));
+    if task::poll(t) != false {
+        panic(9821);
+    };
+    if task::poll(t) != true {
+        panic(9822);
+    };
+    if task::result(t) != 7 {
+        panic(9823);
+    };
+}

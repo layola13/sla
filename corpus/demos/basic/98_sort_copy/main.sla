@@ -1,0 +1,53 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 26_sort：原地排序（1+5=6）+ 拷贝排序（2+9=11，原数组首元仍 9）。
+// SLA 暂无 `toSorted`，拷贝后排序表达同一语义（排序写法见 16）。
+
+fn sort5(^a: [int; 5]) -> [int; 5] {
+    for i in 1..5 {
+        let k = a[i];
+        let j = i - 1;
+        while j >= 0 && a[j] > k {
+            a[j + 1] = a[j];
+            j = j - 1;
+        }
+        a[j + 1] = k;
+    }
+    return a;
+}
+
+fn sort3(^a: [int; 3]) -> [int; 3] {
+    for i in 1..3 {
+        let k = a[i];
+        let j = i - 1;
+        while j >= 0 && a[j] > k {
+            a[j + 1] = a[j];
+            j = j - 1;
+        }
+        a[j + 1] = k;
+    }
+    return a;
+}
+
+fn main() -> i32 {
+    let a = [3, 1, 4, 1, 5];
+    let s = sort5(^a);
+    println("{}", s[0] + s[4]);
+    let b = [9, 2, 7];
+    let bc = [b[0], b[1], b[2]];
+    let c = sort3(^bc);
+    println("{},{}", c[0] + c[2], b[0]);
+    return 0;
+}
+
+@test "basic 98 sort copy"() {
+    let a = [3, 1, 4, 1, 5];
+    let s = sort5(^a);
+    if s[0] + s[4] != 6 { panic(9801); };
+    let b = [9, 2, 7];
+    let bc = [b[0], b[1], b[2]];
+    let c = sort3(^bc);
+    if c[0] + c[2] != 11 { panic(9802); };
+    if b[0] != 9 { panic(9803); };
+}

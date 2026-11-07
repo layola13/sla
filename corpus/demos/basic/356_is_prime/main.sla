@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 试除素数判定（29 素数，30 合数）。
+// 意对标 46 试除版的判定版（261 轮式版互补）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", is_prime(29), is_prime(30), is_prime(2));
+    return 0;
+}
+
+@test "basic 356 is prime"() {
+    if is_prime(29) != 1 { panic(35601); };
+    if is_prime(30) != 0 { panic(35602); };
+    if is_prime(2) != 1 { panic(35603); };
+    if is_prime(1) != 0 { panic(35604); };
+}

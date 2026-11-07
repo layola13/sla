@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+
+fn if_let_chain_sum() -> i32 {
+    let left = Some(2);
+    let middle = Some(3);
+    let right = Some(4);
+
+    let result = if let Some(x) = left && let Some(y) = middle && let Some(z) = right {
+        x + y + z
+    } else {
+        0
+    };
+
+    return result;
+}
+
+fn main() -> i32 {
+    let left = Some(2);
+    let middle = Some(3);
+    let right = Some(4);
+
+    let result = if let Some(x) = left && let Some(y) = middle && let Some(z) = right {
+        x + y + z
+    } else {
+        0
+    };
+
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 104 104_if_let_chains"() {
+    let got = if_let_chain_sum();
+    if got != 9 {
+        panic(104);
+    };
+}

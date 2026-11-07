@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn custom_dst_alloc_len_surrogate() -> usize {
+    let bytes = "hey";
+    return bytes.len();
+}
+
+fn main() -> i32 {
+    let bytes = "hey";
+    let result = bytes.len();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 158 158_custom_dst_alloc"() {
+    let got = custom_dst_alloc_len_surrogate();
+    if got != 3 { panic(158); };
+}

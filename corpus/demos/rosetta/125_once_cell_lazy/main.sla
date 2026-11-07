@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/sync/once.sa"
+
+fn init_42() -> i32 {
+    return 42;
+}
+
+fn init_99() -> i32 {
+    return 99;
+}
+
+fn once_cell_lazy_total() -> i32 {
+    let value = ONCE_NEW();
+    let first: i32 = ONCE_GET_OR_INIT(value, init_42);
+    let second: i32 = ONCE_GET_OR_INIT(value, init_99);
+    return first + second;
+}
+
+fn main() -> i32 {
+    let value = ONCE_NEW();
+    let first: i32 = ONCE_GET_OR_INIT(value, init_42);
+    let second: i32 = ONCE_GET_OR_INIT(value, init_99);
+    let result = first + second;
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 125 125_once_cell_lazy"() {
+    let got = once_cell_lazy_total();
+    if got != 84 {
+        panic(125);
+    };
+};

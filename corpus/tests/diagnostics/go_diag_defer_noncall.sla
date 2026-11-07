@@ -1,0 +1,5 @@
+fn go_diag_defer_main() -> i32 {
+    let x = 1;
+    defer x;
+    return 0;
+}

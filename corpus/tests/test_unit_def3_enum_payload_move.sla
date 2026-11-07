@@ -1,0 +1,90 @@
+@import "sa_std/string.sa"
+
+// DEF-3 (found by the heng species mirror): the Option/Result
+// constructor macros store the payload handle into the fresh enum
+// object, so ownership of a non-Copy payload moves into the enum.
+// On the basepoint both backends still dropped the source binding
+// after wrapping it (SA-text emitted STRING_BUF_FREE right after
+// RESULT_NEW_OK; SAB released the local at the return cleanup), so
+// the caller extracted a dangling String: segfault on both
+// backends for `let s = format!(...); return Ok(s);`.
+
+fn ok_local() -> Result<String, i32> {
+    let s = format("hello {}", 42);
+    return Ok(s);
+}
+
+fn ok_temp() -> Result<String, i32> {
+    return Ok(format("temp {}", 7));
+}
+
+fn err_local() -> Result<i32, String> {
+    let s = format("bad {}", 5);
+    return Err(s);
+}
+
+fn some_local() -> Option<String> {
+    let s = format("opt {}", 9);
+    return Some(s);
+}
+
+fn ok_vec() -> Result<Vec<i32>, i32> {
+    let v: Vec<i32> = Vec::new();
+    v.push(11);
+    v.push(22);
+    return Ok(v);
+}
+
+fn plain_string() -> String {
+    let s = format("hello {}", 42);
+    return s;
+}
+
+@test "def3 result ok of local string survives return"() {
+    let r = ok_local();
+    match r {
+        Ok(s) => { if !str_eq(s, "hello 42") { panic(2201); }; },
+        Err(e) => { panic(2202); },
+    };
+}
+
+@test "def3 result ok of temp string survives return"() {
+    let r = ok_temp();
+    match r {
+        Ok(s) => { if !str_eq(s, "temp 7") { panic(2203); }; },
+        Err(e) => { panic(2204); },
+    };
+}
+
+@test "def3 result err of local string survives return"() {
+    let r = err_local();
+    match r {
+        Ok(v) => { panic(2205); },
+        Err(s) => { if !str_eq(s, "bad 5") { panic(2206); }; },
+    };
+}
+
+@test "def3 option some of local string survives return"() {
+    let o = some_local();
+    match o {
+        Some(s) => { if !str_eq(s, "opt 9") { panic(2207); }; },
+        None => { panic(2208); },
+    };
+}
+
+@test "def3 result ok of vec survives return"() {
+    let r = ok_vec();
+    match r {
+        Ok(v) => {
+            if len(v) != 2 { panic(2209); };
+            if v[0] != 11 { panic(2210); };
+            if v[1] != 22 { panic(2211); };
+        },
+        Err(e) => { panic(2212); },
+    };
+}
+
+@test "def3 plain string return control"() {
+    let p = plain_string();
+    if !str_eq(p, "hello 42") { panic(2213); };
+}

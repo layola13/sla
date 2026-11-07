@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 完全数判定（σ(n)=2n：6 与 28 是，12 否）。
+// 意对标 378 丰数版的等值版（334 因子和版互补）。
+
+fn sigma(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        if n % i == 0 { s = s + i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn is_perfect(n: int) -> int {
+    if sigma(n) == 2 * n { return 1; };
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", is_perfect(6), is_perfect(28), is_perfect(12));
+    return 0;
+}
+
+@test "basic 389 perfect"() {
+    if is_perfect(6) != 1 { panic(38901); };
+    if is_perfect(28) != 1 { panic(38902); };
+    if is_perfect(12) != 0 { panic(38903); };
+}

@@ -1,0 +1,3 @@
+#def ObjCFrame_SIZE = 8
+#def ObjCFrame_tag = +0
+#def ObjCFrame_framework = +4

@@ -1,0 +1,45 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 174_count_even：[1..8] 中偶数计数（=4）。
+// 与 29/43（定长数组版）互补，此处换 Vec 版（`len` + 索引循环）。
+
+fn main() -> i32 {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    a.push(4);
+    a.push(5);
+    a.push(6);
+    a.push(7);
+    a.push(8);
+    let n = 0;
+    for i in 0..8 {
+        if a[i] % 2 == 0 {
+            n = n + 1;
+        };
+    }
+    println("{}", n);
+    return 0;
+}
+
+@test "basic 59 count even"() {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    a.push(4);
+    a.push(5);
+    a.push(6);
+    a.push(7);
+    a.push(8);
+    let n = 0;
+    for i in 0..8 {
+        if a[i] % 2 == 0 {
+            n = n + 1;
+        };
+    }
+    if n != 4 { panic(5901); };
+}

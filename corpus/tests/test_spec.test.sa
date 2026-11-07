@@ -1,0 +1,86 @@
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_sum_range = vtable { call = @sla__sum_range }
+@const SLA_FNPTR_VT_check_result = vtable { call = @sla__check_result }
+@const SLA_FNPTR_VT_process_option = vtable { call = @sla__process_option }
+@sla__sum_range(limit: i64) -> i64:
+L_ENTRY:
+    i_slot = stack_alloc 8
+    tmp_0 = 0
+    sum = tmp_0
+    tmp_1 = 1
+    store i_slot+0, tmp_1 as i64
+    !tmp_1
+    jmp L_LOOP_HEAD_0
+
+L_LOOP_HEAD_0:
+    tmp_2 = load i_slot+0 as i64
+    tmp_3 = slt tmp_2, limit
+    br tmp_3 -> L_LOOP_BODY_1, L_LOOP_COND_FALSE_3
+
+L_LOOP_BODY_1:
+    !tmp_3
+    i = add tmp_2, 0
+    tmp_4 = add sum, i
+    !sum
+    sum = tmp_4
+L_LOOP_CONTINUE_2:
+    tmp_5 = add tmp_2, 1
+    store i_slot+0, tmp_5 as i64
+    !tmp_5
+    !tmp_2
+    !i
+    jmp L_LOOP_HEAD_0
+
+L_LOOP_COND_FALSE_3:
+    !tmp_3
+    !tmp_2
+    jmp L_LOOP_EXIT_4
+
+L_LOOP_EXIT_4:
+    !limit
+    return sum
+
+@sla__check_result(res: ptr, fallback: i64) -> i64:
+L_ENTRY:
+    tmp_6 = load res+0 as u8
+    br tmp_6 -> L_TRY_ERR_6, L_TRY_OK_5
+
+L_TRY_ERR_6:
+    !tmp_6
+    !fallback
+    return res
+
+L_TRY_OK_5:
+    !tmp_6
+    tmp_7 = load res+8 as i64
+    !res
+    val = tmp_7
+    !fallback
+    return val
+
+@sla__process_option(opt: ptr) -> i64:
+L_ENTRY:
+    tmp_8 = load opt+0 as u8
+    br tmp_8 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_8
+    tmp_9 = load opt+8 as i64
+    val = tmp_9
+    tmp_10 = call @sla__sum_range(val)
+    !opt
+    return tmp_10
+
+L_ELSE_8:
+    !tmp_8
+    tmp_11 = 0
+    !opt
+    return tmp_11

@@ -1,0 +1,80 @@
+@import "sa_std/core/box.sa"
+@import "sa_std/core/rc.sa"
+@import "sa_std/core/arc.sa"
+@import "sa_std/string.sa"
+
+// DEF-R8-FIX (face 2): the Box/Rc/Arc constructor macros store the
+// value into the fresh cell, so ownership of a non-Copy argument moves
+// into the cell. On the basepoint both backends released the argument
+// register right after the store (SA-text: callArgNeedsRelease ->
+// emitRelease; SAB: the std-surface rule lacked consume_value), which
+// is invisible while the native backend never frees, but is a live
+// use-after-free on every truly-freeing backend (interpreter: Invalid
+// Address; native with the DEF-R8 face-1 fix: segfault).
+
+struct Pair {
+    a: u64,
+    b: u64,
+}
+
+fn mk_pair(v: u64) -> Pair {
+    return Pair { a: v, b: v + 7 };
+}
+
+@test "def_r8 box_new of struct literal temp survives into_raw roundtrip"() {
+    let raw = Box::into_raw(Box::new(Pair { a: 41, b: 42 }));
+    let ra: u64 = unsafe { (*raw).a };
+    if ra != 41 {
+        panic(2401);
+    };
+    let rb: u64 = unsafe { (*raw).b };
+    if rb != 42 {
+        panic(2402);
+    };
+    let back = unsafe { Box::from_raw(raw) };
+    let ba: u64 = (*back).a;
+    if ba != 41 {
+        panic(2403);
+    };
+}
+
+@test "def_r8 box_new of call result temp survives into_raw roundtrip"() {
+    let raw = Box::into_raw(Box::new(mk_pair(10)));
+    let ra: u64 = unsafe { (*raw).a };
+    if ra != 10 {
+        panic(2404);
+    };
+    let rb: u64 = unsafe { (*raw).b };
+    if rb != 17 {
+        panic(2405);
+    };
+    let back = unsafe { Box::from_raw(raw) };
+    let bb: u64 = (*back).b;
+    if bb != 17 {
+        panic(2406);
+    };
+}
+
+@test "def_r8 rc_new of string temp keeps payload alive"() {
+    let rc = Rc::new(format("rc {}", 5));
+    let s = *rc;
+    if !str_eq(s, "rc 5") {
+        panic(2407);
+    };
+}
+
+@test "def_r8 arc_new of string temp keeps payload alive"() {
+    let arc = Arc::new(format("arc {}", 6));
+    let s = *arc;
+    if !str_eq(s, "arc 6") {
+        panic(2408);
+    };
+}
+
+@test "def_r8 box_new of string temp keeps payload alive"() {
+    let b = Box::new(format("box {}", 7));
+    let s = *b;
+    if !str_eq(s, "box 7") {
+        panic(2409);
+    };
+}

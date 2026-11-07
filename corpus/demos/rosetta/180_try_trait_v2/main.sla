@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+
+fn add_one_surrogate(value: Option<i32>) -> Option<i32> {
+    match value {
+        Some(inner) => { return Some(inner + 1); },
+        None => { return None; },
+    }
+}
+
+fn try_trait_unwrapped_value() -> i32 {
+    let value = add_one_surrogate(Some(2)).unwrap();
+    return value;
+}
+
+fn main() -> i32 {
+    let result = add_one_surrogate(Some(2)).unwrap();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 180 180_try_trait_v2"() {
+    let got = try_trait_unwrapped_value();
+    if got != 3 { panic(180); };
+}

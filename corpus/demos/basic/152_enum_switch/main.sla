@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 943_enum_switch：枚举 switch（2,1）。
+// 与 135/149 的 `match` 消费互补：`switch` 须带 `default` 臂
+//（全枚举列举不断言穷尽，写法见 13/33）。
+
+enum E { A = 1, B = 2 }
+
+fn val(e: E) -> i32 {
+    let r: i32 = 0;
+    switch e {
+        E::A => { r = 1; },
+        E::B => { r = 2; },
+        default => {},
+    };
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{}", val(E::B), val(E::A));
+    return 0;
+}
+
+@test "basic 152 enum switch"() {
+    if val(E::B) != 2 { panic(15201); };
+    if val(E::A) != 1 { panic(15202); };
+}

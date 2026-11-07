@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Catalan 卷积 C(9)=sum C(i)C(8-i)=4862（556 体例续高位）。
+// 意对标 726_cat_conv6（低位卷积版互补；858 做卷积/商式对峙）。
+
+fn catc(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let i = 0;
+    while i < n {
+        s = s + catc(i) * catc(n - 1 - i);
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", catc(9), catc(8));
+    return 0;
+}
+
+@test "basic 857 cat conv9"() {
+    if catc(9) != 4862 { panic(85701); };
+    if catc(8) != 1430 { panic(85702); };
+    if catc(7) != 429 { panic(85703); };
+    if catc(6) != 132 { panic(85704); };
+}

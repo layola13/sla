@@ -1,0 +1,132 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@main() -> i32:
+L_ENTRY:
+    flag = alloc 8
+    store flag+0, 1 as i64
+    tmp_0 = alloc 4
+    jmp L_MATCH_CHECK_0_2
+
+L_MATCH_CHECK_0_2:
+    tmp_1 = load flag+0 as i64
+    tmp_2 = 0
+    tmp_3 = eq tmp_1, tmp_2
+    !tmp_1
+    !tmp_2
+    br tmp_3 -> L_MATCH_CASE_0_2, L_MATCH_CHECK_1_2
+
+L_MATCH_CASE_0_2:
+    !tmp_3
+    tmp_4 = 1
+    store tmp_0+0, tmp_4 as i32
+    !tmp_4
+    jmp L_MATCH_MERGE_0
+
+L_MATCH_CHECK_1_2:
+    !tmp_3
+    tmp_5 = load flag+0 as i64
+    tmp_6 = 1
+    tmp_7 = eq tmp_5, tmp_6
+    !tmp_5
+    !tmp_6
+    br tmp_7 -> L_MATCH_CASE_1_2, L_MATCH_NO_MATCH_1
+
+L_MATCH_CASE_1_2:
+    !tmp_7
+    tmp_8 = 2
+    store tmp_0+0, tmp_8 as i32
+    !tmp_8
+    jmp L_MATCH_MERGE_0
+
+L_MATCH_NO_MATCH_1:
+    !tmp_7
+    panic(1)
+
+L_MATCH_MERGE_0:
+    tmp_9 = load tmp_0+0 as i32
+    !tmp_0
+    value = tmp_9
+    tmp_10 = call @sa_fmt_u64(value, 10)
+    tmp_11 = call @sa_fmt_buffer_data(tmp_10)
+    tmp_12 = call @sa_fmt_buffer_len(tmp_10)
+    tmp_13 = tmp_11
+    call @sa_print_bytes(&tmp_13, tmp_12)
+    call @sa_fmt_buffer_free(^tmp_10)
+    !tmp_13
+    !tmp_12
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_14 = 0
+    !value
+    !flag
+    return tmp_14
+
+@test "rosetta 060 enum branch"():
+L_TEST_ENTRY_3:
+    flag = alloc 8
+    store flag+0, 1 as i64
+    tmp_15 = alloc 4
+    jmp L_MATCH_CHECK_0_6
+
+L_MATCH_CHECK_0_6:
+    tmp_16 = load flag+0 as i64
+    tmp_17 = 0
+    tmp_18 = eq tmp_16, tmp_17
+    !tmp_16
+    !tmp_17
+    br tmp_18 -> L_MATCH_CASE_0_6, L_MATCH_CHECK_1_6
+
+L_MATCH_CASE_0_6:
+    !tmp_18
+    tmp_19 = 1
+    store tmp_15+0, tmp_19 as i32
+    !tmp_19
+    jmp L_MATCH_MERGE_4
+
+L_MATCH_CHECK_1_6:
+    !tmp_18
+    tmp_20 = load flag+0 as i64
+    tmp_21 = 1
+    tmp_22 = eq tmp_20, tmp_21
+    !tmp_20
+    !tmp_21
+    br tmp_22 -> L_MATCH_CASE_1_6, L_MATCH_NO_MATCH_5
+
+L_MATCH_CASE_1_6:
+    !tmp_22
+    tmp_23 = 2
+    store tmp_15+0, tmp_23 as i32
+    !tmp_23
+    jmp L_MATCH_MERGE_4
+
+L_MATCH_NO_MATCH_5:
+    !tmp_22
+    panic(1)
+
+L_MATCH_MERGE_4:
+    tmp_24 = load tmp_15+0 as i32
+    !tmp_15
+    value = tmp_24
+    tmp_25 = 2
+    tmp_26 = ne value, tmp_25
+    !tmp_25
+    br tmp_26 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_26
+    panic(60)
+
+L_ELSE_8:
+    !tmp_26
+    jmp L_MERGE_9
+
+L_MERGE_9:
+    !value
+    !flag
+    return
+

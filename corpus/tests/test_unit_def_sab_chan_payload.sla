@@ -1,0 +1,140 @@
+// DEF-SAB-CHAN-PAYLOAD regression: chan payload staging through the
+// synthesized slot view (__go_slot_view_N) must treat the view register
+// as the slot ADDRESS in the SAB backend, for every payload class.
+// Pre-fix, SAB applied the DEF-CHAIN through-load to the view borrow:
+// pointer payloads were dereferenced one level too many on recv
+// (binding received the pointee's first word), String send staging
+// stored through address 0, and only inline-POD word payloads
+// (u64/i64/usize/f64) escaped. Text backend was correct throughout.
+// Shapes below are red on SAB pre-fix (signal 11) except the scalar
+// control, and green on both backends post-fix.
+@import "sa_std/ptr.sa"
+@import "sa_std/task.sai"
+@import "sa_std/core/box.sa"
+@import "sa_std/vec.sa"
+
+struct ChanPayloadMsg {
+    fd: u64,
+    kind: u8,
+}
+
+fn chan_payload_msg_new(fd: u64, kind: u8) -> *ChanPayloadMsg {
+    return Box::into_raw(Box::new(ChanPayloadMsg { fd: fd, kind: kind }));
+}
+
+fn chan_payload_check(m: *ChanPayloadMsg, fd: u64, kind: u8, base: i32) {
+    if (*m).fd != fd { panic(base + 1); };
+    if (*m).kind != kind { panic(base + 2); };
+}
+
+@test "def sab chan payload scalar control"() {
+    let ch: Chan<u64> = Chan::new(1);
+    ch.send(4242);
+    let (v, cl) = ch.recv();
+    if cl { panic(50100); };
+    if v != 4242 { panic(50101); };
+    ch.destroy();
+}
+
+@test "def sab chan payload ptr plain recv"() {
+    let ch: Chan<*ChanPayloadMsg> = Chan::new(2);
+    let m0 = chan_payload_msg_new(77, 5);
+    ch.send(m0);
+    chan_payload_check(m0, 77, 5, 51100);
+    let (m, cl) = ch.recv();
+    if cl { panic(51200); };
+    chan_payload_check(m, 77, 5, 51200);
+}
+
+@test "def sab chan payload ptr select recv"() {
+    let ch: Chan<*ChanPayloadMsg> = Chan::new(2);
+    let m0 = chan_payload_msg_new(79, 7);
+    ch.send(m0);
+    let got: u64 = 0;
+    let spins: u64 = 0;
+    while got == 0 && spins < 100 {
+        select {
+            case let m = ch.recv() {
+                chan_payload_check(m, 79, 7, 51400);
+                got = 1;
+            }
+            default {
+                spins = spins + 1;
+            }
+        }
+    }
+    if got != 1 { panic(51450); };
+}
+
+@test "def sab chan payload string send only"() {
+    let ch: Chan<String> = Chan::new(1);
+    let s: String = format("hello");
+    ch.send(s);
+    ch.destroy();
+}
+
+@test "def sab chan payload string moves"() {
+    let ch: Chan<String> = Chan::new(1);
+    let s: String = format("hello");
+    ch.send(s);
+    let (got, closed) = ch.recv();
+    if closed { panic(51500); };
+    if got.len() != 5 { panic(51501); };
+    ch.destroy();
+}
+
+@test "def sab chan payload chan handle"() {
+    let inner: Chan<u64> = Chan::new(1);
+    inner.send(99);
+    let outer: Chan<Chan<u64>> = Chan::new(1);
+    outer.send(inner);
+    let (got_ch, closed) = outer.recv();
+    if closed { panic(51700); };
+    let (v, closedv) = got_ch.recv();
+    if closedv { panic(51701); };
+    if v != 99 { panic(51702); };
+    got_ch.destroy();
+    outer.destroy();
+}
+
+@test "def sab chan payload vec moves"() {
+    let ch: Chan<Vec<u8>> = Chan::new(1);
+    let v: Vec<u8> = Vec::new();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    ch.send(v);
+    let (got, closed) = ch.recv();
+    if closed { panic(51800); };
+    if len(got) != 3 { panic(51801); };
+    if got[0] != 10 { panic(51802); };
+    if got[2] != 30 { panic(51803); };
+    ch.destroy();
+}
+
+@test "def sab chan payload u8"() {
+    let ch: Chan<u8> = Chan::new(1);
+    ch.send(200);
+    let (v, cl) = ch.recv();
+    if cl { panic(52000); };
+    if v != 200 { panic(52001); };
+    ch.destroy();
+}
+
+@test "def sab chan payload i32"() {
+    let ch: Chan<i32> = Chan::new(1);
+    ch.send(-123456);
+    let (v, cl) = ch.recv();
+    if cl { panic(52010); };
+    if v != -123456 { panic(52011); };
+    ch.destroy();
+}
+
+@test "def sab chan payload bool"() {
+    let ch: Chan<bool> = Chan::new(1);
+    ch.send(true);
+    let (v, cl) = ch.recv();
+    if cl { panic(52020); };
+    if !v { panic(52021); };
+    ch.destroy();
+}

@@ -1,0 +1,9 @@
+// expect: Redeclaration
+trait RepeatedTrait {
+    fn score(self) -> i32;
+}
+
+trait RepeatedTrait {
+    fn score(self) -> i32;
+}
+

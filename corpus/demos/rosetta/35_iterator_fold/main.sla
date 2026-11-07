@@ -1,0 +1,16 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+fn main() -> i32 {
+    let total: usize = ["sa", "asm", "!!"].into_iter().fold(0, |acc: usize, item: ptr| acc + (item.len() as usize));
+    println("{}", total);
+    return 0;
+}
+
+@test "rosetta 035 iterator fold"() {
+    let total: usize = ["sa", "asm", "!!"].into_iter().fold(0, |acc: usize, item: ptr| acc + (item.len() as usize));
+    if total != 7 {
+        panic(35);
+    };
+}

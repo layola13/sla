@@ -1,0 +1,8 @@
+struct WildPoint {
+    x: i32,
+    y: i32,
+}
+
+fn wild_point_sum(p: WildPoint) -> i32 {
+    return p.x + p.y;
+}

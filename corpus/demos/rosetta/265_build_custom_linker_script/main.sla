@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_linker_script_sections() -> i32 { let text_section = 1; let data_section = 1; return text_section + data_section; }
+fn main() -> i32 { let text_section = 1; let data_section = 1; let result = text_section + data_section; println("{}", result); return result; }
+@test "rosetta 265 build custom linker script"() { let got = build_linker_script_sections(); if got != 2 { panic(265); }; }

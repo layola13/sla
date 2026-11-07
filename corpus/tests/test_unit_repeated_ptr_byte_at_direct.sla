@@ -1,0 +1,19 @@
+@import "tests/import_fixtures/pkgjson/ptr_helpers.sa"
+
+fn repeated_ptr_byte_at_mismatch(data: ptr, data_len: int) -> int {
+    let mismatch = 0;
+    if data_len >= 3 {
+        if SLA_BYTE_AT(data, 0) != 97 { mismatch = mismatch + 1; };
+        if SLA_BYTE_AT(data, 1) != 98 { mismatch = mismatch + 1; };
+        if SLA_BYTE_AT(data, 2) != 99 { mismatch = mismatch + 1; };
+    };
+    return mismatch;
+}
+
+@test "direct sab repeated byte reads keep raw ptr reusable"() {
+    let got = repeated_ptr_byte_at_mismatch("abc", 3);
+    if got != 0 {
+        panic(61031);
+    };
+}
+

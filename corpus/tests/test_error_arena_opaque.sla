@@ -1,0 +1,13 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: an opaque struct's fields are unknowable, so
+// its closure cannot be verified; it is not arena-safe (2.2).
+struct Ghost;
+
+fn id_ghost(x: Ghost) -> Ghost { return x; }
+
+fn neg_opaque(p: Ghost) -> i32 {
+    arena {
+        let g = id_ghost(p);
+    }
+    return 0;
+}

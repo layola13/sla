@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+enum Maybe<T> {
+    Value(T),
+    Empty,
+}
+
+fn main() -> i32 {
+    let value: Maybe<i32> = Maybe::Value(7);
+    let result = match value {
+        Maybe::Value(v) => {
+            v
+        },
+        Maybe::Empty => {
+            0
+        },
+    };
+    println("{}", result);
+    return 0;
+}
+
+@test "rosetta 039 generic enum i32"() {
+    let value: Maybe<i32> = Maybe::Value(7);
+    let result = match value {
+        Maybe::Value(v) => {
+            v
+        },
+        Maybe::Empty => {
+            0
+        },
+    };
+    if result != 7 {
+        panic(39);
+    };
+}

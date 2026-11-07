@@ -1,0 +1,63 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 136_concat_all / 117_dedup：Vec 拼接 + 去重（手写 contains）。
+
+fn vec_contains(values: Vec<i32>, target: i32) -> bool {
+    let i: i32 = 0;
+    while i < len(values) as i32 {
+        if values[i] == target {
+            return true;
+        };
+        i = i + 1;
+    }
+    return false;
+}
+
+fn main() -> i32 {
+    // concat: [1] ++ [2,3] = [1,2,3]
+    let c: Vec<i32> = Vec::new();
+    c.push(1);
+    c.push(2);
+    c.push(3);
+    println("{},{},{}", len(c), c[0], c[2]);
+    // dedup: [1,2,2,3,1] -> [1,2,3]
+    let seen: Vec<i32> = Vec::new();
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(2);
+    a.push(3);
+    a.push(1);
+    let i: i32 = 0;
+    while i < len(a) as i32 {
+        if !vec_contains(seen, a[i]) {
+            seen.push(a[i]);
+        };
+        i = i + 1;
+    }
+    println("{},{},{},{}", len(seen), seen[0], seen[1], seen[2]);
+    return 0;
+}
+
+@test "basic 39 vec concat dedup"() {
+    let c: Vec<i32> = Vec::new();
+    c.push(1);
+    c.push(2);
+    c.push(3);
+    if len(c) != 3 { panic(3901); };
+    if c[0] != 1 { panic(3902); };
+    if c[2] != 3 { panic(3903); };
+    let seen: Vec<i32> = Vec::new();
+    let vals = [1, 2, 2, 3, 1];
+    for i in 0..5 {
+        if !vec_contains(seen, vals[i]) {
+            seen.push(vals[i]);
+        };
+    }
+    if len(seen) != 3 { panic(3904); };
+    if seen[0] != 1 { panic(3905); };
+    if seen[1] != 2 { panic(3906); };
+    if seen[2] != 3 { panic(3907); };
+}

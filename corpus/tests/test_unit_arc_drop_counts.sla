@@ -1,0 +1,133 @@
+@import "sa_std/core/arc.sa"
+@import "sa_std/vec.sa"
+@import "sa_std/sync/atomic.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/core/result.sa"
+
+// DEF-ARC-DROP (F1) R1: Arc strong/weak count precision under drop
+// elaboration. Pre-fix these tests cannot even compile: the SLA
+// surface had no strong_count()/weak_count() dispatch at all, and no
+// backend ever emitted a count decrement, so every count below was
+// either inexpressible or stuck at its historical peak. Post-fix the
+// counts must be exact at every observation point, on both backends.
+
+struct Counter { n: i32 }
+
+struct ArcHolder { data: Arc<Counter> }
+
+fn consume_and_count(a: Arc<Counter>) -> i32 {
+    // The clone passed in is a second strong ref while this runs.
+    return a.strong_count();
+}
+
+fn scoped_clone_count(a: Arc<Counter>) -> i32 {
+    // Param clone is alive for the whole body: count is 2 throughout.
+    return a.strong_count();
+}
+
+@test "arc count clone and callee consume"() {
+    let a = Arc::new(Counter { n: 7 });
+    if a.strong_count() != 1 { panic(7101); };
+    if a.weak_count() != 0 { panic(7102); };
+    let during = consume_and_count(a.clone());
+    if during != 2 { panic(7103); };
+    // The callee's param dropped at its exit: back to exactly 1.
+    if a.strong_count() != 1 { panic(7104); };
+    if (*a).n != 7 { panic(7105); };
+}
+
+@test "arc count inner scope clone drops"() {
+    let a = Arc::new(Counter { n: 6 });
+    if (*a).n == 6 {
+        let b = a.clone();
+        if a.strong_count() != 2 { panic(7111); };
+        if b.strong_count() != 2 { panic(7112); };
+    };
+    // b went out of scope at the block end: its drop decremented.
+    if a.strong_count() != 1 { panic(7113); };
+}
+
+@test "arc count move does not drop"() {
+    let a = Arc::new(Counter { n: 3 });
+    let b = a;
+    // A move transfers the single ref; the count stays 1 and exactly
+    // one drop fires at scope exit (a double drop would underflow the
+    // count and double-free the box: a crash, caught by the harness).
+    if b.strong_count() != 1 { panic(7121); };
+    if (*b).n != 3 { panic(7122); };
+}
+
+@test "arc count overwrite drops old value"() {
+    let a = Arc::new(Counter { n: 1 });
+    let keep = a.clone();
+    if keep.strong_count() != 2 { panic(7131); };
+    a = Arc::new(Counter { n: 2 });
+    // The overwritten handle dropped: keep is now the sole owner.
+    if keep.strong_count() != 1 { panic(7132); };
+    if (*keep).n != 1 { panic(7133); };
+    if (*a).n != 2 { panic(7134); };
+    if a.strong_count() != 1 { panic(7135); };
+}
+
+fn make_holder(a: Arc<Counter>) -> i32 {
+    let h = ArcHolder { data: a };
+    return h.data.strong_count();
+}
+
+@test "arc count struct field drop"() {
+    let probe = Arc::new(Counter { n: 8 });
+    let during = make_holder(probe.clone());
+    if during != 2 { panic(7141); };
+    // The holder died inside the callee; its field drop decremented.
+    if probe.strong_count() != 1 { panic(7142); };
+    if (*probe).n != 8 { panic(7143); };
+}
+
+fn extract_from_holder() -> Arc<Counter> {
+    let h = ArcHolder { data: Arc::new(Counter { n: 11 }) };
+    return h.data;
+}
+
+@test "arc field extraction bumps count"() {
+    let x = extract_from_holder();
+    // Return-point extraction bumps (clone semantics): the holder's
+    // field drop decremented its own ref, the extracted binding owns
+    // exactly one. Without the bump the box would be freed under x;
+    // without the field drop the count would read 2 here.
+    if x.strong_count() != 1 { panic(7151); };
+    if (*x).n != 11 { panic(7152); };
+}
+
+fn vec_elem_count(a: Arc<Counter>) -> i32 {
+    let v: Vec<Arc<Counter>> = Vec::new();
+    v.push(a.clone());
+    v.push(a.clone());
+    return a.strong_count();
+}
+
+@test "arc count vec element drops"() {
+    let probe = Arc::new(Counter { n: 4 });
+    let during = vec_elem_count(probe.clone());
+    if during != 4 { panic(7161); };
+    // Vec and its two element handles dropped inside the callee, and
+    // the by-value param dropped at its exit: exactly 1 remains.
+    if probe.strong_count() != 1 { panic(7162); };
+    if (*probe).n != 4 { panic(7163); };
+}
+
+fn spawn_worker(b: Arc<AtomicI32>) -> i32 {
+    let _old = (*b).fetch_add(1, Ordering::SeqCst);
+    return 1;
+}
+
+@test "arc count spawn slot drop after join"() {
+    let barrier = Arc::new(AtomicI32::new(0));
+    let left = barrier.clone();
+    let h = thread::spawn(^|| spawn_worker(left));
+    let r = h.join().unwrap();
+    if r != 1 { panic(7171); };
+    // The clone moved through the spawn slot into the worker param
+    // and dropped at worker exit: the original is sole owner again.
+    if barrier.strong_count() != 1 { panic(7172); };
+    if (*barrier).load(Ordering::SeqCst) != 1 { panic(7173); };
+}

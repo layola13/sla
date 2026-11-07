@@ -1,0 +1,117 @@
+@import "sa_std/vec.sa"
+@import "sa_std/core/slice.sa"
+
+// REG3-DEF-2 (FP-1): extracting an owning struct element out of a Vec
+// with SLICE_GET (the redis_value_child shape) must hand the receiver
+// an independently owned deep clone, not an alias of the parent Vec's
+// element. Stock: the extracted copy aliases the parent's element, so
+// dropping or mutating the copy corrupts the parent (invalid free /
+// use-after-free when the parent element is read or dropped later).
+
+struct WNode {
+    n: i64,
+    bulk: Vec<u8>,
+}
+
+struct RNode {
+    n: i64,
+    bulk: Vec<u8>,
+    items: Vec<RNode>,
+}
+
+struct RBag {
+    items: Vec<RNode>,
+}
+
+struct WBag {
+    items: Vec<WNode>,
+}
+
+fn wnode(n: i64) -> WNode {
+    let b: Vec<u8> = Vec::new();
+    return WNode {
+        n: n,
+        bulk: b,
+    };
+}
+
+fn wnode_full(n: i64) -> WNode {
+    let w = wnode(n);
+    w.bulk.push(9);
+    w.bulk.push(8);
+    return w;
+}
+
+fn wchild_of(v: &WBag, idx: u64) -> WNode {
+    let sl: Slice<WNode> = VEC_AS_SLICE(v.items);
+    let out = wnode(0);
+    SLICE_GET(out, sl, idx);
+    return out;
+}
+
+fn rnode(n: i64) -> RNode {
+    let b: Vec<u8> = Vec::new();
+    let it: Vec<RNode> = Vec::new();
+    return RNode {
+        n: n,
+        bulk: b,
+        items: it,
+    };
+}
+
+fn rnode_full(n: i64) -> RNode {
+    let r = rnode(n);
+    r.bulk.push(9);
+    r.bulk.push(8);
+    r.bulk.push(7);
+    return r;
+}
+
+fn child_of(v: &RBag, idx: u64) -> RNode {
+    let sl: Slice<RNode> = VEC_AS_SLICE(v.items);
+    let out = rnode(0);
+    SLICE_GET(out, sl, idx);
+    return out;
+}
+
+@test "slice get extract owns a clone"() {
+    // Non-recursive owning struct element.
+    let ws = WBag {
+        items: Vec::new(),
+    };
+    ws.items.push(wnode_full(42));
+    let got = wchild_of(&ws, 0);
+    if got.n != 42 { panic(101); };
+    if (len(got.bulk) as u64) != 2 { panic(102); };
+    // Mutating the extracted copy must not disturb the parent element.
+    got.bulk.push(1);
+    let got2 = wchild_of(&ws, 0);
+    if (len(got2.bulk) as u64) != 2 { panic(103); };
+    if got2.n != 42 { panic(104); };
+    // Both copies drop at scope exit; the parent drops last and must
+    // still be whole (ws is read again through a third extraction).
+    let got3 = wchild_of(&ws, 0);
+    if (len(got3.bulk) as u64) != 2 { panic(105); };
+}
+
+@test "slice get extract recursive struct"() {
+    let leaf = rnode_full(5);
+    let mid = rnode_full(6);
+    mid.items.push(leaf);
+    let bag = RBag {
+        items: Vec::new(),
+    };
+    bag.items.push(mid);
+
+    let got = child_of(&bag, 0);
+    if got.n != 6 { panic(111); };
+    if (len(got.bulk) as u64) != 3 { panic(112); };
+    if (len(got.items) as u64) != 1 { panic(113); };
+    // Mutating the extracted tree must not disturb the parent element.
+    got.items.push(rnode_full(7));
+    if (len(got.items) as u64) != 2 { panic(114); };
+    let got2 = child_of(&bag, 0);
+    if (len(got2.items) as u64) != 1 { panic(115); };
+    if (len(got2.bulk) as u64) != 3 { panic(116); };
+    if got2.n != 6 { panic(117); };
+}

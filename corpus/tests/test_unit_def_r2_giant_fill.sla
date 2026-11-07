@@ -1,0 +1,61 @@
+// DEF-R2-GIANT-FILL regression corpus: large constant aggregate fills
+// must not be materialised as per-element straight-line code.
+//
+// Companion to test_unit_def_r2_giant_frame_growth.sla (the natural
+// case: 49,152 u64 elements across inlined literals). Pre-fix codegen
+// emitted ~4 host instructions per element into single functions
+// (197,176 SAB-disasm lines; 49,152 ownership fences from the
+// struct-field copy alone), and the host's LLVM mem2reg pass is
+// quadratic in that shape: measured host-stage CPU 139.6 s at
+// 12,288 elements and 656.8 s at 24,576 elements, extrapolating to
+// ~2,600-3,100 s for the full file — past the 240 s test budget on
+// BOTH backends (the text backend timed out at the same libLLVM
+// offset; its per-element pressure is compile-time, not task-stack).
+// The fix emits bulk forms above a 32-element threshold: one seed
+// store plus doubling @sa_mem_copy_nonoverlapping copies for repeat
+// fills, and a single bulk copy for struct-literal array fields
+// (the per-element consumed markers existed only for the synthetic
+// element temps the bulk form never creates). This file carries
+// 24,576 elements in one function — the smallest measured tier that
+// was over budget pre-fix — and must now compile and pass in
+// seconds on both backends.
+
+struct FillFrame {
+    a: [u64; 8192],
+    b: [u64; 8192],
+    c: [u64; 8192],
+}
+
+struct ExplicitField {
+    d: [u64; 40],
+}
+
+fn build_frame() -> FillFrame {
+    return FillFrame { a: [11u64; 8192], b: [22u64; 8192], c: [33u64; 8192] };
+}
+
+fn build_explicit() -> ExplicitField {
+    return ExplicitField { d: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40] };
+}
+
+@test "def_r2_giant_fill bulk materialisation"() {
+    let f = build_frame();
+    if f.a[0] != 11 { panic(3301); };
+    if f.a[8191] != 11 { panic(3302); };
+    if f.b[4096] != 22 { panic(3303); };
+    if f.c[8191] != 33 { panic(3304); };
+    let sum: u64 = 0;
+    let i: u64 = 0;
+    while i < 8192 {
+        sum = sum + f.a[i] + f.b[i] * 3 + f.c[i] * 7;
+        i = i + 257;
+    }
+    if sum != 9856 { panic(3305); };
+    let e = build_explicit();
+    if e.d[0] + e.d[39] != 41 { panic(3306); };
+    if e.d[17] != 18 { panic(3307); };
+    let s: [u64; 4096] = [5u64; 4096];
+    if s[0] + s[2048] + s[4095] != 15 { panic(3308); };
+    let small: [u64; 16] = [4u64; 16];
+    if small[15] != 4 { panic(3309); };
+}

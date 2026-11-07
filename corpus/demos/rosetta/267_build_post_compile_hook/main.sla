@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_post_compile_artifact_count() -> i32 { let stripped_binary = 1; return stripped_binary; }
+fn main() -> i32 { let stripped_binary = 1; println("{}", stripped_binary); return stripped_binary; }
+@test "rosetta 267 build post compile hook"() { let got = build_post_compile_artifact_count(); if got != 1 { panic(267); }; }

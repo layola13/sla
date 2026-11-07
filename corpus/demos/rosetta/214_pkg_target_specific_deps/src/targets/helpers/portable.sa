@@ -1,0 +1,5 @@
+@portable_target_value() -> i32:
+L_ENTRY:
+    value = add TARGET_PORTABLE_OFFSET, 0
+    !value
+    return TARGET_PORTABLE_OFFSET

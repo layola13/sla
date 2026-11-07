@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_thread_local_slots() -> i32 {
+    let main_thread_slot = 1;
+    let worker_thread_slot = 1;
+    return main_thread_slot + worker_thread_slot;
+}
+
+fn main() -> i32 {
+    let main_thread_slot = 1;
+    let worker_thread_slot = 1;
+    let result = main_thread_slot + worker_thread_slot;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 258 contract thread local isolation"() {
+    let got = contract_thread_local_slots();
+    if got != 2 { panic(258); };
+}

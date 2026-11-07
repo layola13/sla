@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 133_area：结构体作函数参数（6x7=42）。
+// 与 11（字段读写）互补，此处聚焦 struct 传参（写法见 11 `pt_sum`）。
+
+struct Rect {
+    w: i32,
+    h: i32,
+}
+
+fn area(r: Rect) -> i32 {
+    return r.w * r.h;
+}
+
+fn main() -> i32 {
+    let r = Rect { w: 6, h: 7 };
+    println("{}", area(r));
+    return 0;
+}
+
+@test "basic 73 rect area"() {
+    let r = Rect { w: 6, h: 7 };
+    if area(r) != 42 { panic(7301); };
+}

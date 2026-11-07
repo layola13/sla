@@ -1,0 +1,58 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 大小 Schröder 续桥恒等 S(n)=2s(n)：S(9)=206098，S(10)=1037718（桥续大端双锁）。
+// 意对标 774_schro_bridge（低位桥互补；桥恒等续高位复算）。
+
+fn sch(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 2; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k < ii {
+            s = s + t[k] * t[ii - 1 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn ssho(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        t[ii] = ((6 * ii - 3) * t[ii - 1] - (ii - 2) * t[ii - 2]) / (ii + 1);
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn main() -> i32 {
+    println("{},{}", sch(9), sch(10));
+    return 0;
+}
+
+@test "basic 794 schro bridge9"() {
+    if sch(9) != 2 * ssho(9) { panic(79401); };
+    if sch(10) != 2 * ssho(10) { panic(79402); };
+    if sch(9) != 206098 { panic(79403); };
+    if sch(10) != 1037718 { panic(79404); };
+}

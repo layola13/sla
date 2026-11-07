@@ -1,0 +1,62 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+@import "sa_std/core/slice.sa"
+
+// DEF-9 (parameter prologue, second emission point): a &Slice parameter
+// that is also used by-address (SLICE_GET / SLICE_GET_LEN take the
+// binding as a borrowed place) made the text-backend prologue first
+// materialise the descriptor into a stack_alloc slot under the
+// parameter's own name, then rebind that name onto an addressable cell
+// by move-consuming the stack_alloc register -- StackEscape 1025.
+// SAB gives the entry slot an independent name and never rebinds, so it
+// was unaffected. The fix emits the addressable cell under an
+// independent alias register and records the binding in the compiler's
+// alias map instead of rebinding the parameter name.
+// Minimised from tests/test_unit_def9_repeated_let_struct_move.sla.
+
+fn d9p_byte(sl: &Slice<u8>, off: u64) -> u8 {
+    let b: u8 = 0;
+    SLICE_GET(b, sl, off);
+    return b;
+}
+
+fn d9p_field_is(sl: &Slice<u8>, begin: u64, end: u64, name: &Slice<u8>) -> bool {
+    let n: u64 = 0;
+    SLICE_GET_LEN(n, name);
+    if end - begin != n {
+        return false;
+    };
+    let i: u64 = 0;
+    while i < n {
+        if d9p_byte(sl, begin + i) != d9p_byte(name, i) {
+            return false;
+        };
+        i = i + 1;
+    }
+    return true;
+}
+
+@test "def9 slice param addressable byte read"() {
+    let b: Vec<u8> = Vec::new();
+    b.push(104);
+    b.push(105);
+    let sl: Slice<u8> = VEC_AS_SLICE(b);
+    if d9p_byte(&sl, 0) != 104 { panic(101); };
+    if d9p_byte(&sl, 1) != 105 { panic(102); };
+}
+
+@test "def9 slice param field_is over two slices"() {
+    let b: Vec<u8> = Vec::new();
+    b.push(100);
+    b.push(97);
+    b.push(116);
+    b.push(97);
+    let sl: Slice<u8> = VEC_AS_SLICE(b);
+    let n: Vec<u8> = Vec::new();
+    n.push(100);
+    n.push(97);
+    let nm: Slice<u8> = VEC_AS_SLICE(n);
+    if !d9p_field_is(&sl, 0, 2, &nm) { panic(103); };
+    if d9p_field_is(&sl, 0, 3, &nm) { panic(104); };
+}

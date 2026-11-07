@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 106_flags：位标志组合与测试（perm=7；2, 0, 5）。
+// 与 44（拆位计数）互补，此处为 `|` 组合 + `&` 测试 + `^` 翻转。
+
+fn main() -> i32 {
+    let r = 1;
+    let w = 2;
+    let x = 4;
+    let perm = r | w | x;
+    println("{},{},{}", perm & w, perm & 8, perm ^ w);
+    return 0;
+}
+
+@test "basic 76 flags"() {
+    let r = 1;
+    let w = 2;
+    let x = 4;
+    let perm = r | w | x;
+    if perm != 7 { panic(7601); };
+    if (perm & w) != 2 { panic(7602); };
+    if (perm & 8) != 0 { panic(7603); };
+    if (perm ^ w) != 5 { panic(7604); };
+}

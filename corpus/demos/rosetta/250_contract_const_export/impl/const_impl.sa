@@ -1,0 +1,7 @@
+@const EXPORTED_TEXT = utf8:"250\n"
+
+@export const_value() -> i32:
+L_ENTRY:
+    value = add 250, 0
+    !value
+    return 250

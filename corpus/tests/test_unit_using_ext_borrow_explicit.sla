@@ -1,0 +1,17 @@
+// DEF-E0 regression: borrow-first-parameter extension called on an
+// explicit borrow value.
+mod borrow_ext {
+    pub fn peek_len(v: &Vec<i32>) -> i32 {
+        return v.len() + 50;
+    }
+}
+
+using borrow_ext;
+
+@test "using ext: borrow receiver explicit"() {
+    let v: Vec<i32> = Vec::new();
+    v.push(1);
+    v.push(2);
+    let r = &v;
+    if r.peek_len() != 52 { panic(35010); };
+}

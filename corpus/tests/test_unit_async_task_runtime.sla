@@ -1,0 +1,32 @@
+// Future/task runtime smoke tests beyond direct ready-state await.
+
+fn poll_ready_task_once() -> int {
+    let fut = future::ready(41);
+    let task = task::new(fut);
+    let first_ready = task::poll(task);
+    if first_ready != true {
+        panic(8101);
+    };
+    if task::is_ready(task) != true {
+        panic(8102);
+    };
+    let value = task::result(task);
+    if value != 41 {
+        panic(8103);
+    };
+    let second_ready = task::poll(task);
+    if second_ready {
+        panic(8104);
+    };
+    if task::result(task) != 41 {
+        panic(8105);
+    };
+    return value;
+}
+
+@test "future ready task poll runtime"() {
+    let value = poll_ready_task_once();
+    if value != 41 {
+        panic(8106);
+    };
+}

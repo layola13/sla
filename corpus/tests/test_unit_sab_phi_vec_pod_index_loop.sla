@@ -1,0 +1,114 @@
+// DEF-PHI regression corpus: Vec inline-POD index read/assign inside
+// a while loop, where the index target is a Vec field reached through
+// a borrowed struct. The bounds-check branch disposes the owner temp
+// on both arms; the SAB codegen's path-insensitive release
+// bookkeeping used to swallow the hit arm's disposal, leaving the
+// owner Active on that path only and trapping the SAB verifier with
+// PhiStateConflict (1015) at the loop head (Composite vs
+// Uninitialized). Distilled from test_unit_defkb1_vec_field_index_join
+// and test_unit_vec_index_assign.
+@import "sa_std/vec.sa"
+
+struct PhiAtom {
+    z: i32, charge: i32,
+}
+
+struct PhiGraph {
+    atoms: Vec<PhiAtom>,
+}
+
+fn phi_sum_z(g: &PhiGraph) -> i32 {
+    let total: i32 = 0;
+    let i = 0;
+    while i < len(g.atoms) {
+        let a = g.atoms[i];
+        total = total + a.z;
+        i = i + 1;
+    }
+    return total;
+}
+
+@test "sab phi vec pod index read in while loop"() {
+    let g = PhiGraph { atoms: Vec::new() };
+    g.atoms.push(PhiAtom { z: 3, charge: 0 });
+    g.atoms.push(PhiAtom { z: 4, charge: 0 });
+    if phi_sum_z(&g) != 7 { panic(1710); };
+}
+
+struct PhiDoc {
+    next: Vec<i64>,
+    child: Vec<i64>,
+}
+
+fn phi_bump(doc: &PhiDoc, count: u64) {
+    let i: u64 = 0;
+    while i < count {
+        doc.next[i] = (i as i64) * 2;
+        i = i + 1;
+    }
+}
+
+@test "sab phi vec pod index assign in while loop"() {
+    let doc = PhiDoc { next: Vec::new(), child: Vec::new() };
+    let k: u64 = 0;
+    while k < 4 {
+        doc.next.push(0);
+        doc.child.push(0);
+        k = k + 1;
+    }
+    phi_bump(&doc, 4);
+    if doc.next[0] != 0 { panic(1711); };
+    if doc.next[3] != 6 { panic(1712); };
+}
+
+struct PhiHolder {
+    values: Vec<PhiAtom>,
+}
+
+@test "sab phi vec field index assign in while loop local holder"() {
+    let holder = PhiHolder { values: Vec::new() };
+    holder.values.push(PhiAtom { z: 1, charge: 0 });
+    holder.values.push(PhiAtom { z: 2, charge: 0 });
+    let i: u64 = 0;
+    while i < 2 {
+        holder.values[i] = PhiAtom { z: 5, charge: 1 };
+        i = i + 1;
+    }
+    if holder.values[0].z != 5 { panic(1713); };
+    if holder.values[1].z != 5 { panic(1714); };
+}
+
+fn phi_atom_less(left: &PhiAtom, right: &PhiAtom) -> bool {
+    if left.z < right.z { return true; };
+    return left.charge < right.charge;
+}
+
+// A borrow of an inline-POD element (`&vec[i]`) denotes the element
+// slot in the buffer; the lowering used to hand the slot's packed
+// word to the callee as if it were the element record pointer.
+@test "sab phi vec pod element borrow in nested loops"() {
+    let values: Vec<PhiAtom> = Vec::new();
+    values.push(PhiAtom { z: 9, charge: 0 });
+    values.push(PhiAtom { z: 4, charge: 1 });
+    values.push(PhiAtom { z: 7, charge: 2 });
+    let i: u64 = 0;
+    while i < len(values) {
+        let best = i;
+        let j = i + 1;
+        while j < len(values) {
+            if phi_atom_less(&values[j], &values[best]) == true {
+                best = j;
+            };
+            j = j + 1;
+        }
+        if best != i {
+            let tmp = values[i];
+            values[i] = values[best];
+            values[best] = tmp;
+        };
+        i = i + 1;
+    }
+    if values[0].z != 4 { panic(1715); };
+    if values[1].z != 7 { panic(1716); };
+    if values[2].z != 9 { panic(1717); };
+}

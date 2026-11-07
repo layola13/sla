@@ -1,0 +1,11 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_workspace_member_count() -> i32 {
+    let app_member = 1;
+    let lib_member = 1;
+    return app_member + lib_member;
+}
+
+fn main() -> i32 { let app_member = 1; let lib_member = 1; let result = app_member + lib_member; println("{}", result); return result; }
+@test "rosetta 210 pkg workspace root"() { let got = pkg_workspace_member_count(); if got != 2 { panic(210); }; }

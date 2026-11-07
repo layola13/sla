@@ -1,0 +1,106 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_process_msg = vtable { call = @sla__process_msg }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__process_msg(msg: ptr) -> i32:
+L_ENTRY:
+    jmp L_MATCH_CHECK_0_2
+
+L_MATCH_CHECK_0_2:
+    tmp_0 = load msg+0 as i64
+    tmp_1 = 0
+    tmp_2 = eq tmp_0, tmp_1
+    !tmp_0
+    !tmp_1
+    br tmp_2 -> L_MATCH_CASE_0_2, L_MATCH_CHECK_1_2
+
+L_MATCH_CASE_0_2:
+    !tmp_2
+    tmp_3 = 0
+    !msg
+    return tmp_3
+
+L_MATCH_CHECK_1_2:
+    !tmp_2
+    tmp_4 = load msg+0 as i64
+    tmp_5 = 1
+    tmp_6 = eq tmp_4, tmp_5
+    !tmp_4
+    !tmp_5
+    br tmp_6 -> L_MATCH_CASE_1_2, L_MATCH_NO_MATCH_1
+
+L_MATCH_CASE_1_2:
+    x = load msg+8 as i32
+    y = load msg+12 as i32
+    !tmp_6
+    tmp_7 = add x, y
+    !msg
+    return tmp_7
+
+L_MATCH_NO_MATCH_1:
+    !tmp_6
+    panic(1)
+
+
+@main() -> i32:
+L_ENTRY:
+    msg = alloc 16
+    store msg+0, 1 as i64
+    tmp_9 = 10
+    store msg+8, tmp_9 as i32
+    tmp_10 = 20
+    store msg+12, tmp_10 as i32
+    tmp_11 = call @sla__process_msg(msg)
+    result = tmp_11
+    tmp_12 = call @sa_fmt_u64(result, 10)
+    tmp_13 = call @sa_fmt_buffer_data(tmp_12)
+    tmp_14 = call @sa_fmt_buffer_len(tmp_12)
+    tmp_15 = tmp_13
+    call @sa_print_bytes(&tmp_15, tmp_14)
+    call @sa_fmt_buffer_free(^tmp_12)
+    !tmp_15
+    !tmp_14
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_16 = 0
+    !msg
+    !result
+    return tmp_16
+
+@test "rosetta 006 enum and match"():
+L_TEST_ENTRY_3:
+    msg = alloc 16
+    store msg+0, 1 as i64
+    tmp_17 = 10
+    store msg+8, tmp_17 as i32
+    tmp_18 = 20
+    store msg+12, tmp_18 as i32
+    tmp_19 = call @sla__process_msg(msg)
+    result = tmp_19
+    tmp_20 = 30
+    tmp_21 = ne result, tmp_20
+    !tmp_20
+    br tmp_21 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_21
+    panic(6)
+
+L_ELSE_5:
+    !tmp_21
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !msg
+    !result
+    return
+

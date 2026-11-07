@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 155_collatz 的序列版（49 为步数版：collatz(6) 链长 9，首 6 末 1）。
+// 变换（`/`,`*`）+ 入表（`push`）+ 表长断言组合。
+
+fn main() -> i32 {
+    let chain: Vec<i32> = Vec::new();
+    let n = 6;
+    while n != 1 {
+        chain.push(n);
+        if n % 2 == 0 {
+            n = n / 2;
+        } else {
+            n = n * 3 + 1;
+        };
+    }
+    chain.push(1);
+    println("{},{},{}", len(chain), chain[0], chain[8]);
+    return 0;
+}
+
+@test "basic 236 collatz seq"() {
+    let chain: Vec<i32> = Vec::new();
+    let n = 6;
+    while n != 1 {
+        chain.push(n);
+        if n % 2 == 0 {
+            n = n / 2;
+        } else {
+            n = n * 3 + 1;
+        };
+    }
+    chain.push(1);
+    if len(chain) != 9 { panic(23601); };
+    if chain[0] != 6 { panic(23602); };
+    if chain[8] != 1 { panic(23603); };
+}

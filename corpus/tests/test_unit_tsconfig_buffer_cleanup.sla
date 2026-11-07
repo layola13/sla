@@ -1,0 +1,223 @@
+@import "sa_std/string.sa"
+@import "sa_std/fs.sa"
+@import "sa_std/env.sai"
+@import "sa_std/encoding/json.sa"
+@import "import_fixtures/pkgjson/fs_helpers.sa"
+@import "import_fixtures/pkgjson/json_helpers.sa"
+@import "import_fixtures/pkgjson/ptr_helpers.sa"
+
+const TS_KIND_OBJECT: int = 7;
+const TS_KIND_STRING: int = 5;
+
+struct MiniTsconfigResult {
+    found: bool,
+    parse_ok: bool,
+    option_count: int,
+}
+
+struct MiniPathSlice {
+    ptr: ptr,
+    len: int,
+}
+
+fn mini_buf_append(dst: ptr, off: int, src: ptr, n: int) -> int {
+    let i = 0;
+    while i < n {
+        SLA_BYTE_PUT(dst, off + i, SLA_BYTE_AT(src, i));
+        i = i + 1;
+    }
+    return off + n;
+}
+
+// Fixture dir: SA_SLA_FIXTURE_DIR env override (must end with "/") or the
+// checked-in default. Keeps tests portable across checkouts/machines.
+// Borrow discipline: env buffer borrows never cross a function boundary,
+// so each helper's borrows die with its scope and the handle stays movable.
+fn mini_env_dir_len(h: u64) -> u64 {
+    return sa_env_buffer_len(h);
+}
+
+fn mini_env_dir_copy(h: u64, out: ptr, n: int) -> int {
+    let d = sa_env_buffer_data(h);
+    let draw = SLA_PTR_ADD(d, 0);
+    let w = mini_buf_append(out, 0, draw, n);
+    !draw;
+    !d;
+    return w;
+}
+
+fn mini_join_fixture(name: ptr, name_len: int) -> MiniPathSlice {
+    let h = sa_env_get(STR_PTR("SA_SLA_FIXTURE_DIR"), STR_LEN("SA_SLA_FIXTURE_DIR"));
+    if h == 0 {
+        return mini_join_with_default(name, name_len);
+    };
+    let dir_len = mini_env_dir_len(h);
+    let total = dir_len + name_len;
+    let out = SLA_BUF_ALLOC(total + 1);
+    let w = mini_env_dir_copy(h, out, dir_len);
+    w = mini_buf_append(out, w, name, name_len);
+    SLA_BYTE_PUT(out, total, 0);
+    // NOTE: `!h` (not free(^h)): the dir borrows above keep h pinned for the
+    // typechecker, so an explicit move never verifies; scope release is the
+    // supported idiom here and h is dead after this point anyway.
+    !h;
+    return MiniPathSlice { ptr: out, len: total };
+}
+
+fn mini_join_with_default(name: ptr, name_len: int) -> MiniPathSlice {
+    let total = STR_LEN("/home/vscode/projects/sa_plugins/sa_plugin_sla/tests/import_fixtures/") + name_len;
+    let out = SLA_BUF_ALLOC(total + 1);
+    let w = 0;
+    w = mini_buf_append(out, w, STR_PTR("/home/vscode/projects/sa_plugins/sa_plugin_sla/tests/import_fixtures/"), STR_LEN("/home/vscode/projects/sa_plugins/sa_plugin_sla/tests/import_fixtures/"));
+    w = mini_buf_append(out, w, name, name_len);
+    SLA_BYTE_PUT(out, total, 0);
+    return MiniPathSlice { ptr: out, len: total };
+}
+
+fn mini_build_fixture_path() -> MiniPathSlice {
+    return mini_join_fixture(STR_PTR("tsconfig_cleanup.json"), STR_LEN("tsconfig_cleanup.json"));
+}
+
+fn mini_buf_clone(src: ptr, n: int) -> MiniPathSlice {
+    let out = SLA_BUF_ALLOC(n);
+    let off = 0;
+    off = mini_buf_append(out, off, src, n);
+    return MiniPathSlice { ptr: out, len: n };
+}
+
+fn mini_build_cloned_fixture_path() -> MiniPathSlice {
+    let base = mini_join_fixture(STR_PTR("tsconfig_cleanup.json"), STR_LEN("tsconfig_cleanup.json"));
+    let clone = mini_buf_clone(base.ptr, base.len + 1);
+    return MiniPathSlice { ptr: clone.ptr, len: base.len };
+}
+
+fn mini_tsconfig_not_found() -> MiniTsconfigResult {
+    return MiniTsconfigResult { found: false, parse_ok: false, option_count: 0 };
+}
+
+fn mini_tsconfig_parse_error() -> MiniTsconfigResult {
+    return MiniTsconfigResult { found: true, parse_ok: false, option_count: 0 };
+}
+
+fn mini_tsconfig_from_text(data: ptr, data_len: int) -> MiniTsconfigResult {
+    if data_len == 0 {
+        return mini_tsconfig_parse_error();
+    };
+    let root = JSON_PARSE(data, data_len);
+    if JSON_KIND(root) != TS_KIND_OBJECT {
+        return mini_tsconfig_parse_error();
+    };
+    let co = SLA_JSON_OBJECT_GET(root, STR_PTR("compilerOptions"), STR_LEN("compilerOptions"));
+    let count = 0;
+    if JSON_KIND(co) == TS_KIND_OBJECT {
+        count = 1;
+    };
+    return MiniTsconfigResult { found: true, parse_ok: true, option_count: count };
+}
+
+fn mini_tsconfig_from_path(path: ptr, path_len: int) -> MiniTsconfigResult {
+    let exists = SLA_FS_EXISTS(path, path_len);
+    if exists != 1 {
+        return mini_tsconfig_not_found();
+    };
+
+    let buf = SLA_FS_READ_TO_STRING(path, path_len, 4096);
+    let data = SLA_FS_BUFFER_DATA(buf);
+    let data_len = SLA_FS_BUFFER_LEN(buf);
+    if data_len == 0 {
+        return mini_tsconfig_parse_error();
+    };
+
+    let child = mini_tsconfig_from_text(data, data_len);
+    if child.parse_ok != true { return child; };
+
+    let root = JSON_PARSE(data, data_len);
+    if JSON_KIND(root) != TS_KIND_OBJECT { return child; };
+    let ext_node = SLA_JSON_OBJECT_GET(root, STR_PTR("extends"), STR_LEN("extends"));
+    if JSON_KIND(ext_node) != TS_KIND_STRING { return child; };
+
+    return MiniTsconfigResult { found: true, parse_ok: true, option_count: child.option_count + 1 };
+}
+
+fn mini_tsconfig_from_path_slice(path: MiniPathSlice) -> MiniTsconfigResult {
+    let exists = SLA_FS_EXISTS(path.ptr, path.len);
+    if exists != 1 {
+        return mini_tsconfig_not_found();
+    };
+
+    let buf = SLA_FS_READ_TO_STRING(path.ptr, path.len, 4096);
+    let data = SLA_FS_BUFFER_DATA(buf);
+    let data_len = SLA_FS_BUFFER_LEN(buf);
+    if data_len == 0 {
+        return mini_tsconfig_parse_error();
+    };
+
+    return mini_tsconfig_from_text(data, data_len);
+}
+
+fn mini_read_extended_base() -> MiniTsconfigResult {
+    let child_path = mini_join_fixture(STR_PTR("tsconfig_ext_child.json"), STR_LEN("tsconfig_ext_child.json"));
+    let child = mini_tsconfig_from_path(child_path.ptr, child_path.len);
+    if child.parse_ok != true { return child; };
+
+    let child_buf = SLA_FS_READ_TO_STRING(child_path.ptr, child_path.len, 4096);
+    let child_data = SLA_FS_BUFFER_DATA(child_buf);
+    let child_len = SLA_FS_BUFFER_LEN(child_buf);
+    let root = JSON_PARSE(child_data, child_len);
+    let ext_node = SLA_JSON_OBJECT_GET(root, STR_PTR("extends"), STR_LEN("extends"));
+    if JSON_KIND(ext_node) != TS_KIND_STRING { return mini_tsconfig_parse_error(); };
+    let ext_ptr = SLA_JSON_STRING_PTR(ext_node);
+    let ext_len = SLA_JSON_STRING_LEN(ext_node);
+    let estart = 0;
+    if ext_len >= 2 {
+        if SLA_BYTE_AT(ext_ptr, 0) == 46 { if SLA_BYTE_AT(ext_ptr, 1) == 47 { estart = 2; }; };
+    };
+    let eff_len = ext_len - estart;
+    let base_joined = mini_join_fixture(SLA_PTR_ADD(ext_ptr, estart), eff_len);
+    let base_probe = mini_buf_clone(base_joined.ptr, base_joined.len + 1);
+    let base_path = MiniPathSlice { ptr: base_probe.ptr, len: base_joined.len };
+    return mini_tsconfig_from_path_slice(base_path);
+}
+
+fn mini_build_child_ext_path() -> MiniPathSlice {
+    return mini_join_fixture(STR_PTR("tsconfig_ext_child.json"), STR_LEN("tsconfig_ext_child.json"));
+}
+
+@test "tsconfig buffer data cleanup after child return"() {
+    let cleanup_path = mini_join_fixture(STR_PTR("tsconfig_cleanup.json"), STR_LEN("tsconfig_cleanup.json"));
+    let result = mini_tsconfig_from_path(cleanup_path.ptr, cleanup_path.len);
+    if result.found != true { panic(41001); };
+    if result.parse_ok != true { panic(41002); };
+    if result.option_count != 1 { panic(41003); };
+}
+
+@test "dynamic heap path fs read returns file contents"() {
+    let path = mini_build_fixture_path();
+    let result = mini_tsconfig_from_path(path.ptr, path.len);
+    if result.found != true { panic(41011); };
+    if result.parse_ok != true { panic(41012); };
+    if result.option_count != 1 { panic(41013); };
+}
+
+@test "dynamic path slice fields fs read returns file contents"() {
+    let path = mini_build_fixture_path();
+    let result = mini_tsconfig_from_path_slice(path);
+    if result.found != true { panic(41021); };
+    if result.parse_ok != true { panic(41022); };
+    if result.option_count != 1 { panic(41023); };
+}
+
+@test "cloned dynamic path slice fields fs read returns file contents"() {
+    let path = mini_build_cloned_fixture_path();
+    let result = mini_tsconfig_from_path_slice(path);
+    if result.found != true { panic(41031); };
+    if result.parse_ok != true { panic(41032); };
+    if result.option_count != 1 { panic(41033); };
+}
+
+@test "extends string builds cloned base path fs read returns file contents"() {
+    let result = mini_read_extended_base();
+    if result.found != true { panic(41041); };
+    if result.parse_ok != true { panic(41042); };
+    if result.option_count != 1 { panic(41043); };
+}

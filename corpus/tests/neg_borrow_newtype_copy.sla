@@ -1,0 +1,15 @@
+// expect: UseAfterMove
+// Handle newtypes are move-only: copying the binding and then using
+// the original is a use-after-move (stock checker behavior, no new
+// diagnostic -- the E_res census relies on it).
+@import "sa_std/fs.sai"
+
+struct FsReadBuffer {
+    raw: u64,
+}
+
+fn bad() -> u64 {
+    let a = FsReadBuffer { raw: 7 };
+    let b = a;
+    return a.raw;
+}

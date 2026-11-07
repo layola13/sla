@@ -1,0 +1,163 @@
+// DEF-SAB-BORROW-WRITE-NULL regression corpus (2026-11-05): on the SAB
+// backend, field/index access through a borrow whose register holds
+// the pointee object pointer itself (a &Struct parameter, a borrow of
+// a struct-literal local, a borrow of an inline/copy field place)
+// emitted a through-load meant for cell-handle registers (call result
+// slots, pointer-field views, pointer-backed element slots). The load
+// reinterpreted the object's first word as a pointer, so reads/writes
+// landed on a null or wild address (signal 11; with a first field of
+// 4096 the write fault is at 4104+8). Pre-fix every non-GUARD test
+// below terminates by signal 11 on the SAB backend while the SA-text
+// backend passes; GUARD tests passed before the fix as well (their
+// registers genuinely are cell handles / direct derefs).
+@import "sa_std/vec.sa"
+@import "sa_std/core/box.sa"
+
+struct BnPair {
+    x: u64,
+    y: u64,
+}
+
+struct BnFrame {
+    a: [u64; 64],
+    b: [u64; 64],
+}
+
+struct BnInner {
+    x: u64,
+    y: u64,
+}
+
+struct BnOuter {
+    inner: BnInner,
+    z: u64,
+}
+
+@derive(copy)
+struct BnCfg {
+    x: u64,
+    y: u64,
+}
+
+struct BnCfgHolder {
+    cfg: BnCfg,
+    z: u64,
+}
+
+struct BnRec {
+    key: u64,
+    val: u64,
+}
+
+fn bn_set_pair(p: &BnPair, n: u64) {
+    p.x = n;
+    p.y = n + 1;
+}
+
+fn bn_read_pair(p: &BnPair) -> u64 {
+    return p.x + p.y;
+}
+
+fn bn_fill_frame(f: &BnFrame, n: u64) {
+    let i: u64 = 0;
+    while i < 64 {
+        f.a[i] = n + i;
+        f.b[i] = n * 3 + i;
+        i = i + 1;
+    }
+}
+
+fn bn_set_inner_x(o: &BnOuter, n: u64) {
+    o.inner.x = n;
+}
+
+fn bn_set_via_field_borrow(o: &BnOuter, n: u64) {
+    let q = &o.inner;
+    q.y = n;
+}
+
+fn bn_set_y_raw(p: *BnPair, n: u64) {
+    p.y = n;
+}
+
+@test "def_sab_borrow_write_null param borrow write scalar fields"() {
+    let p = BnPair { x: 0, y: 0 };
+    bn_set_pair(&p, 10);
+    if p.x + p.y != 21 { panic(3601); };
+}
+
+@test "def_sab_borrow_write_null param borrow read"() {
+    let p = BnPair { x: 3, y: 4 };
+    if bn_read_pair(&p) != 7 { panic(3602); };
+}
+
+@test "def_sab_borrow_write_null param borrow fill array fields"() {
+    let f = BnFrame { a: [0; 64], b: [0; 64] };
+    bn_fill_frame(&f, 3);
+    if f.a[3] + f.b[21] != 36 { panic(3603); };
+}
+
+@test "def_sab_borrow_write_null local borrow write"() {
+    let p = BnPair { x: 0, y: 0 };
+    let q = &p;
+    q.y = 7;
+    if p.y != 7 { panic(3604); };
+}
+
+@test "def_sab_borrow_write_null aggregate field borrow write"() {
+    let o = BnOuter { inner: BnInner { x: 0, y: 0 }, z: 0 };
+    let q = &o.inner;
+    q.x = 5;
+    q.y = 6;
+    if o.inner.x + o.inner.y != 11 { panic(3605); };
+}
+
+@test "def_sab_borrow_write_null param nested field write"() {
+    let o = BnOuter { inner: BnInner { x: 0, y: 0 }, z: 0 };
+    bn_set_inner_x(&o, 5);
+    if o.inner.x != 5 { panic(3606); };
+}
+
+@test "def_sab_borrow_write_null param field borrow write"() {
+    let o = BnOuter { inner: BnInner { x: 0, y: 0 }, z: 0 };
+    bn_set_via_field_borrow(&o, 6);
+    if o.inner.y != 6 { panic(3607); };
+}
+
+@test "def_sab_borrow_write_null copy field borrow write"() {
+    let h = BnCfgHolder { cfg: BnCfg { x: 0, y: 0 }, z: 0 };
+    let q = &h.cfg;
+    q.x = 5;
+    if h.cfg.x != 5 { panic(3608); };
+}
+
+@test "def_sab_borrow_write_null sentinel first field"() {
+    let p = BnPair { x: 4096, y: 0 };
+    bn_set_pair(&p, 7);
+    if p.y != 8 { panic(3609); };
+    if p.x != 7 { panic(3610); };
+}
+
+@test "def_sab_borrow_write_null vec element borrow read GUARD"() {
+    let v: Vec<BnRec> = Vec::new();
+    v.push(BnRec { key: 11, val: 22 });
+    v.push(BnRec { key: 33, val: 44 });
+    let b = &v[1];
+    if b.key + b.val != 77 { panic(3611); };
+}
+
+@test "def_sab_borrow_write_null raw pointer param write GUARD"() {
+    let p = Box::into_raw(Box::new(BnPair { x: 0, y: 0 }));
+    bn_set_y_raw(p, 7);
+    if (*p).y != 7 { panic(3612); };
+}
+
+fn bn_set_u64(p: &u64, n: u64) {
+    *p = n;
+}
+
+@test "def_sab_borrow_write_null scalar borrow write GUARD"() {
+    let x: u64 = 0;
+    bn_set_u64(&x, 42);
+    if x != 42 { panic(3613); };
+}

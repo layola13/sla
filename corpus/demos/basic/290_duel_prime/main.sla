@@ -1,0 +1,54 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 试除 vs 轮式素数对峙（46×261：30 以内 10=10，29 素、25 合）.
+// 双实现一致性锁定（单实现见 46/261）。
+
+fn prime_trial(n: int) -> int {
+    if n < 2 { return 0; };
+    for i in 2..n {
+        if i * i > n { break; };
+        if n % i == 0 { return 0; };
+    }
+    return 1;
+}
+
+fn prime_wheel(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 || n == 3 { return 1; };
+    if n % 2 == 0 || n % 3 == 0 { return 0; };
+    let i = 5;
+    while i * i <= n {
+        if n % i == 0 || n % (i + 2) == 0 { return 0; };
+        i = i + 6;
+    }
+    return 1;
+}
+
+fn main() -> i32 {
+    let pt = 0;
+    let pw = 0;
+    let c = 2;
+    while c <= 30 {
+        if prime_trial(c) == 1 { pt = pt + 1; };
+        if prime_wheel(c) == 1 { pw = pw + 1; };
+        c = c + 1;
+    }
+    println("{},{}", pt, pw);
+    return 0;
+}
+
+@test "basic 290 duel prime"() {
+    if prime_trial(29) != prime_wheel(29) { panic(29001); };
+    if prime_trial(25) != prime_wheel(25) { panic(29002); };
+    let pt = 0;
+    let pw = 0;
+    let c = 2;
+    while c <= 30 {
+        if prime_trial(c) == 1 { pt = pt + 1; };
+        if prime_wheel(c) == 1 { pw = pw + 1; };
+        c = c + 1;
+    }
+    if pt != pw { panic(29003); };
+    if pt != 10 { panic(29004); };
+}

@@ -1,0 +1,180 @@
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+// Follow-up line (family 1): SAB match/switch merges previously had
+// NO compensation at all - a local consumed on exactly one arm/case
+// reached the merge Consumed on that path and Active on the others,
+// and the referee rejected the module (PhiStateConflict 1015).
+// Fallthrough arms now jump to deferred per-arm exit blocks that
+// balance against the union of arm-end released sets (with the deep
+// @sa_vec_free form for owned String/Vec values).
+//
+// These shapes pass on the SAB backend before/after as: pre-fix the
+// whole file traps 1015 at module verification; post-fix all pass.
+//
+// Text-backend line (family 3): the SA text backend had the same
+// structural gap in its own match/switch merges - it compensated
+// if/else merges only (see test_unit_branch_merge_balance.sla), so
+// every shape in this file trapped 1015 there. The text backend now
+// carries the N-way form of the if/else consumption compensation:
+// per-arm end sets are collected at each fallthrough jump, the
+// differential union is released on the arms that did not consume it
+// (inserted before the arm's jump to the merge), and a no-default
+// switch's skip path is routed through a dedicated skip block with
+// its own compensation. All shapes below pass on both backends; the
+// enum-match and switch-default tests were added by that line to pin
+// the genMatchExpr and default-arm paths alongside the Option/Result
+// and skip-path shapes.
+
+fn fum_take_string(s: String) -> u64 {
+    return len(s);
+}
+
+@test "match merge string consumed in one arm"() {
+    let s: String = format("hello world hello!");
+    let n: u64 = 0;
+    let r: Result<u64, i32> = Ok(7);
+    match r {
+        Ok(v) => {
+            n = fum_take_string(s);
+        },
+        Err(e) => {
+            n = 0;
+        },
+    };
+    if n != 18 {
+        panic(7101);
+    };
+}
+
+@test "match merge string consumed in second arm"() {
+    let s: String = format("hello world hello!");
+    let n: u64 = 0;
+    let r: Result<u64, i32> = Err(3);
+    match r {
+        Ok(v) => {
+            n = 0;
+        },
+        Err(e) => {
+            n = fum_take_string(s);
+        },
+    };
+    if n != 18 {
+        panic(7102);
+    };
+}
+
+@test "switch merge string consumed in one case"() {
+    let s: String = format("hello world hello!");
+    let n: u64 = 0;
+    let tag: i64 = 1;
+    switch tag {
+        1 => {
+            n = fum_take_string(s);
+        },
+        2 => {
+            n = 0;
+        },
+    };
+    if n != 18 {
+        panic(7103);
+    };
+}
+
+@test "match merge balance in a loop stays sound"() {
+    let k: i32 = 0;
+    let total: u64 = 0;
+    while k < 20000 {
+        let s: String = format("hello world hello!");
+        let r: Result<u64, i32> = Ok(7);
+        if k % 2 == 0 {
+            match r {
+                Ok(v) => {
+                    total = total + fum_take_string(s);
+                },
+                Err(e) => {
+                    total = total + 0;
+                },
+            };
+        } else {
+            total = total + fum_take_string(s);
+        };
+        k = k + 1;
+    }
+    if total != 360000 {
+        panic(7104);
+    };
+}
+
+enum FumEvent {
+    A { v: u64 },
+    B { v: u64 },
+}
+
+@test "enum match merge string consumed in one arm"() {
+    let s: String = format("hello world hello!");
+    let n: u64 = 0;
+    let e = FumEvent::A { v: 7 };
+    match e {
+        FumEvent::A { v } => {
+            n = fum_take_string(s) + v;
+        },
+        FumEvent::B { v } => {
+            n = v;
+        },
+    };
+    if n != 25 {
+        panic(7105);
+    };
+}
+
+@test "enum match merge string consumed in second arm"() {
+    let s: String = format("hello world hello!");
+    let n: u64 = 0;
+    let e = FumEvent::B { v: 7 };
+    match e {
+        FumEvent::A { v } => {
+            n = v;
+        },
+        FumEvent::B { v } => {
+            n = fum_take_string(s) + v;
+        },
+    };
+    if n != 25 {
+        panic(7106);
+    };
+}
+
+@test "switch default merge string consumed in one case"() {
+    let s: String = format("hello world hello!");
+    let n: u64 = 0;
+    let tag: i64 = 9;
+    switch tag {
+        1 => {
+            n = fum_take_string(s);
+        },
+        default => {
+            n = 0;
+        },
+    };
+    if n != 0 {
+        panic(7107);
+    };
+}
+
+@test "switch default merge string consumed in default"() {
+    let s: String = format("hello world hello!");
+    let n: u64 = 0;
+    let tag: i64 = 9;
+    switch tag {
+        1 => {
+            n = 0;
+        },
+        default => {
+            n = fum_take_string(s);
+        },
+    };
+    if n != 18 {
+        panic(7108);
+    };
+}

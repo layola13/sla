@@ -1,0 +1,83 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/future.sa"
+@import "sa_std/core/waker.sa"
+@import "sa_std/pin.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/time.sla"
+
+fn unix_now_millis() -> u64 {
+    return SystemTime::now().duration_since(SystemTime::unix_epoch()).unwrap().as_millis();
+}
+
+fn sleep_for_millis(delay_ms: u64) -> void {
+    thread::sleep(Duration::from_millis(delay_ms));
+}
+
+fn instant_now_ns() -> u64 {
+    let started = Instant::now();
+    return started.raw_ns();
+}
+
+fn elapsed_millis_since_ns(started_ns: u64) -> u64 {
+    let started = Instant::from_raw_ns(started_ns);
+    return started.elapsed().as_millis();
+}
+
+fn duration_millis(ms: u64) -> u64 {
+    return Duration::from_millis(ms).as_millis();
+}
+
+async fn step_one_after_delay(delay_ms: u64) -> i32 {
+    sleep_for_millis(delay_ms);
+    return 1;
+}
+
+async fn run() -> i32 {
+    let delay_ms: u64 = 5;
+    let started_ns = instant_now_ns();
+    let value = step_one_after_delay(delay_ms).await;
+    let elapsed_ms = elapsed_millis_since_ns(started_ns);
+    let min_elapsed_ms = duration_millis(1);
+    if elapsed_ms < min_elapsed_ms {
+        panic(92);
+    };
+    return value + 1;
+}
+
+fn block_on(future: future<i32>) -> i32 {
+    let data: ptr = PTR_NULL();
+    let raw = RAW_WAKER_NEW(data, data);
+    let waker = WAKER_FROM_RAW(raw);
+    let context = CONTEXT_FROM_WAKER(waker);
+    let boxed = Box::new(future);
+    let future_ref = *boxed;
+    let pinned = stack_alloc();
+    PIN_MUT_NEW(pinned, future_ref);
+    let poll = FUTURE_READY_POLL_STATE(PIN_MUT_GET_MUT(pinned));
+    let ready = POLL_IS_READY(poll);
+    if ready != true {
+        let _cx_waker = CONTEXT_WAKER(context);
+        panic(93);
+    };
+    let value: i32 = POLL_VALUE(poll);
+    return value;
+}
+
+fn async_run_value() -> i32 {
+    return block_on(run());
+}
+
+fn main() -> i32 {
+    let result = async_run_value();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 009 09_async_await"() {
+    let got = async_run_value();
+    if got != 2 {
+        panic(9);
+    };
+};

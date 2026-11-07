@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1270_for_break：单层 `for in` + 早停（0+1+2+3+4=10）。
+// SLA `for` 为无步长整数区间（见 158）；C 式三段头不可解析，此处用区间改写。
+// 与 32（while 版早停）、48（嵌套版）互补。
+
+fn main() -> i32 {
+    let s = 0;
+    for i in 0..10 {
+        if i == 5 { break; };
+        s = s + i;
+    }
+    println("{}", s);
+    return 0;
+}
+
+@test "basic 202 for break"() {
+    let s = 0;
+    for i in 0..10 {
+        if i == 5 { break; };
+        s = s + i;
+    }
+    if s != 10 { panic(20201); };
+}

@@ -1,0 +1,22 @@
+// P1-8 regression (text backend): a Mutex created and locked directly
+// in an @test body must have its register released at test exit. The
+// text codegen marked the lock() receiver consumed and never lifted
+// the mark when the guard was released, so the block-end cleanup was
+// suppressed and the exit scan trapped with error[MemoryLeak].
+// NOTE: the SAB arm of this shape is a separate layer (the SAB runner
+// exit-scans the std MUTEX_LOCK fragment function when it is invoked
+// from an @test body and flags its borrow parameter); see RESULT.md.
+
+@import "sa_std/sync/mutex.sa";
+@import "sa_std/core/result.sa";
+
+@test "reg2d3 mutex new lock direct in test body"() {
+    let counter = Mutex::new(0);
+    {
+        let guard = counter.lock().unwrap();
+        if *guard != 0 { panic(350); };
+        *guard = 7;
+    }
+    let guard2 = counter.lock().unwrap();
+    if *guard2 != 7 { panic(351); };
+}

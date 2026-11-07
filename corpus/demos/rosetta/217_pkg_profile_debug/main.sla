@@ -1,0 +1,11 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_debug_profile_level() -> i32 {
+    let debug_info = 1;
+    let optimization_level = 0;
+    return debug_info + optimization_level;
+}
+
+fn main() -> i32 { let debug_info = 1; let optimization_level = 0; let result = debug_info + optimization_level; println("{}", result); return result; }
+@test "rosetta 217 pkg profile debug"() { let got = pkg_debug_profile_level(); if got != 1 { panic(217); }; }

@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 几何级数模和（1+2+…+2^9 mod 100=23）。
+// 意对标 352 等比和的取模版（352 互补）。
+
+fn powmod_sum(base: int, n: int, m: int) -> int {
+    let s = 0;
+    let t = 1;
+    let i = 0;
+    while i < n {
+        s = (s + t) % m;
+        t = t * base % m;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", powmod_sum(2, 10, 100), powmod_sum(3, 5, 100), powmod_sum(2, 1, 100));
+    return 0;
+}
+
+@test "basic 440 powmod sum"() {
+    if powmod_sum(2, 10, 100) != 23 { panic(44001); };
+    if powmod_sum(3, 5, 100) != 21 { panic(44002); };
+    if powmod_sum(2, 1, 100) != 1 { panic(44003); };
+}

@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/future.sa"
+
+fn async_stream_sum() -> i32 {
+    let total = 0;
+    total = stream_accumulate(total, stream_next(0));
+    total = stream_accumulate(total, stream_next(1));
+    total = stream_accumulate(total, stream_next(2));
+    return total;
+}
+
+fn stream_next(index: i32) -> i32 {
+    return index + 1;
+}
+
+fn stream_accumulate(total: i32, item: i32) -> i32 {
+    return total + item;
+}
+
+fn main() -> i32 {
+    let result = async_stream_sum();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 135 135_async_streams"() {
+    let got = async_stream_sum();
+    if got != 6 {
+        panic(135);
+    };
+};

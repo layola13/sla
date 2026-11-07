@@ -1,0 +1,30 @@
+struct Position {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+fn update_position(old_item: Position) -> Position {
+    return Position { x: old_item.x + 10, ..old_item };
+}
+
+fn update_position_in_place(old_item: Position) -> Position {
+    let next = Position { y: old_item.y + 1, ..old_item };
+    return next;
+}
+
+@test "struct update copies untouched fields"() {
+    let p = Position { x: 1, y: 2, z: 3 };
+    let q = update_position(p);
+    if q.x != 11 { panic(22000); };
+    if q.y != 2 { panic(22001); };
+    if q.z != 3 { panic(22002); };
+}
+
+@test "struct update works in let binding"() {
+    let p = Position { x: 4, y: 5, z: 6 };
+    let q = update_position_in_place(p);
+    if q.x != 4 { panic(22010); };
+    if q.y != 6 { panic(22011); };
+    if q.z != 6 { panic(22012); };
+}

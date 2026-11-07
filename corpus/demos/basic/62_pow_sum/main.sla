@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 176_pow_sum：2 的幂求和（1+2+4+8=15）。
+// SLA 无 `**` 运算符（与 52_pow2_series 一致），用翻倍累乘表达。
+
+fn main() -> i32 {
+    let t = 0;
+    let p = 1;
+    for i in 0..4 {
+        t = t + p;
+        p = p * 2;
+    }
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 62 pow sum"() {
+    let t = 0;
+    let p = 1;
+    for i in 0..4 {
+        t = t + p;
+        p = p * 2;
+    }
+    if t != 15 { panic(6201); };
+}

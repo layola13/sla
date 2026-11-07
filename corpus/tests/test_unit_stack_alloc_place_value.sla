@@ -1,0 +1,38 @@
+@import "sa_std/future.sa"
+@import "sa_std/pin.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/time.sla"
+
+// DEF-PLACE-LOAD regression: a let-bound `stack_alloc()` place used in
+// value positions (imported-macro arguments) must materialize as the
+// pointer value itself (the buffer address). The text backend used to
+// emit `load pinned+0 as ptr`, dereferencing the uninitialized buffer;
+// the program survived only on residual stack contents and crashed
+// deterministically (signal 11) once an optimization pipeline shifted
+// the frame layout. Mirrors the block_on shape of
+// test_unit_async_block_on_direct with distinct panic codes.
+async fn delayed_ready_value() -> i32 {
+    thread::sleep(Duration::from_millis(0));
+    return 7;
+}
+
+fn block_ready(future: future<i32>) -> i32 {
+    let boxed = Box::new(future);
+    let future_ref = *boxed;
+    let pinned = stack_alloc();
+    PIN_MUT_NEW(pinned, future_ref);
+    let poll = FUTURE_READY_POLL_STATE(PIN_MUT_GET_MUT(pinned));
+    let ready = POLL_IS_READY(poll);
+    if ready != true {
+        panic(9411);
+    };
+    let value: i32 = POLL_VALUE(poll);
+    return value;
+}
+
+@test "stack_alloc place materializes as pointer value"() {
+    let got = block_ready(delayed_ready_value());
+    if got != 7 {
+        panic(9412);
+    };
+}

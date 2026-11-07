@@ -1,0 +1,8 @@
+@import "src/targets/index.sa"
+
+@src_package_value() -> i32:
+L_ENTRY:
+    target = call @targets_package_value()
+    value = add 200, target
+    !target
+    return value

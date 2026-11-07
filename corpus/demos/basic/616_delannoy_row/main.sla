@@ -1,0 +1,58 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Delannoy 第 5 行：1,11,61,231,681,1683（行和 2668；对称复核 D(5,2)=D(2,5)）。
+// 意对标 611_delannoy_tab（建表版互补；同式高位行复算）。
+
+fn delan(m: int, n: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= m * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= m {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let b = 0;
+    while b <= n {
+        t[b] = 1;
+        b = b + 1;
+    }
+    let mm = 1;
+    while mm <= m {
+        let nn = 1;
+        while nn <= n {
+            t[mm * w + nn] = t[(mm - 1) * w + nn] + t[(mm - 1) * w + nn - 1] + t[mm * w + nn - 1];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[m * w + n];
+}
+
+fn drow5() -> int {
+    let s = 0;
+    let k = 0;
+    while k <= 5 {
+        s = s + delan(5, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", delan(5, 1), delan(5, 2), delan(5, 5));
+    return 0;
+}
+
+@test "basic 616 delannoy row"() {
+    if delan(5, 1) != 11 { panic(61601); };
+    if delan(5, 2) != 61 { panic(61602); };
+    if delan(5, 5) != 1683 { panic(61603); };
+    if drow5() != 2668 { panic(61604); };
+}

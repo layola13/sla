@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_release_profile_level() -> i32 {
+    let optimization_level = 3;
+    return optimization_level;
+}
+
+fn main() -> i32 { let optimization_level = 3; println("{}", optimization_level); return optimization_level; }
+@test "rosetta 216 pkg profile release"() { let got = pkg_release_profile_level(); if got != 3 { panic(216); }; }

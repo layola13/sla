@@ -1,0 +1,13 @@
+@import "pkg/../src/meta.sa"
+
+#def Manifest_SIZE = 12
+#def Manifest_name = +0
+#def Manifest_version = +4
+#def Manifest_edition = +8
+
+@manifest_value() -> i32:
+L_ENTRY:
+    meta = call @meta_value()
+    value = add meta, 0
+    !meta
+    return value

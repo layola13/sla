@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+@import "sa_std/core/panic.sa"
+
+fn never_type_fallback_value() -> i32 {
+    let result: i32 = match Some(1) {
+        Some(v) => {
+            v
+        },
+        None => {
+            panic("unreachable")
+        },
+    };
+    return result;
+}
+
+fn main() -> i32 {
+    let value = never_type_fallback_value();
+    println("{}", value);
+    return value;
+}
+
+@test "rosetta 146 146_never_type_fallback"() {
+    let got = never_type_fallback_value();
+    if got != 1 {
+        panic(146);
+    };
+}

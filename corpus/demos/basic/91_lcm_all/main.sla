@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 182_lcm_all：`lcm(4,6)=12`，`lcm(7,5)=35`。
+// 与 21（递归 gcd+lcm）互补，此处 gcd 用循环版（写法见 51/80）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn lcm(a: int, b: int) -> int {
+    return (a / gcd(a, b)) * b;
+}
+
+fn main() -> i32 {
+    println("{},{}", lcm(4, 6), lcm(7, 5));
+    return 0;
+}
+
+@test "basic 91 lcm all"() {
+    if lcm(4, 6) != 12 { panic(9101); };
+    if lcm(7, 5) != 35 { panic(9102); };
+}

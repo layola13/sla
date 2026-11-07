@@ -1,0 +1,14 @@
+// Generated from build/parallel/jobs/*.toml.
+#def PARALLEL_JOB_COUNT = 2
+
+@parallel_schedule_value() -> i32:
+L_ENTRY:
+    value = add 276, 1
+    !value
+    return 277
+
+@parallel_schedule_count() -> i32:
+L_ENTRY:
+    count = add 1, 1
+    !count
+    return PARALLEL_JOB_COUNT

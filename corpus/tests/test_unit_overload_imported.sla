@@ -1,0 +1,14 @@
+@import "import_fixtures/overload_fixture.sla"
+
+// Overload sets cross module boundaries: functions imported from
+// another .sla file register as one set and resolve with the same
+// exact-after-inference discipline as local functions. Baseline:
+// Redeclaration error when the fixture's second member is registered.
+
+@test "overload imported set"() {
+    let a: i32 = 41;
+    let b: f64 = 2.5;
+    if imp_pick(a) != 1 { panic(901); };
+    if imp_pick(b) != 2 { panic(902); };
+    if imp_pick(a, a) != 3 { panic(903); };
+};

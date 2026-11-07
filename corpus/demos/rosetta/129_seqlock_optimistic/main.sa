@@ -1,0 +1,99 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_seqlock_optimistic_value = vtable { call = @sla__seqlock_optimistic_value }
+@const SLA_FNPTR_VT_seqlock_read = vtable { call = @sla__seqlock_read }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__seqlock_optimistic_value() -> i32:
+L_ENTRY:
+    tmp_0 = 2
+    tmp_1 = 10
+    tmp_2 = 2
+    tmp_3 = call @sla__seqlock_read(tmp_0, tmp_1, tmp_2)
+    !tmp_0
+    !tmp_1
+    !tmp_2
+    return tmp_3
+
+@sla__seqlock_read(begin_version: i32, value: i32, end_version: i32) -> i32:
+L_ENTRY:
+    tmp_4 = eq begin_version, end_version
+    br tmp_4 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_4
+    tmp_5 = 2
+    tmp_6 = rem begin_version, tmp_5
+    !tmp_5
+    tmp_7 = 0
+    tmp_8 = eq tmp_6, tmp_7
+    !tmp_6
+    !tmp_7
+    br tmp_8 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_8
+    tmp_9 = add value, end_version
+    !value
+    !end_version
+    !begin_version
+    return tmp_9
+
+L_ELSE_4:
+    !tmp_8
+    tmp_10 = 0
+    !value
+    !end_version
+    !begin_version
+    return tmp_10
+
+
+L_ELSE_1:
+    !tmp_4
+    tmp_12 = 0
+    !value
+    !end_version
+    !begin_version
+    return tmp_12
+
+
+@main() -> i32:
+L_ENTRY:
+    tmp_14 = call @sla__seqlock_optimistic_value()
+    result = tmp_14
+    tmp_15 = call @sa_fmt_u64(result, 10)
+    tmp_16 = call @sa_fmt_buffer_data(tmp_15)
+    tmp_17 = call @sa_fmt_buffer_len(tmp_15)
+    tmp_18 = tmp_16
+    call @sa_print_bytes(&tmp_18, tmp_17)
+    call @sa_fmt_buffer_free(^tmp_15)
+    !tmp_18
+    !tmp_17
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 129 129_seqlock_optimistic"():
+L_TEST_ENTRY_6:
+    tmp_19 = call @sla__seqlock_optimistic_value()
+    got = tmp_19
+    tmp_20 = 12
+    tmp_21 = ne got, tmp_20
+    !tmp_20
+    br tmp_21 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_21
+    panic(129)
+
+L_ELSE_8:
+    !tmp_21
+    jmp L_MERGE_9
+
+L_MERGE_9:
+    !got
+    return
+

@@ -1,0 +1,40 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/core/option.sa"
+
+// P0 coverage (census 2026-11-06): HashMap.len method form (`m.len()`).
+// The corpus only ever asserted the global `len(m)` form; the method
+// form was probe-verified (tools/sab_audit/probes/map_len.sla) but had
+// no unit test guarding it.
+
+@test "hashmap len method empty and inserts"() {
+    let m = HashMap::new();
+    if m.len() != 0 { panic(88001); };
+    m.insert("a", 1);
+    if m.len() != 1 { panic(88002); };
+    m.insert("b", 2);
+    if m.len() != 2 { panic(88003); };
+}
+
+@test "hashmap len method overwrite does not grow"() {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+    m.insert("a", 111);
+    if m.len() != 2 { panic(88011); };
+    if m.get("a").copied().unwrap_or(0) != 111 { panic(88012); };
+    m.insert("c", 3);
+    if m.len() != 3 { panic(88013); };
+}
+
+@test "hashmap len method int keys matches global len"() {
+    let m: HashMap<i64, i64> = HashMap::new();
+    let i: i64 = 0;
+    while i < 10 {
+        m.insert(i, i * 3);
+        i = i + 1;
+    }
+    if m.len() != 10 { panic(88021); };
+    if m.len() != len(m) { panic(88022); };
+    m.insert(100, 7);
+    if m.len() != 11 { panic(88023); };
+}

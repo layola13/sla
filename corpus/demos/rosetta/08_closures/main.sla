@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn closure_offset_value() -> i32 {
+    let offset = 5;
+    let add_offset = |x: i32| x + offset;
+    let result = add_offset(10);
+    return result;
+}
+
+fn main() -> i32 {
+    let result = closure_offset_value();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 008 08_closures"() {
+    let got = closure_offset_value();
+    if got != 15 {
+        panic(8);
+    };
+};

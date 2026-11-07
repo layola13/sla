@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 313_fneg：f64 取负与比较（11）。
+// 与 90_f64_cmp、108_f64_loop 同口径：字面量比较 + 变量比较双覆盖。
+
+fn main() -> i32 {
+    let x: f64 = 1.5;
+    let y = -x;
+    let z = 1.0 + -x;
+    let s = 0;
+    if y < 0.0 { s = s + 1; };
+    if z < 1.0 { s = s + 10; };
+    println("{}", s);
+    return 0;
+}
+
+@test "basic 109 f64 neg"() {
+    let x: f64 = 1.5;
+    if -x != -1.5 { panic(10901); };
+    if 1.0 + -x != -0.5 { panic(10902); };
+    let y = -x;
+    let z = 1.0 + -x;
+    let s = 0;
+    if y < 0.0 { s = s + 1; };
+    if z < 1.0 { s = s + 10; };
+    if s != 11 { panic(10903); };
+}

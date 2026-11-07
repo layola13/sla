@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn immutable_update_value() -> i32 {
+    let before = 10;
+    let after = before + 10;
+    return after;
+}
+
+fn main() -> i32 {
+    let result = immutable_update_value();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 002 02_mutability"() {
+    let got = immutable_update_value();
+    if got != 20 {
+        panic(2);
+    };
+};

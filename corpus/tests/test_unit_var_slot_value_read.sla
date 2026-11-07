@@ -1,0 +1,57 @@
+// Uninitialized scalar `var` slots must be read by value on both backends.
+//
+// The slot is emitted as `stack_alloc <size>` plus `store slot+0, value`, so
+// every read of the binding has to load the stored primitive. Returning or
+// using the raw slot register would treat the stack address as the scalar and
+// trip the SAB verifier's StackEscape check.
+fn var_slot_scalar_roundtrip(seed: i32) -> i32 {
+    var acc: i32;
+    acc = seed;
+    acc = acc + 5;
+    return acc;
+}
+
+fn var_slot_float_roundtrip(seed: f64) -> f64 {
+    var acc: f64;
+    acc = seed;
+    acc = acc + 0.5;
+    return acc;
+}
+
+fn var_slot_bool_roundtrip(seed: bool) -> bool {
+    var acc: bool;
+    acc = seed;
+    if acc {
+        acc = true;
+    } else {
+        acc = false;
+    };
+    return acc;
+}
+
+fn var_slot_branch_uses_value(flag: bool) -> i32 {
+    var x: i32;
+    x = 7;
+    if x != 7 {
+        return 0;
+    };
+    return x;
+}
+
+@test "var slot scalar reads load the stored value"() {
+    if var_slot_scalar_roundtrip(3) != 8 { panic(19001); };
+    if var_slot_scalar_roundtrip(-3) != 2 { panic(19002); };
+}
+
+@test "var slot float reads load the stored value"() {
+    if var_slot_float_roundtrip(1.5) != 2.0 { panic(19003); };
+}
+
+@test "var slot bool reads load the stored value"() {
+    if !var_slot_bool_roundtrip(true) { panic(19004); };
+    if var_slot_bool_roundtrip(false) { panic(19005); };
+}
+
+@test "var slot value is usable in branch conditions"() {
+    if var_slot_branch_uses_value(true) != 7 { panic(19006); };
+}

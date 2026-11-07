@@ -1,0 +1,22 @@
+// expect: BorrowConflict
+// View-types stage 1: the same field mutably borrowed twice in one
+// call, where the callee writes through both parameters. The checker
+// must reject this with a BorrowConflict diagnostic. Before stage 1 no
+// layer rejected it: call-argument borrows emit no borrow instruction
+// in the caller, so both backends silently aliased the two writes.
+struct Pair { a: i64, b: i64 }
+
+fn set_both(x: &i64, y: &i64) {
+    *x = 10;
+    *y = 20;
+}
+
+fn bad_args_same_field() {
+    let s = Pair { a: 0, b: 0 };
+    set_both(&s.a, &s.a);
+}
+
+fn main() -> i32 {
+    bad_args_same_field();
+    return 0;
+}

@@ -1,0 +1,41 @@
+@import "sa_std/vec.sa"
+
+struct AssignNote {
+    start: u64,
+    duration: u64,
+    key: u8,
+}
+
+struct AssignTrack {
+    notes: Vec<AssignNote>,
+}
+
+fn assign_track_new() -> AssignTrack {
+    let notes: Vec<AssignNote> = Vec::new();
+    return AssignTrack { notes: notes };
+}
+
+fn assign_close_note(track: &AssignTrack, tick: u64, key: u8) -> bool {
+    let i: u64 = len(track.notes);
+    while i > 0 {
+        let j = i - 1;
+        if track.notes[j].key == key && track.notes[j].duration == 0 {
+            track.notes[j].duration = tick - track.notes[j].start;
+            return true;
+        };
+        i = j;
+    }
+    return false;
+}
+
+@test "vec index field assignment updates element owner"() {
+    let track = assign_track_new();
+    track.notes.push(AssignNote { start: 120, duration: 0, key: 60 });
+
+    if assign_close_note(&track, 600, 60) != true {
+        panic(44401);
+    };
+    if track.notes[0].duration != 480 {
+        panic(44402);
+    };
+}

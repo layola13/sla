@@ -1,0 +1,8 @@
+@import "workspace/members/beta/helpers/index.sa"
+
+@beta_package_value() -> i32:
+L_ENTRY:
+    helper = call @beta_helper_value()
+    value = add helper, 0
+    !helper
+    return value

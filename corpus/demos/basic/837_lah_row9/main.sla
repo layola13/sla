@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 第 9 行 362880,1451520,1693440,846720,211680,28224,2016,72,1（行和 4596553；循环求和）。
+// 意对标 836_lah9（单格版互补；同式行复算）。
+
+fn lah(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn lrow(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + lah(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", lah(9, 5), lah(9, 6), lrow(9));
+    return 0;
+}
+
+@test "basic 837 lah row9"() {
+    if lah(9, 5) != 211680 { panic(83701); };
+    if lah(9, 6) != 28224 { panic(83702); };
+    if lrow(9) != 4596553 { panic(83703); };
+    if lah(8, 6) != 1176 { panic(83704); };
+}

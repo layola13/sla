@@ -1,0 +1,45 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 丰亏完三向计数（<=20：亏 16，丰 3，完 1）。
+// 意对标 435 星座三向的分类版（378/389/519 合取）。
+
+fn sigma(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        if n % i == 0 { s = s + i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn class_count(limit: int, kind: int) -> int {
+    let c = 0;
+    let k = 1;
+    while k <= limit {
+        let s = sigma(k);
+        if kind == 0 {
+            if s < 2 * k { c = c + 1; };
+        };
+        if kind == 1 {
+            if s > 2 * k { c = c + 1; };
+        };
+        if kind == 2 {
+            if s == 2 * k { c = c + 1; };
+        };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", class_count(20, 0), class_count(20, 1), class_count(20, 2));
+    return 0;
+}
+
+@test "basic 521 tri classify"() {
+    if class_count(20, 0) != 16 { panic(52101); };
+    if class_count(20, 1) != 3 { panic(52102); };
+    if class_count(20, 2) != 1 { panic(52103); };
+}

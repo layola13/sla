@@ -1,0 +1,39 @@
+struct SignedProjectionParse {
+    ok: bool,
+    negative: bool,
+    value: u64,
+    next_offset: u64,
+}
+
+fn signed_projection_read(offset: u64) -> SignedProjectionParse {
+    if offset == 0 {
+        return SignedProjectionParse { ok: true, negative: false, value: 1031, next_offset: 1 };
+    };
+    if offset == 1 {
+        return SignedProjectionParse { ok: true, negative: true, value: 9, next_offset: 2 };
+    };
+    return SignedProjectionParse { ok: true, negative: true, value: 9, next_offset: 3 };
+}
+
+fn signed_projection_value(parsed: SignedProjectionParse) -> i64 {
+    let value = parsed.value as i64;
+    if parsed.negative == true {
+        return 0 - value;
+    };
+    return value;
+}
+
+@test "delayed scalar field projections keep signed parse flag"() {
+    let first = signed_projection_read(0);
+    if first.ok != true { panic(51901); };
+
+    let middle = signed_projection_read(first.next_offset);
+    if middle.ok != true { panic(51902); };
+
+    let last = signed_projection_read(middle.next_offset);
+    if last.ok != true { panic(51903); };
+
+    if first.value != 1031 { panic(51904); };
+    if signed_projection_value(middle) != -9 { panic(51905); };
+    if signed_projection_value(last) != -9 { panic(51906); };
+}

@@ -1,0 +1,91 @@
+// Goroutine syntax batch P4: monitor(handle) exit notification.
+// The monitor channel is Chan<(u64, i32)> = (watched handle,
+// trap code); 0 means a normal exit.
+
+@import "sa_std/globals.sai"
+@import "sa_std/task.sai"
+@import "sa_std/ptr.sa"
+
+fn mon_worker(arg: u64) {
+    let out: u64 = 0;
+    let rc = sa_global_u64_add("mon_ctr", 8, 7, &out);
+    if rc != 0 { panic(9751); };
+}
+
+@test "monitor delivers normal exit"() {
+    let h = go mon_worker(0);
+    let m = monitor(h);
+    let status = sa_task_join(h);
+    if status != 0 { panic(9752); };
+    let (msg, closed) = m.recv();
+    if closed { panic(9753); };
+    if msg.0 != h { panic(9754); };
+    if msg.1 != 0 { panic(9755); };
+    m.destroy();
+}
+
+fn mon_trap_worker(arg: u64) {
+    let ch: Chan<u64> = Chan::new(0);
+    ch.close();
+    ch.close();
+}
+
+@test "monitor delivers trapped exit code"() {
+    let h = go supervised mon_trap_worker(0);
+    let m = monitor(h);
+    let status = sa_task_join(h);
+    if status != 100 { panic(9760); };
+    let (msg, closed) = m.recv();
+    if msg.0 != h { panic(9761); };
+    if msg.1 != 4 { panic(9762); };
+    m.destroy();
+    let code: i32 = 0;
+    let p: ptr = PTR_NULL();
+    let l: u64 = 0;
+    let irc = sa_task_trap_info(h, &code, &p, &l);
+    if irc != 0 { panic(9763); };
+    if code != 4 { panic(9764); };
+}
+
+@test "monitor channel works in select"() {
+    let h = go mon_worker(0);
+    let m = monitor(h);
+    let got: i32 = 0;
+    select {
+        case let (msg, closed) = m.recv() {
+            if msg.0 != h { panic(9770); };
+            if msg.1 != 0 { panic(9771); };
+            got = 1;
+        }
+        timeout(5000000000) {
+            panic(9772);
+        }
+    }
+    if got != 1 { panic(9773); };
+    let status = sa_task_join(h);
+    if status != 0 { panic(9774); };
+    m.destroy();
+}
+
+@test "monitor after exit delivers immediately"() {
+    let h = go mon_worker(0);
+    let spins: u64 = 0;
+    while spins < 1000000 {
+        let n: u64 = 0;
+        let rc = sa_task_live_count(&n);
+        if rc != 0 { panic(9780); };
+        if n == 0 {
+            break;
+        };
+        let yrc = sa_task_yield();
+        if yrc != 0 { panic(9781); };
+        spins = spins + 1;
+    }
+    let m = monitor(h);
+    let (msg, closed) = m.recv();
+    if msg.0 != h { panic(9782); };
+    if msg.1 != 0 { panic(9783); };
+    m.destroy();
+    let status = sa_task_join(h);
+    if status != 0 { panic(9784); };
+}

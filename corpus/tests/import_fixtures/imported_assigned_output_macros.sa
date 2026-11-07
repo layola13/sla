@@ -1,0 +1,40 @@
+@import "sa_std/ptr.sa"
+// Regression fixtures for the assigned leading-output macro defect
+// (AG6 DESIGN SS11.1): an imported macro whose leading out param is
+// ASSIGNED inside the body (not merely written through a deref of the
+// passed-in value) must define the consumer's variable. Slot-backed
+// (addressable) consumer locals previously lost the value: pointer
+// outputs segfaulted (expansion wrote a load temp, no store-back) and
+// plain u64 outputs trapped RegisterRedefinition at build (expansion
+// assigned the consumer's stack-slot register itself).
+//
+// SA_SQLITE_OPEN's shape (assign %out, then pass &%out to an extern)
+// is deliberately NOT used here: under SA's value model &%p passes
+// %p's current value, which the assignment just zeroed -- that std
+// macro body is defective by construction (registered separately;
+// cf. the FS_LEN internal-slot idiom in sa_std/fs.sa). The macros
+// below pin the coherent assigned-output shapes.
+
+[MACRO] SLA_IMPORTED_ASSIGNED_PTR_NEW %out_p, %v
+    %out_p = alloc 8
+    store %out_p+0, %v as u64
+[END_MACRO]
+
+[MACRO] SLA_IMPORTED_ASSIGNED_PTR_GET %out_v, %p
+    %out_v = load %p+0 as u64
+[END_MACRO]
+
+[MACRO] SLA_IMPORTED_ASSIGNED_U64_STEP %out_db, %v
+    __step_t_%out_db = add %v, 7
+    %out_db = add __step_t_%out_db, 0
+    !__step_t_%out_db
+[END_MACRO]
+
+// Leading outputs assigned inside the body: %out_db starts from an
+// explicit assignment, is then re-assigned through a nested assigned
+// -output macro; %out_status is assigned last.
+[MACRO] SLA_IMPORTED_ASSIGNED_U64_PAIR %out_status, %out_db, %v
+    %out_db = 0
+    EXPAND SLA_IMPORTED_ASSIGNED_U64_STEP %out_db, %v
+    %out_status = 0
+[END_MACRO]

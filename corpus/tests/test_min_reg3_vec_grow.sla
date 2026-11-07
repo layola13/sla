@@ -1,0 +1,18 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/vec_grow.sla"
+
+// MINIM V4 (SAB isolation): sa_vec_u8_extend_grow (delegates to
+// sa_vec_u8_extend_packed).
+@test "minim vec u8 extend grow"() {
+    let src: [u8; 2] = [0u8; 2];
+    src[0] = 7;
+    src[1] = 8;
+    let sp: ptr = PTR_BYTE_ADD(&src, 0);
+    let v: Vec<u8> = Vec::new();
+    v = sa_vec_u8_extend_grow(v, sp, 2);
+    if (len(v) as u64) != 2 { panic(151); };
+    if v[0] != 7 { panic(152); };
+    if v[1] != 8 { panic(153); };
+}

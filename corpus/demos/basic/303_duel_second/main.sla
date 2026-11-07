@@ -1,0 +1,66 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 定长 vs Vec 次大对峙（22×255：9=9）。
+// 双实现一致性锁定（单实现见 22/255）。
+
+fn second_fixed(a: [int; 6]) -> int {
+    let m1 = a[0];
+    let m2 = a[0];
+    for i in 1..6 {
+        if a[i] > m1 {
+            m2 = m1;
+            m1 = a[i];
+        } else if a[i] > m2 {
+            m2 = a[i];
+        };
+    }
+    return m2;
+}
+
+fn main() -> i32 {
+    let w: Vec<i32> = Vec::new();
+    w.push(5);
+    w.push(1);
+    w.push(9);
+    w.push(3);
+    w.push(9);
+    w.push(2);
+    let m1 = w[0];
+    let m2 = w[0];
+    for i in 1..len(w) {
+        if w[i] > m1 {
+            m2 = m1;
+            m1 = w[i];
+        } else if w[i] > m2 {
+            m2 = w[i];
+        };
+    }
+    let f = [5, 1, 9, 3, 9, 2];
+    println("{},{}", m2, second_fixed(f));
+    return 0;
+}
+
+@test "basic 303 duel second"() {
+    let w: Vec<i32> = Vec::new();
+    w.push(5);
+    w.push(1);
+    w.push(9);
+    w.push(3);
+    w.push(9);
+    w.push(2);
+    let m1 = w[0];
+    let m2 = w[0];
+    for i in 1..len(w) {
+        if w[i] > m1 {
+            m2 = m1;
+            m1 = w[i];
+        } else if w[i] > m2 {
+            m2 = w[i];
+        };
+    }
+    let f = [5, 1, 9, 3, 9, 2];
+    if m2 != second_fixed(f) { panic(30301); };
+    if m2 != 9 { panic(30302); };
+}

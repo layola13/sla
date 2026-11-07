@@ -1,0 +1,109 @@
+// 305 - Range Patterns
+// SA: 用 RANGE_IN 宏模拟 Rust 的范围模式匹配
+// RANGE_IN 检查值是否在 [lo, hi] 闭区间内
+
+@import "sa_std/io/print.sai"
+
+@const RESULT_OK = utf8:"0,1,2,3,-1\n"
+@const RESULT_ERR = utf8:"error\n"
+
+// RANGE_IN: 如果 %lo <= %val <= %hi 则跳转 %yes, 否则 %no
+// 使用两次比较 + and
+[MACRO] RANGE_IN %out, %val, %lo, %hi, %label_yes, %label_no
+    _rlo = sle %lo, %val
+    _rhi = sle %val, %hi
+    %out = and _rlo, _rhi
+    !_rlo
+    !_rhi
+    br %out -> %label_yes, %label_no
+[END_MACRO]
+
+// RANGE_CLEANUP: 释放匹配结果并跳转
+[MACRO] RANGE_CLEANUP %reg, %target
+    !%reg
+    jmp %target
+[END_MACRO]
+
+@grade(score: i32) -> i32:
+L_ENTRY:
+    // match score { 0..=59 => 0, 60..=79 => 1, 80..=89 => 2, 90..=100 => 3, _ => -1 }
+    EXPAND RANGE_IN _rin, score, 0, 59, L_FAIL, L_RANGE_60
+
+L_FAIL:
+    !_rin
+    !score
+    return 0
+
+L_RANGE_60:
+    !_rin
+    EXPAND RANGE_IN _rin, score, 60, 79, L_PASS, L_RANGE_80
+
+L_PASS:
+    !_rin
+    !score
+    return 1
+
+L_RANGE_80:
+    !_rin
+    EXPAND RANGE_IN _rin, score, 80, 89, L_GOOD, L_RANGE_90
+
+L_GOOD:
+    !_rin
+    !score
+    return 2
+
+L_RANGE_90:
+    !_rin
+    EXPAND RANGE_IN _rin, score, 90, 100, L_EXCELLENT, L_DEFAULT
+
+L_EXCELLENT:
+    !_rin
+    !score
+    return 3
+
+L_DEFAULT:
+    !_rin
+    !score
+    return -1
+
+@main() -> i32:
+L_ENTRY:
+    a = call @grade(45)
+    b = call @grade(72)
+    c = call @grade(85)
+    d = call @grade(95)
+    e = call @grade(101)
+
+    ok_a = eq a, 0
+    ok_b = eq b, 1
+    ok_c = eq c, 2
+    ok_d = eq d, 3
+    ok_e = eq e, -1
+    ok0 = and ok_a, ok_b
+    ok1 = and ok_c, ok_d
+    ok2 = and ok0, ok1
+    ok = and ok2, ok_e
+    !a
+    !b
+    !c
+    !d
+    !e
+    !ok_a
+    !ok_b
+    !ok_c
+    !ok_d
+    !ok_e
+    !ok0
+    !ok1
+    !ok2
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    !ok
+    call @sa_print_bytes(&RESULT_OK, 10)
+    return 0
+
+L_ERR:
+    !ok
+    call @sa_print_bytes(&RESULT_ERR, 6)
+    return 1

@@ -1,0 +1,37 @@
+// J-4 (leading_output_convention, Jev slasl_macro_ruling j4): a user
+// macro whose first parameter is a leading output (same name rule as
+// imported SA macros) and declares a type (J-3) may be called with
+// the output argument omitted; the call is then an expression of the
+// declared type. On the pre-J-4 baseline the expression-position uses
+// below fail with TypeMismatch (macro calls returned void_type).
+
+macro doubled(out_result: i64, x: i64) {
+    out_result = x + x;
+}
+
+macro scaled(out_result: f64, x: f64, k: f64) {
+    out_result = x * k;
+}
+
+fn compute(v: i64) -> i64 {
+    let a = doubled(v);
+    let b = doubled(a) + 1;
+    return b;
+}
+
+@test "leading-output macros work in expression position"() {
+    let got = compute(20);
+    if got != 81 {
+        panic(41101);
+    };
+    let s = scaled(2.5, 4.0);
+    if s != 10.0 {
+        panic(41102);
+    };
+    // The full-arity statement form keeps working unchanged.
+    let r: i64 = 0;
+    doubled(r, 21);
+    if r != 42 {
+        panic(41103);
+    };
+}

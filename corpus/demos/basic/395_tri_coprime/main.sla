@@ -1,0 +1,64 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 互素和三向对峙（循环 vs 公式 n·φ(n)/2 vs 逆序累加：n=9 → 27）。
+// 意对标 381 求和版的三向版（381 互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn phi(n: int) -> int {
+    if n <= 1 { return 1; };
+    let c = 0;
+    let k = 1;
+    while k < n {
+        if gcd(k, n) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn cs_loop(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k < n {
+        if gcd(k, n) == 1 { s = s + k; };
+        k = k + 1;
+    }
+    return s;
+}
+
+fn cs_form(n: int) -> int {
+    return n * phi(n) / 2;
+}
+
+fn cs_acc(n: int) -> int {
+    let s = 0;
+    let k = n - 1;
+    while k >= 1 {
+        if gcd(k, n) == 1 { s = s + k; };
+        k = k - 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", cs_loop(9), cs_form(9), cs_acc(9));
+    return 0;
+}
+
+@test "basic 395 tri coprime"() {
+    if cs_loop(9) != 27 { panic(39501); };
+    if cs_form(9) != 27 { panic(39502); };
+    if cs_acc(9) != 27 { panic(39503); };
+    if cs_loop(9) != cs_form(9) { panic(39504); };
+    if cs_form(9) != cs_acc(9) { panic(39505); };
+}

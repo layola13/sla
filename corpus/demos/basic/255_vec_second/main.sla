@@ -1,0 +1,50 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 121_second_max 的 Vec 版（22 为定长数组版：m1=9, m2=9）。
+// 双播种 + 单遍更新（22 口径）+ 动态界（215 口径）组合。
+
+fn main() -> i32 {
+    let a: Vec<i32> = Vec::new();
+    a.push(5);
+    a.push(1);
+    a.push(9);
+    a.push(3);
+    a.push(9);
+    a.push(2);
+    let m1 = a[0];
+    let m2 = a[0];
+    for i in 1..len(a) {
+        if a[i] > m1 {
+            m2 = m1;
+            m1 = a[i];
+        } else if a[i] > m2 {
+            m2 = a[i];
+        };
+    }
+    println("{},{}", m1, m2);
+    return 0;
+}
+
+@test "basic 255 vec second"() {
+    let a: Vec<i32> = Vec::new();
+    a.push(5);
+    a.push(1);
+    a.push(9);
+    a.push(3);
+    a.push(9);
+    a.push(2);
+    let m1 = a[0];
+    let m2 = a[0];
+    for i in 1..len(a) {
+        if a[i] > m1 {
+            m2 = m1;
+            m1 = a[i];
+        } else if a[i] > m2 {
+            m2 = a[i];
+        };
+    }
+    if m1 != 9 { panic(25501); };
+    if m2 != 9 { panic(25502); };
+}

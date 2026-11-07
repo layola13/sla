@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+enum Flag {
+    A,
+    B,
+}
+
+fn main() -> i32 {
+    let flag = Flag::B;
+    let value = match flag {
+        Flag::A => { 1 },
+        Flag::B => { 2 },
+    };
+    println("{}", value);
+    return 0;
+}
+
+@test "rosetta 060 enum branch"() {
+    let flag = Flag::B;
+    let value = match flag {
+        Flag::A => { 1 },
+        Flag::B => { 2 },
+    };
+    if value != 2 {
+        panic(60);
+    };
+}

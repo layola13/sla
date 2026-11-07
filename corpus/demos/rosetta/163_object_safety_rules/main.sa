@@ -1,0 +1,77 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/trait_object.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@import "sa_std/core/trait_object.sa"
+@const VT_Item_Draw = vtable { draw = @sla__Item_draw }
+@const SLA_FNPTR_VT_render = vtable { call = @sla__render }
+@const SLA_FNPTR_VT_object_safe_draw_result = vtable { call = @sla__object_safe_draw_result }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__Item_draw(&self: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load self+0 as i32
+    return tmp_0
+
+@sla__render(&item: ptr) -> i32:
+L_ENTRY:
+    EXPAND DYN_CALL tmp_1, item, 0
+    return tmp_1
+
+@sla__object_safe_draw_result() -> i32:
+L_ENTRY:
+    item = alloc 4
+    tmp_2 = 4
+    store item+0, tmp_2 as i32
+    tmp_3 = alloc Dyn_SIZE
+    store tmp_3+Dyn_data, item as ptr
+    store tmp_3+Dyn_vtable, &VT_Item_Draw as ptr
+    tmp_4 = call @sla__render(&tmp_3)
+    !tmp_3
+    !item
+    return tmp_4
+
+@main() -> i32:
+L_ENTRY:
+    tmp_5 = call @sla__object_safe_draw_result()
+    result = tmp_5
+    tmp_6 = call @sa_fmt_u64(result, 10)
+    tmp_7 = call @sa_fmt_buffer_data(tmp_6)
+    tmp_8 = call @sa_fmt_buffer_len(tmp_6)
+    tmp_9 = tmp_7
+    call @sa_print_bytes(&tmp_9, tmp_8)
+    call @sa_fmt_buffer_free(^tmp_6)
+    !tmp_9
+    !tmp_8
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 163 163_object_safety_rules"():
+L_TEST_ENTRY_0:
+    tmp_10 = call @sla__object_safe_draw_result()
+    got = tmp_10
+    tmp_11 = 4
+    tmp_12 = ne got, tmp_11
+    !tmp_11
+    br tmp_12 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_12
+    panic(163)
+
+L_ELSE_2:
+    !tmp_12
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

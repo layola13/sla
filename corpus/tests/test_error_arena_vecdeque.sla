@@ -1,0 +1,9 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: VecDeque is a self-managed container (ring
+// buffer with its own growth); Jev U2 = A bans it from arenas.
+fn neg_vecdeque() -> i32 {
+    arena {
+        let q: VecDeque<i32> = VecDeque::new();
+    }
+    return 0;
+}

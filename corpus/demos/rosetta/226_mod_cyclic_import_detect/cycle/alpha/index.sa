@@ -1,0 +1,7 @@
+@import "cycle/alpha/../beta/index.sa"
+
+@export alpha_value() -> i32:
+L_ENTRY:
+    value = add 226, 0
+    !value
+    return 226

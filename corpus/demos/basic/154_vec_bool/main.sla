@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 388_boolkw 的 Vec 版（2,true,false）。
+// 124 覆盖定长 `bool` 数组，此处换 `Vec<bool>`（与 59 的换 Vec 版先例一致）。
+
+fn main() -> i32 {
+    let v: Vec<bool> = Vec::new();
+    v.push(true);
+    v.push(false);
+    println("{},{},{}", len(v), v[0], v[1]);
+    return 0;
+}
+
+@test "basic 154 vec bool"() {
+    let v: Vec<bool> = Vec::new();
+    v.push(true);
+    v.push(false);
+    if len(v) != 2 { panic(15401); };
+    if v[0] != true { panic(15402); };
+    if v[1] != false { panic(15403); };
+}

@@ -1,0 +1,42 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 位计数三向对峙（消位 vs 移位 vs 递归：255 皆得 8）。
+// 意对标 510 双边版的三向版（508 互补）。
+
+fn bc_clear(n: int) -> int {
+    let c = 0;
+    let m = n;
+    while m != 0 {
+        m = m & (m - 1);
+        c = c + 1;
+    }
+    return c;
+}
+
+fn bc_shift(n: int) -> int {
+    let c = 0;
+    let m = n;
+    while m != 0 {
+        c = c + m % 2;
+        m = m / 2;
+    }
+    return c;
+}
+
+fn bc_rec(n: int) -> int {
+    if n == 0 { return 0; };
+    return n % 2 + bc_rec(n / 2);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", bc_clear(255), bc_shift(255), bc_rec(255));
+    return 0;
+}
+
+@test "basic 512 tri bitcount"() {
+    if bc_clear(255) != 8 { panic(51201); };
+    if bc_shift(255) != 8 { panic(51202); };
+    if bc_rec(255) != 8 { panic(51203); };
+    if bc_clear(255) != bc_rec(255) { panic(51204); };
+}

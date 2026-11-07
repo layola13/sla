@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/ops.sa"
+
+struct Vec3 {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+fn vec3_scalar_product_score() -> i32 {
+    let a = Vec3 { x: 1.0, y: 2.0, z: 3.0 };
+    let b = a * 4.0;
+    if b.x != 4.0 { return 0; };
+    if b.y != 8.0 { return 0; };
+    if b.z != 12.0 { return 0; };
+    return 4812;
+}
+
+fn main() -> i32 {
+    let a = Vec3 { x: 1.0, y: 2.0, z: 3.0 };
+    let b = a * 4.0;
+    println("({}, {}, {})", b.x, b.y, b.z);
+    if b.x != 4.0 { return 0; };
+    if b.y != 8.0 { return 0; };
+    if b.z != 12.0 { return 0; };
+    return 4812;
+}
+
+@test "rosetta 303 operator_overload_scalar_mul"() {
+    let a = Vec3 { x: 1.0, y: 2.0, z: 3.0 };
+    let b = a * 4.0;
+    if b.x != 4.0 { panic(303); };
+    if b.y != 8.0 { panic(304); };
+    if b.z != 12.0 { panic(305); };
+}

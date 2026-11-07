@@ -1,0 +1,17 @@
+// FB-020 regression corpus: the return-exit cleanup list for several
+// same-scope bindings is built in declaration order (pinned exactly
+// by the plugin zig test "sla return cleanup list follows declaration
+// order" in src/plugin_tests.zig). This file keeps the shape running
+// on both backends; the value is the e2e_a oracle case (249).
+
+fn det_order_values() -> i32 {
+    let a = 2 + 3 * 4;
+    let b = (20 - 8) / 3;
+    let c = 17 % 5;
+    let d = -(2 + 3);
+    return a + b * 10 + c * 100 + d;
+}
+
+@test "det order return cleanup values"() {
+    if det_order_values() != 249 { panic(7742); };
+}

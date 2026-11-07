@@ -1,0 +1,37 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 模单位积（n=9 → 8，n=10 → 9，n=8 → 1）。
+// 意对标 381 互素和的乘积版（381 互补；Gauss 定理实例）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn units_prod(n: int, m: int) -> int {
+    let r = 1;
+    let k = 1;
+    while k < n {
+        if gcd(k, n) == 1 { r = r * k % m; };
+        k = k + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", units_prod(9, 9), units_prod(10, 10), units_prod(8, 8));
+    return 0;
+}
+
+@test "basic 402 units prod"() {
+    if units_prod(9, 9) != 8 { panic(40201); };
+    if units_prod(10, 10) != 9 { panic(40202); };
+    if units_prod(8, 8) != 1 { panic(40203); };
+}

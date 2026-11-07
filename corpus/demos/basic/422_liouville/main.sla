@@ -1,0 +1,47 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Liouville 累和（L(10)=0，L(8)=-2）。
+// 意对标 421 Mertens 的全计数版（421 互补；Ω 计重数）。
+
+fn big_omega(n: int) -> int {
+    if n < 2 { return 0; };
+    let c = 0;
+    let m = n;
+    let d = 2;
+    while d * d <= m {
+        while m % d == 0 {
+            c = c + 1;
+            m = m / d;
+        }
+        d = d + 1;
+    }
+    if m > 1 { c = c + 1; };
+    return c;
+}
+
+fn lambda(n: int) -> int {
+    if big_omega(n) % 2 == 0 { return 1; };
+    return 0 - 1;
+}
+
+fn liouville_sum(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + lambda(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", liouville_sum(10), liouville_sum(8), liouville_sum(1));
+    return 0;
+}
+
+@test "basic 422 liouville"() {
+    if liouville_sum(10) != 0 { panic(42201); };
+    if liouville_sum(8) != 0 - 2 { panic(42202); };
+    if liouville_sum(1) != 1 { panic(42203); };
+}

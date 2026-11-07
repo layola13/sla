@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 蛋糕数双实现对峙（闭式 vs 逐层累加：5 层 26 双边）。
+// 意对标 460 懒人对峙的三次版（459 互补）。
+
+fn cake_form(n: int) -> int {
+    return (n * n * n + 5 * n + 6) / 6;
+}
+
+fn lazy(n: int) -> int {
+    return (n * n + n + 2) / 2;
+}
+
+fn cake_rec(n: int) -> int {
+    if n == 0 { return 1; };
+    return cake_rec(n - 1) + lazy(n - 1);
+}
+
+fn main() -> i32 {
+    println("{},{}", cake_form(5), cake_rec(5));
+    return 0;
+}
+
+@test "basic 463 duel cake"() {
+    if cake_form(5) != 26 { panic(46301); };
+    if cake_rec(5) != 26 { panic(46302); };
+    if cake_form(5) != cake_rec(5) { panic(46303); };
+    if cake_rec(3) != 8 { panic(46304); };
+}

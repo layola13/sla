@@ -1,0 +1,5 @@
+@export v2_seed() -> i32:
+L_ENTRY:
+    value = add 40, 0
+    !value
+    return 40

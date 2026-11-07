@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 奇数求和（1+3+5+7+9=25=5²）。
+// 意对标 tsgosa 04_while_sum 的步进版（04 为逐一累加，此处步长 2；
+// 前 n 奇数和为 n² 的数论事实另由断言锁定）。
+
+fn main() -> i32 {
+    let osum = 0;
+    let o = 1;
+    while o <= 9 {
+        osum = osum + o;
+        o = o + 2;
+    }
+    println("{}", osum);
+    return 0;
+}
+
+@test "basic 284 odd sum"() {
+    let osum = 0;
+    let o = 1;
+    while o <= 9 {
+        osum = osum + o;
+        o = o + 2;
+    }
+    if osum != 25 { panic(28401); };
+}

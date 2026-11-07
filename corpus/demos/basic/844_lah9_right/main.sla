@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 第 9 行右部 L(9,7)=2016，L(9,8)=72，L(9,9)=1（左部 836 互补，全行覆盖）。
+// 意对标 836_lah9（左部版互补；845 做三向）。
+
+fn lah(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", lah(9, 7), lah(9, 8), lah(9, 9));
+    return 0;
+}
+
+@test "basic 844 lah9 right"() {
+    if lah(9, 7) != 2016 { panic(84401); };
+    if lah(9, 8) != 72 { panic(84402); };
+    if lah(9, 9) != 1 { panic(84403); };
+    if lah(8, 6) != 1176 { panic(84404); };
+}

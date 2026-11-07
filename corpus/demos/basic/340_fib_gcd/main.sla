@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// fib-gcd 恒等式对峙（120×17：gcd(F6,F9)=F(gcd(6,9))=2=2）。
+// 双实现一致性锁定（恒等式即断言）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn fib(n: int) -> int {
+    let a = 0;
+    let b = 1;
+    let i = 0;
+    while i < n {
+        let t = a + b;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    return a;
+}
+
+fn main() -> i32 {
+    println("{},{}", gcd(fib(6), fib(9)), fib(gcd(6, 9)));
+    return 0;
+}
+
+@test "basic 340 fib gcd"() {
+    if gcd(fib(6), fib(9)) != fib(gcd(6, 9)) { panic(34001); };
+    if fib(gcd(6, 9)) != 2 { panic(34002); };
+}

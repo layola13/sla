@@ -1,0 +1,23 @@
+// C2a regression: the root imports ONLY module A
+// (import_fixtures/transitive_user.sla). A's function bodies build
+// literals of types defined in module B (transitive_types.sla), which
+// the root never imports directly. After the defect #1 fix,
+// `sa build-exe` handled this chain, but `sa test` still failed at
+// import expansion with an unlocated error.SyntaxError: the
+// test-compile expansion seeded imported-body parsing from a narrower
+// type surface than the build path. The sibling fixture
+// test_unit_import_transitive_type_surface.sla covers the shape where
+// the root imports both A and B; this file covers root-imports-only-A.
+@import "import_fixtures/transitive_user.sla"
+
+@test "single import chain body uses transitive types"() {
+    if chain_point_sum() != 42 {
+        panic(43601);
+    };
+}
+
+@test "single import chain nested transitive literal"() {
+    if chain_policy_checksum() != 17 {
+        panic(43602);
+    };
+}

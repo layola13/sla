@@ -1,0 +1,73 @@
+@import "sa_std/core/box.sa"
+@import "sa_std/core/rc.sa"
+@import "sa_std/core/arc.sa"
+
+// DEF-SP2 regression corpus: `&*sp` deref-reborrow places for smart
+// pointers whose pointee is a user struct (plus a nested control).
+// On the pre-fix SAB backend the Box shapes sig11'd:
+// genSmartPointerAddressSource took the pointee's first word out of
+// the as_ptr result as if it were a cell holding the pointer, but
+// BOX_AS_PTR returns the payload pointer itself; Rc/Arc as_ptr
+// results address the RcBox/ArcBox data slot and need exactly one
+// load. Text backend was always green. (Rc/Arc are exercised with
+// in-body local derefs: the helper-call form `sp_read(&rc)` also
+// depends on caller-side `&local` materialization for alloc-backed
+// locals, a separate defect tracked outside DEF-SP2.)
+struct Sp2Pair { value: i64, flag: bool }
+struct Sp2Single { value: i64 }
+
+fn sp2_pair_read(b: &Box<Sp2Pair>) -> i64 {
+    let payload: &Sp2Pair = &*b;
+    return payload.value;
+}
+
+fn sp2_pair_write(b: &Box<Sp2Pair>, v: i64) -> void {
+    let payload: &Sp2Pair = &*b;
+    payload.value = v;
+}
+
+@test "sp2 box struct deref reborrow fields"() {
+    let b = Box::new(Sp2Pair { value: 40, flag: false });
+    if sp2_pair_read(&b) != 40 { panic(1); };
+    sp2_pair_write(&b, 52);
+    if sp2_pair_read(&b) != 52 { panic(2); };
+}
+
+@test "sp2 local box deref reborrow"() {
+    let b = Box::new(Sp2Pair { value: 40, flag: false });
+    let payload: &Sp2Pair = &*b;
+    if payload.value != 40 { panic(1); };
+}
+
+@test "sp2 rc struct deref reborrow"() {
+    let r = Rc::new(Sp2Pair { value: 42, flag: false });
+    let payload: &Sp2Pair = &*r;
+    if payload.value != 42 { panic(3); };
+}
+
+@test "sp2 arc struct deref reborrow"() {
+    let a = Arc::new(Sp2Pair { value: 43, flag: true });
+    let payload: &Sp2Pair = &*a;
+    if payload.value != 43 { panic(4); };
+}
+
+fn sp2_single_read(b: &Box<Sp2Single>) -> i64 {
+    let payload: &Sp2Single = &*b;
+    return payload.value;
+}
+
+@test "sp2 box single-field deref reborrow"() {
+    let b = Box::new(Sp2Single { value: 44 });
+    if sp2_single_read(&b) != 44 { panic(5); };
+}
+
+fn sp2_nested_read(b: &Box<Box<Sp2Pair>>) -> i64 {
+    let inner: &Box<Sp2Pair> = &*b;
+    let payload: &Sp2Pair = &*inner;
+    return payload.value;
+}
+
+@test "sp2 nested box deref reborrow"() {
+    let b = Box::new(Box::new(Sp2Pair { value: 45, flag: false }));
+    if sp2_nested_read(&b) != 45 { panic(6); };
+}

@@ -1,0 +1,51 @@
+// FB-011 positive regression: legitimate switch pattern forms (bool and
+// integer literals against typed scrutinees, enum variant paths,
+// default) must keep checking and running after pattern checking was
+// added to the switch arm. Shapes mirror forms already proven on both
+// backends (assignment bodies; single-case return form as in
+// test_unit_switch_local_scrutinee_cleanup). Multi-case all-return
+// switches trap in the text backend at baseline too (FallthroughForbidden,
+// pre-existing codegen gap) and are deliberately not used here; string
+// switches use literal scrutinees (demos/basic/126_str_switch) because
+// bound-string scrutinee comparison is registered gap #18.
+enum FbMode {
+    Build,
+    Inspect,
+}
+
+fn fb(b: bool) -> i64 {
+    let r: i64 = 0;
+    switch b {
+        true => { r = 1; },
+        default => {},
+    };
+    return r;
+}
+
+fn fi(v: u8) -> i64 {
+    let x: u8 = v;
+    switch x {
+        1 => { return 10; },
+        default => {},
+    };
+    return 0;
+}
+
+fn fe(m: FbMode) -> i64 {
+    let r: i64 = 0;
+    switch m {
+        FbMode::Build => { r = 1; },
+        FbMode::Inspect => { r = 2; },
+        default => {},
+    };
+    return r;
+}
+
+@test "fb011 switch patterns positive forms"() {
+    if fb(true) != 1 { panic(11011); };
+    if fb(false) != 0 { panic(11012); };
+    if fi(1) != 10 { panic(11013); };
+    if fi(9) != 0 { panic(11014); };
+    if fe(FbMode::Inspect) != 2 { panic(11015); };
+    if fe(FbMode::Build) != 1 { panic(11016); };
+}

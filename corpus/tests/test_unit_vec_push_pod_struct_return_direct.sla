@@ -1,0 +1,48 @@
+@import "sa_std/vec.sa"
+
+// Mirrors sla_ecs ComponentInfo/Registry: push a POD struct containing a pure
+// enum into a Vec, then return the same local in a tuple. SA codegen previously
+// treated the enum-bearing struct as ownership-only, emitted ^info after
+// VEC_PUSH, and trap'd UseAfterMove on the return store.
+
+enum PodKind {
+    Table,
+    Sparse,
+}
+
+struct PodInfo {
+    id: i32,
+    kind: PodKind,
+}
+
+struct PodRegistry {
+    next_id: i32,
+    infos: Vec<PodInfo>,
+}
+
+fn pod_info_new(id: i32, kind: PodKind) -> PodInfo {
+    return PodInfo { id: id, kind: kind };
+}
+
+fn pod_register(registry: PodRegistry) -> (PodRegistry, PodInfo) {
+    let id = registry.next_id;
+    let info = pod_info_new(id, PodKind::Table);
+    registry.next_id = id + 1;
+    registry.infos.push(info);
+    return (registry, info);
+}
+
+@test "vec push of pod struct with pure enum keeps local for return tuple"() {
+    let infos: Vec<PodInfo> = Vec::new();
+    let reg0 = PodRegistry { next_id: 1, infos: infos };
+    let (reg1, info) = pod_register(reg0);
+    if info.id != 1 {
+        panic(91001);
+    };
+    if len(reg1.infos) != 1 {
+        panic(91002);
+    };
+    if reg1.infos[0].id != 1 {
+        panic(91003);
+    };
+}

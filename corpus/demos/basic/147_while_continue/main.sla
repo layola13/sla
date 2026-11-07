@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 895_while_continue：while + continue 求和（37）。
+// 注意：`continue` 前须先步进循环变量（此处 `i` 先自增），
+// 否则与 TS 同样死循环（语义一致，非缺口）。
+
+fn main() -> i32 {
+    let i = 0;
+    let t = 0;
+    while i < 10 {
+        i = i + 1;
+        if i % 3 == 0 { continue; };
+        t = t + i;
+    }
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 147 while continue"() {
+    let i = 0;
+    let t = 0;
+    while i < 10 {
+        i = i + 1;
+        if i % 3 == 0 { continue; };
+        t = t + i;
+    }
+    if t != 37 { panic(14701); };
+    if i != 10 { panic(14702); };
+}

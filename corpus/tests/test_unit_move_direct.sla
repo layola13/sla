@@ -1,0 +1,13 @@
+struct MoveBox {
+    value: i32,
+}
+
+fn take_box(^item: MoveBox) -> i32 {
+    return item.value;
+};
+
+@test "direct move struct argument"() {
+    let item = MoveBox { value: 9 };
+    let got = take_box(^item);
+    if got != 9 { panic(30801); };
+};

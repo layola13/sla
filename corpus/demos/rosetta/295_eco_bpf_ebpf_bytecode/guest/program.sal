@@ -1,0 +1,3 @@
+#def BpfPacket_SIZE = 8
+#def BpfPacket_kind = +0
+#def BpfPacket_value = +4

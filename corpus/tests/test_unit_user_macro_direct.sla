@@ -1,0 +1,495 @@
+@import "sa_std/core/box.sa"
+@import "sa_std/core/option.sa"
+@import "sa_std/core/refcell.sa"
+@import "sa_std/core/result.sa"
+
+macro add_one_macro(var_ref) {
+    let temp = 1;
+    var_ref = var_ref + temp;
+}
+
+macro add_two_macro(var_ref) {
+    {
+        let temp = 1;
+        var_ref = var_ref + temp;
+    }
+    {
+        let temp = 1;
+        var_ref = var_ref + temp;
+    }
+}
+
+struct DirectMacroPoint { left: i64, right: i64 }
+struct DirectMacroBorrowPoint { left: i64, right: i64 }
+struct DirectMacroCounter { value: i64 }
+struct DirectMacroBoxHolder { value: Box<i64> }
+struct DirectMacroGuardConfig { limits: [i64; 2] }
+struct DirectMacroTryResult { is_err: bool, value: i64, error: i64 }
+
+enum DirectMacroMessage {
+    Empty,
+    Pair { left: i64, right: i64 },
+}
+
+fn direct_macro_add(value: i64, delta: i64) -> i64 {
+    value + delta
+}
+
+fn direct_macro_guard_between(value: i64, floor: i64, ceiling: i64) -> bool {
+    value > floor && value < ceiling
+}
+
+fn direct_macro_read_i64(value: &i64) -> i64 {
+    *value
+}
+
+fn direct_macro_consume_box(^value: Box<i64>) -> i64 {
+    *value
+}
+
+fn direct_macro_make_option(value: i64, succeed: bool) -> Option<i64> {
+    if succeed { Some(value) } else { None }
+}
+
+macro scoped_shadow_macro(var_ref) {
+    let temp = 1;
+    {
+        let temp = 100;
+        var_ref = var_ref + temp;
+    }
+    var_ref = var_ref + temp;
+}
+
+macro branch_call_cast_macro(var_ref, cond, delta) {
+    {
+        if cond {
+            let widened = delta as i64;
+            var_ref = direct_macro_add(var_ref, widened);
+        } else {
+            var_ref = var_ref - (delta as i64);
+        }
+    }
+}
+
+macro aggregate_macro(out, seed) {
+    {
+        let point = DirectMacroPoint { left: seed, right: seed + 1 };
+        let tuple = (point.left, point.right);
+        let values: [i64; 3] = [tuple.0, tuple.1, seed + 2];
+        out = 0;
+        for i in 0..3 {
+            out = out + values[i];
+        }
+    }
+}
+
+macro nested_add_macro(var_ref, delta) {
+    var_ref = var_ref + delta;
+}
+
+macro wrapper_macro(var_ref, delta) {
+    {
+        let local_delta = delta + 1;
+        nested_add_macro(var_ref, local_delta);
+    }
+}
+
+macro borrow_address_macro(out, point, values, ptr) {
+    {
+        out = direct_macro_read_i64(&point.left);
+        out = out + direct_macro_read_i64(&values[1]);
+        out = out + direct_macro_read_i64(&*ptr);
+    }
+}
+
+macro borrow_smart_address_macro(out, boxed, nested_box) {
+    {
+        out = direct_macro_read_i64(&*boxed);
+        out = out + direct_macro_read_i64(&**nested_box);
+    }
+}
+
+macro evaluate_value_once_macro(out, value) {
+    out = value + value;
+}
+
+macro evaluate_call_value_once_macro(out, value) {
+    out = direct_macro_add(value, value);
+}
+
+macro loop_control_macro(out) {
+    out = 0;
+    for i in 0..5 {
+        if i == 1 {
+            continue;
+        };
+        if i == 4 {
+            break;
+        };
+        out = out + i;
+    }
+}
+
+macro enum_literal_macro(out, left, right) {
+    out = DirectMacroMessage::Pair { left: left, right: right };
+}
+
+macro enum_unit_literal_macro(out) {
+    out = DirectMacroMessage::Empty;
+}
+
+macro move_box_macro(out, value) {
+    out = ^value;
+}
+
+macro forwarding_move_box_macro(out, value) {
+    move_box_macro(out, value);
+}
+
+macro branch_move_box_macro(out, value, cond) {
+    if cond {
+        out = ^value;
+    } else {
+        out = ^value;
+    }
+}
+
+macro call_move_box_macro(out, value) {
+    out = direct_macro_consume_box(^value);
+}
+
+macro aggregate_move_box_macro(out, value) {
+    out = DirectMacroBoxHolder { value: ^value };
+}
+
+macro deref_move_box_macro(out, value) {
+    out = *^value;
+}
+
+macro match_enum_macro(out, value) {
+    out = match value {
+        DirectMacroMessage::Empty => { 5 },
+        DirectMacroMessage::Pair { left, right } => { left + right },
+    };
+}
+
+macro match_enum_guard_macro(out, value, floor) {
+    out = match value {
+        DirectMacroMessage::Empty => { 0 },
+        DirectMacroMessage::Pair { left, right } if left > floor => { left + right },
+        DirectMacroMessage::Pair { left, right } => { right - left },
+    };
+}
+
+macro match_option_macro(out, value, floor, ceiling) {
+    out = match value {
+        Some(inner) if inner > floor && inner < ceiling => { inner + 1 },
+        Some(inner) => { 0 - inner },
+        None => { 0 },
+    };
+}
+
+macro match_result_macro(out, value, config, floor_index) {
+    out = match value {
+        Ok(inner) if direct_macro_guard_between((inner + 1) as i64, config.limits[floor_index], config.limits[floor_index + 1]) => { inner + 2 },
+        Ok(inner) => { 0 - inner },
+        Err(error) => { 0 - error },
+    };
+}
+
+macro unsafe_block_macro(out, value) {
+    out = unsafe {
+        let local: i64 = value + 1;
+        local + 1
+    };
+}
+
+macro try_option_macro(out, value) {
+    out = value?;
+}
+
+macro forwarding_try_macro(out, value) {
+    try_option_macro(out, value);
+}
+
+macro try_call_option_macro(out, value, succeed) {
+    out = direct_macro_make_option(value, succeed)?;
+}
+
+fn macro_next_value(cell: &RefCell<DirectMacroCounter>) -> i64 {
+    let borrowed: &DirectMacroCounter = cell.borrow_mut();
+    borrowed.value = borrowed.value + 1;
+    borrowed.value
+}
+
+fn macro_hygiene_direct(value: i64) -> i64 {
+    let temp = value;
+    add_one_macro(temp);
+    temp
+}
+
+fn macro_block_direct(value: i64) -> i64 {
+    let item = value;
+    add_two_macro(item);
+    item
+}
+
+@test "direct user macro hygiene"() {
+    if macro_hygiene_direct(5) != 6 { panic(31801); };
+    if macro_block_direct(5) != 7 { panic(31802); };
+}
+
+fn macro_shadow_direct(value: i64) -> i64 {
+    let item = value;
+    scoped_shadow_macro(item);
+    item
+}
+
+fn macro_branch_direct(value: i64, cond: bool, delta: i32) -> i64 {
+    let item = value;
+    branch_call_cast_macro(item, cond, delta);
+    item
+}
+
+fn macro_aggregate_direct(seed: i64) -> i64 {
+    let total = 99;
+    aggregate_macro(total, seed);
+    total
+}
+
+fn macro_nested_call_direct(value: i64) -> i64 {
+    let item = value;
+    wrapper_macro(item, 2);
+    item
+}
+
+fn macro_address_direct() -> i64 {
+    let point = DirectMacroBorrowPoint { left: 11, right: 17 };
+    let values: [i64; 3] = [3, 5, 7];
+    let tail = 17;
+    let ptr = &tail;
+    let total = 0;
+    borrow_address_macro(total, point, values, ptr);
+    total
+}
+
+fn macro_smart_address_direct() -> i64 {
+    let boxed: Box<i64> = Box::new(19i64);
+    let nested_box: Box<Box<i64>> = Box::new(Box::new(23i64));
+    let total = 0i64;
+    borrow_smart_address_macro(total, boxed, nested_box);
+    total
+}
+
+fn macro_value_arg_evaluated_once() -> i64 {
+    let cell = RefCell::new(DirectMacroCounter { value: 0 });
+    let total = 0i64;
+    evaluate_value_once_macro(total, macro_next_value(&cell));
+    let borrowed: &DirectMacroCounter = cell.borrow();
+    if borrowed.value != 1 { panic(31810); };
+    total
+}
+
+fn macro_call_value_arg_evaluated_once() -> i64 {
+    let cell = RefCell::new(DirectMacroCounter { value: 0 });
+    let total = 0i64;
+    evaluate_call_value_once_macro(total, macro_next_value(&cell));
+    let borrowed: &DirectMacroCounter = cell.borrow();
+    if borrowed.value != 1 { panic(31812); };
+    total
+}
+
+fn macro_loop_control_direct() -> i64 {
+    let total = 99i64;
+    loop_control_macro(total);
+    total
+}
+
+fn macro_enum_literal_direct() -> i64 {
+    let msg = DirectMacroMessage::Empty;
+    enum_literal_macro(msg, 19, 23);
+    match msg {
+        DirectMacroMessage::Empty => { 0 },
+        DirectMacroMessage::Pair { left, right } => { left + right },
+    }
+}
+
+fn macro_enum_unit_literal_direct() -> i64 {
+    let msg = DirectMacroMessage::Pair { left: 1, right: 2 };
+    enum_unit_literal_macro(msg);
+    match msg {
+        DirectMacroMessage::Empty => { 7 },
+        DirectMacroMessage::Pair { left, right } => { left + right },
+    }
+}
+
+fn macro_move_box_direct() -> i64 {
+    let source = Box::new(42i64);
+    let destination = Box::new(1i64);
+    move_box_macro(destination, source);
+    *destination
+}
+
+fn macro_nested_move_box_direct() -> i64 {
+    let source = Box::new(40i64);
+    let destination = Box::new(2i64);
+    forwarding_move_box_macro(destination, source);
+    *destination
+}
+
+fn macro_branch_move_box_direct(cond: bool) -> i64 {
+    let source = Box::new(41i64);
+    let destination = Box::new(1i64);
+    branch_move_box_macro(destination, source, cond);
+    *destination
+}
+
+fn macro_call_move_box_direct() -> i64 {
+    let source = Box::new(39i64);
+    let result = 0i64;
+    call_move_box_macro(result, source);
+    result
+}
+
+fn macro_aggregate_move_box_direct() -> i64 {
+    let source = Box::new(38i64);
+    let holder = DirectMacroBoxHolder { value: Box::new(1i64) };
+    aggregate_move_box_macro(holder, source);
+    *holder.value
+}
+
+fn macro_deref_move_box_direct() -> i64 {
+    let source = Box::new(37i64);
+    let result = 0i64;
+    deref_move_box_macro(result, source);
+    result
+}
+
+fn macro_match_enum_direct() -> i64 {
+    let message = DirectMacroMessage::Pair { left: 17, right: 19 };
+    let result = 0i64;
+    match_enum_macro(result, message);
+    result
+}
+
+fn macro_match_enum_guard_direct(floor: i64) -> i64 {
+    let message = DirectMacroMessage::Pair { left: 17, right: 25 };
+    let result = 0i64;
+    match_enum_guard_macro(result, message, floor);
+    result
+}
+
+fn macro_match_option_direct(^value: Option<i64>, floor: i64, ceiling: i64) -> i64 {
+    let result = 0i64;
+    match_option_macro(result, value, floor, ceiling);
+    result
+}
+
+fn macro_match_result_direct(^value: Result<i64, i64>) -> i64 {
+    let result = 0i64;
+    let config = DirectMacroGuardConfig { limits: [40, 42] };
+    let floor_index = 0i64;
+    match_result_macro(result, value, config, floor_index);
+    result
+}
+
+fn macro_unsafe_block_direct() -> i64 {
+    let local = 100i64;
+    let result = 0i64;
+    unsafe_block_macro(result, 33i64);
+    result + local
+}
+
+fn macro_try_option_direct(^value: Option<i64>) -> Option<i64> {
+    let cleanup = Box::new(9i64);
+    let result = 0i64;
+    try_option_macro(result, value);
+    Some(result + *cleanup)
+}
+
+fn macro_try_result_direct(^value: Result<i64, i64>) -> Result<i64, i64> {
+    let cleanup = Box::new(8i64);
+    let result = 0i64;
+    forwarding_try_macro(result, value);
+    Ok(result + *cleanup)
+}
+
+fn macro_try_custom_result_direct(^value: DirectMacroTryResult) -> DirectMacroTryResult {
+    let cleanup = Box::new(7i64);
+    let result = 0i64;
+    forwarding_try_macro(result, value);
+    DirectMacroTryResult { is_err: false, value: result + *cleanup, error: 0 }
+}
+
+fn macro_try_call_option_direct(value: i64, succeed: bool) -> Option<i64> {
+    let cleanup = Box::new(6i64);
+    let result = 0i64;
+    try_call_option_macro(result, value, succeed);
+    Some(result + *cleanup)
+}
+
+@test "direct user macro nested expansion"() {
+    if macro_shadow_direct(5) != 106 { panic(31803); };
+    if macro_branch_direct(10, true, 4) != 14 { panic(31804); };
+    if macro_branch_direct(10, false, 4) != 6 { panic(31805); };
+    if macro_aggregate_direct(3) != 12 { panic(31806); };
+    if macro_nested_call_direct(7) != 10 { panic(31807); };
+    if macro_address_direct() != 33 { panic(31808); };
+    if macro_smart_address_direct() != 42 { panic(31809); };
+    if macro_value_arg_evaluated_once() != 2 { panic(31811); };
+    if macro_call_value_arg_evaluated_once() != 2 { panic(31813); };
+    if macro_loop_control_direct() != 5 { panic(31814); };
+    if macro_enum_literal_direct() != 42 { panic(31815); };
+    if macro_enum_unit_literal_direct() != 7 { panic(31816); };
+    if macro_move_box_direct() != 42 { panic(31817); };
+    if macro_nested_move_box_direct() != 40 { panic(31818); };
+    if macro_branch_move_box_direct(true) != 41 { panic(31819); };
+    if macro_branch_move_box_direct(false) != 41 { panic(31820); };
+    if macro_call_move_box_direct() != 39 { panic(31821); };
+    if macro_aggregate_move_box_direct() != 38 { panic(31822); };
+    if macro_deref_move_box_direct() != 37 { panic(31823); };
+    if macro_match_enum_direct() != 36 { panic(31824); };
+    if macro_match_enum_guard_direct(10) != 42 { panic(31836); };
+    if macro_match_enum_guard_direct(20) != 8 { panic(31837); };
+    let macro_match_some_input: Option<i64> = Some(41i64);
+    if macro_match_option_direct(^macro_match_some_input, 40, 42) != 42 { panic(31838); };
+    let macro_match_low_some_input: Option<i64> = Some(9i64);
+    if macro_match_option_direct(^macro_match_low_some_input, 10, 20) != -9 { panic(31842); };
+    let macro_match_high_some_input: Option<i64> = Some(21i64);
+    if macro_match_option_direct(^macro_match_high_some_input, 10, 20) != -21 { panic(31844); };
+    let macro_match_none_input: Option<i64> = None;
+    if macro_match_option_direct(^macro_match_none_input, 10, 20) != 0 { panic(31839); };
+    let macro_match_ok_input: Result<i64, i64> = Ok(40i64);
+    if macro_match_result_direct(^macro_match_ok_input) != 42 { panic(31840); };
+    let macro_match_low_ok_input: Result<i64, i64> = Ok(8i64);
+    if macro_match_result_direct(^macro_match_low_ok_input) != -8 { panic(31843); };
+    let macro_match_high_ok_input: Result<i64, i64> = Ok(21i64);
+    if macro_match_result_direct(^macro_match_high_ok_input) != -21 { panic(31845); };
+    let macro_match_err_input: Result<i64, i64> = Err(7i64);
+    if macro_match_result_direct(^macro_match_err_input) != -7 { panic(31841); };
+    if macro_unsafe_block_direct() != 135 { panic(31825); };
+    let macro_try_some_input: Option<i64> = Some(33i64);
+    let macro_try_some = macro_try_option_direct(^macro_try_some_input);
+    if !macro_try_some.is_some() { panic(31826); };
+    if macro_try_some.unwrap() != 42 { panic(31827); };
+    let macro_try_none_input: Option<i64> = None;
+    let macro_try_none = macro_try_option_direct(^macro_try_none_input);
+    if !macro_try_none.is_none() { panic(31828); };
+    let macro_try_ok_input: Result<i64, i64> = Ok(34i64);
+    let macro_try_ok = macro_try_result_direct(^macro_try_ok_input);
+    if !macro_try_ok.is_ok() { panic(31829); };
+    if macro_try_ok.unwrap() != 42 { panic(31830); };
+    let macro_try_err_input: Result<i64, i64> = Err(7i64);
+    let macro_try_err = macro_try_result_direct(^macro_try_err_input);
+    if !macro_try_err.is_err() { panic(31831); };
+    let macro_try_custom_ok_input = DirectMacroTryResult { is_err: false, value: 35, error: 0 };
+    let macro_try_custom_ok = macro_try_custom_result_direct(^macro_try_custom_ok_input);
+    if macro_try_custom_ok.is_err || macro_try_custom_ok.value != 42 { panic(31832); };
+    let macro_try_custom_err_input = DirectMacroTryResult { is_err: true, value: 0, error: 6 };
+    let macro_try_custom_err = macro_try_custom_result_direct(^macro_try_custom_err_input);
+    if !macro_try_custom_err.is_err || macro_try_custom_err.error != 6 { panic(31833); };
+    let macro_try_call_some = macro_try_call_option_direct(36i64, true);
+    if !macro_try_call_some.is_some() || macro_try_call_some.unwrap() != 42 { panic(31834); };
+    let macro_try_call_none = macro_try_call_option_direct(36i64, false);
+    if !macro_try_call_none.is_none() { panic(31835); };
+}

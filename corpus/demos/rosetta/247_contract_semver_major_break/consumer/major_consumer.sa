@@ -1,0 +1,15 @@
+@import "consumer/../bridge/major_break_impl.sa"
+
+@major_consumer_value() -> i32:
+L_ENTRY:
+    handle = alloc 8
+    result = call @major_value(handle)
+    ok = eq result, 247
+    !result
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 247
+
+L_ERR:
+    return 0

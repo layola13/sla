@@ -1,0 +1,5 @@
+// expect: UndefinedVariable
+// neg: returning an undeclared identifier
+fn main() -> i32 {
+    return missing_name;
+}

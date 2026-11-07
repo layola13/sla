@@ -1,0 +1,5 @@
+// Extern variadic batch fixture: libc variadic declarations imported
+// through the .sai contract surface (Face A, declaration + call side).
+@extern printf(fmt: ptr, ...) -> i32
+@extern snprintf(buf: ptr, size: u64, fmt: ptr, ...) -> i32
+@extern memcmp(a: ptr, b: ptr, n: u64) -> i32

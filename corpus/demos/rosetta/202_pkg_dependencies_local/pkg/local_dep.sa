@@ -1,0 +1,16 @@
+#def LocalDep_SIZE = 8
+#def LocalDep_value = +0
+#def LocalDep_kind = +4
+
+@local_dep_seed() -> i32:
+L_ENTRY:
+    value = add 200, 2
+    !value
+    return 2
+
+@local_dep_value() -> i32:
+L_ENTRY:
+    seed = call @local_dep_seed()
+    value = add 200, seed
+    !seed
+    return value

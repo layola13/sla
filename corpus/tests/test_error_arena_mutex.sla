@@ -1,0 +1,9 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: Mutex is a synchronization primitive with its
+// own wait queues; it can never be an arena root (design 2.2).
+fn neg_mutex() -> i32 {
+    arena {
+        let m = Mutex::new(0);
+    }
+    return 0;
+}

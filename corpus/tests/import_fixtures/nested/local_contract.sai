@@ -1,0 +1,1 @@
+@extern nested_contract_value() -> i32

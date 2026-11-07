@@ -1,0 +1,30 @@
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Bag {
+    active: [bool; 2],
+    values: [Point; 2],
+}
+
+fn sum_active_x(bag: Bag) -> i32 {
+    let total: i32 = 0;
+    let i: i64 = 0;
+    while i < 2 {
+        if bag.active[i] == true {
+            total = total + bag.values[i].x;
+        };
+        i = i + 1;
+    }
+    return total;
+}
+
+@test "array struct field cleanup across branch"() {
+    let bag = Bag {
+        active: [true, false],
+        values: [Point { x: 7, y: 1 }, Point { x: 11, y: 2 }],
+    };
+    let got = sum_active_x(bag);
+    if got != 7 { panic(1300); };
+}

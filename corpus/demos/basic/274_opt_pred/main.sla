@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+
+// Option 谓词（15 为 match 版：1,1）。
+// `is_some/is_none`（15 的 match 口径之谓词版）。
+
+fn main() -> i32 {
+    let o = Some(5);
+    let n: Option<int> = None;
+    println("{},{}", if o.is_some() { 1 } else { 0 }, if n.is_none() { 1 } else { 0 });
+    return 0;
+}
+
+@test "basic 274 opt pred"() {
+    let o = Some(5);
+    let n: Option<int> = None;
+    if !o.is_some() { panic(27401); };
+    if !n.is_none() { panic(27402); };
+    if o.is_none() { panic(27403); };
+    if n.is_some() { panic(27404); };
+}

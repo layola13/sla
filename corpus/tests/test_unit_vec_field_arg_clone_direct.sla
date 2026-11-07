@@ -1,0 +1,62 @@
+@import "sa_std/vec.sa"
+
+// DEF-PARALLEL regression: a consuming call whose argument is a
+// struct-field Vec projection must clone the projection. Passing the raw
+// field handle lets the callee free the owner's buffer (use-after-free
+// across loop iterations + double free at owner drop). This shape has no
+// element read and no spawn: the field-argument aliasing alone corrupts.
+struct ELane {
+    runs: Vec<fn(i32) -> i32>,
+    run_order_positions: Vec<i64>,
+}
+
+fn e1_inc(value: i32) -> i32 {
+    return value + 1;
+}
+
+fn e1_new() -> ELane {
+    return ELane {
+        runs: Vec::new(),
+        run_order_positions: Vec::new(),
+    };
+}
+
+fn e1_find_order(positions: Vec<i64>, order_pos: i64) -> i64 {
+    let i: i64 = 0;
+    let n = len(positions) as i64;
+    while i < n {
+        if positions[i] == order_pos {
+            return i;
+        };
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn e1_push(holder: ELane, run: fn(i32) -> i32, pos: i64) -> ELane {
+    holder.runs.push(run);
+    holder.run_order_positions.push(pos);
+    return holder;
+}
+
+fn e1_scan(child: ELane) -> i64 {
+    let order_pos: i64 = 0;
+    let total = len(child.run_order_positions) as i64;
+    let hits: i64 = 0;
+    while order_pos < total {
+        let slot = e1_find_order(child.run_order_positions, order_pos);
+        if slot >= 0 {
+            hits = hits + 1;
+        };
+        order_pos = order_pos + 1;
+    }
+    return hits;
+}
+
+@test "e1 find order field arg in loop only"() {
+    let c0 = e1_new();
+    let c1 = e1_push(c0, e1_inc, 0);
+    let c2 = e1_push(c1, e1_inc, 1);
+    let hits = e1_scan(c2);
+    if hits != 2 { panic(9401); };
+}

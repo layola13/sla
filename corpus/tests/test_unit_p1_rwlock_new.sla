@@ -1,0 +1,38 @@
+@import "sa_std/sync/rwlock.sa"
+@import "sa_std/core/result.sa"
+
+// P1 coverage: RwLock.new is declared in sla_std
+// std_surface.sla_meta but no unit corpus file references
+// RwLock::new (only the rosetta 121 demo hits it, through an
+// Arc). This exercises a direct (non-Arc) RwLock: read guard
+// deref, write guard mutation, re-read.
+
+@test "p1 rwlock new direct read write"() {
+    let lock = RwLock::new(1);
+    {
+        let reader = lock.read().unwrap();
+        if *reader != 1 { panic(310); };
+    }
+    {
+        let writer = lock.write().unwrap();
+        *writer = 41;
+    }
+    let reader = lock.read().unwrap();
+    if *reader != 41 { panic(311); };
+}
+
+@test "p1 rwlock write accumulates"() {
+    let lock = RwLock::new(10);
+    {
+        let writer = lock.write().unwrap();
+        let current = *writer;
+        *writer = current + 5;
+    }
+    {
+        let writer = lock.write().unwrap();
+        let current = *writer;
+        *writer = current + 5;
+    }
+    let reader = lock.read().unwrap();
+    if *reader != 20 { panic(312); };
+}

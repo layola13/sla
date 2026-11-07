@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 183_prime_upto：30 以内素数 10 个（2,3,5,7,11,13,17,19,23,29）。
+
+fn is_prime(n: i32) -> i32 {
+    if n < 2 {
+        return 0;
+    };
+    for i in 2..n {
+        if i * i > n {
+            break;
+        };
+        if n % i == 0 {
+            return 0;
+        };
+    }
+    return 1;
+}
+
+fn prime_upto(limit: i32) -> i32 {
+    let c: i32 = 0;
+    for i in 2..limit {
+        c = c + is_prime(i);
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{}", prime_upto(30));
+    return 0;
+}
+
+@test "basic 46 prime upto"() {
+    if prime_upto(30) != 10 { panic(4601); };
+    if is_prime(2) != 1 { panic(4602); };
+    if is_prime(1) != 0 { panic(4603); };
+}

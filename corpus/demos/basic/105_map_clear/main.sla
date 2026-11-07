@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/hashmap.sa"
+@import "sa_std/core/option.sa"
+
+// 对标 tsgosa 167_map_clear：清空后表长为 0。
+// `clear()` 经 `MAP_CLEAR` 直降（checker 定 void 类型，双后端一致）。
+
+fn probe() -> int {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    m.clear();
+    return len(m) as int;
+}
+
+fn main() -> i32 {
+    println("{}", probe());
+    return 0;
+}
+
+@test "basic 105 map clear"() {
+    if probe() != 0 { panic(10501); };
+}

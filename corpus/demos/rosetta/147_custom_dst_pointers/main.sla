@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn custom_dst_pointer_bytes_len_surrogate() -> usize {
+    let bytes = "abc";
+    return bytes.len();
+}
+
+fn main() -> i32 {
+    let bytes = "abc";
+    let result = bytes.len();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 147 147_custom_dst_pointers"() {
+    let got = custom_dst_pointer_bytes_len_surrogate();
+    if got != 3 { panic(147); };
+}

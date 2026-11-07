@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Tribonacci 数（T(10)=81；初值 0,0,1）。
+// 意对标 237 斐波那契的三阶版（237 互补；453 做对峙）。
+
+fn trib(n: int) -> int {
+    if n == 0 { return 0; };
+    if n == 1 { return 0; };
+    if n == 2 { return 1; };
+    let a = 0;
+    let b = 0;
+    let c = 1;
+    let i = 2;
+    while i < n {
+        let t = a + b + c;
+        a = b;
+        b = c;
+        c = t;
+        i = i + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", trib(10), trib(7), trib(2));
+    return 0;
+}
+
+@test "basic 448 tribonacci"() {
+    if trib(10) != 81 { panic(44801); };
+    if trib(7) != 13 { panic(44802); };
+    if trib(2) != 1 { panic(44803); };
+}

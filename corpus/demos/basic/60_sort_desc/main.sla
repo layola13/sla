@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 190_sort_desc：降序排列（[1,2,3,4,5] -> 首 5 尾 1）。
+// 16/38 已有升序插入排序，此处取反比较子（`a[j] < k`）做降序版，
+// 定长 [int; 5] 原地写法与 16 一致。
+
+fn insert_sort_desc(^a: [int; 5]) -> [int; 5] {
+    for i in 1..5 {
+        let k = a[i];
+        let j = i - 1;
+        while j >= 0 && a[j] < k {
+            a[j + 1] = a[j];
+            j = j - 1;
+        }
+        a[j + 1] = k;
+    }
+    return a;
+}
+
+fn main() -> i32 {
+    let a = [1, 2, 3, 4, 5];
+    let s = insert_sort_desc(^a);
+    println("{},{},{},{},{}", s[0], s[1], s[2], s[3], s[4]);
+    return 0;
+}
+
+@test "basic 60 sort desc"() {
+    let a = [1, 2, 3, 4, 5];
+    let s = insert_sort_desc(^a);
+    if s[0] != 5 { panic(6001); };
+    if s[1] != 4 { panic(6002); };
+    if s[2] != 3 { panic(6003); };
+    if s[3] != 2 { panic(6004); };
+    if s[4] != 1 { panic(6005); };
+}

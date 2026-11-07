@@ -1,0 +1,6 @@
+@import "src/patches/helpers/index.sa"
+
+@patches_package_value() -> i32:
+L_ENTRY:
+    value = call @patches_helper_value()
+    return value

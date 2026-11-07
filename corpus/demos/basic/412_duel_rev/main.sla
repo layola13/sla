@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 反转双实现对峙（循环 vs 尾递归：12345 皆得 54321）。
+// 意对标 411 数位和对峙的反转版（409 互补）。
+
+fn rev_loop(n: int) -> int {
+    let r = 0;
+    let m = n;
+    while m > 0 {
+        r = r * 10 + m % 10;
+        m = m / 10;
+    }
+    return r;
+}
+
+fn rev_rec(n: int, acc: int) -> int {
+    if n == 0 { return acc; };
+    return rev_rec(n / 10, acc * 10 + n % 10);
+}
+
+fn main() -> i32 {
+    println("{},{}", rev_loop(12345), rev_rec(12345, 0));
+    return 0;
+}
+
+@test "basic 412 duel rev"() {
+    if rev_loop(12345) != 54321 { panic(41201); };
+    if rev_rec(12345, 0) != 54321 { panic(41202); };
+    if rev_loop(12345) != rev_rec(12345, 0) { panic(41203); };
+    if rev_rec(100, 0) != 1 { panic(41204); };
+}

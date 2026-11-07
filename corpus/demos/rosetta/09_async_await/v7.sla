@@ -1,0 +1,41 @@
+@import "sa_std/fmt.sai"
+@import "sa_std/time.sla"
+@import "sa_std/future.sa"
+@import "sa_std/core/waker.sa"
+@import "sa_std/pin.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/box.sa"
+
+async fn step_one_after_delay(delay_ms: u64) -> i32 {
+    thread::sleep(Duration::from_millis(delay_ms));
+    return 1;
+}
+
+async fn run() -> i32 {
+    let delay_ms: u64 = 5;
+    let value = step_one_after_delay(delay_ms).await;
+    return value;
+}
+
+fn block_on(future: future<i32>) -> i32 {
+    let data: ptr = PTR_NULL();
+    let raw = RAW_WAKER_NEW(data, data);
+    let waker = WAKER_FROM_RAW(raw);
+    let context = CONTEXT_FROM_WAKER(waker);
+    let boxed = Box::new(future);
+    let future_ref = *boxed;
+    let pinned = stack_alloc();
+    PIN_MUT_NEW(pinned, future_ref);
+    let poll = FUTURE_READY_POLL_STATE(PIN_MUT_GET_MUT(pinned));
+    let ready = POLL_IS_READY(poll);
+    if ready != true {
+        panic(93);
+    };
+    let value: i32 = POLL_VALUE(poll);
+    return value;
+}
+
+fn main() -> i32 {
+    println("{}", block_on(run()));
+    return 0;
+};

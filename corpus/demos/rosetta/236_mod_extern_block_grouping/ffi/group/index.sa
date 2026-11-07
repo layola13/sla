@@ -1,0 +1,17 @@
+@import "ffi/group/index.sai"
+@import "ffi/group/layout.sal"
+@import "ffi/group/bridge.sa"
+
+@export ffi_group_value() -> i32:
+L_ENTRY:
+    slot = alloc Group_SIZE
+    store slot+Group_value, 236 as i32
+    left = call @ffi_probe(&slot)
+    right = call @ffi_reset(&slot)
+    total = load slot+Group_value as i32
+    value = add left, total
+    !left
+    !right
+    !total
+    !slot
+    return value

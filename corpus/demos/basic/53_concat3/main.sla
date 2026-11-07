@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 161_concat3：[1] ++ [2] ++ [3, 4] = [1,2,3,4]。
+// SLA 无 `concat` 方法，按 39 的 `Vec::push` 写法逐个压入。
+
+fn main() -> i32 {
+    let c: Vec<i32> = Vec::new();
+    c.push(1);
+    c.push(2);
+    c.push(3);
+    c.push(4);
+    println("{},{},{}", len(c), c[0], c[3]);
+    return 0;
+}
+
+@test "basic 53 concat3"() {
+    let c: Vec<i32> = Vec::new();
+    c.push(1);
+    c.push(2);
+    c.push(3);
+    c.push(4);
+    if len(c) != 4 { panic(5301); };
+    if c[0] != 1 { panic(5302); };
+    if c[3] != 4 { panic(5303); };
+}

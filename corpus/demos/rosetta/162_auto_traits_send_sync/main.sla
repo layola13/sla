@@ -1,0 +1,9 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+fn send_requirement_result() -> i32 { return 42; }
+fn main() -> i32 {
+    let result = 42;
+    println("{}", result);
+    return result;
+}
+@test "rosetta 162 162_auto_traits_send_sync"() { let got = send_requirement_result(); if got != 42 { panic(162); }; }

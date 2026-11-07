@@ -1,0 +1,12 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/box.sa"
+
+fn global_alloc_box_value() -> i32 { let value = Box::new(5); return *value; }
+fn main() -> i32 {
+    let value = Box::new(5);
+    let result = *value;
+    println("{}", result);
+    return result;
+}
+@test "rosetta 151 151_global_alloc_trait"() { let got = global_alloc_box_value(); if got != 5 { panic(151); }; }

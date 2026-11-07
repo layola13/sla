@@ -1,0 +1,7 @@
+// expect: InvalidExpandTuple
+// neg: @expand_tuple with min greater than max
+@expand_tuple(3, 2, T) {
+struct Generated$N {
+}
+}
+fn main() -> i32 { return 0; }

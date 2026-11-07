@@ -1,0 +1,66 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// C(10,5)=252 三向收束：Pascal 查表 == 乘法式 == Vandermonde 自卷积 Σ_k C(5,k)²
+//（252 对 252 对 252；三算法互锁，316 系三向体例）。
+// 意对标 546 pascal × 350 binom × 549 vander（三源单实现见各源）。
+
+fn binom_table(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let nn = 1;
+    while nn <= n {
+        t[nn * w] = 1;
+        let kk = 1;
+        while kk <= k {
+            if kk <= nn {
+                t[nn * w + kk] = t[(nn - 1) * w + kk - 1] + t[(nn - 1) * w + kk];
+            };
+            kk = kk + 1;
+        }
+        nn = nn + 1;
+    }
+    return t[n * w + k];
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn vander_self(n: int) -> int {
+    let acc = 0;
+    let k = 0;
+    while k <= n {
+        let c = binom_table(n, k);
+        acc = acc + c * c;
+        k = k + 1;
+    }
+    return acc;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", binom_table(10, 5), binom_mul(10, 5), vander_self(5));
+    return 0;
+}
+
+@test "basic 555 tri binom"() {
+    if binom_table(10, 5) != 252 { panic(55501); };
+    if binom_mul(10, 5) != 252 { panic(55502); };
+    if vander_self(5) != 252 { panic(55503); };
+    if vander_self(4) != 70 { panic(55504); };
+}

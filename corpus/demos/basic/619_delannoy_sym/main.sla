@@ -1,0 +1,48 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Delannoy 对称性：D(5,3)=D(3,5)=231，D(5,4)=D(4,5)=681（转置双算一致）。
+// 意对标 611_delannoy_tab（建表版互补；行列镜像互锁）。
+
+fn delan(m: int, n: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= m * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= m {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let b = 0;
+    while b <= n {
+        t[b] = 1;
+        b = b + 1;
+    }
+    let mm = 1;
+    while mm <= m {
+        let nn = 1;
+        while nn <= n {
+            t[mm * w + nn] = t[(mm - 1) * w + nn] + t[(mm - 1) * w + nn - 1] + t[mm * w + nn - 1];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[m * w + n];
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", delan(5, 3), delan(3, 5), delan(5, 4), delan(4, 5));
+    return 0;
+}
+
+@test "basic 619 delannoy sym"() {
+    if delan(5, 3) != 231 { panic(61901); };
+    if delan(3, 5) != 231 { panic(61902); };
+    if delan(5, 4) != 681 { panic(61903); };
+    if delan(4, 5) != 681 { panic(61904); };
+}

@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 435_str_switch：绑定 scrutinee 字符串 switch（2,9）。
+// 126 只用字面量 scrutinee；此处探针证实 `: ptr` 绑定 scrutinee
+// 分发正常（相等路径），失真仅限关系比较（见 #18，122 用字面量）。
+
+fn pick(s: ptr) -> i32 {
+    let r: i32 = 9;
+    switch s {
+        "a" => { r = 1; },
+        "b" => { r = 2; },
+        default => {},
+    };
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{}", pick("b"), pick("z"));
+    return 0;
+}
+
+@test "basic 180 swbind str"() {
+    if pick("b") != 2 { panic(18001); };
+    if pick("a") != 1 { panic(18002); };
+    if pick("z") != 9 { panic(18003); };
+}

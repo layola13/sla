@@ -1,0 +1,79 @@
+// Goroutine syntax batch P1: `go` spawn (plain, statement form,
+// supervised, function-value callee, Box pointer argument).
+// The runtime is sa_std/task.sai (sci 870cda60); no test in this
+// file writes the spawn sequence by hand.
+
+@import "sa_std/task.sai"
+@import "sa_std/globals.sai"
+@import "sa_std/core/box.sa"
+
+fn go_count_bump() {
+    let out: u64 = 0;
+    let rc = sa_global_u64_add("go_syntax_ctr", 13, 1, &out);
+    if rc != 0 { panic(9210); };
+}
+
+fn go_count_read() -> u64 {
+    let v: u64 = 0;
+    let rc = sa_global_u64_get("go_syntax_ctr", 13, &v);
+    // An unset cell reads as 0: NOT_FOUND (3) is the contract's
+    // "no value yet", not an error.
+    if rc == 3 { return 0; };
+    if rc != 0 { panic(9211); };
+    return v;
+}
+
+fn go_ptr_bump(arg: *u64) {
+    let v = *arg;
+    let out: u64 = 0;
+    let rc = sa_global_u64_add("go_syntax_ctr", 13, v as i64, &out);
+    if rc != 0 { panic(9212); };
+    let boxed = unsafe { Box::from_raw(arg) };
+}
+
+fn go_word_add(v: u64) {
+    let out: u64 = 0;
+    let rc = sa_global_u64_add("go_syntax_ctr", 13, v as i64, &out);
+    if rc != 0 { panic(9213); };
+}
+
+@test "go spawn let form joins and runs"() {
+    let before = go_count_read();
+    let h = go go_count_bump();
+    let st = sa_task_join(h);
+    if st != 0 { panic(9201); };
+    if go_count_read() != before + 1 { panic(9202); };
+}
+
+@test "go spawn statement form runs"() {
+    let before = go_count_read();
+    let h = go go_count_bump();
+    go go_count_bump();
+    let st = sa_task_join(h);
+    if st != 0 { panic(9203); };
+    let spins: u64 = 0;
+    while go_count_read() < before + 2 {
+        sa_task_yield();
+        spins = spins + 1;
+        if spins > 1000000 { panic(9204); };
+    }
+}
+
+@test "go spawn with box pointer argument"() {
+    let before = go_count_read();
+    let boxed = Box::new(10);
+    let raw = Box::into_raw(boxed);
+    let h = go go_ptr_bump(raw);
+    let st = sa_task_join(h);
+    if st != 0 { panic(9207); };
+    if go_count_read() != before + 10 { panic(9208); };
+}
+
+@test "go spawn through function value"() {
+    let before = go_count_read();
+    let f: fn(u64) = go_word_add;
+    let h = go f(5);
+    let st = sa_task_join(h);
+    if st != 0 { panic(9209); };
+    if go_count_read() != before + 5 { panic(9214); };
+}

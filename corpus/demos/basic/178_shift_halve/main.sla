@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1256_shift_while：循环右移折半（8,1）。
+// SLA 无 `>>=`（无词法 token，见 119），用 `x = x >> 1` 表达；
+// 与 170 的左移翻倍方向互补。
+
+fn main() -> i32 {
+    let x = 256;
+    let t = 0;
+    while x > 1 {
+        x = x >> 1;
+        t = t + 1;
+    }
+    println("{},{}", t, x);
+    return 0;
+}
+
+@test "basic 178 shift halve"() {
+    let x = 256;
+    let t = 0;
+    while x > 1 {
+        x = x >> 1;
+        t = t + 1;
+    }
+    if t != 8 { panic(17801); };
+    if x != 1 { panic(17802); };
+}

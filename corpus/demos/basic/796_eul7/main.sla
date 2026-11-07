@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian 续高位 E(7,1)=120，E(7,2)=1191，E(7,3)=2416（同式再上两行）。
+// 意对标 666_eulerian（n≤6 版互补；799 做建表/交错和对峙）。
+
+fn eul(n: int, m: int) -> int {
+    let w = m + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + m {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= m {
+            t[mm * w + nn] = (mm - nn) * t[(mm - 1) * w + nn - 1] + (nn + 1) * t[(mm - 1) * w + nn];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + m];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", eul(7, 1), eul(7, 2), eul(7, 3));
+    return 0;
+}
+
+@test "basic 796 eul7"() {
+    if eul(7, 1) != 120 { panic(79601); };
+    if eul(7, 2) != 1191 { panic(79602); };
+    if eul(7, 3) != 2416 { panic(79603); };
+    if eul(6, 2) != 302 { panic(79604); };
+}

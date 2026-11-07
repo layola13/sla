@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Position {
+    entity: i32,
+    x: i32,
+    y: i32,
+}
+
+fn component_sum(store: [Position; 2]) -> i32 {
+    let pos = store[1];
+    let entity = pos.entity;
+    let x = pos.x;
+    let y = pos.y;
+    return entity + x + y;
+}
+
+fn main() -> i32 {
+    let positions = [
+        Position { entity: 1, x: 1, y: 2 },
+        Position { entity: 2, x: 3, y: 4 },
+    ];
+    let total = component_sum(positions);
+    println("{}", total);
+    return total;
+}
+
+@test "rosetta 074 74_component_store"() {
+    if main() != 9 {
+        panic(74);
+    };
+}

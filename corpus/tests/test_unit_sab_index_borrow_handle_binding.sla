@@ -1,0 +1,58 @@
+@import "sa_std/vec.sa"
+@import "sa_std/growvec.sa"
+@import "sa_std/growvec.sai"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+
+// DEF-SAB-BORROW-RESIDUAL regression: a borrow of a pointer-backed
+// container element bound to a local -- `let e = &args[i]` where the
+// element is a Vec<u8> -- kept the element SLOT address as the borrow
+// value on the SAB backend, while the call-argument path for the
+// same borrow loads the stored element pointer. Consumers of the
+// binding that expect the object pointer (len, element reads,
+// passing the binding as a &param) then read neighbouring slots as
+// the element's fields (wrong lengths / signal 11). The SA-text
+// backend binds the element pointer.
+
+fn take_bulk(out: Vec<u8>, data: &Vec<u8>) -> Vec<u8> {
+    out.push(36);
+    let n = len(data);
+    out.push(n as u8);
+    return out;
+}
+
+@test "let bound index borrow len"() {
+    let args: Vec<Vec<u8>> = Vec::new();
+    let a: Vec<u8> = Vec::new();
+    a.push(65);
+    args.push(a);
+    let e = &args[0];
+    if len(e) != 1 { panic(47101); };
+}
+
+@test "let bound index borrow second elem read"() {
+    let args: Vec<Vec<u8>> = Vec::new();
+    let a: Vec<u8> = Vec::new();
+    a.push(65);
+    args.push(a);
+    let b: Vec<u8> = Vec::new();
+    b.push(66);
+    b.push(67);
+    args.push(b);
+    let e = &args[1];
+    if len(e) != 2 { panic(47102); };
+    if e[0] != 66 { panic(47103); };
+    if e[1] != 67 { panic(47104); };
+}
+
+@test "let bound index borrow passed as borrow param"() {
+    let args: Vec<Vec<u8>> = Vec::new();
+    let a: Vec<u8> = Vec::new();
+    a.push(65);
+    args.push(a);
+    let e = &args[0];
+    let out: Vec<u8> = Vec::new();
+    let r = take_bulk(out, e);
+    if len(r) != 2 { panic(47105); };
+    if r[1] != 1 { panic(47106); };
+}

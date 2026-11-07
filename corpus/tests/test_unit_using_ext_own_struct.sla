@@ -1,0 +1,28 @@
+// DEF-E0 regression: `using` static extension whose first parameter is
+// a user struct defined at the top level of the same file, the
+// extension living in a different module of that file.
+struct Meter {
+    value: i32,
+}
+
+mod meter_ext {
+    pub fn double(m: Meter) -> i32 {
+        return m.value + m.value;
+    }
+
+    pub fn plus(m: Meter, d: i32) -> i32 {
+        return m.value + d;
+    }
+}
+
+using meter_ext;
+
+@test "using ext: own struct extension"() {
+    let m = Meter { value: 21 };
+    if m.double() != 42 { panic(34100); };
+    let m2 = Meter { value: 10 };
+    if m2.plus(5) != 15 { panic(34101); };
+    // real field access as control (property-form baseline)
+    let m3 = Meter { value: 7 };
+    if m3.value != 7 { panic(34102); };
+}

@@ -1,0 +1,13 @@
+struct ImportedPoint {
+    x: i32,
+    y: i32,
+}
+
+struct ImportedRect {
+    w: i32,
+    h: i32,
+}
+
+fn imported_area(r: ImportedRect) -> i32 {
+    return r.w * r.h;
+}

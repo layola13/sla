@@ -1,0 +1,37 @@
+// DEF-12: kb shape, second form (slaheng kb test_json.sla:116).
+// Owned local doc; the call site passes an explicit &doc borrow
+// together with doc.soff[0] / doc.slen[0] by-value Copy reads.
+// Baseline fc46620a rejects with the same BorrowConflict family as
+// the param-forward form; judged by standalone `sla check`
+// (RC=1 on baseline, RC=0 with the DEF-12 fix).
+
+struct Doc {
+    soff: Vec<u64>,
+    slen: Vec<u64>,
+    pool: Vec<u8>,
+}
+
+fn doc_new() -> Doc {
+    return Doc {
+        soff: Vec::new(), slen: Vec::new(), pool: Vec::new(),
+    };
+}
+
+fn pool_byte(doc: &Doc, off: u64) -> u8 {
+    return doc.pool[off];
+}
+
+fn span_eq(doc: &Doc, off: u64, len: u64, tp: ptr, tn: u64) -> bool {
+    if len != tn { return false; };
+    let i: u64 = 0;
+    while i < len {
+        if pool_byte(doc, off + i) != 0 { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn caller(tp: ptr, tn: u64) -> bool {
+    let doc = doc_new();
+    return span_eq(&doc, doc.soff[0], doc.slen[0], tp, tn);
+}

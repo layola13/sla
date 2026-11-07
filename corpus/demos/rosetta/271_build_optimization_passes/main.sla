@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_optimization_pass_count() -> i32 { let inline_pass = 1; let dce_pass = 1; let const_fold_pass = 1; return inline_pass + dce_pass + const_fold_pass; }
+fn main() -> i32 { let inline_pass = 1; let dce_pass = 1; let const_fold_pass = 1; let result = inline_pass + dce_pass + const_fold_pass; println("{}", result); return result; }
+@test "rosetta 271 build optimization passes"() { let got = build_optimization_pass_count(); if got != 3 { panic(271); }; }

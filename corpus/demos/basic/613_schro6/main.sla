@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Schroder 高位二 S(6)=1806（S(5)=394 对 394；卷积和 1412）。
+// 意对标 608_schro_high（高位版互补；614 做高位二对峙）。
+
+fn sch(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 2; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k < ii {
+            s = s + t[k] * t[ii - 1 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn main() -> i32 {
+    println("{},{}", sch(5), sch(6));
+    return 0;
+}
+
+@test "basic 613 schro6"() {
+    if sch(6) != 1806 { panic(61301); };
+    if sch(5) != 394 { panic(61302); };
+    if sch(4) != 90 { panic(61303); };
+}

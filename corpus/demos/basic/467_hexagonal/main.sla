@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 六边形数（H(n)=n(2n-1)：H(5)=45）。
+// 意对标 466 五边形的六边版（466 互补）。
+
+fn hex(n: int) -> int {
+    return n * (2 * n - 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", hex(5), hex(4), hex(1));
+    return 0;
+}
+
+@test "basic 467 hexagonal"() {
+    if hex(5) != 45 { panic(46701); };
+    if hex(4) != 28 { panic(46702); };
+    if hex(1) != 1 { panic(46703); };
+}

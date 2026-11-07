@@ -1,0 +1,33 @@
+// Extern variadic batch, fn-pointer face (sequenced last per the Jev
+// ruling: named declarations first, C fn-pointer types after).
+//
+// A function-pointer type with a C ABI may end its parameter list with
+// `...`. Calls through such a pointer follow the same checker rules as
+// named variadic declarations: at least the fixed arguments, trailing
+// arguments promoted per the C default argument promotions, aggregates
+// and borrows rejected.
+//
+// Baseline behaviour: the `...` in a fn-pointer type is a SyntaxError
+// on the pristine tree.
+//
+// KNOWN OPEN ITEM (see the batch REPORT): when one module contains TWO
+// variadic definitions sharing the same fixed-parameter prefix, an
+// indirect call's signature provenance is lost host-side (the vtable
+// slot inference requires shape-equal candidates and the fallback
+// inference has no reliable key), so the FP case lives in its own file
+// (this file) — one variadic definition per module is the verified shape today.
+
+extern "C" fn va_mix2(fixed: i32, args: ...) -> f64 {
+    let a = va_next_i32(args);
+    let b = va_next_f64(args);
+    return fixed as f64 + a as f64 + b;
+}
+
+@test "variadic fn ptr call f32 promotion"() {
+    let g: extern "C" fn(i32, ...) -> f64 = va_mix2;
+    let frac: f32 = 0.5;
+    let r = unsafe { g(1, 2, frac) };
+    if r != 3.5 {
+        panic(7302);
+    };
+}

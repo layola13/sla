@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/hashmap.sa"
+@import "sa_std/core/option.sa"
+
+// 对标 tsgosa 1022_map_str_int 的 `-or` 半（101 为取零版：命中 1，缺键 7）。
+// `unwrap_or(v)`（#14 口径）；`Vec.clear` 不在面（`Undefined call`，见 #27 系）。
+
+fn main() -> i32 {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    let hit = m.get("a").copied().unwrap_or(7);
+    let miss = m.get("z").copied().unwrap_or(7);
+    println("{},{}", hit, miss);
+    return 0;
+}
+
+@test "basic 266 unwrap or"() {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    if m.get("a").copied().unwrap_or(7) != 1 { panic(26601); };
+    if m.get("z").copied().unwrap_or(7) != 7 { panic(26602); };
+}

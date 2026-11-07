@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 06_ternary / 153_ternary_chain：if 表达式代替三元。
+
+fn pick(c: i32) -> i32 {
+    return if c > 10 { 100 } else { 200 };
+}
+
+fn pick_chain(c: i32) -> i32 {
+    return if c > 10 { 100 } else if c > 0 { 200 } else { 300 };
+}
+
+fn main() -> i32 {
+    println("{}", pick(7));
+    println("{}", pick(42));
+    println("{}", pick_chain(-1));
+    return 0;
+}
+
+@test "basic 06 ternary as if expr"() {
+    if pick(7) != 200 { panic(601); };
+    if pick(42) != 100 { panic(602); };
+    if pick_chain(42) != 100 { panic(603); };
+    if pick_chain(5) != 200 { panic(604); };
+    if pick_chain(-1) != 300 { panic(605); };
+}

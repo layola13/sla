@@ -1,0 +1,29 @@
+@const CALLBACK_VT = vtable { call = @callback }
+
+#def Slot_SIZE = 16
+#def Slot_DATA = +0
+#def Slot_VTABLE = +8
+#def VTable_call = +0
+
+@callback(x: i32) -> i32:
+L_ENTRY:
+    result = add x, 1
+    !x
+    return result
+
+@register(&slot: ptr) -> i32:
+L_ENTRY:
+    vt = load slot+Slot_VTABLE as ptr
+    fn = load vt+VTable_call as ptr
+    result = call_indirect fn(5)
+    ok = eq result, 6
+    !fn
+    !vt
+    !result
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 0
+
+L_ERR:
+    return 1

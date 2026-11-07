@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1258_compare_chain：比较链（1,1）。
+// 与 175 的 `&&` 区间判定同构：此处为传递链（急求值见 #21，
+// 两侧纯比较无副作用）。
+
+fn main() -> i32 {
+    let r1 = 0;
+    if 1 < 2 && 2 < 3 { r1 = 1; };
+    let r2 = 0;
+    if 3 > 2 && 2 > 1 { r2 = 1; };
+    println("{},{}", r1, r2);
+    return 0;
+}
+
+@test "basic 179 compare chain"() {
+    if 1 < 2 && 2 < 3 { } else { panic(17901); };
+    if 3 > 2 && 2 > 1 { } else { panic(17902); };
+    if 1 < 2 && 3 < 2 { panic(17903); };
+}

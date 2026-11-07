@@ -1,0 +1,16 @@
+#def Meta_SIZE = 8
+#def Meta_name = +0
+#def Meta_version = +4
+
+@meta_seed() -> i32:
+L_ENTRY:
+    value = add 200, 1
+    !value
+    return 1
+
+@meta_value() -> i32:
+L_ENTRY:
+    seed = call @meta_seed()
+    value = add 200, seed
+    !seed
+    return value

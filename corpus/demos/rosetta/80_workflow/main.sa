@@ -1,0 +1,99 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_completed_steps = vtable { call = @sla__completed_steps }
+@const SLA_FNPTR_VT_bool_to_i32 = vtable { call = @sla__bool_to_i32 }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__completed_steps(state: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load state+0 as u8
+    tmp_1 = call @sla__bool_to_i32(tmp_0)
+    !tmp_0
+    tmp_2 = load state+1 as u8
+    tmp_3 = call @sla__bool_to_i32(tmp_2)
+    !tmp_2
+    tmp_4 = add tmp_1, tmp_3
+    !tmp_1
+    !tmp_3
+    tmp_5 = load state+2 as u8
+    tmp_6 = call @sla__bool_to_i32(tmp_5)
+    !tmp_5
+    tmp_7 = add tmp_4, tmp_6
+    !tmp_4
+    !tmp_6
+    mut_count = tmp_7
+    !state
+    return mut_count
+
+@sla__bool_to_i32(value: u8) -> i32:
+L_ENTRY:
+    br value -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !value
+    tmp_8 = 1
+    return tmp_8
+
+L_ELSE_1:
+    !value
+    jmp L_MERGE_2
+
+L_MERGE_2:
+    tmp_10 = 0
+    return tmp_10
+
+@main() -> i32:
+L_ENTRY:
+    state = alloc 3
+    tmp_11 = 1
+    store state+0, tmp_11 as u8
+    tmp_12 = 1
+    store state+1, tmp_12 as u8
+    tmp_13 = 0
+    store state+2, tmp_13 as u8
+    tmp_14 = call @sla__completed_steps(state)
+    done = tmp_14
+    tmp_15 = call @sa_fmt_u64(done, 10)
+    tmp_16 = call @sa_fmt_buffer_data(tmp_15)
+    tmp_17 = call @sa_fmt_buffer_len(tmp_15)
+    tmp_18 = tmp_16
+    call @sa_print_bytes(&tmp_18, tmp_17)
+    call @sa_fmt_buffer_free(^tmp_15)
+    !tmp_18
+    !tmp_17
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    !state
+    return done
+
+@test "rosetta 080 80_workflow"():
+L_TEST_ENTRY_3:
+    state = alloc 3
+    tmp_19 = 1
+    store state+0, tmp_19 as u8
+    tmp_20 = 1
+    store state+1, tmp_20 as u8
+    tmp_21 = 0
+    store state+2, tmp_21 as u8
+    tmp_22 = call @sla__completed_steps(state)
+    tmp_23 = 2
+    tmp_24 = ne tmp_22, tmp_23
+    !tmp_22
+    !tmp_23
+    br tmp_24 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_24
+    panic(80)
+
+L_ELSE_5:
+    !tmp_24
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !state
+    return
+

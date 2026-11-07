@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Narayana 高位行 n=6：`1,15,50,50,15,1`（和 132=C(6)；行和循环求和）。
+// 意对标 597 narayana_row（低位版互补；同式高位复算）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn narayana(n: int, k: int) -> int {
+    return binom_mul(n, k) * binom_mul(n, k + 1) / n;
+}
+
+fn nar_row(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n - 1 {
+        s = s + narayana(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", narayana(6, 1), narayana(6, 2), narayana(6, 3), nar_row(6));
+    return 0;
+}
+
+@test "basic 598 narayana6"() {
+    if narayana(6, 1) != 15 { panic(59801); };
+    if narayana(6, 2) != 50 { panic(59802); };
+    if narayana(6, 3) != 50 { panic(59803); };
+    if nar_row(6) != 132 { panic(59804); };
+}

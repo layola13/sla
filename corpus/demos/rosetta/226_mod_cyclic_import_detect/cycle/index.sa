@@ -1,0 +1,6 @@
+@import "cycle/core/index.sa"
+
+@export cycle_value() -> i32:
+L_ENTRY:
+    value = call @cycle_core_value()
+    return value

@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 模幂（258 为明文版：2^10 mod 1000=24，3^5 mod 100=43）。
+// 平方乘（258 口径）+ 步步取模组合。
+
+fn powmod(base: int, exp: int, m: int) -> int {
+    let r = 1;
+    let b = base % m;
+    let e = exp;
+    while e > 0 {
+        if e % 2 == 1 { r = r * b % m; };
+        b = b * b % m;
+        e = e / 2;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{}", powmod(2, 10, 1000), powmod(3, 5, 100));
+    return 0;
+}
+
+@test "basic 328 powmod"() {
+    if powmod(2, 10, 1000) != 24 { panic(32801); };
+    if powmod(3, 5, 100) != 43 { panic(32802); };
+    if powmod(7, 0, 5) != 1 { panic(32803); };
+}

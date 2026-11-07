@@ -1,0 +1,61 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/string.sa"
+
+// DEF-HASHMAP-XTALK (A-form) ownership: overwriting a key must return
+// the old value and retire the replaced entry's heap cell exactly
+// once (a double free crashes the test binary; a missed free is
+// caught by the line's RSS harness). Repeated overwrite of one key
+// in a loop hammers the replaced branch.
+
+@test "xtalk overwrite returns old"() {
+    let m: HashMap<i32, i32> = HashMap::new();
+    let first = m.insert(5, 50);
+    if first.is_some() { panic(78101); };
+    let second = m.insert(5, 55);
+    if second.is_none() { panic(78102); };
+    if second.unwrap_or(0) != 50 { panic(78103); };
+    if len(m) != 1 { panic(78104); };
+    if m.get(5).copied().unwrap_or(0) != 55 { panic(78105); };
+}
+
+@test "xtalk overwrite loop one key"() {
+    let m: HashMap<i32, i32> = HashMap::new();
+    m.insert(9, 0);
+    let i: i32 = 1;
+    while i <= 500 {
+        let old = m.insert(9, i);
+        if old.unwrap_or(0) != i - 1 { panic(78201); };
+        i = i + 1;
+    }
+    if len(m) != 1 { panic(78202); };
+    if m.get(9).copied().unwrap_or(0) != 500 { panic(78203); };
+}
+
+@test "xtalk overwrite loop many keys"() {
+    let m: HashMap<i32, i32> = HashMap::new();
+    let i: i32 = 0;
+    while i < 32 {
+        m.insert(i, i);
+        i = i + 1;
+    }
+    let r: i32 = 0;
+    while r < 50 {
+        let j: i32 = 0;
+        while j < 32 {
+            let old = m.insert(j, 1000 * r + j);
+            if r == 0 {
+                if old.unwrap_or(0) != j { panic(78301); };
+            } else {
+                if old.unwrap_or(0) != 1000 * (r - 1) + j { panic(78302); };
+            };
+            j = j + 1;
+        }
+        r = r + 1;
+    }
+    if len(m) != 32 { panic(78303); };
+    let j: i32 = 0;
+    while j < 32 {
+        if m.get(j).copied().unwrap_or(0) != 1000 * 49 + j { panic(78304); };
+        j = j + 1;
+    }
+}

@@ -1,0 +1,20 @@
+// FB-010 regression: destructuring an all-Copy tuple must not consume
+// the root binding (six-house verdict B*: a tuple is Copy iff all
+// elements are Copy; the destructure site follows the plain-let
+// exemption caliber). Pre-fix: check fails with UseAfterMove.
+// The trailing reads of `t` after `let c = t` are the discriminating
+// part at the execution level: they trap at the SA register level
+// if an emitter aliases the source instead of materializing a copy.
+fn f() -> i64 {
+    let t = (2, 5);
+    let (x, y) = t;
+    let c = t;
+    let (a, b) = c;
+    return x + y + a + b + t.0 + t.1;
+}
+
+@test "fb010 destructure copy tuple keeps root usable"() {
+    if f() != 21 {
+        panic(10010);
+    };
+}

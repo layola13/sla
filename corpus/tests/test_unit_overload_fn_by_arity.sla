@@ -1,0 +1,16 @@
+// Function overloading by arity: same-name user functions with
+// different parameter counts form one overload set; each call resolves
+// to the member with the matching arity. Baseline: Redeclaration error.
+
+fn acc(x: i32) -> i32 { return x; }
+fn acc(x: i32, y: i32) -> i32 { return x + y; }
+fn acc(x: i32, y: i32, z: i32) -> i32 { return x + y + z; }
+
+@test "overload fn by arity"() {
+    let a: i32 = 10;
+    let b: i32 = 20;
+    let c: i32 = 12;
+    if acc(a) != 10 { panic(201); };
+    if acc(a, b) != 30 { panic(202); };
+    if acc(a, b, c) != 42 { panic(203); };
+};

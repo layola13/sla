@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Config {
+    threads: u32,
+    level: u32,
+}
+
+fn merge(base: Config, override_cfg: Config) -> Config {
+    Config {
+        threads: if override_cfg.threads == 0 {
+            base.threads
+        } else {
+            override_cfg.threads
+        },
+        level: if override_cfg.level == 0 {
+            base.level
+        } else {
+            override_cfg.level
+        },
+    }
+}
+
+fn main() -> i32 {
+    let merged = merge(
+        Config { threads: 4, level: 1 },
+        Config { threads: 0, level: 3 },
+    );
+    println("{} {}", merged.threads, merged.level);
+    return 0;
+}
+
+@test "rosetta 045 config merge"() {
+    let merged = merge(
+        Config { threads: 4, level: 1 },
+        Config { threads: 0, level: 3 },
+    );
+    if merged.threads != 4 {
+        panic(45);
+    };
+    if merged.level != 3 {
+        panic(145);
+    };
+}

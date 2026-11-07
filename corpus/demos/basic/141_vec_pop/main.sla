@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 507_arr_api 的 pop 部（2,1,1）。
+// `pop()` 返回 `Option`（空表 `None`），此处以 `unwrap()` 取值
+//（与 15 的 Option 口径一致；`map/filter/join` 等方法暂无，见 81/116）。
+
+fn main() -> i32 {
+    let v: Vec<i32> = Vec::new();
+    v.push(1);
+    v.push(2);
+    let p = v.pop().unwrap();
+    println("{},{},{}", p, len(v), v[0]);
+    return 0;
+}
+
+@test "basic 141 vec pop"() {
+    let v: Vec<i32> = Vec::new();
+    v.push(1);
+    v.push(2);
+    if v.pop().unwrap() != 2 { panic(14101); };
+    if len(v) != 1 { panic(14102); };
+    if v[0] != 1 { panic(14103); };
+    if v.pop().unwrap() != 1 { panic(14104); };
+    if len(v) != 0 { panic(14105); };
+}

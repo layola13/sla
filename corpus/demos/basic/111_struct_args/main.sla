@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 310_iface_lit_arg：结构体字面量作函数实参（3,7,11）。
+// 原用例另有接口继承（`extends`），SLA 无继承语义，此处取两独立
+// 结构体 + 字面量/绑定两种传参（与 79/87 的嵌套读写互补）。
+
+struct Q { x: i32, y: i32 }
+struct P { m: i32, n: i32 }
+
+fn add(o: Q) -> i32 { return o.x + o.y; }
+fn sum(o: P) -> i32 { return o.m + o.n; }
+
+fn main() -> i32 {
+    let p = Q { x: 3, y: 4 };
+    println("{},{},{}", add(Q { x: 1, y: 2 }), add(p), sum(P { m: 5, n: 6 }));
+    return 0;
+}
+
+@test "basic 111 struct args"() {
+    if add(Q { x: 1, y: 2 }) != 3 { panic(11101); };
+    let p = Q { x: 3, y: 4 };
+    if add(p) != 7 { panic(11102); };
+    if sum(P { m: 5, n: 6 }) != 11 { panic(11103); };
+}

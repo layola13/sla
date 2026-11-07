@@ -1,0 +1,17 @@
+// Negative (integration-wave recheck (a)): a call below every
+// member's arity — including a variadic member's fixed floor —
+// matches no member and is rejected with the candidate list. Judge
+// with a standalone `sla check` (exit 1, "no overload of `tf`
+// matches"); never via the test runner. Baseline (pristine tree):
+// also rejected, as a Redeclaration of the two definitions.
+
+fn tf(code: i32, extra: i32) -> i64 { return 0; }
+
+extern "C" fn tf(tag: ptr, args: ...) -> i64 {
+    return 0;
+}
+
+fn main() -> i32 {
+    let r = unsafe { tf() };
+    return r as i32;
+}

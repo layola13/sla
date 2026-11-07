@@ -1,0 +1,14 @@
+// Generated from build/ci.toml and ci/workflows/*.yml.
+#def CI_WORKFLOW_COUNT = 2
+
+@ci_pipeline_value() -> i32:
+L_ENTRY:
+    value = add 279, 1
+    !value
+    return 280
+
+@ci_pipeline_count() -> i32:
+L_ENTRY:
+    count = add 1, 1
+    !count
+    return CI_WORKFLOW_COUNT

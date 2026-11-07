@@ -1,0 +1,113 @@
+// DEF-KB-1 regression corpus: index assignment into struct Vec fields
+// at control-flow joins. On the 6004af4 basepoint the SAB backend's
+// emitted code traps the SAB verifier with PhiStateConflict (1015):
+// a temp register is Composite on one incoming path and Uninitialized
+// on the other. Morphology 1: if/else branches write two different Vec
+// fields of the same struct (heng kb json.sla j_parse_array/object).
+// Morphology 2: a Vec field index assignment inside a while loop
+// (heng species tests). Distilled from heng kb/tools/repro_defkb1.sla.
+@import "sa_std/vec.sa"
+
+struct Doc {
+    next: Vec<i64>,
+    child: Vec<i64>,
+}
+
+fn make_doc() -> Doc {
+    let doc = Doc { next: Vec::new(), child: Vec::new() };
+    let k: u64 = 0;
+    while k < 8 {
+        doc.next.push(0);
+        doc.child.push(0);
+        k = k + 1;
+    }
+    return doc;
+}
+
+fn write_branch(doc: &Doc, flag: bool, val: i64) {
+    if flag {
+        doc.child[0] = val;
+    } else {
+        doc.next[1] = val;
+    }
+}
+
+fn fill_loop(doc: &Doc, count: u64) -> i64 {
+    let last: i64 = -1;
+    let i: u64 = 0;
+    while i < count {
+        let val: i64 = (i as i64) + 1;
+        if last < 0 {
+            doc.child[0] = val;
+        } else {
+            doc.next[last as u64] = val;
+        };
+        last = val;
+        i = i + 1;
+    }
+    return last;
+}
+
+fn bump_loop(doc: &Doc, count: u64) {
+    let i: u64 = 0;
+    while i < count {
+        doc.next[i] = (i as i64) * 2;
+        i = i + 1;
+    }
+}
+
+@test "defkb1 if else write different vec fields"() {
+    let doc = make_doc();
+    write_branch(&doc, true, 41);
+    write_branch(&doc, false, 42);
+    if doc.child[0] != 41 { panic(1501); };
+    if doc.next[1] != 42 { panic(1502); };
+}
+
+@test "defkb1 while loop branch writes vec fields"() {
+    let doc = make_doc();
+    let r = fill_loop(&doc, 6);
+    if r != 6 { panic(1503); };
+    if doc.child[0] != 1 { panic(1504); };
+    if doc.next[1] != 2 { panic(1505); };
+    if doc.next[5] != 6 { panic(1506); };
+}
+
+@test "defkb1 while loop single vec field index assign"() {
+    let doc = make_doc();
+    bump_loop(&doc, 8);
+    if doc.next[0] != 0 { panic(1507); };
+    if doc.next[3] != 6 { panic(1508); };
+    if doc.next[7] != 14 { panic(1509); };
+}
+
+struct Atom {
+    z: i32, charge: i32,
+}
+
+struct AtomGraph {
+    atoms: Vec<Atom>,
+}
+
+// Morphology 2 in its species form: the while condition itself reads
+// len() of a Vec field, and the body index-reads the field's elements.
+// The condition's owner temp is created in the loop head; disposing it
+// with the verifier-no-op move_ leaves it Active|InteriorPtr around
+// the back-edge (trap 1015 at the head on the basepoint).
+fn sum_z(g: &AtomGraph) -> i32 {
+    let total: i32 = 0;
+    let i = 0;
+    while i < len(g.atoms) {
+        let a = g.atoms[i];
+        total = total + a.z;
+        i = i + 1;
+    }
+    return total;
+}
+
+@test "defkb1 while head len of vec field and element read"() {
+    let g = AtomGraph { atoms: Vec::new() };
+    g.atoms.push(Atom { z: 3, charge: 0 });
+    g.atoms.push(Atom { z: 4, charge: 0 });
+    if sum_z(&g) != 7 { panic(1510); };
+}

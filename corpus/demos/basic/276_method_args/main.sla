@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 14_class 的带参版（12 为无参版：8）。
+// 值语义方法（12 口径）+ 整形参。
+
+struct Counter {
+    count: i32,
+}
+
+impl Counter {
+    fn new() -> Counter {
+        return Counter { count: 0 };
+    }
+
+    fn add(self, n: i32) -> Counter {
+        return Counter { count: self.count + n };
+    }
+}
+
+fn main() -> i32 {
+    let c = Counter::new();
+    c = c.add(5);
+    c = c.add(3);
+    println("{}", c.count);
+    return 0;
+}
+
+@test "basic 276 method args"() {
+    let c = Counter::new();
+    c = c.add(5);
+    c = c.add(3);
+    if c.count != 8 { panic(27601); };
+}

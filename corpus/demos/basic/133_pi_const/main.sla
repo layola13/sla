@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 574_piconst：模块级浮点常量比较（1,0）。
+// SLA 支持顶层 `const`（探针已验证）；`PI` 取 3.14159 近似。
+
+const PI: f64 = 3.14159;
+
+fn main() -> i32 {
+    let r1 = 0;
+    if PI >= 3.0 { r1 = 1; };
+    let r2 = 0;
+    if PI == 3.0 { r2 = 1; };
+    println("{},{}", r1, r2);
+    return 0;
+}
+
+@test "basic 133 pi const"() {
+    if PI >= 3.0 { } else { panic(13301); };
+    if PI == 3.0 { panic(13302); };
+    if PI > 3.14 && PI < 3.15 { } else { panic(13303); };
+}

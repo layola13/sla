@@ -1,0 +1,16 @@
+[MACRO] SLA_IMPORTED_READ_I64 %out, %value
+    %out = call @sla__imported_macro_read_i64(&%value)
+[END_MACRO]
+
+[MACRO] SLA_IMPORTED_WRITE_29_I64 %out, %value
+    store %value+0, 29 as i64
+    %out = 29
+[END_MACRO]
+
+[MACRO] SLA_IMPORTED_READ_PAIR_SUM %out, %value
+    %out = call @sla__imported_macro_read_pair_sum(&%value)
+[END_MACRO]
+
+[MACRO] SLA_IMPORTED_WRITE_PAIR_LEFT %out, %value
+    %out = call @sla__imported_macro_write_pair_left(&%value)
+[END_MACRO]

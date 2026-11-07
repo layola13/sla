@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Narayana 边对峙：商式 vs 三角数 n(n-1)/2（(8,1)：28 对 28；(9,1)：36 对 36）。
+// 意对标 722_nar_edge（低位边值互补；853 做次对角对峙）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn nar(n: int, k: int) -> int {
+    return binom_mul(n, k) * binom_mul(n, k + 1) / n;
+}
+
+fn tri(n: int) -> int {
+    return n * (n - 1) / 2;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", nar(8, 1), tri(8), nar(9, 1), tri(9));
+    return 0;
+}
+
+@test "basic 848 duel narcol19"() {
+    if nar(8, 1) != 28 { panic(84801); };
+    if tri(8) != 28 { panic(84802); };
+    if nar(9, 1) != 36 { panic(84803); };
+    if tri(9) != 36 { panic(84804); };
+    if nar(7, 1) != tri(7) { panic(84805); };
+}

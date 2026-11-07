@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn cancellation_safe_value() -> i32 {
+    let reserved = reserve_slot(4);
+    let committed = commit_slot(reserved, true);
+    return cancel_cleanup(committed, false);
+}
+
+fn reserve_slot(value: i32) -> i32 {
+    return value;
+}
+
+fn commit_slot(value: i32, commit: bool) -> i32 {
+    if commit {
+        return value;
+    } else {
+        return 0;
+    };
+}
+
+fn cancel_cleanup(value: i32, cancelled: bool) -> i32 {
+    if cancelled {
+        return 0;
+    } else {
+        return value;
+    };
+}
+
+fn main() -> i32 {
+    let reserved = reserve_slot(4);
+    let committed = commit_slot(reserved, true);
+    let result = cancel_cleanup(committed, false);
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 139 139_cancellation_safety"() {
+    let got = cancellation_safe_value();
+    if got != 4 {
+        panic(139);
+    };
+};

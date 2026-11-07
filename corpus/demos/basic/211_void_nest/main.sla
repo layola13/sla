@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 671_void_fn：void 函数嵌套调用（f 打印 7，g 调 f 后打印 2）。
+
+fn f() {
+    println("{}", 7);
+}
+
+fn g() {
+    f();
+    println("{}", 2);
+}
+
+fn main() -> i32 {
+    g();
+    return 0;
+}
+
+@test "basic 211 void nest"() {
+    g();
+}

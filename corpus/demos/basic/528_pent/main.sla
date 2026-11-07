@@ -1,0 +1,45 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 五边形数定理求分拆数 p(n)：p(m) = Σ(-1)^{k+1}(p(m-g1)+p(m-g2))，
+// g1=k(3k-1)/2，g2=k(3k+1)/2（p(5..7)=7,11,15）。
+// 意对标 350 binom（乘法式组合版互补；此处为递推式分拆版）。
+
+fn pent_part(n: int) -> int {
+    let p: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        p.push(0);
+        i = i + 1;
+    }
+    p[0] = 1;
+    let m = 1;
+    while m <= n {
+        let acc = 0;
+        let k = 1;
+        while k * (3 * k - 1) / 2 <= m {
+            let g1 = k * (3 * k - 1) / 2;
+            let g2 = k * (3 * k + 1) / 2;
+            let sgn = 0 - 1;
+            if k % 2 == 1 { sgn = 1; };
+            acc = acc + sgn * p[m - g1];
+            if g2 <= m { acc = acc + sgn * p[m - g2]; };
+            k = k + 1;
+        }
+        p[m] = acc;
+        m = m + 1;
+    }
+    return p[n];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", pent_part(5), pent_part(6), pent_part(7));
+    return 0;
+}
+
+@test "basic 528 pent"() {
+    if pent_part(5) != 7 { panic(52801); };
+    if pent_part(6) != 11 { panic(52802); };
+    if pent_part(7) != 15 { panic(52803); };
+}

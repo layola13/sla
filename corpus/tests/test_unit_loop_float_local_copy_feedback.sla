@@ -1,0 +1,104 @@
+// Regression (DEF-MANDEL): assigning a loop-body-local float to a
+// loop-carried float (`x = xtemp;` inside a while body) did not feed
+// back into the next iteration's reads on the SA-text backend. The
+// text codegen materialized the copy as an integer `add src, 0.0`,
+// which the backend folds as an integer identity copy and coalesces
+// onto the source register; the loop head kept reading the entry
+// value. The SAB backend was never affected. All copy sites now go
+// through the primitive-copy lowering whose float arm emits a real
+// `fadd` copy (the same form the direct-expression update uses).
+// Pre-fix (SA-text backend): every case below observes the entry
+// value (x stays 0 / first update only) and panics; post-fix all
+// pass on both backends.
+
+fn micro4_form() -> i32 {
+    let x0: f32 = 1.0;
+    let x: f32 = 0.0;
+    let y: f32 = 0.0;
+    let iter: i32 = 0;
+    while iter < 3 {
+        let x2: f32 = x * x;
+        let y2: f32 = y * y;
+        let xtemp: f32 = x2 - y2 + x0;
+        x = xtemp;
+        iter = iter + 1;
+    }
+    if x != 5.0 { return 1; };
+    return 0;
+}
+
+fn plain_accum_form() -> i32 {
+    let x0: f32 = 1.0;
+    let x: f32 = 0.0;
+    let iter: i32 = 0;
+    while iter < 3 {
+        let xtemp: f32 = x + x0;
+        x = xtemp;
+        iter = iter + 1;
+    }
+    if x != 3.0 { return 1; };
+    return 0;
+}
+
+fn f64_form() -> i32 {
+    let x0: f64 = 1.0;
+    let x: f64 = 0.0;
+    let iter: i32 = 0;
+    while iter < 3 {
+        let xtemp: f64 = x + x0;
+        x = xtemp;
+        iter = iter + 1;
+    }
+    if x != 3.0 { return 1; };
+    return 0;
+}
+
+fn esc_form(x0: f32, y0: f32) -> i32 {
+    let x: f32 = 0.0;
+    let y: f32 = 0.0;
+    let iter: i32 = 0;
+    while iter < 200 {
+        let x2: f32 = x * x;
+        let y2: f32 = y * y;
+        if x2 + y2 > 4.0 { break; };
+        let xtemp: f32 = x2 - y2 + x0;
+        y = 2.0 * x * y + y0;
+        x = xtemp;
+        iter = iter + 1;
+    }
+    return iter;
+}
+
+fn int_control() -> i32 {
+    let x: i32 = 0;
+    let iter: i32 = 0;
+    while iter < 3 {
+        let xtemp: i32 = x + 1;
+        x = xtemp;
+        iter = iter + 1;
+    }
+    if x != 3 { return 1; };
+    return 0;
+}
+
+@test "loop float local-copy feedback (micro4 form)"() {
+    if micro4_form() != 0 { panic(42601); };
+}
+
+@test "loop float local-copy feedback (plain accum)"() {
+    if plain_accum_form() != 0 { panic(42602); };
+}
+
+@test "loop f64 local-copy feedback"() {
+    if f64_form() != 0 { panic(42603); };
+}
+
+@test "loop float local-copy feedback (escape fn)"() {
+    if esc_form(1.0, 0.0) != 3 { panic(42604); };
+    if esc_form(2.0, 0.0) != 2 { panic(42605); };
+    if esc_form(0.0, 0.0) != 200 { panic(42606); };
+}
+
+@test "loop int local-copy feedback (control)"() {
+    if int_control() != 0 { panic(42607); };
+}

@@ -1,0 +1,152 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+@import "sa_std/fs.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_mmap_mapped_fd = vtable { call = @sla__mmap_mapped_fd }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__mmap_mapped_fd() -> i32:
+L_ENTRY:
+    tmp_0 = 0
+    mapped_fd = add tmp_0, 0
+    !tmp_0
+    @const SLA_STR_0 = utf8:"/dev/zero"
+    tmp_2 = 9
+    tmp_1 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_1, &SLA_STR_0, tmp_2
+    !tmp_2
+    tmp_3 = load tmp_1+Slice_ptr as ptr
+    tmp_4 = load tmp_1+Slice_len as u64
+    EXPAND FS_OPEN_READ tmp_5, tmp_6, tmp_3, tmp_4
+    tmp_8 = eq tmp_5, SA_FS_OK
+    br tmp_8 -> L_FILE_OPEN_OK_0, L_FILE_OPEN_ERR_1
+
+L_FILE_OPEN_OK_0:
+    EXPAND RESULT_NEW_OK tmp_7, tmp_6
+    !tmp_5
+    !tmp_6
+    jmp L_FILE_OPEN_END_2
+
+L_FILE_OPEN_ERR_1:
+    EXPAND RESULT_NEW_ERR tmp_7, tmp_5
+    jmp L_FILE_OPEN_END_2
+
+L_FILE_OPEN_END_2:
+    !tmp_8
+    !tmp_4
+    !tmp_3
+    tmp_10 = load tmp_7+0 as u64
+    tmp_11 = eq tmp_10, 0
+    br tmp_11 -> L_RESULT_UNWRAP_OK_3, L_RESULT_UNWRAP_ERR_4
+
+L_RESULT_UNWRAP_OK_3:
+    !tmp_11
+    tmp_9 = load tmp_7+8 as ptr
+    !tmp_10
+    jmp L_RESULT_UNWRAP_END_5
+
+L_RESULT_UNWRAP_ERR_4:
+    !tmp_11
+    panic(17)
+    tmp_9 = 0
+    !tmp_10
+    jmp L_RESULT_UNWRAP_END_5
+
+L_RESULT_UNWRAP_END_5:
+    !tmp_7
+    file = tmp_9
+    tmp_12 = add file, 0
+    tmp_13 = tmp_12 as i32
+    raw_fd = add tmp_13, 0
+    !tmp_13
+    tmp_14 = 1
+    tmp_15 = add raw_fd, tmp_14
+    !tmp_14
+    !mapped_fd
+    mapped_fd = tmp_15
+    EXPAND FS_CLOSE tmp_16, file
+    !tmp_16
+    !raw_fd
+    return mapped_fd
+
+@main() -> i32:
+L_ENTRY:
+    @const SLA_STR_1 = utf8:"/dev/zero"
+    tmp_18 = 9
+    tmp_17 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_17, &SLA_STR_1, tmp_18
+    !tmp_18
+    tmp_19 = load tmp_17+Slice_ptr as ptr
+    tmp_20 = load tmp_17+Slice_len as u64
+    EXPAND FS_OPEN_READ tmp_21, tmp_22, tmp_19, tmp_20
+    tmp_24 = eq tmp_21, SA_FS_OK
+    br tmp_24 -> L_FILE_OPEN_OK_6, L_FILE_OPEN_ERR_7
+
+L_FILE_OPEN_OK_6:
+    EXPAND RESULT_NEW_OK tmp_23, tmp_22
+    !tmp_21
+    !tmp_22
+    jmp L_FILE_OPEN_END_8
+
+L_FILE_OPEN_ERR_7:
+    EXPAND RESULT_NEW_ERR tmp_23, tmp_21
+    jmp L_FILE_OPEN_END_8
+
+L_FILE_OPEN_END_8:
+    !tmp_24
+    !tmp_20
+    !tmp_19
+    tmp_26 = load tmp_23+0 as u64
+    tmp_27 = eq tmp_26, 0
+    br tmp_27 -> L_RESULT_UNWRAP_OK_9, L_RESULT_UNWRAP_ERR_10
+
+L_RESULT_UNWRAP_OK_9:
+    !tmp_27
+    tmp_25 = load tmp_23+8 as ptr
+    !tmp_26
+    jmp L_RESULT_UNWRAP_END_11
+
+L_RESULT_UNWRAP_ERR_10:
+    !tmp_27
+    panic(17)
+    tmp_25 = 0
+    !tmp_26
+    jmp L_RESULT_UNWRAP_END_11
+
+L_RESULT_UNWRAP_END_11:
+    !tmp_23
+    file = tmp_25
+    tmp_28 = add file, 0
+    tmp_29 = tmp_28 as i32
+    raw_fd = add tmp_29, 0
+    !tmp_29
+    tmp_30 = 1
+    tmp_31 = add raw_fd, tmp_30
+    !tmp_30
+    result = add tmp_31, 0
+    !tmp_31
+    tmp_32 = call @sa_fmt_u64(result, 10)
+    tmp_33 = call @sa_fmt_buffer_data(tmp_32)
+    tmp_34 = call @sa_fmt_buffer_len(tmp_32)
+    tmp_35 = tmp_33
+    call @sa_print_bytes(&tmp_35, tmp_34)
+    call @sa_fmt_buffer_free(^tmp_32)
+    !tmp_35
+    !tmp_34
+    @const SLA_STR_2 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_2, 1)
+    EXPAND FS_CLOSE tmp_36, file
+    !tmp_36
+    !raw_fd
+    return result
+
+@test "rosetta 182 182_mmap_memory_mapping"():
+L_TEST_ENTRY_12:
+    return
+

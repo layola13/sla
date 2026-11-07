@@ -1,0 +1,62 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 大小 Schröder 续桥二对峙：短递推 vs 半大数（n=11：2646723 对 2646723；n=12：13648869 对 13648869）。
+// 意对标 901_sschro1112 × 896_schro11（续桥源与续高位源合流）。
+
+fn sch(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 2; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k < ii {
+            s = s + t[k] * t[ii - 1 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn ssho(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        t[ii] = ((6 * ii - 3) * t[ii - 1] - (ii - 2) * t[ii - 2]) / (ii + 1);
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn dsch(n: int) -> int {
+    return 2 * ssho(n);
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", ssho(11), sch(11) / 2, ssho(12), sch(12) / 2);
+    return 0;
+}
+
+@test "basic 902 duel sschro1112"() {
+    if ssho(11) != 2646723 { panic(90201); };
+    if sch(11) / 2 != 2646723 { panic(90202); };
+    if ssho(12) != 13648869 { panic(90203); };
+    if sch(12) / 2 != 13648869 { panic(90204); };
+}

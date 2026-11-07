@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 23_switch_plain：分档函数（90→1，80→2，70→3）。
+// 与 13（表达式式分类）/33（混合 return 臂）互补，此处为纯全 `return` 臂
+// 写法（#7 已修复，探针 p7a 同款）。
+
+fn grade(s: i32) -> i32 {
+    switch s {
+        90 => {
+            return 1;
+        },
+        80 => {
+            return 2;
+        },
+        default => {
+            return 3;
+        },
+    }
+}
+
+fn main() -> i32 {
+    println("{},{},{}", grade(90), grade(80), grade(70));
+    return 0;
+}
+
+@test "basic 88 grade"() {
+    if grade(90) != 1 { panic(8801); };
+    if grade(80) != 2 { panic(8802); };
+    if grade(70) != 3 { panic(8803); };
+}

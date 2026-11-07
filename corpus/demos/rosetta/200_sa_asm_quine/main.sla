@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn sa_asm_quine_source_len() -> usize {
+    let source = "const SOURCE";
+    return source.len();
+}
+
+fn main() -> i32 {
+    let source = "const SOURCE";
+    println("{}", source);
+    return source.len();
+}
+
+@test "rosetta 200 200_sa_asm_quine"() {
+    let got = sa_asm_quine_source_len();
+    if got != 12 {
+        panic(200);
+    };
+}

@@ -1,0 +1,6 @@
+@import "alias/deep/index.sa"
+
+@export alias_value() -> i32:
+L_ENTRY:
+    value = call @alias_deep_value()
+    return value

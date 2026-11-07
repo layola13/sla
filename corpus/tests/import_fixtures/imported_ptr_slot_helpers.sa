@@ -1,0 +1,3 @@
+[MACRO] SLA_IMPORTED_PTR_SLOT_TOUCH %out, %value
+    %out = call @sla__imported_ptr_slot_touch(&%value)
+[END_MACRO]

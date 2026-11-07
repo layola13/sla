@@ -1,0 +1,40 @@
+// Regression: compiler defect #1 (import expansion type surface).
+//
+// The functions under test live in import_fixtures/transitive_user.sla,
+// an imported module whose bodies construct literals of types defined
+// in a second module (transitive_types.sla). Before the fix, expanding
+// an imported module's bodies only saw that module's own type set, so
+// every literal of a transitively imported type failed with an
+// unlocated SyntaxError; the fix seeds body materialization with the
+// union of the module's own types and all transitively imported
+// types/enums. On the pre-fix compiler this whole file fails at import
+// expansion; on the fixed compiler all assertions run.
+//
+// Registered residual (not covered by this file): with the root
+// importing ONLY transitive_user.sla, `sa test` still fails at import
+// expansion on the fixed compiler, while `sa build-exe` of the same
+// chain succeeds. The test-compile expansion path apparently seeds
+// imported-body parsing from a narrower surface than the build path.
+// The root therefore also imports transitive_types.sla directly (and
+// uses it), which is the shape that discriminates old vs fixed here.
+@import "import_fixtures/transitive_types.sla"
+@import "import_fixtures/transitive_user.sla"
+
+@test "imported body uses transitively imported struct literal"() {
+    if chain_point_sum() != 42 {
+        panic(7301);
+    };
+}
+
+@test "imported body builds nested imported-type literal"() {
+    if chain_policy_checksum() != 17 {
+        panic(7302);
+    };
+}
+
+@test "root combines own imported-type literal with imported body results"() {
+    let origin = ChainPoint { x: 1, y: 2 };
+    if origin.x + origin.y + chain_point_sum() != 45 {
+        panic(7303);
+    };
+}

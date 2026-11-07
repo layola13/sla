@@ -1,0 +1,4 @@
+framework module DemoKit {
+  header "DemoKit.h"
+  export *
+}

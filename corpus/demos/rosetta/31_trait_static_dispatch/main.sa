@@ -1,0 +1,69 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const VT_Square_Area = vtable { area = @sla__Square_area }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@const SLA_FNPTR_VT_area_of_Square = vtable { call = @sla__area_of_Square }
+@sla__Square_area(&self: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load self+0 as i32
+    tmp_1 = load self+0 as i32
+    tmp_2 = mul tmp_0, tmp_1
+    !tmp_0
+    !tmp_1
+    return tmp_2
+
+@main() -> i32:
+L_ENTRY:
+    square = alloc 4
+    tmp_3 = 4
+    store square+0, tmp_3 as i32
+    tmp_4 = call @sla__area_of_Square(&square)
+    tmp_5 = call @sa_fmt_u64(tmp_4, 10)
+    tmp_6 = call @sa_fmt_buffer_data(tmp_5)
+    tmp_7 = call @sa_fmt_buffer_len(tmp_5)
+    tmp_8 = tmp_6
+    call @sa_print_bytes(&tmp_8, tmp_7)
+    call @sa_fmt_buffer_free(^tmp_5)
+    !tmp_8
+    !tmp_7
+    !tmp_4
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_9 = 0
+    !square
+    return tmp_9
+
+@sla__area_of_Square(&value: ptr) -> i32:
+L_ENTRY:
+    tmp_10 = call @sla__Square_area(&value)
+    return tmp_10
+
+@test "rosetta 031 trait static dispatch"():
+L_TEST_ENTRY_0:
+    square = alloc 4
+    tmp_11 = 4
+    store square+0, tmp_11 as i32
+    tmp_12 = call @sla__area_of_Square(&square)
+    result = tmp_12
+    tmp_13 = 16
+    tmp_14 = ne result, tmp_13
+    !tmp_13
+    br tmp_14 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_14
+    panic(31)
+
+L_ELSE_2:
+    !tmp_14
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !square
+    !result
+    return
+

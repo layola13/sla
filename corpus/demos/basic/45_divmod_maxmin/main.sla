@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 179_div_mod / 186_max3：整除取余 + 手写 max/min。
+
+fn max2(a: i32, b: i32) -> i32 {
+    return if a > b { a } else { b };
+}
+
+fn min2(a: i32, b: i32) -> i32 {
+    return if a < b { a } else { b };
+}
+
+fn main() -> i32 {
+    println("{},{}", 17 / 5, 17 % 5);
+    println("{},{},{}", max2(7, 12), min2(7, 12), max2(7, min2(12, 9)));
+    return 0;
+}
+
+@test "basic 45 divmod maxmin"() {
+    if 17 / 5 != 3 { panic(4501); };
+    if 17 % 5 != 2 { panic(4502); };
+    if max2(7, 12) != 12 { panic(4503); };
+    if min2(7, 12) != 7 { panic(4504); };
+    if max2(7, min2(12, 9)) != 9 { panic(4505); };
+}

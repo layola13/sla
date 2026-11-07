@@ -1,0 +1,72 @@
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+
+// SCATTER-3 (7a) regression: a nested struct value field passed by
+// value to a consuming function must be materialised as an independent
+// value (clone / fresh record), never as a raw alias of the owner's
+// record. The text backend passed `^load owner+off`, the callee dropped
+// the owner's record, and the second call re-read / re-freed freed
+// memory (signal 11 in nested_value_field_call_arg_direct).
+
+struct Scatter3Slice {
+    ptr: ptr,
+    len: int,
+}
+
+struct Scatter3Response {
+    body: Scatter3Slice,
+}
+
+fn scatter3_from_parts(data: ptr, len: int) -> Scatter3Slice {
+    return Scatter3Slice { ptr: data, len: len };
+}
+
+fn scatter3_byte_at(value: Scatter3Slice, index: int) -> u8 {
+    let p = PTR_BYTE_ADD(value.ptr, index);
+    return PTR_READ_U8(p);
+}
+
+fn scatter3_contains(value: Scatter3Slice, needle: Scatter3Slice) -> bool {
+    if needle.len == 0 {
+        return true;
+    };
+    if value.len < needle.len {
+        return false;
+    };
+    let start = 0;
+    while start <= value.len - needle.len {
+        let i = 0;
+        let matched = true;
+        while i < needle.len {
+            if scatter3_byte_at(value, start + i) != scatter3_byte_at(needle, i) {
+                matched = false;
+                break;
+            };
+            i = i + 1;
+        }
+        if matched {
+            return true;
+        };
+        start = start + 1;
+    }
+    return false;
+}
+
+fn scatter3_response() -> Scatter3Response {
+    return Scatter3Response {
+        body: scatter3_from_parts(STR_PTR("{\"result\":\"ok\"}"), STR_LEN("{\"result\":\"ok\"}")),
+    };
+}
+
+@test "scatter3 field arg reuse after consuming calls"() {
+    let response = scatter3_response();
+    if scatter3_contains(response.body, scatter3_from_parts(STR_PTR("\"result\""), STR_LEN("\"result\""))) == false {
+        panic(96001);
+    };
+    if scatter3_contains(response.body, scatter3_from_parts(STR_PTR("\"ok\""), STR_LEN("\"ok\""))) == false {
+        panic(96002);
+    };
+    if response.body.len != 15 {
+        panic(96003);
+    };
+}

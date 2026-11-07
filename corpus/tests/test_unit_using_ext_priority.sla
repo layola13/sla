@@ -1,0 +1,27 @@
+// DEF-E0 regression: resolution order — an inherent impl method wins
+// over a `using` extension with the same name and receiver type.
+// Markers distinguish which one ran: inherent returns 111, extension
+// returns 222; the inherent result is the required outcome.
+struct NumberBox {
+    value: i32,
+}
+
+impl NumberBox {
+    fn double(self) -> i32 {
+        return 111;
+    }
+}
+
+mod box_ext {
+    pub fn double(b: NumberBox) -> i32 {
+        return 222;
+    }
+}
+
+using box_ext;
+
+@test "using ext: inherent method wins over extension"() {
+    let boxed = NumberBox { value: 1 };
+    let r = boxed.double();
+    if r != 111 { panic(34700); };
+}

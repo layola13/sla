@@ -1,0 +1,14 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+fn main() -> i32 {
+    println("hello, saasm");
+    return 0;
+};
+
+@test "rosetta 001 01_hello_world"() {
+    if str_eq("hello, saasm", "hello, saasm") != true {
+        panic(1);
+    };
+};

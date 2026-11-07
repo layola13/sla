@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 343_generic_erase 的 Box 半（int + bool 两具化，5/1）。
+// 泛型结构体（104 为泛型函数版）；Stack 半（方法）暂无对应面，略去。
+
+struct Box<T> { v: T }
+
+fn main() -> i32 {
+    let a = Box<int> { v: 5 };
+    let b = Box<bool> { v: true };
+    println("{},{}", a.v, if b.v { 1 } else { 0 });
+    return 0;
+}
+
+@test "basic 221 gen struct"() {
+    let a = Box<int> { v: 5 };
+    let b = Box<bool> { v: true };
+    if a.v != 5 { panic(22101); };
+    if !b.v { panic(22102); };
+}

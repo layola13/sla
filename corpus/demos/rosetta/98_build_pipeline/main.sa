@@ -1,0 +1,138 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_artifact_count = vtable { call = @sla__artifact_count }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__artifact_count(compiled: u8, tests_passed: u8, docs_built: u8, packaged: u8) -> i32:
+L_ENTRY:
+    tmp_0 = 1
+    tmp_1 = eq compiled, tmp_0
+    !tmp_0
+    br tmp_1 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_1
+    tmp_2 = 1
+    tmp_3 = eq tests_passed, tmp_2
+    !tmp_2
+    br tmp_3 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_3
+    tmp_4 = 1
+    tmp_5 = eq packaged, tmp_4
+    !tmp_4
+    br tmp_5 -> L_THEN_6, L_ELSE_7
+
+L_THEN_6:
+    !tmp_5
+    tmp_6 = 1
+    tmp_7 = eq docs_built, tmp_6
+    !tmp_6
+    br tmp_7 -> L_THEN_9, L_ELSE_10
+
+L_THEN_9:
+    !tmp_7
+    tmp_8 = 2
+    !tests_passed
+    !docs_built
+    !packaged
+    !compiled
+    return tmp_8
+
+L_ELSE_10:
+    !tmp_7
+    tmp_9 = 1
+    !tests_passed
+    !docs_built
+    !packaged
+    !compiled
+    return tmp_9
+
+
+L_ELSE_7:
+    !tmp_5
+    tmp_11 = 0
+    !tests_passed
+    !docs_built
+    !packaged
+    !compiled
+    return tmp_11
+
+
+L_ELSE_4:
+    !tmp_3
+    tmp_13 = 0
+    !tests_passed
+    !docs_built
+    !packaged
+    !compiled
+    return tmp_13
+
+
+L_ELSE_1:
+    !tmp_1
+    tmp_15 = 0
+    !tests_passed
+    !docs_built
+    !packaged
+    !compiled
+    return tmp_15
+
+
+@main() -> i32:
+L_ENTRY:
+    tmp_17 = 1
+    tmp_18 = 1
+    tmp_19 = 1
+    tmp_20 = 1
+    tmp_21 = call @sla__artifact_count(tmp_17, tmp_18, tmp_19, tmp_20)
+    !tmp_17
+    !tmp_18
+    !tmp_19
+    !tmp_20
+    result = tmp_21
+    tmp_22 = call @sa_fmt_u64(result, 10)
+    tmp_23 = call @sa_fmt_buffer_data(tmp_22)
+    tmp_24 = call @sa_fmt_buffer_len(tmp_22)
+    tmp_25 = tmp_23
+    call @sa_print_bytes(&tmp_25, tmp_24)
+    call @sa_fmt_buffer_free(^tmp_22)
+    !tmp_25
+    !tmp_24
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 098 98_build_pipeline"():
+L_TEST_ENTRY_12:
+    tmp_26 = 1
+    tmp_27 = 1
+    tmp_28 = 1
+    tmp_29 = 1
+    tmp_30 = call @sla__artifact_count(tmp_26, tmp_27, tmp_28, tmp_29)
+    !tmp_26
+    !tmp_27
+    !tmp_28
+    !tmp_29
+    got = tmp_30
+    tmp_31 = 2
+    tmp_32 = ne got, tmp_31
+    !tmp_31
+    br tmp_32 -> L_THEN_13, L_ELSE_14
+
+L_THEN_13:
+    !tmp_32
+    panic(98)
+
+L_ELSE_14:
+    !tmp_32
+    jmp L_MERGE_15
+
+L_MERGE_15:
+    !got
+    return
+

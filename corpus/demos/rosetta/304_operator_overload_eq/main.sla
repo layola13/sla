@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+@derive(PartialEq)
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn struct_equality_score() -> i32 {
+    let a = Point { x: 10, y: 20 };
+    let b = Point { x: 10, y: 20 };
+    let c = Point { x: 99, y: 0 };
+    if a == b {
+        if a != c { return 11; } else { return 0; };
+    } else {
+        return 0;
+    };
+}
+
+fn main() -> i32 {
+    let a = Point { x: 10, y: 20 };
+    let b = Point { x: 10, y: 20 };
+    let c = Point { x: 99, y: 0 };
+
+    println("a == b: {}, a != c: {}", a == b, a != c);
+    if a == b {
+        if a != c { return 11; } else { return 0; };
+    } else {
+        return 0;
+    };
+}
+
+@test "rosetta 304 operator_overload_eq"() {
+    let a = Point { x: 10, y: 20 };
+    let b = Point { x: 10, y: 20 };
+    let c = Point { x: 99, y: 0 };
+    if a != b { panic(304); };
+    if a == c { panic(305); };
+}

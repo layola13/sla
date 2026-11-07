@@ -1,0 +1,77 @@
+// Regression: compiler defect #3, shared-state facet.
+//
+// A loop-shaped async fn must re-read shared state on every poll, so a
+// write that lands after the future was created (here: after the task
+// has already been driven through several polls) is observed by the
+// iterations that run after the write. Before the fix, loop awaits were
+// compiled eagerly: the whole loop ran inside the first poll, before
+// the driver had any chance to write, so the future could only ever
+// return the stale initial value.
+//
+// The shared channel is sa_std's named global cell (u64), re-read in
+// the loop's post-await segment each iteration (the channel the timer
+// probes found stable: scalar locals plus extern calls). The observed
+// value is returned verbatim, so the assertion is exact, not timing
+// based: the loop runs 200 iterations, the driver writes 77 after 3
+// warm-up polls, and every later iteration re-reads the cell.
+//
+// Shape note: reading the cell inside a child async fn that is awaited
+// by the loop (whether the read sits before or after the child's own
+// await) currently leaves the task permanently pending; the parent-side
+// post-segment read used here is the verified shape.
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+@import "sa_std/string.sa"
+@import "sa_std/globals.sai"
+
+fn shared_cell_get() -> u64 {
+    let v: u64 = 0;
+    let rc: i32 = sa_global_u64_get(STR_PTR("sla.test.loop.shared"), STR_LEN("sla.test.loop.shared"), &v);
+    if rc != 0 {
+        return 0;
+    };
+    return v;
+}
+
+fn shared_cell_set(v: u64) -> i32 {
+    return sa_global_u64_set(STR_PTR("sla.test.loop.shared"), STR_LEN("sla.test.loop.shared"), v);
+}
+
+async fn observe_shared(limit: i32) -> u64 {
+    let i: i32 = 0;
+    let seen: u64 = 0;
+    while i < limit {
+        let tick: i32 = future::defer_ready(0).await;
+        seen = shared_cell_get();
+        i = i + 1 + tick;
+    }
+    return seen;
+}
+
+@test "loop await observes state written after creation"() {
+    if shared_cell_set(0) != 0 {
+        panic(7501);
+    };
+    let t = task::new(observe_shared(200));
+    let warm: i32 = 0;
+    while warm < 3 {
+        let step: bool = task::poll(t);
+        warm = warm + 1;
+    }
+    if task::is_ready(t) {
+        panic(7502);
+    };
+    if shared_cell_set(77) != 0 {
+        panic(7503);
+    };
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 100000 {
+            panic(7504);
+        };
+    }
+    if task::result(t) != 77 {
+        panic(7505);
+    };
+}

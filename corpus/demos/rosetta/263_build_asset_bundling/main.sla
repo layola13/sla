@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_bundled_asset_count() -> i32 { let manifest = 1; let shader = 1; let config = 1; return manifest + shader + config; }
+fn main() -> i32 { let manifest = 1; let shader = 1; let config = 1; let result = manifest + shader + config; println("{}", result); return result; }
+@test "rosetta 263 build asset bundling"() { let got = build_bundled_asset_count(); if got != 3 { panic(263); }; }

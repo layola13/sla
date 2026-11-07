@@ -1,0 +1,78 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Delannoy 列对峙：建表 vs 直和（(4,7)：2241 对 2241；(5,7)：7183 对 7183）。
+// 意对标 763_delan_col7 × 759_duel_delan7（列源与对峙体例合流）。
+
+fn delan(m: int, n: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= m * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= m {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let b = 0;
+    while b <= n {
+        t[b] = 1;
+        b = b + 1;
+    }
+    let mm = 1;
+    while mm <= m {
+        let nn = 1;
+        while nn <= n {
+            t[mm * w + nn] = t[(mm - 1) * w + nn] + t[(mm - 1) * w + nn - 1] + t[mm * w + nn - 1];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[m * w + n];
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn ddel(m: int, n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= m {
+        if k <= n {
+            let p = 1;
+            let j = 0;
+            while j < k {
+                p = p * 2;
+                j = j + 1;
+            }
+            s = s + binom_mul(m, k) * binom_mul(n, k) * p;
+        };
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", delan(4, 7), ddel(4, 7), delan(5, 7), ddel(5, 7));
+    return 0;
+}
+
+@test "basic 764 duel delan col7"() {
+    if delan(4, 7) != 2241 { panic(76401); };
+    if ddel(4, 7) != 2241 { panic(76402); };
+    if delan(5, 7) != 7183 { panic(76403); };
+    if ddel(5, 7) != 7183 { panic(76404); };
+}

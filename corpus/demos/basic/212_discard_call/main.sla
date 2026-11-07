@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 672_void_i32：i32 返回值丢弃调用（只打印 1）。
+// 返回值作语句丢弃早有 141（`push` 作语句）背书，此处为用户函数版。
+
+fn three() -> int {
+    return 3;
+}
+
+fn main() -> i32 {
+    three();
+    println("{}", 1);
+    return 0;
+}
+
+@test "basic 212 discard call"() {
+    three();
+}

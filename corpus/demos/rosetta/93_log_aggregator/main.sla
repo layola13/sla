@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn severity_score(info: i32, warn: i32, error: i32, dropped: i32) -> i32 {
+    return info + warn * 10 + error * 100 - dropped;
+}
+
+fn main() -> i32 {
+    let result = severity_score(4, 2, 1, 3);
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 093 93_log_aggregator"() {
+    let got = severity_score(4, 2, 1, 3);
+    if got != 121 {
+        panic(93);
+    };
+};

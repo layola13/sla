@@ -1,0 +1,6 @@
+@export plugin_dispatch(tag: i32) -> i32:
+L_ENTRY:
+    value = add tag, 0
+    !tag
+    !value
+    return 254

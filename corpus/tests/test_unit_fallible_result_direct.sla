@@ -1,0 +1,593 @@
+@import "sa_std/fs.sai"
+@import "sa_std/encoding/json.sai"
+@import "sa_std/net.sai"
+@import "sa_std/text/regex.sai"
+@import "sa_std/testing/assert.sai"
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+
+// A_min (fallible `T!`) corpus, direct-extern surface: every call
+// materializes `Result<T, i32>` — Ok carries the payload, Err carries
+// the nonzero runtime status word, and the payload slot is never read
+// on the Err arm. Error cases are built from real failures (missing
+// file, refused connection) or from invalid handles (closing handle 0
+// fails with the invalid-handle status in the runtime registry —
+// never a real double free).
+//
+// Shape note: results are let-bound before matching, and matches are
+// sequenced at one level per function. Two stock match-codegen
+// defects (registered separately with minimal repros) make the other
+// shapes unusable today for ANY Result producer: a bare scrutinee in
+// a fall-through match leaks the result register on the text backend,
+// and a match nested inside a match arm traps UseAfterMove on the
+// SAB backend.
+
+@test "fallible direct hook ok payload"() {
+    let r = sa_test_fallible_i32_value(42);
+    match r {
+        Ok(v) => {
+            if v != 42 {
+                panic(45101);
+            };
+        },
+        Err(e) => {
+            panic(45102);
+        },
+    };
+}
+
+@test "fallible direct fs read family ok and err"() {
+    let path = "test_unit_fallible_result_direct.tmp";
+    let data = "fallible corpus payload";
+    let miss = "missing_fallible_direct_9f3.txt";
+    if sa_fs_write_file(STR_PTR(path), STR_LEN(path), STR_PTR(data), STR_LEN(data)) != 0 {
+        panic(45110);
+    };
+    let r1 = sa_fs_read_file(STR_PTR(path), STR_LEN(path), 4096);
+    match r1 {
+        Ok(b) => {
+            if sa_fs_read_buffer_len(b) != STR_LEN(data) {
+                panic(45111);
+            };
+            if sa_fs_read_buffer_free(b) != 0 {
+                panic(45112);
+            };
+        },
+        Err(e) => {
+            panic(45113);
+        },
+    };
+    let r2 = sa_fs_read_file(STR_PTR(miss), STR_LEN(miss), 4096);
+    match r2 {
+        Ok(b) => {
+            panic(45114);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45115);
+            };
+        },
+    };
+    let r3 = sa_fs_read_to_string(STR_PTR(path), STR_LEN(path), 4096);
+    match r3 {
+        Ok(b) => {
+            if sa_fs_read_buffer_len(b) != STR_LEN(data) {
+                panic(45116);
+            };
+            if sa_fs_read_buffer_free(b) != 0 {
+                panic(45117);
+            };
+        },
+        Err(e) => {
+            panic(45118);
+        },
+    };
+    let r4 = sa_fs_read_file_base64(STR_PTR(path), STR_LEN(path), 4096);
+    match r4 {
+        Ok(b) => {
+            if sa_fs_read_buffer_len(b) == 0 {
+                panic(45119);
+            };
+            if sa_fs_read_buffer_free(b) != 0 {
+                panic(45120);
+            };
+        },
+        Err(e) => {
+            panic(45121);
+        },
+    };
+    let metadata: u64 = 0;
+    let mr = sa_fs_metadata(STR_PTR(path), STR_LEN(path));
+    match mr {
+        Ok(m) => {
+            metadata = m;
+        },
+        Err(e) => {
+            panic(45124);
+        },
+    };
+    let fr = sa_fs_metadata_free(metadata);
+    match fr {
+        Ok(p) => {
+            if p != 0 {
+                panic(45122);
+            };
+        },
+        Err(e) => {
+            panic(45123);
+        },
+    };
+    let r5 = sa_fs_metadata(STR_PTR(miss), STR_LEN(miss));
+    match r5 {
+        Ok(m) => {
+            panic(45125);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45126);
+            };
+        },
+    };
+    let r6 = sa_fs_metadata_json(STR_PTR(path), STR_LEN(path));
+    match r6 {
+        Ok(b) => {
+            if sa_fs_read_buffer_len(b) == 0 {
+                panic(45127);
+            };
+            if sa_fs_read_buffer_free(b) != 0 {
+                panic(45128);
+            };
+        },
+        Err(e) => {
+            panic(45129);
+        },
+    };
+    let r7 = sa_fs_metadata_free(0);
+    match r7 {
+        Ok(p) => {
+            panic(45130);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45131);
+            };
+        },
+    };
+}
+
+@test "fallible direct fs dir family ok"() {
+    let r1 = sa_fs_read_dir_entries(STR_PTR("."), 1, 4096);
+    match r1 {
+        Ok(b) => {
+            if sa_fs_dir_entries_len(b) == 0 {
+                panic(45132);
+            };
+            if sa_fs_dir_entries_free(b) != 0 {
+                panic(45133);
+            };
+        },
+        Err(e) => {
+            panic(45134);
+        },
+    };
+    let r2 = sa_fs_read_dir_json(STR_PTR("."), 1, 4096);
+    match r2 {
+        Ok(b) => {
+            if sa_fs_dir_buffer_len(b) == 0 {
+                panic(45135);
+            };
+            if sa_fs_dir_buffer_free(b) != 0 {
+                panic(45136);
+            };
+        },
+        Err(e) => {
+            panic(45137);
+        },
+    };
+}
+
+@test "fallible direct json frees ok and err"() {
+    let doc = "{\"a\":1}";
+    let root = sa_json_parse(STR_PTR(doc), STR_LEN(doc));
+    if root == 0 {
+        panic(45140);
+    };
+    let f1 = sa_json_free(root);
+    match f1 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45141);
+            };
+        },
+        Err(e) => {
+            panic(45142);
+        },
+    };
+    let f2 = sa_json_free(0);
+    match f2 {
+        Ok(p) => {
+            panic(45143);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45144);
+            };
+        },
+    };
+    let root2 = sa_json_parse(STR_PTR(doc), STR_LEN(doc));
+    if root2 == 0 {
+        panic(45145);
+    };
+    let buf: u64 = 0;
+    if sa_json_stringify(root2, &buf) != 0 {
+        panic(45146);
+    };
+    if buf == 0 {
+        panic(45147);
+    };
+    let f3 = sa_json_buffer_free(buf);
+    match f3 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45148);
+            };
+        },
+        Err(e) => {
+            panic(45149);
+        },
+    };
+    let f4 = sa_json_free(root2);
+    match f4 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45150);
+            };
+        },
+        Err(e) => {
+            panic(45151);
+        },
+    };
+    let f5 = sa_json_buffer_free(0);
+    match f5 {
+        Ok(p) => {
+            panic(45152);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45153);
+            };
+        },
+    };
+    let stream = sa_json_stream_new(STR_PTR(doc), STR_LEN(doc));
+    if stream == 0 {
+        panic(45154);
+    };
+    let f6 = sa_json_stream_free(stream);
+    match f6 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45155);
+            };
+        },
+        Err(e) => {
+            panic(45156);
+        },
+    };
+    let f7 = sa_json_stream_free(0);
+    match f7 {
+        Ok(p) => {
+            panic(45157);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45158);
+            };
+        },
+    };
+}
+
+@test "fallible direct regex frees ok and err"() {
+    let re = sa_regex_compile(STR_PTR("1"), STR_LEN("1"), 0);
+    if re == 0 {
+        panic(45160);
+    };
+    let m = sa_regex_match(re, STR_PTR("123abc"), STR_LEN("123abc"));
+    if m == 0 {
+        panic(45161);
+    };
+    let f1 = sa_regex_match_free(m);
+    match f1 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45162);
+            };
+        },
+        Err(e) => {
+            panic(45163);
+        },
+    };
+    let list = sa_regex_match_all(re, STR_PTR("a1b22"), STR_LEN("a1b22"));
+    if list == 0 {
+        panic(45164);
+    };
+    let f2 = sa_regex_match_list_free(list);
+    match f2 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45165);
+            };
+        },
+        Err(e) => {
+            panic(45166);
+        },
+    };
+    let buf = sa_regex_replace(re, STR_PTR("a1"), 2, STR_PTR("X"), 1);
+    if buf == 0 {
+        panic(45167);
+    };
+    let f3 = sa_regex_buffer_free(buf);
+    match f3 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45168);
+            };
+        },
+        Err(e) => {
+            panic(45169);
+        },
+    };
+    let parts = sa_regex_split(re, STR_PTR("a1b2"), 4, 0);
+    if parts == 0 {
+        panic(45170);
+    };
+    let f4 = sa_regex_split_free(parts);
+    match f4 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45171);
+            };
+        },
+        Err(e) => {
+            panic(45172);
+        },
+    };
+    let f5 = sa_regex_free(re);
+    match f5 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45173);
+            };
+        },
+        Err(e) => {
+            panic(45174);
+        },
+    };
+    let f6 = sa_regex_free(0);
+    match f6 {
+        Ok(p) => {
+            panic(45175);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45176);
+            };
+        },
+    };
+}
+
+@test "fallible direct tcp ok path"() {
+    let listener: u64 = 0;
+    let b1 = sa_net_tcp_listener_bind(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 0);
+    match b1 {
+        Ok(l) => {
+            listener = l;
+        },
+        Err(e) => {
+            panic(45180);
+        },
+    };
+    if listener == 0 {
+        panic(45181);
+    };
+    let addr: u64 = 0;
+    let a1 = sa_net_tcp_listener_local_addr(listener);
+    match a1 {
+        Ok(a) => {
+            addr = a;
+        },
+        Err(e) => {
+            panic(45184);
+        },
+    };
+    let port = sa_net_addr_port(addr) as u16;
+    let f1 = sa_net_addr_free(addr);
+    match f1 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45182);
+            };
+        },
+        Err(e) => {
+            panic(45183);
+        },
+    };
+    if port == 0 {
+        panic(45185);
+    };
+    let stream: u64 = 0;
+    let c1 = sa_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), port);
+    match c1 {
+        Ok(s) => {
+            stream = s;
+        },
+        Err(e) => {
+            panic(45186);
+        },
+    };
+    if stream == 0 {
+        panic(45187);
+    };
+    let w1 = sa_net_tcp_stream_write_all(stream, STR_PTR("hi"), 2);
+    match w1 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45188);
+            };
+        },
+        Err(e) => {
+            panic(45189);
+        },
+    };
+    let z1 = sa_net_tcp_stream_close(stream);
+    match z1 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45198);
+            };
+        },
+        Err(e) => {
+            panic(45199);
+        },
+    };
+    let z3 = sa_net_tcp_listener_close(listener);
+    match z3 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45202);
+            };
+        },
+        Err(e) => {
+            panic(45203);
+        },
+    };
+}
+
+@test "fallible direct tcp err constructions"() {
+    let scratch = "........";
+    let x1 = sa_net_tcp_stream_read(0, STR_PTR(scratch), 8);
+    match x1 {
+        Ok(n) => {
+            panic(45190);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45191);
+            };
+        },
+    };
+    let x2 = sa_net_tcp_stream_read_exact(0, STR_PTR(scratch), 8);
+    match x2 {
+        Ok(p) => {
+            panic(45192);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45193);
+            };
+        },
+    };
+    let x3 = sa_net_tcp_stream_write_all(0, STR_PTR("hi"), 2);
+    match x3 {
+        Ok(p) => {
+            panic(45194);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45195);
+            };
+        },
+    };
+    let c2 = sa_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 1);
+    match c2 {
+        Ok(s) => {
+            panic(45196);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45197);
+            };
+        },
+    };
+    let z2 = sa_net_tcp_stream_close(0);
+    match z2 {
+        Ok(p) => {
+            panic(45200);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45201);
+            };
+        },
+    };
+    let listener: u64 = 0;
+    let b1 = sa_net_tcp_listener_bind(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 0);
+    match b1 {
+        Ok(l) => {
+            listener = l;
+        },
+        Err(e) => {
+            panic(45208);
+        },
+    };
+    let z3 = sa_net_tcp_listener_close(listener);
+    match z3 {
+        Ok(p) => {},
+        Err(e) => {
+            panic(45209);
+        },
+    };
+    let z4 = sa_net_tcp_listener_accept(0);
+    match z4 {
+        Ok(s) => {
+            panic(45204);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45205);
+            };
+        },
+    };
+    let z5 = sa_net_addr_free(0);
+    match z5 {
+        Ok(p) => {
+            panic(45206);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45207);
+            };
+        },
+    };
+}
+
+@test "fallible direct unix addr free ok and err"() {
+    let uaddr: u64 = 0;
+    if sa_std_net_unix_addr_from_pathname(STR_PTR("/tmp/x.sock"), STR_LEN("/tmp/x.sock"), &uaddr) != 0 {
+        panic(45210);
+    };
+    if uaddr == 0 {
+        panic(45211);
+    };
+    let f1 = sa_net_unix_addr_free(uaddr);
+    match f1 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45212);
+            };
+        },
+        Err(e) => {
+            panic(45213);
+        },
+    };
+    let f2 = sa_net_unix_addr_free(0);
+    match f2 {
+        Ok(p) => {
+            panic(45214);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45215);
+            };
+        },
+    };
+}

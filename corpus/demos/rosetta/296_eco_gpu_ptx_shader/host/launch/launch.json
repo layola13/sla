@@ -1,0 +1,4 @@
+{
+  "gpu": "ptx",
+  "entry": "gpu_shader_entry"
+}

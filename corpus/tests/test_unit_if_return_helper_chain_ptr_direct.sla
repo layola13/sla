@@ -1,0 +1,41 @@
+struct ChainResult {
+    handled: bool,
+    off: int,
+}
+
+fn chain_result(handled: bool, off: int) -> ChainResult {
+    return ChainResult { handled: handled, off: off };
+}
+
+fn chain_append(buf: ptr, off: int, add: int) -> int {
+    let keep = buf;
+    return off + add;
+}
+
+fn chain_tail(buf: ptr, off: int, probe: int) -> ChainResult {
+    if probe == 2 {
+        let next = chain_append(buf, off, 2);
+        return chain_result(true, next);
+    } else {
+        return chain_result(false, off);
+    };
+}
+
+fn chain_head(buf: ptr, off: int, probe: int) -> ChainResult {
+    if probe == 1 {
+        let next = chain_append(buf, off, 1);
+        return chain_result(true, next);
+    } else {
+        return chain_tail(buf, off, probe);
+    };
+}
+
+@test "direct sab if return helper chain keeps ptr parameter state"() {
+    let result = chain_head("abc", 10, 2);
+    if result.handled != true {
+        panic(61021);
+    };
+    if result.off != 12 {
+        panic(61022);
+    };
+}

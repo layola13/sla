@@ -1,0 +1,23 @@
+// expect: BorrowConflict
+// View-types stage 1: a parent-path borrow and a child-path borrow
+// live in the same call, both written through by the callee. The
+// places are prefix-related (o.inner vs o.inner.x), so the checker
+// must reject the call with a BorrowConflict diagnostic. Before
+// stage 1 no layer rejected it.
+struct Inner { x: i64, y: i64 }
+struct Outer { inner: Inner, z: i64 }
+
+fn two(p: &Inner, q: &i64) {
+    p.y = 7;
+    *q = 10;
+}
+
+fn bad_prefix_overlap() {
+    let o = Outer { inner: Inner { x: 0, y: 0 }, z: 0 };
+    two(&o.inner, &o.inner.x);
+}
+
+fn main() -> i32 {
+    bad_prefix_overlap();
+    return 0;
+}

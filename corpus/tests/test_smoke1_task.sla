@@ -1,0 +1,224 @@
+// Smoke wave 1: register-2 externs in sa_std/task.sai -- chan and sync
+// primitive families (handles from sla_chan_make / sla_sync_*_new).
+// Panic codes 58xxx.
+@import "sla_std/wrap/task.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+fn s1_chan(code: i32) -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_chan_make(4, &cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+@test "smoke1 sa_chan_send"() {
+    let h = s1_chan(58010);
+    let rc = sla_chan_send(h, STR_PTR("aa"));
+    if rc != 0 { panic(58011); };
+    let len = [0u64; 4];
+    sla_chan_len(h, &len[0]);
+    if len[0] != 1 { panic(58012); };
+    sla_chan_destroy(h);
+}
+
+@test "smoke1 sa_chan_recv"() {
+    let h = s1_chan(58020);
+    // sa_chan_send takes a pointer TO the value slot; the channel
+    // transports a copy of the slot value (sa_task.zig: value_ptr.*
+    // is queued). So the substantive check is value equality.
+    let cell = [0u64; 4];
+    cell[0] = 4242;
+    let bp: ptr = PTR_BYTE_ADD(&cell, 0);
+    sla_chan_send(h, bp);
+    let val = [0u64; 4];
+    let closed = [0u64; 4];
+    let rc = sla_chan_recv(h, &val[0], &closed[0]);
+    if rc != 0 { panic(58021); };
+    if val[0] != 4242 { panic(58022); };
+    if closed[0] != 0 { panic(58023); };
+    sla_chan_destroy(h);
+}
+
+@test "smoke1 sa_chan_len"() {
+    let h = s1_chan(58030);
+    sla_chan_send(h, STR_PTR("a"));
+    sla_chan_send(h, STR_PTR("b"));
+    let len = [0u64; 4];
+    let rc = sla_chan_len(h, &len[0]);
+    if rc != 0 { panic(58031); };
+    if len[0] != 2 { panic(58032); };
+    sla_chan_destroy(h);
+}
+
+@test "smoke1 sa_chan_cap"() {
+    let h = s1_chan(58040);
+    let cap = [0u64; 4];
+    let rc = sla_chan_cap(h, &cap[0]);
+    if rc != 0 { panic(58041); };
+    if cap[0] != 4 { panic(58042); };
+    sla_chan_destroy(h);
+}
+
+@test "smoke1 sa_chan_close"() {
+    let h = s1_chan(58050);
+    let rc = sla_chan_close(h);
+    if rc != 0 { panic(58051); };
+    // Recv on a closed, drained channel reports closed=1.
+    let val = [0u64; 4];
+    let closed = [0u64; 4];
+    let rc2 = sla_chan_recv(h, &val[0], &closed[0]);
+    if rc2 != 0 { panic(58052); };
+    if closed[0] != 1 { panic(58053); };
+    sla_chan_destroy(h);
+}
+
+@test "smoke1 sa_chan_destroy"() {
+    let h = s1_chan(58060);
+    let rc = sla_chan_destroy(h);
+    if rc != 0 { panic(58061); };
+}
+
+fn s1_mutex(code: i32) -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_sync_mutex_new(&cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+@test "smoke1 sa_sync_mutex_lock"() {
+    let h = s1_mutex(58070);
+    let rc = sla_sync_mutex_lock(h);
+    if rc != 0 { panic(58071); };
+    let rc2 = sla_sync_mutex_unlock(h);
+    if rc2 != 0 { panic(58072); };
+    sla_sync_destroy(h);
+}
+
+@test "smoke1 sa_sync_mutex_try_lock"() {
+    let h = s1_mutex(58080);
+    sla_sync_mutex_lock(h);
+    let acq = [0u64; 4];
+    let rc = sla_sync_mutex_try_lock(h, &acq[0]);
+    if rc != 0 { panic(58081); };
+    if acq[0] != 0 { panic(58082); };
+    sla_sync_mutex_unlock(h);
+    let rc2 = sla_sync_mutex_try_lock(h, &acq[0]);
+    if rc2 != 0 { panic(58083); };
+    if acq[0] != 1 { panic(58084); };
+    sla_sync_mutex_unlock(h);
+    sla_sync_destroy(h);
+}
+
+@test "smoke1 sa_sync_mutex_unlock"() {
+    let h = s1_mutex(58090);
+    sla_sync_mutex_lock(h);
+    let rc = sla_sync_mutex_unlock(h);
+    if rc != 0 { panic(58091); };
+    // After unlock, try_lock succeeds again.
+    let acq = [0u64; 4];
+    sla_sync_mutex_try_lock(h, &acq[0]);
+    if acq[0] != 1 { panic(58092); };
+    sla_sync_mutex_unlock(h);
+    sla_sync_destroy(h);
+}
+
+fn s1_rwlock(code: i32) -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_sync_rwlock_new(&cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+@test "smoke1 sa_sync_rwlock_rlock"() {
+    let h = s1_rwlock(58100);
+    let rc = sla_sync_rwlock_rlock(h);
+    if rc != 0 { panic(58101); };
+    let rc2 = sla_sync_rwlock_rlock(h);
+    if rc2 != 0 { panic(58102); };
+    sla_sync_rwlock_runlock(h);
+    sla_sync_rwlock_runlock(h);
+    sla_sync_destroy(h);
+}
+
+@test "smoke1 sa_sync_rwlock_runlock"() {
+    let h = s1_rwlock(58110);
+    sla_sync_rwlock_rlock(h);
+    let rc = sla_sync_rwlock_runlock(h);
+    if rc != 0 { panic(58111); };
+    // Fully released: a write lock can now be taken.
+    let rc2 = sla_sync_rwlock_lock(h);
+    if rc2 != 0 { panic(58112); };
+    sla_sync_rwlock_unlock(h);
+    sla_sync_destroy(h);
+}
+
+@test "smoke1 sa_sync_rwlock_lock"() {
+    let h = s1_rwlock(58120);
+    let rc = sla_sync_rwlock_lock(h);
+    if rc != 0 { panic(58121); };
+    let rc2 = sla_sync_rwlock_unlock(h);
+    if rc2 != 0 { panic(58122); };
+    sla_sync_destroy(h);
+}
+
+@test "smoke1 sa_sync_rwlock_unlock"() {
+    let h = s1_rwlock(58130);
+    sla_sync_rwlock_lock(h);
+    let rc = sla_sync_rwlock_unlock(h);
+    if rc != 0 { panic(58131); };
+    let rc2 = sla_sync_rwlock_rlock(h);
+    if rc2 != 0 { panic(58132); };
+    sla_sync_rwlock_runlock(h);
+    sla_sync_destroy(h);
+}
+
+fn s1_wg(code: i32) -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_sync_waitgroup_new(&cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+@test "smoke1 sa_sync_waitgroup_add"() {
+    let h = s1_wg(58140);
+    let rc = sla_sync_waitgroup_add(h, 2);
+    if rc != 0 { panic(58141); };
+    sla_sync_waitgroup_done(h);
+    sla_sync_waitgroup_done(h);
+    let rc2 = sla_sync_waitgroup_wait(h);
+    if rc2 != 0 { panic(58142); };
+    sla_sync_destroy(h);
+}
+
+@test "smoke1 sa_sync_waitgroup_done"() {
+    let h = s1_wg(58150);
+    sla_sync_waitgroup_add(h, 1);
+    let rc = sla_sync_waitgroup_done(h);
+    if rc != 0 { panic(58151); };
+    let rc2 = sla_sync_waitgroup_wait(h);
+    if rc2 != 0 { panic(58152); };
+    sla_sync_destroy(h);
+}
+
+@test "smoke1 sa_sync_waitgroup_wait"() {
+    let h = s1_wg(58160);
+    // Zero counter: wait returns immediately.
+    let rc = sla_sync_waitgroup_wait(h);
+    if rc != 0 { panic(58161); };
+    sla_sync_waitgroup_add(h, 1);
+    sla_sync_waitgroup_done(h);
+    let rc2 = sla_sync_waitgroup_wait(h);
+    if rc2 != 0 { panic(58162); };
+    sla_sync_destroy(h);
+}
+
+@test "smoke1 sa_sync_destroy"() {
+    let h = s1_mutex(58170);
+    let rc = sla_sync_destroy(h);
+    if rc != 0 { panic(58171); };
+}

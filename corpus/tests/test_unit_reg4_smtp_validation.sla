@@ -1,0 +1,50 @@
+@import "sa_std/smtp.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Registry shard 4 coverage: connect-path input validation from
+// sa_std/smtp.sla (SAB registry class=declared, never probed,
+// zero corpus references at census 2026-11-06).
+// Entries: smtp_dial_plain, smtp_connect, smtp_connect_tls.
+// A host longer than SA_SMTP_MAX_HOST (512) must be refused
+// with SA_STD_ERR_INVALID_ARGUMENT (1) before any network or
+// TLS call happens, so these tests need no network at all.
+
+fn v4_of(s: String) -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    let p: ptr = STR_PTR(s);
+    let i: u64 = 0;
+    while i < len(s) {
+        out.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn long_host() -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < 513 {
+        out.push(97);
+        i = i + 1;
+    }
+    return out;
+}
+
+@test "reg4 smtp dial plain rejects overlong host"() {
+    let s = smtp_dial_plain(long_host(), 25);
+    if s.status != 1 { panic(42401); };
+    if s.client.open != false { panic(42402); };
+}
+
+@test "reg4 smtp connect rejects overlong host"() {
+    let s = smtp_connect(long_host(), 25, v4_of(format("me")));
+    if s.status != 1 { panic(42411); };
+    if s.client.open != false { panic(42412); };
+}
+
+@test "reg4 smtp connect tls rejects overlong host"() {
+    let s = smtp_connect_tls(long_host(), 465, 0, v4_of(format("me")));
+    if s.status != 1 { panic(42421); };
+    if s.client.open != false { panic(42422); };
+}

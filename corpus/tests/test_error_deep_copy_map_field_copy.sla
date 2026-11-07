@@ -1,0 +1,21 @@
+// expect: UncloneableCopy
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/hashmap.sa"
+
+// DEF-deep-copy negative: a preserved by-value argument whose closure
+// contains a HashMap cannot be materialized by the record copy
+// routine (maps have no clone), so the call must be rejected at check
+// time with UncloneableCopy instead of handle-copying the map.
+
+struct MapDeep { m: HashMap<i32, i32>, n: i32 }
+
+fn idm(x: MapDeep) -> MapDeep {
+    return x;
+}
+
+fn bad(a: MapDeep) -> i32 {
+    let b: MapDeep = idm(a);
+    return a.n + b.n;
+}

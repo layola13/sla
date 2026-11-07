@@ -1,0 +1,35 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+
+// DEF-deep-copy: `.clone()` on a user struct clones field by field
+// through the record copy routine — the clone owns independent
+// handles and the source binding stays fully usable.
+
+struct Deep { xs: Vec<u8>, n: i32 }
+
+fn mk_deep(k: i32) -> Deep {
+    let xs: Vec<u8> = Vec::new();
+    xs.push(200 as u8);
+    xs.push(201 as u8);
+    return Deep { xs: xs, n: k };
+}
+
+@test "deep copy struct clone is field deep"() {
+    let a: Deep = mk_deep(300);
+    let b: Deep = a.clone();
+    b.xs.push(202 as u8);
+    if a.xs.len() != 2 { panic(2951); };
+    if b.xs.len() != 3 { panic(2952); };
+    if b.n != 300 { panic(2953); };
+}
+
+struct Wrap { inner: Deep, tag: i32 }
+
+@test "deep copy nested struct clone recurses"() {
+    let a: Wrap = Wrap { inner: mk_deep(300), tag: 7 };
+    let b: Wrap = a.clone();
+    b.inner.xs.push(202 as u8);
+    if a.inner.xs.len() != 2 { panic(2954); };
+    if b.inner.xs.len() != 3 { panic(2955); };
+}

@@ -1,0 +1,63 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian 行和对峙：表行和 == 阶乘闭式（n=4：24 对 24；n=5：120 对 120）。
+// 意对标 570 euler_row（单实现见源；286 系对峙体例）。
+
+fn euler(n: int, d: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let nn = 1;
+    while nn <= n {
+        let dd = 0;
+        while dd <= nn - 1 {
+            let a = 0;
+            if dd > 0 { a = (nn - dd) * t[(nn - 1) * w + dd - 1]; };
+            let b = (dd + 1) * t[(nn - 1) * w + dd];
+            t[nn * w + dd] = a + b;
+            dd = dd + 1;
+        }
+        nn = nn + 1;
+    }
+    return t[n * w + d];
+}
+
+fn euler_row(n: int) -> int {
+    let s = 0;
+    let d = 0;
+    while d <= n - 1 {
+        s = s + euler(n, d);
+        d = d + 1;
+    }
+    return s;
+}
+
+fn fact(n: int) -> int {
+    let r = 1;
+    let i = 2;
+    while i <= n {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", euler_row(4), fact(4), euler_row(5), fact(5));
+    return 0;
+}
+
+@test "basic 571 duel euler"() {
+    if euler_row(4) != 24 { panic(57101); };
+    if fact(4) != 24 { panic(57102); };
+    if euler_row(5) != 120 { panic(57103); };
+    if fact(5) != 120 { panic(57104); };
+    if euler_row(5) != fact(5) { panic(57105); };
+}

@@ -1,0 +1,57 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 3 幂和三向对峙（循环 vs 闭式 (3^n-1)/2 vs 逆序累加：n=4 → 40）。
+// 意对标 375 交错三向的等比版（372 互补）。
+
+fn pow3_loop(n: int) -> int {
+    let s = 0;
+    let t = 1;
+    let i = 0;
+    while i < n {
+        s = s + t;
+        t = t * 3;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn pow3_form(n: int) -> int {
+    let p = 1;
+    let i = 0;
+    while i < n {
+        p = p * 3;
+        i = i + 1;
+    }
+    return (p - 1) / 2;
+}
+
+fn pow3_acc(n: int) -> int {
+    let t = 1;
+    let i = 0;
+    while i < n {
+        t = t * 3;
+        i = i + 1;
+    }
+    let s = 0;
+    let k = n;
+    while k > 0 {
+        t = t / 3;
+        s = s + t;
+        k = k - 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", pow3_loop(4), pow3_form(4), pow3_acc(4));
+    return 0;
+}
+
+@test "basic 385 tri pow3sum"() {
+    if pow3_loop(4) != 40 { panic(38501); };
+    if pow3_form(4) != 40 { panic(38502); };
+    if pow3_acc(4) != 40 { panic(38503); };
+    if pow3_loop(4) != pow3_form(4) { panic(38504); };
+    if pow3_form(4) != pow3_acc(4) { panic(38505); };
+}

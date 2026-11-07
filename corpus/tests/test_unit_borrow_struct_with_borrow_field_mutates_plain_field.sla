@@ -1,0 +1,85 @@
+@import "sa_std/vec.sa"
+
+struct BorrowReader {
+    bytes: &Vec<u8>,
+    offset: u64,
+}
+
+struct BorrowWriter {
+    bytes: Vec<u8>,
+}
+
+fn borrow_writer_new() -> BorrowWriter {
+    let bytes: Vec<u8> = Vec::new();
+    return BorrowWriter { bytes: bytes };
+}
+
+fn borrow_reader_new(bytes: &Vec<u8>) -> BorrowReader {
+    return BorrowReader { bytes: bytes, offset: 0 };
+}
+
+fn borrow_reader_read_u8(reader: &BorrowReader) -> u8 {
+    if reader.offset >= len(reader.bytes) {
+        return 0;
+    };
+    let value = reader.bytes[reader.offset];
+    reader.offset = reader.offset + 1;
+    return value;
+}
+
+fn borrow_reader_read_u8_wrapped(reader: &BorrowReader) -> u8 {
+    return borrow_reader_read_u8(reader);
+}
+
+fn borrow_reader_read_u8_in_loop(reader: &BorrowReader) -> u8 {
+    let value: u8 = 0;
+    let done = false;
+    while done != true {
+        value = borrow_reader_read_u8(reader);
+        done = true;
+    }
+    return value;
+}
+
+@test "borrowed struct with borrow field mutates plain field"() {
+    let bytes: Vec<u8> = Vec::new();
+    bytes.push(11);
+    bytes.push(22);
+    let reader = borrow_reader_new(&bytes);
+    if borrow_reader_read_u8(&reader) != 11 { panic(7101); };
+    if borrow_reader_read_u8(&reader) != 22 { panic(7102); };
+    if reader.offset != 2 { panic(7103); };
+}
+
+@test "nested borrowed struct helper mutates plain field"() {
+    let bytes: Vec<u8> = Vec::new();
+    bytes.push(33);
+    bytes.push(44);
+    let reader = borrow_reader_new(&bytes);
+    if borrow_reader_read_u8_wrapped(&reader) != 33 { panic(7111); };
+    if reader.offset != 1 { panic(7112); };
+    if borrow_reader_read_u8_wrapped(&reader) != 44 { panic(7113); };
+    if reader.offset != 2 { panic(7114); };
+}
+
+@test "loop nested borrowed struct helper mutates plain field"() {
+    let bytes: Vec<u8> = Vec::new();
+    bytes.push(55);
+    bytes.push(66);
+    let reader = borrow_reader_new(&bytes);
+    if borrow_reader_read_u8_in_loop(&reader) != 55 { panic(7121); };
+    if reader.offset != 1 { panic(7122); };
+    if borrow_reader_read_u8_in_loop(&reader) != 66 { panic(7123); };
+    if reader.offset != 2 { panic(7124); };
+}
+
+@test "borrow vec field into reader preserves data and offset"() {
+    let writer = borrow_writer_new();
+    writer.bytes.push(77);
+    writer.bytes.push(88);
+    let reader = borrow_reader_new(&writer.bytes);
+    if borrow_reader_read_u8(&reader) != 77 { panic(7131); };
+    if reader.offset != 1 { panic(7132); };
+    if borrow_reader_read_u8(&reader) != 88 { panic(7133); };
+    if reader.offset != 2 { panic(7134); };
+}

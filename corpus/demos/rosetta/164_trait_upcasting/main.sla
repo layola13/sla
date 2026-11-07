@@ -1,0 +1,63 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Surrogate: static trait dispatch that preserves the observable total (22).
+trait A {
+    fn a(&self) -> i32;
+}
+
+trait B {
+    fn b(&self) -> i32;
+}
+
+struct Item {
+    value: i32,
+}
+
+impl A for Item {
+    fn a(&self) -> i32 {
+        self.value
+    }
+}
+
+impl B for Item {
+    fn b(&self) -> i32 {
+        self.value + 1
+    }
+}
+
+fn sum_a(item: &Item) -> i32 {
+    item.a()
+}
+
+fn sum_b(item: &Item) -> i32 {
+    let left = item.a();
+    let right = item.b();
+    return left + right;
+}
+
+fn upcast_and_sum(item: &Item) -> i32 {
+    let left = sum_a(item);
+    let right = item.b();
+    return left + right;
+}
+
+fn trait_upcast_total() -> i32 {
+    let item = Item { value: 5 };
+    let left = upcast_and_sum(&item);
+    let right = sum_b(&item);
+    return left + right;
+}
+
+fn main() -> i32 {
+    let result = trait_upcast_total();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 164 164_trait_upcasting"() {
+    let got = trait_upcast_total();
+    if got != 22 {
+        panic(164);
+    };
+}

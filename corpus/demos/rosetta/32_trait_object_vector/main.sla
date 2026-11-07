@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/core/trait_object.sa"
+
+trait Score {
+    fn score(&self) -> i32;
+}
+
+struct AddOne(i32);
+struct AddTwo(i32);
+
+impl Score for AddOne {
+    fn score(&self) -> i32 {
+        self.0 + 1
+    }
+}
+
+impl Score for AddTwo {
+    fn score(&self) -> i32 {
+        self.0 + 2
+    }
+}
+
+fn main() -> i32 {
+    let left: Box<dyn Score> = Box::new(AddOne(4));
+    let right: Box<dyn Score> = Box::new(AddTwo(5));
+    let values: Vec<Box<dyn Score> > = vec(left, right);
+    let total: i32 = values.iter().map(|v: Box<dyn Score>| v.score()).sum();
+    println("{}", total);
+    return 0;
+}
+
+@test "rosetta 032 trait object vector"() {
+    if main() != 0 {
+        panic(32);
+    };
+}

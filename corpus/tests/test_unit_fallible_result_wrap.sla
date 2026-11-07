@@ -1,0 +1,463 @@
+@import "sla_std/wrap/fs.sla"
+@import "sla_std/wrap/encoding/json.sla"
+@import "sla_std/wrap/net.sla"
+@import "sla_std/wrap/text/regex.sla"
+@import "sla_std/wrap/testing/assert.sla"
+@import "sla_std/wrap/io.sla"
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+
+// A_min (fallible `T!`) corpus, generated-wrapper surface: the
+// regenerated thin wrappers return `Result<T, i32>` and forward the
+// materialization unchanged. Same Ok/Err discipline and the same
+// let-bound, single-level match shapes as the direct corpus (see its
+// header for the two stock match-codegen defects behind the shapes).
+// The underlying `.sai` externs arrive transitively through the
+// wrapper imports and are used for fixture setup only.
+
+@test "fallible wrap hook and println ok"() {
+    let r1 = sla_test_fallible_i32_value(7);
+    match r1 {
+        Ok(v) => {
+            if v != 7 {
+                panic(45301);
+            };
+        },
+        Err(e) => {
+            panic(45302);
+        },
+    };
+    let msg = "fallible wrap println ok";
+    let r2 = sla_std_println(STR_PTR(msg), STR_LEN(msg));
+    match r2 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45303);
+            };
+        },
+        Err(e) => {
+            panic(45304);
+        },
+    };
+}
+
+@test "fallible wrap fs family ok and err"() {
+    let path = "test_unit_fallible_result_wrap.tmp";
+    let data = "wrapped fallible payload";
+    let miss = "missing_fallible_wrap_9f3.txt";
+    if sa_fs_write_file(STR_PTR(path), STR_LEN(path), STR_PTR(data), STR_LEN(data)) != 0 {
+        panic(45310);
+    };
+    let r1 = sla_fs_read_file(STR_PTR(path), STR_LEN(path), 4096);
+    let b1: FsReadBuffer = FsReadBuffer { raw: 0 };
+    match r1 {
+        Ok(b) => {
+            b1 = b;
+        },
+        Err(e) => {
+            panic(45313);
+        },
+    };
+    if sla_fs_read_buffer_len(b1.raw) != STR_LEN(data) {
+        panic(45311);
+    };
+    if sla_fs_read_buffer_free(^b1.raw) != 0 {
+        panic(45312);
+    };
+    let r2 = sla_fs_read_file(STR_PTR(miss), STR_LEN(miss), 4096);
+    match r2 {
+        Ok(b) => {
+            panic(45314);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45315);
+            };
+        },
+    };
+    let r3 = sla_fs_read_to_string(STR_PTR(path), STR_LEN(path), 4096);
+    match r3 {
+        Ok(b) => {
+            if sla_fs_read_buffer_free(^b.raw) != 0 {
+                panic(45316);
+            };
+        },
+        Err(e) => {
+            panic(45317);
+        },
+    };
+    let r4 = sla_fs_read_file_base64(STR_PTR(path), STR_LEN(path), 4096);
+    match r4 {
+        Ok(b) => {
+            if sla_fs_read_buffer_free(^b.raw) != 0 {
+                panic(45318);
+            };
+        },
+        Err(e) => {
+            panic(45319);
+        },
+    };
+    let metadata: u64 = 0;
+    let mr = sla_fs_metadata(STR_PTR(path), STR_LEN(path));
+    match mr {
+        Ok(m) => {
+            metadata = m;
+        },
+        Err(e) => {
+            panic(45322);
+        },
+    };
+    let fr = sla_fs_metadata_free(metadata);
+    match fr {
+        Ok(p) => {
+            if p != 0 {
+                panic(45320);
+            };
+        },
+        Err(e) => {
+            panic(45321);
+        },
+    };
+    let r5 = sla_fs_metadata_json(STR_PTR(path), STR_LEN(path));
+    match r5 {
+        Ok(b) => {
+            if sa_fs_read_buffer_free(b) != 0 {
+                panic(45323);
+            };
+        },
+        Err(e) => {
+            panic(45324);
+        },
+    };
+    let r6 = sla_fs_read_dir_entries(STR_PTR("."), 1, 4096);
+    let b6: FsDirEntries = FsDirEntries { raw: 0 };
+    match r6 {
+        Ok(b) => {
+            b6 = b;
+        },
+        Err(e) => {
+            panic(45326);
+        },
+    };
+    if sla_fs_dir_entries_free(^b6.raw) != 0 {
+        panic(45325);
+    };
+    let r7 = sla_fs_read_dir_json(STR_PTR("."), 1, 4096);
+    let b7: FsDirBuffer = FsDirBuffer { raw: 0 };
+    match r7 {
+        Ok(b) => {
+            b7 = b;
+        },
+        Err(e) => {
+            panic(45328);
+        },
+    };
+    if sla_fs_dir_buffer_free(^b7.raw) != 0 {
+        panic(45327);
+    };
+}
+
+@test "fallible wrap json and regex frees ok and err"() {
+    let doc = "[1,2]";
+    let root = sa_json_parse(STR_PTR(doc), STR_LEN(doc));
+    if root == 0 {
+        panic(45330);
+    };
+    let root_h = JsonNode { raw: root };
+    let f1 = sla_json_free(^root_h);
+    match f1 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45331);
+            };
+        },
+        Err(e) => {
+            panic(45332);
+        },
+    };
+    let zero_node = JsonNode { raw: 0 };
+    let f2 = sla_json_free(^zero_node);
+    match f2 {
+        Ok(p) => {
+            panic(45333);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45334);
+            };
+        },
+    };
+    let root2 = sa_json_parse(STR_PTR(doc), STR_LEN(doc));
+    let buf: u64 = 0;
+    if sa_json_stringify(root2, &buf) != 0 {
+        panic(45335);
+    };
+    let buf_h = JsonBuffer { raw: buf };
+    let f3 = sla_json_buffer_free(^buf_h);
+    match f3 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45336);
+            };
+        },
+        Err(e) => {
+            panic(45337);
+        },
+    };
+    let root2_h = JsonNode { raw: root2 };
+    let f4 = sla_json_free(^root2_h);
+    match f4 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45338);
+            };
+        },
+        Err(e) => {
+            panic(45339);
+        },
+    };
+    let stream = sa_json_stream_new(STR_PTR(doc), STR_LEN(doc));
+    if stream == 0 {
+        panic(45340);
+    };
+    let stream_h = JsonStream { raw: stream };
+    let f5 = sla_json_stream_free(^stream_h);
+    match f5 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45341);
+            };
+        },
+        Err(e) => {
+            panic(45342);
+        },
+    };
+    let re = sa_regex_compile(STR_PTR("1"), STR_LEN("1"), 0);
+    if re == 0 {
+        panic(45343);
+    };
+    let m = sa_regex_match(re, STR_PTR("11ca"), STR_LEN("11ca"));
+    if m == 0 {
+        panic(45344);
+    };
+    let m_h = RegexMatch { raw: m };
+    let f6 = sla_regex_match_free(^m_h);
+    match f6 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45345);
+            };
+        },
+        Err(e) => {
+            panic(45346);
+        },
+    };
+    let list = sa_regex_match_all(re, STR_PTR("11b11"), STR_LEN("11b11"));
+    if list == 0 {
+        panic(45347);
+    };
+    let list_h = RegexSplitList { raw: list };
+    let f7 = sla_regex_match_list_free(^list_h);
+    match f7 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45348);
+            };
+        },
+        Err(e) => {
+            panic(45349);
+        },
+    };
+    let rbuf = sa_regex_replace(re, STR_PTR("11"), 2, STR_PTR("b"), 1);
+    if rbuf == 0 {
+        panic(45350);
+    };
+    let rbuf_h = RegexBuffer { raw: rbuf };
+    let f8 = sla_regex_buffer_free(^rbuf_h);
+    match f8 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45351);
+            };
+        },
+        Err(e) => {
+            panic(45352);
+        },
+    };
+    let parts = sa_regex_split(re, STR_PTR("11x11"), 5, 0);
+    if parts == 0 {
+        panic(45353);
+    };
+    let parts_h = RegexSplitList { raw: parts };
+    let f9 = sla_regex_split_free(^parts_h);
+    match f9 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45354);
+            };
+        },
+        Err(e) => {
+            panic(45355);
+        },
+    };
+    let f10 = sla_regex_free(^re);
+    match f10 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45356);
+            };
+        },
+        Err(e) => {
+            panic(45357);
+        },
+    };
+}
+
+@test "fallible wrap tcp ok path"() {
+    let listener: u64 = 0;
+    let b1 = sla_net_tcp_listener_bind(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 0);
+    match b1 {
+        Ok(l) => {
+            listener = l;
+        },
+        Err(e) => {
+            panic(45360);
+        },
+    };
+    let addr = NetAddr { raw: 0 };
+    let a1 = sla_net_tcp_listener_local_addr(listener);
+    match a1 {
+        Ok(a) => {
+            addr = a;
+        },
+        Err(e) => {
+            panic(45363);
+        },
+    };
+    let port = sla_net_addr_port(addr.raw) as u16;
+    let f1 = sla_net_addr_free(^addr);
+    match f1 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45361);
+            };
+        },
+        Err(e) => {
+            panic(45362);
+        },
+    };
+    let stream: u64 = 0;
+    let c1 = sla_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), port);
+    match c1 {
+        Ok(s) => {
+            stream = s;
+        },
+        Err(e) => {
+            panic(45364);
+        },
+    };
+    let w1 = sla_net_tcp_stream_write_all(stream, STR_PTR("hi"), 2);
+    match w1 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45365);
+            };
+        },
+        Err(e) => {
+            panic(45366);
+        },
+    };
+    let z1 = sla_net_tcp_stream_close(stream);
+    match z1 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45371);
+            };
+        },
+        Err(e) => {
+            panic(45372);
+        },
+    };
+    let z2 = sla_net_tcp_listener_close(listener);
+    match z2 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45373);
+            };
+        },
+        Err(e) => {
+            panic(45374);
+        },
+    };
+}
+
+@test "fallible wrap tcp err and unix"() {
+    let scratch = "........";
+    let scratch_buf = [0u8; 8];
+    let x1 = sla_net_tcp_stream_read(0, &scratch_buf[0], 8);
+    match x1 {
+        Ok(n) => {
+            panic(45367);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45368);
+            };
+        },
+    };
+    let x2 = sla_net_tcp_stream_read_exact(0, STR_PTR(scratch), 8);
+    match x2 {
+        Ok(p) => {
+            panic(45369);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45370);
+            };
+        },
+    };
+    let listener: u64 = 0;
+    let b1 = sla_net_tcp_listener_bind(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 0);
+    match b1 {
+        Ok(l) => {
+            listener = l;
+        },
+        Err(e) => {
+            panic(45380);
+        },
+    };
+    let z2 = sla_net_tcp_listener_close(listener);
+    match z2 {
+        Ok(p) => {},
+        Err(e) => {
+            panic(45381);
+        },
+    };
+    let z3 = sla_net_tcp_listener_accept(0);
+    match z3 {
+        Ok(s) => {
+            panic(45375);
+        },
+        Err(e) => {
+            if e == 0 {
+                panic(45376);
+            };
+        },
+    };
+    let uaddr: u64 = 0;
+    if sa_std_net_unix_addr_from_pathname(STR_PTR("/tmp/y.sock"), STR_LEN("/tmp/y.sock"), &uaddr) != 0 {
+        panic(45377);
+    };
+    let uaddr_h = NetAddr { raw: uaddr };
+    let f2 = sla_net_unix_addr_free(^uaddr_h);
+    match f2 {
+        Ok(p) => {
+            if p != 0 {
+                panic(45378);
+            };
+        },
+        Err(e) => {
+            panic(45379);
+        },
+    };
+}

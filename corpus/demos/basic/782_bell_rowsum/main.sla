@@ -1,0 +1,50 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Bell 二类行和桥 bsum(9)=21147，bsum(10)=115975（行和恒等续高位）。
+// 意对标 697_stir2_row7 × 776_bell9（两族桥接续高位；785 做三向收束）。
+
+fn svt(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + nn * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn bsum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + svt(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", bsum(9), bsum(10));
+    return 0;
+}
+
+@test "basic 782 bell rowsum"() {
+    if bsum(9) != 21147 { panic(78201); };
+    if bsum(10) != 115975 { panic(78202); };
+    if bsum(8) != 4140 { panic(78203); };
+}

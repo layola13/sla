@@ -1,0 +1,11 @@
+@import "src/../registry/codec.sa"
+
+#def Lib_SIZE = 4
+#def Lib_value = +0
+
+@lib_value() -> i32:
+L_ENTRY:
+    dep = call @codec_value()
+    value = add dep, 0
+    !dep
+    return value

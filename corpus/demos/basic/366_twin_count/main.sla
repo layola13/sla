@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 孪生素数计数（p,p+2 皆素数；<=20 有 4 对）。
+// 意对标 356 判定的对版（358 求和版互补）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn twin_count(limit: int) -> int {
+    let c = 0;
+    let p = 3;
+    while p + 2 <= limit {
+        if is_prime(p) == 1 {
+            if is_prime(p + 2) == 1 { c = c + 1; };
+        };
+        p = p + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{}", twin_count(20), twin_count(10));
+    return 0;
+}
+
+@test "basic 366 twin count"() {
+    if twin_count(20) != 4 { panic(36601); };
+    if twin_count(10) != 2 { panic(36602); };
+}

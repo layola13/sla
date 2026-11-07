@@ -1,0 +1,9 @@
+@test "u64 max literal parses and behaves unsigned"() {
+    let max: u64 = 18446744073709551615u64;
+    let half: u64 = 9223372036854775807u64;
+
+    if max / 2u64 != half { panic(33401); };
+    if max % 256u64 != 255u64 { panic(33402); };
+    if max <= half { panic(33403); };
+    if max >> 63u64 != 1u64 { panic(33404); };
+}

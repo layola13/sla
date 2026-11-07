@@ -1,0 +1,11 @@
+@import "ns/prefix/alpha.sa"
+@import "ns/prefix/beta.sa"
+
+@export ns_prefix_value() -> i32:
+L_ENTRY:
+    left = call @ns_prefix_alpha()
+    right = call @ns_prefix_beta()
+    value = add left, right
+    !left
+    !right
+    return value

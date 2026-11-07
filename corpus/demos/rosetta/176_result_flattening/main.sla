@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+
+fn flatten_result(value: Result<Result<i32, i32>, i32>) -> Result<i32, i32> {
+    match value {
+        Ok(inner) => { return inner; },
+        Err(err) => { return Err(err); },
+    }
+}
+
+fn result_flattened_value() -> i32 {
+    let nested = Ok(Ok(2));
+    return flatten_result(nested).unwrap_or(-1);
+}
+
+fn main() -> i32 {
+    let nested = Ok(Ok(2));
+    let result = flatten_result(nested).unwrap_or(-1);
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 176 176_result_flattening"() {
+    let got = result_flattened_value();
+    if got != 2 {
+        panic(176);
+    };
+}

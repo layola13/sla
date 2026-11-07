@@ -1,0 +1,14 @@
+@import "sa_std/vec.sa"
+
+// DEF deep-drop regression: deep-dropping a Vec<Row> must load each
+// boxed element pointer out of its slot before dropping fields.
+// The d9c593e walker dropped fields at slot_addr+offset and freed
+// neighbour slots / byte-buffer contents (slaredis store_sweep
+// compaction: free(0x70), SIGSEGV on both backends). This test
+// reads no element fields (SAB-direct cannot lower struct element
+// field reads yet); the oracle is survival + exact lens after
+// post-drop allocation churn.
+struct Row { name: Vec<u8>, n: u64, data: Vec<u8>, rows: Vec<Vec<u8>> }
+fn bytes_of(seed: u8, n: u64) -> Vec<u8> { let v: Vec<u8> = Vec::new(); let i: u64 = 0; while i < n { v.push(seed + (i % 7) as u8); i = i + 1; } return v; }
+fn make_row(k: u64) -> Row { let inner: Vec<Vec<u8>> = Vec::new(); let r: u64 = 0; while r < 3 { inner.push(bytes_of(40 + (k % 9) as u8, 24)); r = r + 1; } return Row { name: bytes_of(97, 16), n: k, data: bytes_of(65, 32), rows: inner }; }
+@test "deep drop vec of struct elements"() { let v: Vec<Row> = Vec::new(); let i: u64 = 0; while i < 64 { v.push(make_row(i)); i = i + 1; } if len(v) != 64 { panic(1); }; v = Vec::new(); if len(v) != 0 { panic(2); }; let w: Vec<Row> = Vec::new(); let k: u64 = 0; while k < 64 { w.push(make_row(1000 + k)); k = k + 1; } if len(w) != 64 { panic(3); }; w = Vec::new(); if len(w) != 0 { panic(4); }; println("SURVIVED"); }

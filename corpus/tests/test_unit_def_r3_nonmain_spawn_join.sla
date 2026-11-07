@@ -1,0 +1,53 @@
+// DEF-R3 regression corpus: spawn+join driven by a NON-main task.
+// The slanginx goroutine rewrite registered a cumulative ceiling
+// for spawn/join issued from a non-main task (supervisor-shaped
+// probes died at ~295-315k cycles on the box-era toolchain with
+// PANIC 60901, while the same loop driven by the main task passed
+// 705k). Local A/B on this VM (DEF batch 4) isolated the locally
+// reproducible face of the non-main ceiling: a spawner goroutine
+// running the spawn+join LOOP dies between 7k and 8k iterations
+// on the pre-DEF-4 toolchain (sci e7c18568 + sla 6004af4) with
+// "goroutine 4294967296 stack overflow" -- the loop body's
+// stack_alloc cells (go handle/dummy slots) ratchet the fixed
+// 256 KiB task stack because the host LLVM lowering did not
+// rewind allocas at the back-edge. That is the DEF-4 mechanism
+// acting inside a goroutine, where the fixed stack makes the
+// death point ~65x lower than the main task's. The DEF-4 host
+// fix (stacksave/stackrestore at loop headers/back-edges) is
+// what closes it: on the current tree the same probe passes
+// 1,200,000 cycles. The 60901-at-300k fan-out signature itself
+// did not reproduce locally on any era toolchain combination
+// (see REPORT_NOTES DEF batch 4); this corpus pins the shape
+// that did reproduce, at 60k cycles -- ~8x past the era death
+// point, fast on the fixed tree.
+@import "sa_std/ptr.sa"
+@import "sa_std/task.sai"
+@import "sa_std/core/box.sa"
+
+struct R3Ctx {
+    done: Chan<u64>,
+}
+
+fn r3_worker() {
+}
+
+fn r3_supervisor(ctx: *R3Ctx) {
+    let n: u64 = 0;
+    while n < 60000 {
+        let h = go r3_worker();
+        let st = sa_task_join(h);
+        n = n + 1;
+    }
+    (*ctx).done.send(n);
+}
+
+@test "def_r3 non-main task spawn+join loop passes era ceiling"() {
+    let done: Chan<u64> = Chan::new(1);
+    let ctx = Box::into_raw(Box::new(R3Ctx { done: done }));
+    let h = go r3_supervisor(ctx);
+    let (n, closed) = (*ctx).done.recv();
+    if closed { panic(1951); };
+    if n != 60000 { panic(1952); };
+    let st = sa_task_join(h);
+    if st != 0 { panic(1953); };
+}

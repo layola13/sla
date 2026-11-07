@@ -1,0 +1,22 @@
+@import "import_fixtures/imported_ptr_slot_helpers.sa"
+@import "sa_std/string.sa"
+
+fn imported_ptr_slot_touch(value: &ptr) -> i32 {
+    if *value == PTR_NULL() { return 7; };
+    return 0;
+}
+
+fn imported_ptr_slot_branch_header_shape(enabled: bool) -> i32 {
+    let status: i32 = 999;
+    if enabled {
+        let content_type_key = STR_PTR("content-type");
+        let content_type_value = STR_PTR("application/json");
+        status = SLA_IMPORTED_PTR_SLOT_TOUCH(content_type_key) + SLA_IMPORTED_PTR_SLOT_TOUCH(content_type_value);
+    };
+    return status;
+}
+
+@test "imported macro ptr slot temps do not poison sab branch merge"() {
+    if imported_ptr_slot_branch_header_shape(true) != 0 { panic(90501); };
+    if imported_ptr_slot_branch_header_shape(false) != 999 { panic(90502); };
+}

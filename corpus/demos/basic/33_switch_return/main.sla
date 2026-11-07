@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 111_switch_fn：多臂取值（90->1, 80->2, else->3）。
+// 注意（POTENTIAL_ISSUES #7）：
+// - 全 return 臂 + 尾 switch 作函数尾：check 报尾表达式 void TypeMismatch；
+// - 全 return 臂 + 尾兜底 return：check 过但 SAB 后端报 FallthroughForbidden；
+// 此处采用已验证写法（见 tests/test_unit_switch_statement_direct.sla）：
+// 一臂直接 return，其余臂赋值 + 尾 return，check/test 双绿。
+
+fn grade(s: i32) -> i32 {
+    let r: i32 = 3;
+    switch s {
+        90 => {
+            return 1;
+        },
+        80 => {
+            r = 2;
+        },
+        default => {},
+    };
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", grade(90), grade(80), grade(70));
+    return 0;
+}
+
+@test "basic 33 switch return"() {
+    if grade(90) != 1 { panic(3301); };
+    if grade(80) != 2 { panic(3302); };
+    if grade(70) != 3 { panic(3303); };
+}

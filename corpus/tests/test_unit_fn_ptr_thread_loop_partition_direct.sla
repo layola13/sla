@@ -1,0 +1,228 @@
+@import "sa_std/vec.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/core/result.sa"
+
+struct FnPtrThreadPartResult {
+    left: Vec<i32>,
+    right: Vec<i32>,
+}
+
+fn fn_ptr_thread_part_result(left: Vec<i32>, right: Vec<i32>) -> FnPtrThreadPartResult {
+    return FnPtrThreadPartResult { left: left, right: right };
+}
+
+fn fn_ptr_thread_chunk(values: Vec<i32>, start: i64, chunk_len: i64) -> Vec<i32> {
+    let chunk: Vec<i32> = Vec::new();
+    let i: i64 = 0;
+    while i < chunk_len {
+        chunk.push(values[start + i]);
+        i = i + 1;
+    }
+    return chunk;
+}
+
+fn fn_ptr_thread_partition_batch(chunk: Vec<i32>, predicate: fn(i32) -> bool) -> FnPtrThreadPartResult {
+    let left: Vec<i32> = Vec::new();
+    let right: Vec<i32> = Vec::new();
+    let i: i64 = 0;
+    while i < len(chunk) as i64 {
+        let value = chunk[i];
+        let matched = predicate(value);
+        if len(chunk) == 2 {
+            if chunk[0] == 4 {
+                if value == 4 {
+                    if matched != true { panic(51311); };
+                };
+            };
+        };
+        if matched { left.push(value); } else { right.push(value); };
+        i = i + 1;
+    }
+    if len(chunk) == 2 {
+        if chunk[0] == 4 {
+            if len(left) != 1 { panic(51310); };
+        };
+    };
+    return fn_ptr_thread_part_result(left, right);
+}
+
+fn fn_ptr_thread_partition_loop(values: Vec<i32>, batch_size: i64, predicate: fn(i32) -> bool) -> FnPtrThreadPartResult {
+    let left: Vec<i32> = Vec::new();
+    let right: Vec<i32> = Vec::new();
+    let handles: Vec<JoinHandle<FnPtrThreadPartResult>> = Vec::new();
+    let start: i64 = 0;
+    let n = len(values) as i64;
+    while start < n {
+        let current_len = batch_size;
+        let remaining = n - start;
+        if current_len > remaining { current_len = remaining; };
+        let chunk = fn_ptr_thread_chunk(values, start, current_len);
+        handles.push(thread::spawn(^|| fn_ptr_thread_partition_batch(chunk, predicate)));
+        start = start + current_len;
+    }
+    let join_i: i64 = 0;
+    while join_i < len(handles) as i64 {
+        let part = handles[join_i].join().unwrap();
+        if join_i == 1 {
+            if len(part.left) != 1 { panic(51320); };
+        };
+        let i: i64 = 0;
+        while i < len(part.left) as i64 { left.push(part.left[i]); i = i + 1; }
+        let j: i64 = 0;
+        while j < len(part.right) as i64 { right.push(part.right[j]); j = j + 1; }
+        join_i = join_i + 1;
+    }
+    return fn_ptr_thread_part_result(left, right);
+}
+
+fn fn_ptr_thread_partition_twice(values: Vec<i32>, predicate: fn(i32) -> bool) -> FnPtrThreadPartResult {
+    let first_chunk = fn_ptr_thread_chunk(values, 0, 2);
+    let first = fn_ptr_thread_partition_batch(first_chunk, predicate);
+    if len(first.left) != 0 { panic(51370); };
+    let second_chunk = fn_ptr_thread_chunk(values, 2, 2);
+    let second = fn_ptr_thread_partition_batch(second_chunk, predicate);
+    return second;
+}
+
+fn fn_ptr_thread_predicate_four(predicate: fn(i32) -> bool) -> bool {
+    return predicate(4);
+}
+
+fn fn_ptr_thread_predicate_four_bound(predicate: fn(i32) -> bool) -> bool {
+    let matched = predicate(4);
+    return matched;
+}
+
+fn fn_ptr_thread_first_chunk_predicate(chunk: Vec<i32>, predicate: fn(i32) -> bool) -> bool {
+    let value = chunk[0];
+    return predicate(value);
+}
+
+fn fn_ptr_thread_dynamic_chunk_predicate(chunk: Vec<i32>, predicate: fn(i32) -> bool) -> bool {
+    let i: i64 = 0;
+    let value = chunk[i];
+    return predicate(value);
+}
+
+fn fn_ptr_thread_count_chunk_matches(chunk: Vec<i32>, predicate: fn(i32) -> bool) -> i64 {
+    let count: i64 = 0;
+    let i: i64 = 0;
+    while i < len(chunk) as i64 {
+        let value = chunk[i];
+        if predicate(value) { count = count + 1; };
+        i = i + 1;
+    }
+    return count;
+}
+
+fn fn_ptr_thread_count_chunk_matches_direct(chunk: Vec<i32>, predicate: fn(i32) -> bool) -> i64 {
+    let count: i64 = 0;
+    let i: i64 = 0;
+    while i < len(chunk) as i64 {
+        if predicate(chunk[i]) { count = count + 1; };
+        i = i + 1;
+    }
+    return count;
+}
+
+fn fn_ptr_thread_count_two_chunk_matches(chunk: Vec<i32>, predicate: fn(i32) -> bool) -> i64 {
+    let count: i64 = 0;
+    let i: i64 = 0;
+    while i < 2 {
+        if predicate(chunk[i]) { count = count + 1; };
+        i = i + 1;
+    }
+    return count;
+}
+
+fn fn_ptr_thread_direct_chunk_predicate_loop(values: Vec<i32>, batch_size: i64, predicate: fn(i32) -> bool) -> i32 {
+    let handles: Vec<JoinHandle<bool>> = Vec::new();
+    let start: i64 = 0;
+    let n = len(values) as i64;
+    while start < n {
+        let current_len = batch_size;
+        let remaining = n - start;
+        if current_len > remaining { current_len = remaining; };
+        let chunk = fn_ptr_thread_chunk(values, start, current_len);
+        handles.push(thread::spawn(^|| predicate(chunk[0])));
+        start = start + current_len;
+    }
+    let first = handles[0].join().unwrap();
+    let second = handles[1].join().unwrap();
+    if first { return 10; };
+    if second { return 1; };
+    return 0;
+}
+
+fn fn_ptr_thread_loop_is_even(candidate: i32) -> bool { return candidate % 2 == 0; }
+
+fn fn_ptr_thread_loop_values() -> Vec<i32> {
+    let values: Vec<i32> = Vec::new();
+    values.push(3);
+    values.push(1);
+    values.push(4);
+    values.push(1);
+    values.push(5);
+    values.push(9);
+    return values;
+}
+
+@test "thread loop closure captures function pointer partition batch"() {
+    let result = fn_ptr_thread_partition_loop(fn_ptr_thread_loop_values(), 2, fn_ptr_thread_loop_is_even);
+    if len(result.left) != 1 { panic(51301); };
+    if result.left[0] != 4 { panic(51302); };
+    if len(result.right) != 5 { panic(51303); };
+    if result.right[0] != 3 { panic(51304); };
+    if result.right[4] != 9 { panic(51305); };
+}
+
+@test "direct partition batch calls bool predicate"() {
+    let chunk = fn_ptr_thread_chunk(fn_ptr_thread_loop_values(), 2, 2);
+    let part = fn_ptr_thread_partition_batch(chunk, fn_ptr_thread_loop_is_even);
+    if len(part.left) != 1 { panic(51330); };
+    if part.left[0] != 4 { panic(51331); };
+}
+
+@test "fn pointer parameter can be forwarded to partition batch twice"() {
+    let part = fn_ptr_thread_partition_twice(fn_ptr_thread_loop_values(), fn_ptr_thread_loop_is_even);
+    if len(part.left) != 1 { panic(51371); };
+    if part.left[0] != 4 { panic(51372); };
+}
+
+@test "direct bool predicate parameter returns true"() {
+    if fn_ptr_thread_predicate_four(fn_ptr_thread_loop_is_even) != true { panic(51350); };
+}
+
+@test "bound bool predicate parameter returns true"() {
+    if fn_ptr_thread_predicate_four_bound(fn_ptr_thread_loop_is_even) != true { panic(51351); };
+}
+
+@test "first chunk bool predicate parameter returns true"() {
+    let chunk = fn_ptr_thread_chunk(fn_ptr_thread_loop_values(), 2, 2);
+    if fn_ptr_thread_first_chunk_predicate(chunk, fn_ptr_thread_loop_is_even) != true { panic(51352); };
+}
+
+@test "dynamic chunk bool predicate parameter returns true"() {
+    let chunk = fn_ptr_thread_chunk(fn_ptr_thread_loop_values(), 2, 2);
+    if fn_ptr_thread_dynamic_chunk_predicate(chunk, fn_ptr_thread_loop_is_even) != true { panic(51353); };
+}
+
+@test "chunk bool predicate loop counts matches"() {
+    let chunk = fn_ptr_thread_chunk(fn_ptr_thread_loop_values(), 2, 2);
+    if fn_ptr_thread_count_chunk_matches(chunk, fn_ptr_thread_loop_is_even) != 1 { panic(51354); };
+}
+
+@test "chunk direct bool predicate loop counts matches"() {
+    let chunk = fn_ptr_thread_chunk(fn_ptr_thread_loop_values(), 2, 2);
+    if fn_ptr_thread_count_chunk_matches_direct(chunk, fn_ptr_thread_loop_is_even) != 1 { panic(51355); };
+}
+
+@test "chunk fixed bool predicate loop counts matches"() {
+    let chunk = fn_ptr_thread_chunk(fn_ptr_thread_loop_values(), 2, 2);
+    if fn_ptr_thread_count_two_chunk_matches(chunk, fn_ptr_thread_loop_is_even) != 1 { panic(51356); };
+}
+
+@test "thread loop closure directly calls captured bool predicate with chunk"() {
+    let got = fn_ptr_thread_direct_chunk_predicate_loop(fn_ptr_thread_loop_values(), 2, fn_ptr_thread_loop_is_even);
+    if got != 1 { panic(51340); };
+}

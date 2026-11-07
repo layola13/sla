@@ -1,0 +1,53 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 实际数（Stewart 准则：12 是，14 否，20 是）。
+// 意对标 378 丰数版的划分版（378 互补；子集和能力判定）。
+
+fn sigma_pp(p: int, e: int) -> int {
+    let s = 0;
+    let t = 1;
+    let i = 0;
+    while i <= e {
+        s = s + t;
+        t = t * p;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn is_practical(n: int) -> int {
+    if n < 1 { return 0; };
+    if n == 1 { return 1; };
+    let prev = 1;
+    let m = n;
+    let d = 2;
+    while d * d <= m {
+        if m % d == 0 {
+            let e = 0;
+            while m % d == 0 {
+                m = m / d;
+                e = e + 1;
+            }
+            if d > 1 + prev { return 0; };
+            prev = prev * sigma_pp(d, e);
+        };
+        d = d + 1;
+    }
+    if m > 1 {
+        if m > 1 + prev { return 0; };
+    };
+    return 1;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", is_practical(12), is_practical(14), is_practical(20), is_practical(18));
+    return 0;
+}
+
+@test "basic 525 practical"() {
+    if is_practical(12) != 1 { panic(52501); };
+    if is_practical(14) != 0 { panic(52502); };
+    if is_practical(20) != 1 { panic(52503); };
+    if is_practical(18) != 1 { panic(52504); };
+}

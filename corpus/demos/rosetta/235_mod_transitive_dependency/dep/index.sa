@@ -1,0 +1,6 @@
+@import "dep/mid.sa"
+
+@export transitive_value() -> i32:
+L_ENTRY:
+    value = call @dep_mid_value()
+    return value

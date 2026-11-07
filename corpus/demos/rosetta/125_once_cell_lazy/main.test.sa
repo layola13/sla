@@ -1,0 +1,96 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/sync/once.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_init_42 = vtable { call = @sla__init_42 }
+@const SLA_FNPTR_VT_init_99 = vtable { call = @sla__init_99 }
+@const SLA_FNPTR_VT_once_cell_lazy_total = vtable { call = @sla__once_cell_lazy_total }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__init_42() -> i32:
+L_ENTRY:
+    tmp_0 = 42
+    return tmp_0
+
+@sla__init_99() -> i32:
+L_ENTRY:
+    tmp_1 = 99
+    return tmp_1
+
+@sla__once_cell_lazy_total() -> i32:
+L_ENTRY:
+    EXPAND ONCE_NEW tmp_2
+    value = tmp_2
+    tmp_4 = stack_alloc 16
+    store tmp_4+0, 0 as ptr
+    store tmp_4+8, &SLA_FNPTR_VT_init_42 as ptr
+    EXPAND ONCE_GET_OR_INIT tmp_3, value, tmp_4
+    first = tmp_3
+    tmp_6 = stack_alloc 16
+    store tmp_6+0, 0 as ptr
+    store tmp_6+8, &SLA_FNPTR_VT_init_99 as ptr
+    EXPAND ONCE_GET_OR_INIT tmp_5, value, tmp_6
+    second = tmp_5
+    tmp_7 = add first, second
+    !value
+    return tmp_7
+
+@main() -> i32:
+L_ENTRY:
+    EXPAND ONCE_NEW tmp_8
+    value = tmp_8
+    tmp_10 = stack_alloc 16
+    store tmp_10+0, 0 as ptr
+    store tmp_10+8, &SLA_FNPTR_VT_init_42 as ptr
+    EXPAND ONCE_GET_OR_INIT tmp_9, value, tmp_10
+    first = tmp_9
+    tmp_12 = stack_alloc 16
+    store tmp_12+0, 0 as ptr
+    store tmp_12+8, &SLA_FNPTR_VT_init_99 as ptr
+    EXPAND ONCE_GET_OR_INIT tmp_11, value, tmp_12
+    second = tmp_11
+    tmp_13 = add first, second
+    result = tmp_13
+    tmp_14 = call @sa_fmt_u64(result, 10)
+    tmp_15 = call @sa_fmt_buffer_data(tmp_14)
+    tmp_16 = call @sa_fmt_buffer_len(tmp_14)
+    tmp_17 = tmp_15
+    call @sa_print_bytes(&tmp_17, tmp_16)
+    call @sa_fmt_buffer_free(^tmp_14)
+    !tmp_17
+    !tmp_16
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    !value
+    !first
+    !second
+    return result
+
+@test "rosetta 125 125_once_cell_lazy"():
+L_TEST_ENTRY_0:
+    tmp_18 = call @sla__once_cell_lazy_total()
+    got = tmp_18
+    tmp_19 = 84
+    tmp_20 = ne got, tmp_19
+    !tmp_19
+    br tmp_20 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_20
+    panic(125)
+
+L_ELSE_2:
+    !tmp_20
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

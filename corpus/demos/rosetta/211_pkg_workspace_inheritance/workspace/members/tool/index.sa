@@ -1,0 +1,7 @@
+@import "workspace/members/tool/helpers/index.sa"
+
+@tool_package_value(base: i32) -> i32:
+L_ENTRY:
+    value = call @tool_helper_value(base)
+    !base
+    return value

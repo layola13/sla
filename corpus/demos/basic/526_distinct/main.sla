@@ -1,0 +1,37 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 互异分拆数 q(n)：每种部至多用一次（0-1 背包式 DP）。
+// 意对标 525 practical 的划分版（525 按素因子判定，此处按 DP 计数）。
+
+fn distinct_part(n: int) -> int {
+    let dp: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        dp.push(0);
+        i = i + 1;
+    }
+    dp[0] = 1;
+    let k = 1;
+    while k <= n {
+        let s = n;
+        while s >= k {
+            dp[s] = dp[s] + dp[s - k];
+            s = s - 1;
+        }
+        k = k + 1;
+    }
+    return dp[n];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", distinct_part(5), distinct_part(6), distinct_part(7));
+    return 0;
+}
+
+@test "basic 526 distinct"() {
+    if distinct_part(5) != 3 { panic(52601); };
+    if distinct_part(6) != 4 { panic(52602); };
+    if distinct_part(7) != 5 { panic(52603); };
+}

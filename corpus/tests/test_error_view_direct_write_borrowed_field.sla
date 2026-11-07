@@ -1,0 +1,20 @@
+// expect: BorrowConflict
+// View-types stage 1: borrow a field, then write THE SAME field
+// directly while the borrow is live and used afterwards. The checker
+// must reject the direct write with a BorrowConflict diagnostic.
+// (Writing a DISJOINT field directly is legal — see
+// test_unit_view_types_stage1.sla.) Before stage 1 the offset-8 field
+// used here escaped every layer's accounting.
+struct Pair { a: i64, b: i64 }
+
+fn bad_direct_write_borrowed() {
+    let s = Pair { a: 1, b: 2 };
+    let x = &s.b;
+    s.b = 30;
+    *x = 10;
+}
+
+fn main() -> i32 {
+    bad_direct_write_borrowed();
+    return 0;
+}

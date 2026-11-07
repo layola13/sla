@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Bell 续高位三 B(11)=678570（二项递推，同式再上一位）。
+// 意对标 778_bell10（n=10 版互补；908 做递推/三角对峙）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn bell(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let k = 0;
+    while k <= n - 1 {
+        s = s + binom_mul(n - 1, k) * bell(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", bell(11), bell(10));
+    return 0;
+}
+
+@test "basic 906 bell11"() {
+    if bell(11) != 678570 { panic(90601); };
+    if bell(10) != 115975 { panic(90602); };
+    if bell(9) != 21147 { panic(90603); };
+    if binom_mul(10, 5) != 252 { panic(90604); };
+}

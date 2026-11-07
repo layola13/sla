@@ -1,0 +1,5 @@
+#def CallbackState_SIZE = 16
+#def CallbackState_value = +0
+#def CallbackState_padding = +4
+#def CallbackState_vtable = +8
+#def CallbackVTable_call = +0

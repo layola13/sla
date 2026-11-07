@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 动态上界区间求和（10+20+30=60）。
+// 意对标 tsgosa 605_top_cond_forlen 的“ Bound 取自集合长度”思想，
+// 原用例为字符串长（字符串区暂不碰），此处以 `len(v)` 作 `for in` 上界
+// 改写；此前区间上界皆为字面量（89/196/200/202/203），此处首覆动态界。
+
+fn main() -> i32 {
+    let v: Vec<i32> = Vec::new();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    let s = 0;
+    for i in 0..len(v) {
+        s = s + v[i];
+    }
+    println("{}", s);
+    return 0;
+}
+
+@test "basic 215 dyn range"() {
+    let v: Vec<i32> = Vec::new();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    let s = 0;
+    for i in 0..len(v) {
+        s = s + v[i];
+    }
+    if s != 60 { panic(21501); };
+    if len(v) != 3 { panic(21502); };
+}

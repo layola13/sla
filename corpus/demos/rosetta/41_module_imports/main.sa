@@ -1,0 +1,58 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_math__double = vtable { call = @sla__math__double }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__math__double(x: i32) -> i32:
+L_ENTRY:
+    tmp_0 = 2
+    tmp_1 = mul x, tmp_0
+    !tmp_0
+    return tmp_1
+
+@main() -> i32:
+L_ENTRY:
+    tmp_2 = 21
+    tmp_3 = call @sla__math__double(tmp_2)
+    !tmp_2
+    value = tmp_3
+    tmp_4 = call @sa_fmt_u64(value, 10)
+    tmp_5 = call @sa_fmt_buffer_data(tmp_4)
+    tmp_6 = call @sa_fmt_buffer_len(tmp_4)
+    tmp_7 = tmp_5
+    call @sa_print_bytes(&tmp_7, tmp_6)
+    call @sa_fmt_buffer_free(^tmp_4)
+    !tmp_7
+    !tmp_6
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_8 = 0
+    !value
+    return tmp_8
+
+@test "rosetta 041 module imports"():
+L_TEST_ENTRY_0:
+    tmp_9 = 21
+    tmp_10 = call @sla__math__double(tmp_9)
+    !tmp_9
+    value = tmp_10
+    tmp_11 = 42
+    tmp_12 = ne value, tmp_11
+    !tmp_11
+    br tmp_12 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_12
+    panic(41)
+
+L_ELSE_2:
+    !tmp_12
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !value
+    return
+

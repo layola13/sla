@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 语句 vs 三元 min 对峙（134×242：3=3）。
+// 双实现一致性锁定（单实现见 134/242）。
+
+fn min_stmt(a: int, b: int) -> int {
+    if a < b {
+        return a;
+    };
+    return b;
+}
+
+fn min_expr(a: int, b: int) -> int {
+    return if a < b { a } else { b };
+}
+
+fn main() -> i32 {
+    println("{}", min_stmt(3, 7));
+    return 0;
+}
+
+@test "basic 297 duel min"() {
+    if min_stmt(3, 7) != min_expr(3, 7) { panic(29701); };
+    if min_expr(3, 7) != 3 { panic(29702); };
+    if min_stmt(7, 7) != min_expr(7, 7) { panic(29703); };
+}

@@ -1,0 +1,5 @@
+@export portable_seed() -> i32:
+L_ENTRY:
+    value = add 12, 0
+    !value
+    return 12

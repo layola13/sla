@@ -1,0 +1,579 @@
+@import "sa_std/core/refcell.sa"
+@import "sa_std/core/option.sa"
+@import "import_fixtures/imported_refcell_helpers.sa"
+
+struct OwnerReleasePayload {
+    value: int,
+}
+
+enum OwnerReleaseChoice {
+    Keep,
+    Stop,
+}
+
+fn owner_release_payload_value(payload: &OwnerReleasePayload) -> int {
+    payload.value
+}
+
+fn owner_release_payload_set(payload: &OwnerReleasePayload, value: int) -> void {
+    payload.value = value;
+}
+
+fn owner_release_borrow_count(cell: &RefCell<OwnerReleasePayload>) -> i64 {
+    SLA_REFCELL_BORROW_COUNT(cell)
+}
+
+fn owner_release_if_borrow_call_count(flag: bool) -> i64 {
+    let left = RefCell::new(OwnerReleasePayload { value: 31 });
+    let right = RefCell::new(OwnerReleasePayload { value: 37 });
+    let value = owner_release_payload_value(if flag {
+        left.borrow()
+    } else {
+        right.borrow()
+    });
+    if value == 0 {
+        panic(30903);
+    };
+    owner_release_borrow_count(&left) + owner_release_borrow_count(&right)
+}
+
+fn owner_release_branch_move_value(flag: bool) -> int {
+    let cell = RefCell::new(OwnerReleasePayload { value: 61 });
+    let first: &OwnerReleasePayload = cell.borrow();
+    let second: &OwnerReleasePayload = cell.borrow();
+    let value = first.value + second.value;
+    if flag {
+        let moved_cell = cell;
+        !moved_cell;
+        return value;
+    };
+    !cell;
+    value
+}
+
+fn owner_release_if_result_move_value(flag: bool) -> int {
+    let cell = RefCell::new(OwnerReleasePayload { value: 67 });
+    let first: &OwnerReleasePayload = cell.borrow();
+    let second: &OwnerReleasePayload = cell.borrow();
+    let value = first.value + second.value;
+    let moved_cell = if flag {
+        cell
+    } else {
+        cell
+    };
+    !moved_cell;
+    value
+}
+
+fn owner_release_if_let_then_move_value(first_match: bool, second_match: bool) -> int {
+    let cell = RefCell::new(OwnerReleasePayload { value: 71 });
+    let first_borrow: &OwnerReleasePayload = cell.borrow();
+    let second_borrow: &OwnerReleasePayload = cell.borrow();
+    let value = first_borrow.value + second_borrow.value;
+    let first: Option<int> = if first_match { Some(1) } else { None };
+    let second: Option<int> = if second_match { Some(2) } else { None };
+    if let Some(first_value) = first && let Some(second_value) = second {
+        let moved_cell = cell;
+        !moved_cell;
+        return value;
+    } else {};
+    !cell;
+    value
+}
+
+fn owner_release_if_let_else_move_value(first_match: bool, second_match: bool) -> int {
+    let cell = RefCell::new(OwnerReleasePayload { value: 73 });
+    let first_borrow: &OwnerReleasePayload = cell.borrow();
+    let second_borrow: &OwnerReleasePayload = cell.borrow();
+    let value = first_borrow.value + second_borrow.value;
+    let first: Option<int> = if first_match { Some(1) } else { None };
+    let second: Option<int> = if second_match { Some(2) } else { None };
+    if let Some(first_value) = first && let Some(second_value) = second {
+    } else {
+        let moved_cell = cell;
+        !moved_cell;
+        return value;
+    };
+    !cell;
+    value
+}
+
+fn owner_release_match_move_value(choice: OwnerReleaseChoice) -> int {
+    let cell = RefCell::new(OwnerReleasePayload { value: 79 });
+    let first: &OwnerReleasePayload = cell.borrow();
+    let second: &OwnerReleasePayload = cell.borrow();
+    let value = first.value + second.value;
+    match choice {
+        OwnerReleaseChoice::Keep => {},
+        OwnerReleaseChoice::Stop => {
+            let moved_cell = cell;
+            !moved_cell;
+            return value;
+        },
+    };
+    !cell;
+    value
+}
+
+fn owner_release_match_all_arms_move_value(choice: OwnerReleaseChoice) -> int {
+    let cell = RefCell::new(OwnerReleasePayload { value: 83 });
+    let first: &OwnerReleasePayload = cell.borrow();
+    let second: &OwnerReleasePayload = cell.borrow();
+    let value = first.value + second.value;
+    match choice {
+        OwnerReleaseChoice::Keep => {
+            let kept_cell = cell;
+            !kept_cell;
+        },
+        OwnerReleaseChoice::Stop => {
+            let stopped_cell = cell;
+            !stopped_cell;
+        },
+    };
+    value
+}
+
+fn owner_release_loop_continue_borrow_count() -> i64 {
+    let cell = RefCell::new(OwnerReleasePayload { value: 89 });
+    let i: int = 0;
+    while i < 3 {
+        let borrowed: &OwnerReleasePayload = cell.borrow();
+        if borrowed.value != 89 {
+            panic(30924);
+        };
+        i = i + 1;
+        if i < 3 {
+            continue;
+        };
+        break;
+    }
+    owner_release_borrow_count(&cell)
+}
+
+fn owner_release_loop_break_borrow_count() -> i64 {
+    let cell = RefCell::new(OwnerReleasePayload { value: 97 });
+    let i: int = 0;
+    while i < 3 {
+        let borrowed: &OwnerReleasePayload = cell.borrow();
+        if borrowed.value != 97 {
+            panic(30927);
+        };
+        break;
+    }
+    owner_release_borrow_count(&cell)
+}
+
+fn owner_release_loop_return_move_value(move_on_return: bool) -> int {
+    let cell = RefCell::new(OwnerReleasePayload { value: 101 });
+    let first: &OwnerReleasePayload = cell.borrow();
+    let second: &OwnerReleasePayload = cell.borrow();
+    let value = first.value + second.value;
+    let i: int = 0;
+    while i < 1 {
+        if move_on_return {
+            let moved_cell = cell;
+            !moved_cell;
+            return value;
+        };
+        break;
+    }
+    !cell;
+    value
+}
+
+fn owner_release_for_jump_borrow_count() -> i64 {
+    let cell = RefCell::new(OwnerReleasePayload { value: 103 });
+    for i in 0..3 {
+        let borrowed: &OwnerReleasePayload = cell.borrow();
+        if borrowed.value != 103 {
+            panic(30930);
+        };
+        if i < 2 {
+            continue;
+        };
+        break;
+    }
+    owner_release_borrow_count(&cell)
+}
+
+fn owner_release_try_value(cell: &RefCell<OwnerReleasePayload>, fail: bool) -> Option<int> {
+    let borrowed: &OwnerReleasePayload = cell.borrow();
+    let maybe: Option<int> = if fail { None } else { Some(borrowed.value) };
+    let value = maybe?;
+    return Some(value);
+}
+
+fn owner_release_let_else_value(cell: &RefCell<OwnerReleasePayload>, fail: bool) -> int {
+    let borrowed: &OwnerReleasePayload = cell.borrow();
+    let maybe: Option<int> = if fail { None } else { Some(borrowed.value) };
+    let Some(value) = maybe else {
+        return 0;
+    };
+    return value;
+}
+
+fn owner_release_tail_value(cell: &RefCell<OwnerReleasePayload>) -> int {
+    let borrowed: &OwnerReleasePayload = cell.borrow();
+    borrowed.value
+}
+
+fn owner_release_tail_cell() -> RefCell<OwnerReleasePayload> {
+    let cell = RefCell::new(OwnerReleasePayload { value: 113 });
+    cell
+}
+
+fn owner_release_explicit_value(cell: &RefCell<OwnerReleasePayload>) -> int {
+    let borrowed: &OwnerReleasePayload = cell.borrow();
+    return borrowed.value;
+}
+
+fn owner_release_explicit_cell() -> RefCell<OwnerReleasePayload> {
+    let cell = RefCell::new(OwnerReleasePayload { value: 127 });
+    return cell;
+}
+
+fn owner_release_branch_reassign_handle(flag: bool) -> i64 {
+    let left = RefCell::new(1i64);
+    let right = RefCell::new(2i64);
+    let borrowed = left.borrow_mut();
+    if flag {
+        borrowed = right.borrow_mut();
+    };
+    if flag {
+        let left_checked: &i64 = left.borrow();
+        if *left_checked != 1 {
+            panic(30953);
+        };
+        !left_checked;
+        *borrowed = 42i64;
+        !borrowed;
+        let right_checked: &i64 = right.borrow();
+        if *right_checked != 42 {
+            panic(30954);
+        };
+        !right_checked;
+    } else {
+        let right_checked: &i64 = right.borrow();
+        if *right_checked != 2 {
+            panic(30955);
+        };
+        !right_checked;
+        *borrowed = 41i64;
+        !borrowed;
+        let left_checked: &i64 = left.borrow();
+        if *left_checked != 41 {
+            panic(30956);
+        };
+        !left_checked;
+    };
+    return 0i64;
+}
+
+fn owner_release_if_let_reassign_handle(flag: bool) -> i64 {
+    let left = RefCell::new(3i64);
+    let right = RefCell::new(4i64);
+    let borrowed = left.borrow_mut();
+    if let Some(_) = if flag { Some(1i64) } else { None } {
+        borrowed = right.borrow_mut();
+    } else {
+        let right_checked: &i64 = right.borrow();
+        if *right_checked != 4 {
+            panic(30959);
+        };
+        !right_checked;
+    };
+    if flag {
+        let left_checked: &i64 = left.borrow();
+        if *left_checked != 3 {
+            panic(30960);
+        };
+        !left_checked;
+        *borrowed = 44i64;
+        !borrowed;
+        let right_checked_after: &i64 = right.borrow();
+        if *right_checked_after != 44 {
+            panic(30961);
+        };
+        !right_checked_after;
+    } else {
+        *borrowed = 43i64;
+        !borrowed;
+        let left_checked_after: &i64 = left.borrow();
+        if *left_checked_after != 43 {
+            panic(30962);
+        };
+        !left_checked_after;
+    };
+    return 0i64;
+}
+
+@test "refcell owner release clears active borrow handle"() {
+    let refcell = RefCell::new(OwnerReleasePayload { value: 17 });
+    let borrowed: &OwnerReleasePayload = refcell.borrow();
+    if borrowed.value != 17 {
+        panic(30901);
+    };
+    !refcell;
+}
+
+@test "refcell if-let failure cleanup releases active borrow handle"() {
+    let none: Option<i32> = None;
+    let result = if let Some(refcell) = Some(RefCell::new(OwnerReleasePayload { value: 23 })) && let Some(borrowed) = Some(refcell.borrow()) && let Some(_) = none {
+        borrowed.value
+    } else {
+        0
+    };
+    if result != 0 {
+        panic(30902);
+    };
+}
+
+@test "refcell if-expression call argument releases companion handle"() {
+    if owner_release_if_borrow_call_count(true) != 0 {
+        panic(30904);
+    };
+    if owner_release_if_borrow_call_count(false) != 0 {
+        panic(30905);
+    };
+}
+
+@test "refcell temporary call argument releases across loop iterations"() {
+    let cell = RefCell::new(OwnerReleasePayload { value: 41 });
+    let i: int = 0;
+    while i < 3 {
+        if owner_release_payload_value(cell.borrow()) != 41 + i {
+            panic(30906);
+        };
+        if owner_release_borrow_count(&cell) != 0 {
+            panic(30907);
+        };
+        owner_release_payload_set(cell.borrow_mut(), 42 + i);
+        if owner_release_borrow_count(&cell) != 0 {
+            panic(30908);
+        };
+        i = i + 1;
+    }
+}
+
+@test "refcell owner release clears multiple active handles"() {
+    let cell = RefCell::new(OwnerReleasePayload { value: 53 });
+    let first: &OwnerReleasePayload = cell.borrow();
+    let second: &OwnerReleasePayload = cell.borrow();
+    if first.value + second.value != 106 {
+        panic(30909);
+    };
+    if owner_release_borrow_count(&cell) != 2 {
+        panic(30910);
+    };
+    !cell;
+}
+
+@test "refcell moved owner release clears source attached handles"() {
+    let cell = RefCell::new(OwnerReleasePayload { value: 59 });
+    let first: &OwnerReleasePayload = cell.borrow();
+    let second: &OwnerReleasePayload = cell.borrow();
+    if first.value + second.value != 118 {
+        panic(30911);
+    };
+    let moved_cell = cell;
+    !moved_cell;
+}
+
+@test "refcell terminating branch owner move restores fallthrough state"() {
+    if owner_release_branch_move_value(true) != 122 {
+        panic(30912);
+    };
+    if owner_release_branch_move_value(false) != 122 {
+        panic(30913);
+    };
+}
+
+@test "refcell if-result owner move merges attached handles"() {
+    if owner_release_if_result_move_value(true) != 134 {
+        panic(30914);
+    };
+    if owner_release_if_result_move_value(false) != 134 {
+        panic(30915);
+    };
+}
+
+@test "refcell if-let chain owner moves preserve live branch state"() {
+    if owner_release_if_let_then_move_value(true, true) != 142 {
+        panic(30916);
+    };
+    if owner_release_if_let_then_move_value(true, false) != 142 {
+        panic(30917);
+    };
+    if owner_release_if_let_else_move_value(true, true) != 146 {
+        panic(30918);
+    };
+    if owner_release_if_let_else_move_value(false, true) != 146 {
+        panic(30919);
+    };
+}
+
+@test "refcell match owner move preserves live arm state"() {
+    if owner_release_match_move_value(OwnerReleaseChoice::Keep) != 158 {
+        panic(30920);
+    };
+    if owner_release_match_move_value(OwnerReleaseChoice::Stop) != 158 {
+        panic(30921);
+    };
+    if owner_release_match_all_arms_move_value(OwnerReleaseChoice::Keep) != 166 {
+        panic(30922);
+    };
+    if owner_release_match_all_arms_move_value(OwnerReleaseChoice::Stop) != 166 {
+        panic(30923);
+    };
+}
+
+@test "refcell loop jumps release active borrow handles"() {
+    if owner_release_loop_continue_borrow_count() != 0 {
+        panic(30925);
+    };
+    if owner_release_loop_break_borrow_count() != 0 {
+        panic(30926);
+    };
+    if owner_release_loop_return_move_value(true) != 202 {
+        panic(30928);
+    };
+    if owner_release_loop_return_move_value(false) != 202 {
+        panic(30929);
+    };
+    if owner_release_for_jump_borrow_count() != 0 {
+        panic(30931);
+    };
+}
+
+@test "refcell try propagation releases active borrow handle"() {
+    let cell = RefCell::new(OwnerReleasePayload { value: 107 });
+    let failed = owner_release_try_value(&cell, true);
+    !failed;
+    if owner_release_borrow_count(&cell) != 0 {
+        panic(30934);
+    };
+    let succeeded = owner_release_try_value(&cell, false);
+    !succeeded;
+    if owner_release_borrow_count(&cell) != 0 {
+        panic(30935);
+    };
+}
+
+@test "refcell let-else releases active borrow handle"() {
+    let cell = RefCell::new(OwnerReleasePayload { value: 109 });
+    if owner_release_let_else_value(&cell, true) != 0 {
+        panic(30936);
+    };
+    if owner_release_borrow_count(&cell) != 0 {
+        panic(30937);
+    };
+    if owner_release_let_else_value(&cell, false) != 109 {
+        panic(30938);
+    };
+    if owner_release_borrow_count(&cell) != 0 {
+        panic(30939);
+    };
+}
+
+@test "refcell implicit tail releases locals and transfers result"() {
+    let source = RefCell::new(OwnerReleasePayload { value: 111 });
+    if owner_release_tail_value(&source) != 111 {
+        panic(30940);
+    };
+    if owner_release_borrow_count(&source) != 0 {
+        panic(30941);
+    };
+
+    let returned = owner_release_tail_cell();
+    let borrowed: &OwnerReleasePayload = returned.borrow();
+    if borrowed.value != 113 {
+        panic(30942);
+    };
+    !borrowed;
+    if owner_release_borrow_count(&returned) != 0 {
+        panic(30943);
+    };
+}
+
+@test "refcell explicit return releases locals and transfers result"() {
+    let source = RefCell::new(OwnerReleasePayload { value: 125 });
+    if owner_release_explicit_value(&source) != 125 {
+        panic(30944);
+    };
+    if owner_release_borrow_count(&source) != 0 {
+        panic(30945);
+    };
+
+    let returned = owner_release_explicit_cell();
+    let borrowed: &OwnerReleasePayload = returned.borrow();
+    if borrowed.value != 127 {
+        panic(30946);
+    };
+    !borrowed;
+    if owner_release_borrow_count(&returned) != 0 {
+        panic(30947);
+    };
+}
+
+@test "refcell temporary deref assignment releases borrow handle"() {
+    let cell = RefCell::new(1i64);
+    *cell.borrow_mut() = 42i64;
+    let borrowed: &i64 = cell.borrow();
+    if *borrowed != 42 {
+        panic(30948);
+    };
+    !borrowed;
+}
+
+@test "refcell local deref assignment keeps borrow handle"() {
+    let cell = RefCell::new(1i64);
+    let borrowed: &i64 = cell.borrow_mut();
+    *borrowed = 21i64;
+    *borrowed = 42i64;
+    if *borrowed != 42 {
+        panic(30949);
+    };
+    !borrowed;
+    let checked: &i64 = cell.borrow();
+    if *checked != 42 {
+        panic(30950);
+    };
+    !checked;
+}
+
+@test "refcell local handle reassignment transfers lifecycle"() {
+    let left = RefCell::new(1i64);
+    let right = RefCell::new(2i64);
+    let borrowed: &i64 = left.borrow_mut();
+    borrowed = right.borrow_mut();
+    let left_checked: &i64 = left.borrow();
+    if *left_checked != 1 {
+        panic(30951);
+    };
+    !left_checked;
+    *borrowed = 42i64;
+    !borrowed;
+    let right_checked: &i64 = right.borrow();
+    if *right_checked != 42 {
+        panic(30952);
+    };
+    !right_checked;
+}
+
+@test "refcell branch-dependent handle reassignment merges owner"() {
+    if owner_release_branch_reassign_handle(true) != 0 {
+        panic(30957);
+    };
+    if owner_release_branch_reassign_handle(false) != 0 {
+        panic(30958);
+    };
+}
+
+@test "refcell if-let handle reassignment merges owner"() {
+    if owner_release_if_let_reassign_handle(true) != 0 {
+        panic(30963);
+    };
+    if owner_release_if_let_reassign_handle(false) != 0 {
+        panic(30964);
+    };
+}

@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 672_void_i32 + 676_void_loop：弃值调用（7,7,1）。
+// 返回值可直接弃置（`g();` 独立成句，check 放行）；
+
+fn seven() -> i32 {
+    println("7");
+    return 7;
+}
+
+fn main() -> i32 {
+    let i = 0;
+    while i < 2 {
+        seven();
+        i = i + 1;
+    }
+    println("1");
+    return 0;
+}
+
+@test "basic 139 discard loop"() {
+    seven();
+    seven();
+    if seven() != 7 { panic(13901); };
+}

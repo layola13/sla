@@ -1,0 +1,29 @@
+@import "sa_std/thread.sa"
+
+// FB-016 regression corpus: several escaped closures registered from
+// one scope must spawn, run and join correctly on both backends. The
+// SAB emission order of the generated wrappers/workers is pinned by
+// the plugin zig test "sla sab escaped closure emission follows
+// registration order" (src/plugin_tests.zig); this file keeps the
+// shape exercised end to end by the corpus sweep.
+
+fn det_order_worker(v: i32) -> i32 {
+    return v * 3 + 1;
+}
+
+@test "det order many escaped closures"() {
+    let a = 1;
+    let b = 2;
+    let c = 3;
+    let d = 4;
+    let e = 5;
+    let f = 6;
+    let ha = thread::spawn(^|| det_order_worker(a));
+    let hb = thread::spawn(^|| det_order_worker(b));
+    let hc = thread::spawn(^|| det_order_worker(c));
+    let hd = thread::spawn(^|| det_order_worker(d));
+    let he = thread::spawn(^|| det_order_worker(e));
+    let hf = thread::spawn(^|| det_order_worker(f));
+    let total = ha.join().unwrap() + hb.join().unwrap() + hc.join().unwrap() + hd.join().unwrap() + he.join().unwrap() + hf.join().unwrap();
+    if total != 69 { panic(7741); };
+}

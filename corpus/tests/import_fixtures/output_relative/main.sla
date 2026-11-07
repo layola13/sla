@@ -1,0 +1,10 @@
+@import "helper.sla"
+@import "local_dep.sa"
+
+fn output_relative_value() -> i32 {
+    return output_relative_helper() + 1;
+}
+
+@test "output relative import helper"() {
+    if output_relative_value() != 42 { panic(4201); };
+}

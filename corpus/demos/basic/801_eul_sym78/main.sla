@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian 续对称性：E(7,1)=E(7,5)=120，E(8,1)=E(8,6)=247（镜像双算一致）。
+// 意对标 796_eul7（单格版互补；行列镜像互锁，671 体例续高位）。
+
+fn eul(n: int, m: int) -> int {
+    let w = m + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + m {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= m {
+            t[mm * w + nn] = (mm - nn) * t[(mm - 1) * w + nn - 1] + (nn + 1) * t[(mm - 1) * w + nn];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + m];
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", eul(7, 1), eul(7, 5), eul(8, 1), eul(8, 6));
+    return 0;
+}
+
+@test "basic 801 eul sym78"() {
+    if eul(7, 1) != 120 { panic(80101); };
+    if eul(7, 5) != 120 { panic(80102); };
+    if eul(8, 1) != 247 { panic(80103); };
+    if eul(8, 6) != 247 { panic(80104); };
+}

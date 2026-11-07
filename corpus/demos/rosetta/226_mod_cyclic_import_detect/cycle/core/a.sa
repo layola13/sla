@@ -1,0 +1,7 @@
+@import "cycle/core/a/detail/seed.sa"
+@import "cycle/core/b.sa"
+
+@export cycle_a_value() -> i32:
+L_ENTRY:
+    seed = call @cycle_a_seed()
+    return seed

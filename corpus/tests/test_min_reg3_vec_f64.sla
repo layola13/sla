@@ -1,0 +1,19 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/vec_packed.sla"
+
+// MINIM V8 (SAB isolation): sa_vec_f64_extend_packed.
+@test "minim vec f64 extend packed"() {
+    let src: [u8; 16] = [0u8; 16];
+    src[6] = 248;
+    src[7] = 63;
+    src[14] = 2;
+    src[15] = 192;
+    let sp: ptr = PTR_BYTE_ADD(&src, 0);
+    let v: Vec<f64> = Vec::new();
+    v = sa_vec_f64_extend_packed(v, sp, 2);
+    if (len(v) as u64) != 2 { panic(191); };
+    if v[0] != 1.5 { panic(192); };
+    if v[1] != 0.0 - 2.25 { panic(193); };
+}

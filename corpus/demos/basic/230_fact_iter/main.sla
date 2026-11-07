@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 125_fact 的迭代版（120；120 为递归版）。
+// `for` 无阶乘步长语义，用 `while` 累乘表达。
+
+fn fact_iter(n: int) -> int {
+    let p = 1;
+    let i = 1;
+    while i <= n {
+        p = p * i;
+        i = i + 1;
+    }
+    return p;
+}
+
+fn main() -> i32 {
+    println("{}", fact_iter(5));
+    return 0;
+}
+
+@test "basic 230 fact iter"() {
+    if fact_iter(5) != 120 { panic(23001); };
+    if fact_iter(0) != 1 { panic(23002); };
+}

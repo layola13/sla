@@ -1,0 +1,49 @@
+@import "sa_std/string.sa"
+
+struct MiniScannerState {
+    text: ptr,
+    text_len: int,
+    pos: int,
+    token_kind: int,
+}
+
+struct MiniParser {
+    scanner: MiniScannerState,
+    current_kind: int,
+    nodes: int,
+}
+
+fn mini_scanner_new(text: ptr, text_len: int) -> MiniScannerState {
+    return MiniScannerState { text: text, text_len: text_len, pos: 0, token_kind: 17 };
+}
+
+fn mini_scanner_next(state: MiniScannerState) -> MiniScannerState {
+    return MiniScannerState { text: state.text, text_len: state.text_len, pos: state.pos + 1, token_kind: 29 };
+}
+
+fn mini_token_kind(state: MiniScannerState) -> int {
+    return state.token_kind;
+}
+
+fn mini_parser_new(scanner: MiniScannerState, current_kind: int, nodes: int) -> MiniParser {
+    return MiniParser { scanner: scanner, current_kind: current_kind, nodes: nodes };
+}
+
+fn mini_advance(parser: MiniParser) -> MiniParser {
+    let s2 = mini_scanner_next(parser.scanner);
+    return mini_parser_new(s2, mini_token_kind(s2), parser.nodes + 1);
+}
+
+@test "ptr aggregate can be reused by nested sibling call arg"() {
+    let p = mini_parser_new(mini_scanner_new(STR_PTR("keyword"), STR_LEN("keyword")), 17, 3);
+    let next = mini_advance(p);
+    if next.current_kind != 29 {
+        panic(44101);
+    };
+    if next.scanner.pos != 1 {
+        panic(44102);
+    };
+    if next.nodes != 4 {
+        panic(44103);
+    };
+}

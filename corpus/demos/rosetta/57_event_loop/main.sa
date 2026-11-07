@@ -1,0 +1,150 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_run_loop = vtable { call = @sla__run_loop }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__run_loop(^events: ptr) -> i32:
+L_ENTRY:
+    event_slot = stack_alloc 8
+    tmp_0 = 0
+    acc = add tmp_0, 0
+    !tmp_0
+    store event_slot+0, 0 as i64
+    jmp L_LOOP_HEAD_0
+
+L_LOOP_HEAD_0:
+    tmp_1 = load event_slot+0 as i64
+    tmp_2 = slt tmp_1, 4
+    br tmp_2 -> L_LOOP_BODY_1, L_LOOP_COND_FALSE_4
+
+L_LOOP_BODY_1:
+    !tmp_2
+    tmp_3 = mul tmp_1, 8
+    tmp_4 = ptr_add events, tmp_3
+    event = load tmp_4+0 as ptr
+    !tmp_3
+    !tmp_4
+    jmp L_MATCH_CHECK_0_9
+
+L_MATCH_CHECK_0_9:
+    tmp_5 = load event+0 as i64
+    tmp_6 = 0
+    tmp_7 = eq tmp_5, tmp_6
+    !tmp_5
+    !tmp_6
+    br tmp_7 -> L_MATCH_CASE_0_9, L_MATCH_CHECK_1_9
+
+L_MATCH_CASE_0_9:
+    value = load event+8 as i32
+    !tmp_7
+    tmp_8 = add acc, value
+    !acc
+    acc = tmp_8
+    !value
+    jmp L_MATCH_MERGE_7
+
+L_MATCH_CHECK_1_9:
+    !tmp_7
+    tmp_9 = load event+0 as i64
+    tmp_10 = 1
+    tmp_11 = eq tmp_9, tmp_10
+    !tmp_9
+    !tmp_10
+    br tmp_11 -> L_MATCH_CASE_1_9, L_MATCH_CHECK_2_9
+
+L_MATCH_CASE_1_9:
+    !tmp_11
+    tmp_12 = 0
+    !acc
+    acc = tmp_12
+    jmp L_MATCH_MERGE_7
+
+L_MATCH_CHECK_2_9:
+    !tmp_11
+    tmp_13 = load event+0 as i64
+    tmp_14 = 2
+    tmp_15 = eq tmp_13, tmp_14
+    !tmp_13
+    !tmp_14
+    br tmp_15 -> L_MATCH_CASE_2_9, L_MATCH_NO_MATCH_8
+
+L_MATCH_CASE_2_9:
+    value = load event+8 as i32
+    !tmp_15
+    tmp_16 = add acc, value
+    !acc
+    acc = tmp_16
+    jmp L_MATCH_MERGE_7
+
+L_MATCH_NO_MATCH_8:
+    !tmp_15
+    panic(1)
+
+L_MATCH_MERGE_7:
+L_LOOP_CONTINUE_2:
+    tmp_18 = add tmp_1, 1
+    store event_slot+0, tmp_18 as i64
+    !tmp_18
+    !tmp_1
+    !event
+    jmp L_LOOP_HEAD_0
+
+L_LOOP_COND_FALSE_4:
+    !tmp_2
+    !tmp_1
+    jmp L_LOOP_EXIT_6
+
+L_LOOP_EXIT_6:
+    !events
+    return acc
+
+@main() -> i32:
+L_ENTRY:
+    events = alloc 32
+    tmp_19 = alloc 12
+    store tmp_19+0, 0 as i64
+    tmp_20 = 2
+    store tmp_19+8, tmp_20 as i32
+    store events+0, tmp_19 as ptr
+    !tmp_19
+    tmp_21 = alloc 12
+    store tmp_21+0, 0 as i64
+    tmp_22 = 3
+    store tmp_21+8, tmp_22 as i32
+    store events+8, tmp_21 as ptr
+    !tmp_21
+    tmp_23 = alloc 12
+    store tmp_23+0, 1 as i64
+    store events+16, tmp_23 as ptr
+    !tmp_23
+    tmp_24 = alloc 12
+    store tmp_24+0, 2 as i64
+    tmp_25 = 4
+    store tmp_24+8, tmp_25 as i32
+    store events+24, tmp_24 as ptr
+    !tmp_24
+    tmp_26 = call @sla__run_loop(^events)
+    acc = add tmp_26, 0
+    !tmp_26
+    tmp_27 = call @sa_fmt_u64(acc, 10)
+    tmp_28 = call @sa_fmt_buffer_data(tmp_27)
+    tmp_29 = call @sa_fmt_buffer_len(tmp_27)
+    tmp_30 = tmp_28
+    call @sa_print_bytes(&tmp_30, tmp_29)
+    call @sa_fmt_buffer_free(^tmp_27)
+    !tmp_30
+    !tmp_29
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return acc
+
+@test "rosetta 057 event loop"():
+L_TEST_ENTRY_10:
+    return
+

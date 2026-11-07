@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 125_fact 的表版（230 为单值版：0!–5!，末项 120）。
+// 迭代阶乘（230 口径）+ 逐项入表组合。
+
+fn fact(n: int) -> int {
+    let p = 1;
+    let i = 1;
+    while i <= n {
+        p = p * i;
+        i = i + 1;
+    }
+    return p;
+}
+
+fn main() -> i32 {
+    let facts: Vec<i32> = Vec::new();
+    let k = 0;
+    while k <= 5 {
+        facts.push(fact(k));
+        k = k + 1;
+    }
+    println("{},{}", len(facts), facts[5]);
+    return 0;
+}
+
+@test "basic 277 fact list"() {
+    let facts: Vec<i32> = Vec::new();
+    let k = 0;
+    while k <= 5 {
+        facts.push(fact(k));
+        k = k + 1;
+    }
+    if len(facts) != 6 { panic(27701); };
+    if facts[5] != 120 { panic(27702); };
+    if facts[0] != 1 { panic(27703); };
+}

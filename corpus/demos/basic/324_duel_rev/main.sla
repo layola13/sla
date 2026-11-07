@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 双重逆序复原对峙（246×246：首 1 末 3）。
+// 自对偶恒等（与 301 的异操作对互补，此处为同操作对）。
+
+fn main() -> i32 {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    let r1: Vec<i32> = Vec::new();
+    for i in 0..len(a) {
+        r1.push(a[len(a) - 1 - i]);
+    }
+    let r2: Vec<i32> = Vec::new();
+    for i in 0..len(r1) {
+        r2.push(r1[len(r1) - 1 - i]);
+    }
+    println("{},{}", r2[0], r2[2]);
+    return 0;
+}
+
+@test "basic 324 duel rev"() {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    let r1: Vec<i32> = Vec::new();
+    for i in 0..len(a) {
+        r1.push(a[len(a) - 1 - i]);
+    }
+    let r2: Vec<i32> = Vec::new();
+    for i in 0..len(r1) {
+        r2.push(r1[len(r1) - 1 - i]);
+    }
+    if r2[0] != a[0] { panic(32401); };
+    if r2[2] != a[2] { panic(32402); };
+}

@@ -1,0 +1,21 @@
+fn nested_reassign_after_release(limit: int) -> int {
+    let pos = 0;
+    while pos < limit {
+        if pos == 0 {
+            pos = pos + 1;
+            while pos < limit {
+                let c = pos;
+                if c == 3 { break; };
+                pos = pos + 1;
+            }
+        } else {
+            break;
+        };
+    }
+    return pos;
+}
+
+@test "reassigned loop local is live after release"() {
+    let got = nested_reassign_after_release(5);
+    if got != 3 { panic(42001); };
+}

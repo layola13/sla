@@ -1,0 +1,14 @@
+@import "consumer/../bridge/error_map.sa"
+
+@error_consumer_value() -> i32:
+L_ENTRY:
+    value = call @map_error(252)
+    ok = eq value, 252
+    !value
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 252
+
+L_ERR:
+    return 0

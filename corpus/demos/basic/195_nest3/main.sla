@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 916_nested_struct 的三层版（9）。
+// 79 覆盖两层嵌套读，此处为三层内联字面量 + 穿透读
+//（探针已验证三线；四层以上未探，按需再探）。
+
+struct L3 { v: i32 }
+struct L2 { inner: L3 }
+struct L1 { mid: L2 }
+
+fn main() -> i32 {
+    let o = L1 { mid: L2 { inner: L3 { v: 9 } } };
+    println("{}", o.mid.inner.v);
+    return 0;
+}
+
+@test "basic 195 nest3"() {
+    let o = L1 { mid: L2 { inner: L3 { v: 9 } } };
+    if o.mid.inner.v != 9 { panic(19501); };
+}

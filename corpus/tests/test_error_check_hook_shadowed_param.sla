@@ -1,0 +1,19 @@
+// expect: MacroParamUnused
+// J-5 negative (scope awareness): the body's `x` references bind
+// to the macro-local `let x`, which shadows the parameter from its
+// declaration point on — so parameter `x` is still unreferenced and
+// the audit must fire. Judged by standalone `sla check` (see
+// plugin_tests.zig registration).
+
+@check_hook macro_param_audit;
+
+macro add_into(out: i64, x: i64) {
+    let x: i64 = 5;
+    out = x + x;
+}
+
+fn f() -> i64 {
+    let r: i64 = 0;
+    add_into(r, 1);
+    return r;
+}

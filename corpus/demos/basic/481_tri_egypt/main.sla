@@ -1,0 +1,68 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 埃及展开三向（首项/项数/末项：3/7 → 3，3 项，末 231）。
+// 意对标 476 双角版的三向版（476 互补）。
+
+fn egypt_first(num: int, den: int) -> int {
+    return (den + num - 1) / num;
+}
+
+fn egypt_count(num: int, den: int) -> int {
+    let c = 0;
+    let n = num;
+    let d = den;
+    while n != 0 {
+        let u = (d + n - 1) / n;
+        c = c + 1;
+        n = n * u - d;
+        d = d * u;
+        if n != 0 {
+            let g1 = n;
+            let g2 = d;
+            while g2 != 0 {
+                let t = g1 % g2;
+                g1 = g2;
+                g2 = t;
+            }
+            n = n / g1;
+            d = d / g1;
+        };
+    }
+    return c;
+}
+
+fn egypt_last(num: int, den: int) -> int {
+    let last = 0;
+    let n = num;
+    let d = den;
+    while n != 0 {
+        let u = (d + n - 1) / n;
+        last = u;
+        n = n * u - d;
+        d = d * u;
+        if n != 0 {
+            let g1 = n;
+            let g2 = d;
+            while g2 != 0 {
+                let t = g1 % g2;
+                g1 = g2;
+                g2 = t;
+            }
+            n = n / g1;
+            d = d / g1;
+        };
+    }
+    return last;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", egypt_first(3, 7), egypt_count(3, 7), egypt_last(3, 7));
+    return 0;
+}
+
+@test "basic 481 tri egypt"() {
+    if egypt_first(3, 7) != 3 { panic(48101); };
+    if egypt_count(3, 7) != 3 { panic(48102); };
+    if egypt_last(3, 7) != 231 { panic(48103); };
+}

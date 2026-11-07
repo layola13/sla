@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+
+fn fail() -> Result<i32, i32> {
+    Err(7)
+}
+
+fn anyhow_fallback_value() -> i32 {
+    let result = fail().map(|msg| msg + 1);
+    return result.unwrap_or(0);
+}
+
+fn main() -> i32 {
+    let result = fail().map(|msg| msg + 1).unwrap_or(0);
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 171 171_anyhow_dynamic_error"() {
+    let got = anyhow_fallback_value();
+    if got != 0 {
+        panic(171);
+    };
+}

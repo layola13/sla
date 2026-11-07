@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Catalan 双实现对峙（商式 vs 递推 C_{n+1}=C_n·2(2n+1)/(n+2)：5 → 42 双边）。
+// 意对标 351 商式版的递推对峙版（351 互补）。
+
+fn binom(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn catalan_q(n: int) -> int {
+    return binom(2 * n, n) / (n + 1);
+}
+
+fn catalan_r(n: int) -> int {
+    let c = 1;
+    let i = 0;
+    while i < n {
+        c = c * 2 * (2 * i + 1) / (i + 2);
+        i = i + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", catalan_q(5), catalan_r(5), catalan_r(4));
+    return 0;
+}
+
+@test "basic 394 duel catalan"() {
+    if catalan_q(5) != 42 { panic(39401); };
+    if catalan_r(5) != 42 { panic(39402); };
+    if catalan_q(5) != catalan_r(5) { panic(39403); };
+    if catalan_r(4) != 14 { panic(39404); };
+}

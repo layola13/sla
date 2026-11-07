@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 187_binary：8 轮 `x = x * 2 + (i % 2)` 拼出 01010101b = 85。
+// 与 44_bit_count（拆位计数）互补，此处为组装方向。
+
+fn main() -> i32 {
+    let x = 0;
+    for i in 0..8 {
+        x = x * 2 + (i % 2);
+    }
+    println("{}", x);
+    return 0;
+}
+
+@test "basic 63 binary build"() {
+    let x = 0;
+    for i in 0..8 {
+        x = x * 2 + (i % 2);
+    }
+    if x != 85 { panic(6301); };
+}

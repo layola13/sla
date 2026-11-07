@@ -1,0 +1,32 @@
+@import "sa_std/vec.sa"
+
+struct StandaloneBorrowHolder {
+    values: Vec<u8>,
+}
+
+fn standalone_borrow_first(source: &Vec<u8>) -> u8 {
+    return source[0];
+}
+
+fn standalone_borrow_make() -> Vec<u8> {
+    let values: Vec<u8> = Vec::new();
+    values.push(41);
+    values.push(42);
+    return values;
+}
+
+fn standalone_borrow_field_value(holder: StandaloneBorrowHolder) -> u8 {
+    let borrowed = &holder.values;
+    return borrowed[1];
+}
+
+@test "standalone borrow of pointer-backed field"() {
+    let inner = standalone_borrow_make();
+    let holder = StandaloneBorrowHolder { values: inner };
+    let borrowed = &holder.values;
+    if standalone_borrow_first(borrowed) != 41 { panic(90101); };
+    if borrowed[1] != 42 { panic(90102); };
+    let inner2 = standalone_borrow_make();
+    let holder2 = StandaloneBorrowHolder { values: inner2 };
+    if standalone_borrow_field_value(holder2) != 42 { panic(90103); };
+}

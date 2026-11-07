@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 154_rest_first：首参 + 其余参数长（10+3=13）。
+// SLA 暂无剩余参数语法，用定长 `[int; 3]` 形参表达同一语义（类型口径见 #1）。
+
+fn f(first: int, rest: [int; 3]) -> int {
+    let n = len(rest) as int;
+    return first + n;
+}
+
+fn main() -> i32 {
+    println("{}", f(10, [1, 2, 3]));
+    return 0;
+}
+
+@test "basic 85 rest first"() {
+    if f(10, [1, 2, 3]) != 13 { panic(8501); };
+}

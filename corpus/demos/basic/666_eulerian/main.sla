@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian 三角建表 E(n,m)=(n-m)E(n-1,m-1)+(m+1)E(n-1,m)（546 范式）。
+// E(3,1)=4，E(4,1)=11，E(4,2)=11（669 做建表/交错和对峙）。
+// 意对标 646_ballot（同为三角建表；此处为加权双系数）。
+
+fn eul(n: int, m: int) -> int {
+    let w = m + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + m {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= m {
+            t[mm * w + nn] = (mm - nn) * t[(mm - 1) * w + nn - 1] + (nn + 1) * t[(mm - 1) * w + nn];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + m];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", eul(3, 1), eul(4, 1), eul(4, 2));
+    return 0;
+}
+
+@test "basic 666 eulerian"() {
+    if eul(3, 1) != 4 { panic(66601); };
+    if eul(4, 1) != 11 { panic(66602); };
+    if eul(4, 2) != 11 { panic(66603); };
+    if eul(2, 1) != 1 { panic(66604); };
+}

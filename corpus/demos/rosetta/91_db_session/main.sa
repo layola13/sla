@@ -1,0 +1,81 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_can_commit = vtable { call = @sla__can_commit }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__can_commit(session: ptr) -> u8:
+L_ENTRY:
+    tmp_0 = load session+0 as u8
+    tmp_1 = 1
+    tmp_2 = eq tmp_0, tmp_1
+    !tmp_0
+    !tmp_1
+    br tmp_2 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_2
+    tmp_3 = load session+1 as u8
+    !session
+    return tmp_3
+
+L_ELSE_1:
+    !tmp_2
+    tmp_4 = 0
+    !session
+    return tmp_4
+
+
+@main() -> i32:
+L_ENTRY:
+    session = alloc 2
+    tmp_6 = 1
+    store session+0, tmp_6 as u8
+    tmp_7 = 1
+    store session+1, tmp_7 as u8
+    tmp_8 = call @sla__can_commit(session)
+    result = tmp_8
+    tmp_9 = call @sa_fmt_bool(result)
+    tmp_10 = call @sa_fmt_buffer_data(tmp_9)
+    tmp_11 = call @sa_fmt_buffer_len(tmp_9)
+    tmp_12 = tmp_10
+    call @sa_print_bytes(&tmp_12, tmp_11)
+    call @sa_fmt_buffer_free(^tmp_9)
+    !tmp_12
+    !tmp_11
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_13 = 0
+    !session
+    !result
+    return tmp_13
+
+@test "rosetta 091 91_db_session"():
+L_TEST_ENTRY_3:
+    session = alloc 2
+    tmp_14 = 1
+    store session+0, tmp_14 as u8
+    tmp_15 = 1
+    store session+1, tmp_15 as u8
+    tmp_16 = call @sla__can_commit(session)
+    got = tmp_16
+    tmp_17 = 1
+    tmp_18 = ne got, tmp_17
+    !tmp_17
+    br tmp_18 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_18
+    panic(91)
+
+L_ELSE_5:
+    !tmp_18
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !session
+    !got
+    return
+

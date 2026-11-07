@@ -1,0 +1,3 @@
+# Future metadata only. Not compiler input.
+[workspace-shared]
+revision = "1"

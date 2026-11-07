@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 贪心埃及分数（4/7=1/2+1/14：首项 2，共 2 项）。
+// 意对标 362 调和缩放的单位分数版（362 互补；481 做三向）。
+
+fn egypt_first(num: int, den: int) -> int {
+    return (den + num - 1) / num;
+}
+
+fn egypt_count(num: int, den: int) -> int {
+    let c = 0;
+    let n = num;
+    let d = den;
+    while n != 0 {
+        let u = (d + n - 1) / n;
+        c = c + 1;
+        n = n * u - d;
+        d = d * u;
+        if n != 0 {
+            let g1 = n;
+            let g2 = d;
+            while g2 != 0 {
+                let t = g1 % g2;
+                g1 = g2;
+                g2 = t;
+            }
+            n = n / g1;
+            d = d / g1;
+        };
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", egypt_first(4, 7), egypt_count(4, 7), egypt_count(3, 7));
+    return 0;
+}
+
+@test "basic 476 egypt"() {
+    if egypt_first(4, 7) != 2 { panic(47601); };
+    if egypt_count(4, 7) != 2 { panic(47602); };
+    if egypt_count(3, 7) != 3 { panic(47603); };
+}

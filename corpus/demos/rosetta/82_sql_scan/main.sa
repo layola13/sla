@@ -1,0 +1,190 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_qualifies = vtable { call = @sla__qualifies }
+@const SLA_FNPTR_VT_scan_count = vtable { call = @sla__scan_count }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__qualifies(row: ptr) -> u8:
+L_ENTRY:
+    tmp_0 = load row+0 as u8
+    tmp_1 = 1
+    tmp_2 = eq tmp_0, tmp_1
+    !tmp_0
+    !tmp_1
+    br tmp_2 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_2
+    tmp_3 = load row+1 as i32
+    tmp_4 = 18
+    tmp_5 = sge tmp_3, tmp_4
+    !tmp_3
+    !tmp_4
+    br tmp_5 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_5
+    tmp_6 = 1
+    !row
+    return tmp_6
+
+L_ELSE_4:
+    !tmp_5
+    tmp_7 = 0
+    !row
+    return tmp_7
+
+
+L_ELSE_1:
+    !tmp_2
+    tmp_9 = 0
+    !row
+    return tmp_9
+
+
+@sla__scan_count() -> i32:
+L_ENTRY:
+    a = alloc 5
+    tmp_11 = 1
+    store a+0, tmp_11 as u8
+    tmp_12 = 21
+    store a+1, tmp_12 as i32
+    b = alloc 5
+    tmp_13 = 0
+    store b+0, tmp_13 as u8
+    tmp_14 = 40
+    store b+1, tmp_14 as i32
+    c = alloc 5
+    tmp_15 = 1
+    store c+0, tmp_15 as u8
+    tmp_16 = 17
+    store c+1, tmp_16 as i32
+    tmp_17 = call @sla__qualifies(a)
+    tmp_18 = 1
+    tmp_19 = eq tmp_17, tmp_18
+    !tmp_17
+    !tmp_18
+    tmp_20 = alloc 4
+    br tmp_19 -> L_THEN_6, L_ELSE_7
+
+L_THEN_6:
+    !tmp_19
+    tmp_21 = 1
+    store tmp_20+0, tmp_21 as i32
+    !tmp_21
+    jmp L_MERGE_8
+
+L_ELSE_7:
+    !tmp_19
+    tmp_22 = 0
+    store tmp_20+0, tmp_22 as i32
+    !tmp_22
+    jmp L_MERGE_8
+
+L_MERGE_8:
+    tmp_23 = load tmp_20+0 as i32
+    !tmp_20
+    av = tmp_23
+    tmp_24 = call @sla__qualifies(b)
+    tmp_25 = 1
+    tmp_26 = eq tmp_24, tmp_25
+    !tmp_24
+    !tmp_25
+    tmp_27 = alloc 4
+    br tmp_26 -> L_THEN_9, L_ELSE_10
+
+L_THEN_9:
+    !tmp_26
+    tmp_28 = 1
+    store tmp_27+0, tmp_28 as i32
+    !tmp_28
+    jmp L_MERGE_11
+
+L_ELSE_10:
+    !tmp_26
+    tmp_29 = 0
+    store tmp_27+0, tmp_29 as i32
+    !tmp_29
+    jmp L_MERGE_11
+
+L_MERGE_11:
+    tmp_30 = load tmp_27+0 as i32
+    !tmp_27
+    bv = tmp_30
+    tmp_31 = call @sla__qualifies(c)
+    tmp_32 = 1
+    tmp_33 = eq tmp_31, tmp_32
+    !tmp_31
+    !tmp_32
+    tmp_34 = alloc 4
+    br tmp_33 -> L_THEN_12, L_ELSE_13
+
+L_THEN_12:
+    !tmp_33
+    tmp_35 = 1
+    store tmp_34+0, tmp_35 as i32
+    !tmp_35
+    jmp L_MERGE_14
+
+L_ELSE_13:
+    !tmp_33
+    tmp_36 = 0
+    store tmp_34+0, tmp_36 as i32
+    !tmp_36
+    jmp L_MERGE_14
+
+L_MERGE_14:
+    tmp_37 = load tmp_34+0 as i32
+    !tmp_34
+    cv = tmp_37
+    tmp_38 = add av, bv
+    tmp_39 = add tmp_38, cv
+    !tmp_38
+    !b
+    !a
+    !c
+    !av
+    !bv
+    !cv
+    return tmp_39
+
+@main() -> i32:
+L_ENTRY:
+    tmp_40 = call @sla__scan_count()
+    result = tmp_40
+    tmp_41 = call @sa_fmt_u64(result, 10)
+    tmp_42 = call @sa_fmt_buffer_data(tmp_41)
+    tmp_43 = call @sa_fmt_buffer_len(tmp_41)
+    tmp_44 = tmp_42
+    call @sa_print_bytes(&tmp_44, tmp_43)
+    call @sa_fmt_buffer_free(^tmp_41)
+    !tmp_44
+    !tmp_43
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 082 82_sql_scan"():
+L_TEST_ENTRY_15:
+    tmp_45 = call @sla__scan_count()
+    got = tmp_45
+    tmp_46 = 1
+    tmp_47 = ne got, tmp_46
+    !tmp_46
+    br tmp_47 -> L_THEN_16, L_ELSE_17
+
+L_THEN_16:
+    !tmp_47
+    panic(82)
+
+L_ELSE_17:
+    !tmp_47
+    jmp L_MERGE_18
+
+L_MERGE_18:
+    !got
+    return
+

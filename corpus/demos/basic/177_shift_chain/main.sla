@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1239_shift_chain + 1247_shift_compare：连续位移与符号判定
+//（SLA 口径 4294967296,1,0）。
+// 64 位语义再确认：`(1 << 31) << 1` 得 2^32（TS 回绕得 0）；
+// `(1 << 31) >> 31` 得 1（TS 得 -1）；`(1 << 31) < 0` 为假（TS 为真）。
+// 见 128/168/171 同主题。
+
+fn main() -> i32 {
+    let c = (1 << 31) << 1;
+    let d = (1 << 31) >> 31;
+    let s = 0;
+    if (1 << 31) < 0 { s = 1; };
+    println("{},{},{}", c, d, s);
+    return 0;
+}
+
+@test "basic 177 shift chain"() {
+    if (1 << 31) << 1 != 4294967296 { panic(17701); };
+    if (1 << 31) >> 31 != 1 { panic(17702); };
+    if (1 << 31) < 0 { panic(17703); };
+}

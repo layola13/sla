@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 193_map_dbl：`[1,2,3]` 翻倍得 `[2,4,6]`。
+// 高阶 `map` 用显式循环 + `push` 表达（迭代器协议见 Phase 6，写法见 39/59）。
+
+fn main() -> i32 {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    let b: Vec<i32> = Vec::new();
+    for i in 0..3 {
+        b.push(a[i] * 2);
+    }
+    println("{},{},{}", b[0], b[1], b[2]);
+    return 0;
+}
+
+@test "basic 67 map dbl"() {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    let b: Vec<i32> = Vec::new();
+    for i in 0..3 {
+        b.push(a[i] * 2);
+    }
+    if b[0] != 2 { panic(6701); };
+    if b[1] != 4 { panic(6702); };
+    if b[2] != 6 { panic(6703); };
+}

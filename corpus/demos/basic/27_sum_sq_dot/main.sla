@@ -1,0 +1,35 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 141_sum_sq / 142_dot：平方和 1..5=55，点积=32。
+
+fn sum_sq(limit: int) -> int {
+    let t = 0;
+    for i in 1..(limit + 1) {
+        t = t + i * i;
+    }
+    return t;
+}
+
+fn dot(a: [int; 3], b: [int; 3]) -> int {
+    let t = 0;
+    for i in 0..3 {
+        t = t + a[i] * b[i];
+    }
+    return t;
+}
+
+fn main() -> i32 {
+    println("{}", sum_sq(5));
+    let a = [1, 2, 3];
+    let b = [4, 5, 6];
+    println("{}", dot(a, b));
+    return 0;
+}
+
+@test "basic 27 sum sq dot"() {
+    if sum_sq(5) != 55 { panic(2701); };
+    let a = [1, 2, 3];
+    let b = [4, 5, 6];
+    if dot(a, b) != 32 { panic(2702); };
+}

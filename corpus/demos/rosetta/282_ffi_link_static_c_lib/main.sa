@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_ffi_static_library_objects = vtable { call = @sla__ffi_static_library_objects }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__ffi_static_library_objects() -> i32:
+L_ENTRY:
+    tmp_0 = 1
+    archive_member = tmp_0
+    return archive_member
+
+@main() -> i32:
+L_ENTRY:
+    tmp_1 = call @sla__ffi_static_library_objects()
+    result = tmp_1
+    tmp_2 = call @sa_fmt_u64(result, 10)
+    tmp_3 = call @sa_fmt_buffer_data(tmp_2)
+    tmp_4 = call @sa_fmt_buffer_len(tmp_2)
+    tmp_5 = tmp_3
+    call @sa_print_bytes(&tmp_5, tmp_4)
+    call @sa_fmt_buffer_free(^tmp_2)
+    !tmp_5
+    !tmp_4
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 282 ffi link static c lib"():
+L_TEST_ENTRY_0:
+    tmp_6 = call @sla__ffi_static_library_objects()
+    got = tmp_6
+    tmp_7 = 1
+    tmp_8 = ne got, tmp_7
+    !tmp_7
+    br tmp_8 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_8
+    panic(282)
+
+L_ELSE_2:
+    !tmp_8
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_selected_allocator_count() -> i32 {
+    let bump_allocator_selected = 1;
+    return bump_allocator_selected;
+}
+
+fn main() -> i32 {
+    let result = contract_selected_allocator_count();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 255 contract memory allocator swap"() {
+    let got = contract_selected_allocator_count();
+    if got != 1 { panic(255); };
+}

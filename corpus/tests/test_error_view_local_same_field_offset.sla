@@ -1,0 +1,21 @@
+// expect: BorrowConflict
+// View-types stage 1: two local mutable borrows of the SAME field at
+// a nonzero offset, written through interleaved. The checker must
+// reject the second borrow with a BorrowConflict diagnostic. Before
+// stage 1 this was a hole in every layer: the nonzero-offset borrow
+// landed in a fresh ptr_add register that no accounting tied back to
+// the field, so both backends silently aliased the two writes.
+struct Pair { a: i64, b: i64 }
+
+fn bad_local_same_field_offset() {
+    let s = Pair { a: 1, b: 2 };
+    let x = &s.b;
+    let y = &s.b;
+    *x = 10;
+    *y = 20;
+}
+
+fn main() -> i32 {
+    bad_local_same_field_offset();
+    return 0;
+}

@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 小 Schröder 续高位 s(9)=103049，s(10)=518859（短递推续高位；771 体例续）。
+// 意对标 771_sschro8（n=8 版互补；792 做续桥对峙）。
+
+fn ssho(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        t[ii] = ((6 * ii - 3) * t[ii - 1] - (ii - 2) * t[ii - 2]) / (ii + 1);
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn main() -> i32 {
+    println("{},{}", ssho(9), ssho(10));
+    return 0;
+}
+
+@test "basic 791 sschro910"() {
+    if ssho(9) != 103049 { panic(79101); };
+    if ssho(10) != 518859 { panic(79102); };
+    if ssho(8) != 20793 { panic(79103); };
+}

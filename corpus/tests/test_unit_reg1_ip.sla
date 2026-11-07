@@ -1,0 +1,387 @@
+@import "sa_std/ip.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/option.sa"
+
+// reg-shard1 coverage: SAB registry declared entries from
+// sa_std/ip.sla (32): ip_hex_val / ip_hex_char / ip_dec_digits /
+// ip_dec_len / ip_mask128 / ip_family_bits / ip_addr_from_ipv4 /
+// ip_addr_from_ipv6 / ip_addr_from_octets / ip_addr_is_ipv4 /
+// ip_addr_is_ipv6 / ip_addr_to_ipv4 / ip_addr_to_ipv6 /
+// ip_addr_to_ipv4_mapped / ip_addr_unmap / ip_addr_parse /
+// ip_addr_to_string / ip_addr_eq / ip_addr_compare /
+// ip_addr_next / ip_addr_prev / ip_addr_is_unspecified /
+// ip_addr_is_loopback / ip_addr_is_multicast / ip_addr_is_private /
+// ip_addr_is_link_local / ip_addr_is_global /
+// ip_addr_is_documentation / ip_addr_is_ipv4_mapped /
+// ip_addr_is_unique_local / ip_addr_to_octets /
+// ip_addr_masked_with.
+// Predicate cases pin the IANA special-purpose ranges the file
+// header documents (Rust std rule set for is_global).
+
+fn reg1_seq(s: String, lit: String) -> bool {
+    let ns: u64 = len(s) as u64;
+    let nl: u64 = len(lit) as u64;
+    if ns != nl { return false; };
+    let ps: ptr = STR_PTR(s);
+    let pl: ptr = STR_PTR(lit);
+    let i: u64 = 0;
+    while i < ns {
+        if PTR_BYTE_AT(ps, i) != PTR_BYTE_AT(pl, i) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn reg1_v4(a: u32, b: u32, c: u32, d: u32) -> IpAddr {
+    return ip_addr_from_ipv4(ipv4_from_octets(a, b, c, d));
+}
+
+@test "reg1 ip hex and dec helpers"() {
+    if ip_hex_val(48) != 0 { panic(61601); };
+    if ip_hex_val(57) != 9 { panic(61602); };
+    if ip_hex_val(97) != 10 { panic(61603); };
+    if ip_hex_val(102) != 15 { panic(61604); };
+    if ip_hex_val(65) != 10 { panic(61605); };
+    if ip_hex_val(70) != 15 { panic(61606); };
+    if ip_hex_val(103) != -1 { panic(61607); };
+    if ip_hex_val(58) != -1 { panic(61608); };
+    if ip_hex_char(0) != 48 { panic(61609); };
+    if ip_hex_char(9) != 57 { panic(61610); };
+    if ip_hex_char(10) != 97 { panic(61611); };
+    if ip_hex_char(15) != 102 { panic(61612); };
+    if ip_dec_len(0) != 1 { panic(61613); };
+    if ip_dec_len(9) != 1 { panic(61614); };
+    if ip_dec_len(10) != 2 { panic(61615); };
+    if ip_dec_len(100) != 3 { panic(61616); };
+    if ip_dec_len(12345) != 5 { panic(61617); };
+    if ip_dec_len(1000000) != 7 { panic(61618); };
+    if ip_dec_len(4294967295) != 10 { panic(61619); };
+    let d0 = ip_dec_digits(0);
+    if d0[0] != 48 { panic(61620); };
+    if d0[1] != 0 { panic(61621); };
+    let d1 = ip_dec_digits(123);
+    if d1[0] != 49 { panic(61622); };
+    if d1[1] != 50 { panic(61623); };
+    if d1[2] != 51 { panic(61624); };
+    if d1[3] != 0 { panic(61625); };
+    let d2 = ip_dec_digits(4294967295);
+    if d2[0] != 52 { panic(61626); };
+    if d2[2] != 57 { panic(61627); };
+    if d2[5] != 54 { panic(61628); };
+    if d2[9] != 53 { panic(61629); };
+}
+
+@test "reg1 ip mask128 and family bits"() {
+    let m0 = ip_mask128(0);
+    if m0.hi != 0 { panic(61631); };
+    if m0.lo != 0 { panic(61632); };
+    let m1 = ip_mask128(1);
+    if m1.hi != ((1 as u64) << 63) { panic(61633); };
+    if m1.lo != 0 { panic(61634); };
+    let m32 = ip_mask128(32);
+    if m32.hi != ((4294967295 as u64) << 32) { panic(61635); };
+    if m32.lo != 0 { panic(61636); };
+    let m64 = ip_mask128(64);
+    if m64.hi != ip_u64_max() { panic(61637); };
+    if m64.lo != 0 { panic(61638); };
+    let m65 = ip_mask128(65);
+    if m65.hi != ip_u64_max() { panic(61639); };
+    if m65.lo != ((1 as u64) << 63) { panic(61640); };
+    let m127 = ip_mask128(127);
+    if m127.hi != ip_u64_max() { panic(61641); };
+    if m127.lo != (ip_u64_max() - 1) { panic(61642); };
+    let m128 = ip_mask128(128);
+    if m128.hi != ip_u64_max() { panic(61643); };
+    if m128.lo != ip_u64_max() { panic(61644); };
+    if ip_family_bits(4) != 32 { panic(61645); };
+    if ip_family_bits(6) != 128 { panic(61646); };
+}
+
+@test "reg1 ip construction and conversion"() {
+    let a = ip_addr_from_ipv4(16909060);
+    if a.tag != 4 { panic(61651); };
+    if a.hi != 0 { panic(61652); };
+    if a.lo != 16909060 { panic(61653); };
+    if !ip_addr_is_ipv4(a) { panic(61654); };
+    if ip_addr_is_ipv6(a) { panic(61655); };
+    let t4 = ip_addr_to_ipv4(a);
+    match t4 {
+        Some(bits) => { if bits != 16909060 { panic(61656); }; },
+        None => { panic(61657); },
+    };
+    let t6 = ip_addr_to_ipv6(a);
+    if t6.hi != 0 { panic(61658); };
+    if t6.lo != 16909060 { panic(61659); };
+    let b = ip_addr_from_ipv6(ipv6_from_segments(8193, 3512, 0, 0, 0, 0, 0, 1));
+    if b.tag != 6 { panic(61660); };
+    if b.hi != 2306139568115548160 { panic(61661); };
+    if b.lo != 1 { panic(61662); };
+    if !ip_addr_is_ipv6(b) { panic(61663); };
+    if ip_addr_is_ipv4(b) { panic(61664); };
+    let bt4 = ip_addr_to_ipv4(b);
+    match bt4 {
+        Some(bits) => { panic(61665); },
+        None => {},
+    };
+    let bt6 = ip_addr_to_ipv6(b);
+    if bt6.hi != 2306139568115548160 { panic(61666); };
+    if bt6.lo != 1 { panic(61667); };
+    let mm = ip_addr_to_ipv4_mapped(a);
+    if mm.tag != 6 { panic(61668); };
+    if mm.hi != 0 { panic(61669); };
+    if mm.lo != 281470698652420 { panic(61670); };
+    if !ip_addr_is_ipv4_mapped(mm) { panic(61671); };
+    let mmt4 = ip_addr_to_ipv4(mm);
+    match mmt4 {
+        Some(bits) => { if bits != 16909060 { panic(61672); }; },
+        None => { panic(61673); },
+    };
+    let un = ip_addr_unmap(mm);
+    if un.tag != 4 { panic(61674); };
+    if un.lo != 16909060 { panic(61675); };
+    let un2 = ip_addr_unmap(b);
+    if un2.tag != 6 { panic(61676); };
+    if un2.lo != 1 { panic(61677); };
+    let un3 = ip_addr_unmap(a);
+    if un3.tag != 4 { panic(61678); };
+    let mm2 = ip_addr_to_ipv4_mapped(b);
+    if mm2.hi != 2306139568115548160 { panic(61679); };
+    if mm2.lo != 1 { panic(61680); };
+}
+
+@test "reg1 ip parse and to_string"() {
+    let p1 = ip_addr_parse("1.2.3.4");
+    match p1 {
+        Some(a) => {
+            if a.tag != 4 { panic(61681); };
+            if a.lo != 16909060 { panic(61682); };
+            if !reg1_seq(ip_addr_to_string(a), "1.2.3.4") { panic(61683); };
+        },
+        None => { panic(61684); },
+    };
+    let p2 = ip_addr_parse("::1");
+    match p2 {
+        Some(a) => {
+            if a.tag != 6 { panic(61685); };
+            if a.hi != 0 { panic(61686); };
+            if a.lo != 1 { panic(61687); };
+            if !reg1_seq(ip_addr_to_string(a), "::1") { panic(61688); };
+        },
+        None => { panic(61689); },
+    };
+    let p3 = ip_addr_parse("2001:db8::1");
+    match p3 {
+        Some(a) => {
+            if a.hi != 2306139568115548160 { panic(61690); };
+            if a.lo != 1 { panic(61691); };
+            if !reg1_seq(ip_addr_to_string(a), "2001:db8::1") { panic(61692); };
+        },
+        None => { panic(61693); },
+    };
+    let p4 = ip_addr_parse("::ffff:1.2.3.4");
+    match p4 {
+        Some(a) => {
+            if !ip_addr_is_ipv4_mapped(a) { panic(61694); };
+            if !reg1_seq(ip_addr_to_string(a), "::ffff:1.2.3.4") { panic(61695); };
+        },
+        None => { panic(61696); },
+    };
+    let n1 = ip_addr_parse("256.1.1.1");
+    match n1 {
+        Some(a) => { panic(61697); },
+        None => {},
+    };
+    let n2 = ip_addr_parse("01.2.3.4");
+    match n2 {
+        Some(a) => { panic(61698); },
+        None => {},
+    };
+    let n3 = ip_addr_parse("hello");
+    match n3 {
+        Some(a) => { panic(61699); },
+        None => {},
+    };
+    let n4 = ip_addr_parse("1::2::3");
+    match n4 {
+        Some(a) => { panic(61700); },
+        None => {},
+    };
+    if !reg1_seq(ip_addr_to_string(ip_addr_from_ipv4(167772161)), "10.0.0.1") { panic(61701); };
+    if !reg1_seq(ip_addr_to_string(ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 0))), "::") { panic(61702); };
+    if !reg1_seq(ip_addr_to_string(ip_addr_from_ipv6(ipv6_from_segments(65152, 0, 0, 0, 0, 0, 0, 1))), "fe80::1") { panic(61703); };
+}
+
+@test "reg1 ip v4 predicates"() {
+    if !ip_addr_is_loopback(reg1_v4(127, 0, 0, 1)) { panic(61711); };
+    if !ip_addr_is_loopback(reg1_v4(127, 255, 0, 1)) { panic(61712); };
+    if ip_addr_is_loopback(reg1_v4(128, 0, 0, 1)) { panic(61713); };
+    if !ip_addr_is_private(reg1_v4(10, 1, 2, 3)) { panic(61714); };
+    if !ip_addr_is_private(reg1_v4(172, 16, 0, 1)) { panic(61715); };
+    if !ip_addr_is_private(reg1_v4(172, 31, 255, 255)) { panic(61716); };
+    if ip_addr_is_private(reg1_v4(172, 32, 0, 1)) { panic(61717); };
+    if !ip_addr_is_private(reg1_v4(192, 168, 0, 1)) { panic(61718); };
+    if ip_addr_is_private(reg1_v4(192, 169, 0, 1)) { panic(61719); };
+    if ip_addr_is_private(reg1_v4(11, 0, 0, 1)) { panic(61720); };
+    if !ip_addr_is_link_local(reg1_v4(169, 254, 1, 1)) { panic(61721); };
+    if ip_addr_is_link_local(reg1_v4(169, 253, 1, 1)) { panic(61722); };
+    if !ip_addr_is_multicast(reg1_v4(224, 0, 0, 1)) { panic(61723); };
+    if !ip_addr_is_multicast(reg1_v4(239, 255, 255, 255)) { panic(61724); };
+    if ip_addr_is_multicast(reg1_v4(240, 0, 0, 1)) { panic(61725); };
+    if ip_addr_is_multicast(reg1_v4(223, 255, 255, 255)) { panic(61726); };
+    if !ip_addr_is_documentation(reg1_v4(192, 0, 2, 1)) { panic(61727); };
+    if !ip_addr_is_documentation(reg1_v4(198, 51, 100, 7)) { panic(61728); };
+    if !ip_addr_is_documentation(reg1_v4(203, 0, 113, 9)) { panic(61729); };
+    if ip_addr_is_documentation(reg1_v4(192, 0, 3, 1)) { panic(61730); };
+    if !ip_addr_is_unspecified(reg1_v4(0, 0, 0, 0)) { panic(61731); };
+    if ip_addr_is_unspecified(reg1_v4(0, 0, 0, 1)) { panic(61732); };
+    if !ip_addr_is_global(reg1_v4(8, 8, 8, 8)) { panic(61733); };
+    if !ip_addr_is_global(reg1_v4(1, 1, 1, 1)) { panic(61734); };
+    if ip_addr_is_global(reg1_v4(10, 0, 0, 1)) { panic(61735); };
+    if ip_addr_is_global(reg1_v4(127, 0, 0, 1)) { panic(61736); };
+    if ip_addr_is_global(reg1_v4(169, 254, 1, 1)) { panic(61737); };
+    if ip_addr_is_global(reg1_v4(192, 0, 2, 1)) { panic(61738); };
+    if ip_addr_is_global(reg1_v4(224, 0, 0, 1)) { panic(61739); };
+    if ip_addr_is_global(reg1_v4(100, 64, 0, 1)) { panic(61740); };
+    if ip_addr_is_global(reg1_v4(0, 0, 0, 0)) { panic(61741); };
+    if ip_addr_is_global(reg1_v4(255, 255, 255, 255)) { panic(61742); };
+    if ip_addr_is_global(reg1_v4(240, 0, 0, 1)) { panic(61743); };
+    if ip_addr_is_unique_local(reg1_v4(10, 0, 0, 1)) { panic(61744); };
+    if ip_addr_is_ipv4_mapped(reg1_v4(1, 2, 3, 4)) { panic(61745); };
+}
+
+@test "reg1 ip v6 predicates"() {
+    if !ip_addr_is_loopback(ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 1))) { panic(61751); };
+    if ip_addr_is_loopback(ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 2))) { panic(61752); };
+    if !ip_addr_is_unspecified(ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 0))) { panic(61753); };
+    if !ip_addr_is_link_local(ip_addr_from_ipv6(ipv6_from_segments(65152, 0, 0, 0, 0, 0, 0, 1))) { panic(61754); };
+    if !ip_addr_is_link_local(ip_addr_from_ipv6(ipv6_from_segments(65215, 0, 0, 0, 0, 0, 0, 1))) { panic(61755); };
+    if ip_addr_is_link_local(ip_addr_from_ipv6(ipv6_from_segments(65216, 0, 0, 0, 0, 0, 0, 1))) { panic(61756); };
+    if !ip_addr_is_unique_local(ip_addr_from_ipv6(ipv6_from_segments(64768, 0, 0, 0, 0, 0, 0, 1))) { panic(61757); };
+    if !ip_addr_is_unique_local(ip_addr_from_ipv6(ipv6_from_segments(64512, 0, 0, 0, 0, 0, 0, 1))) { panic(61758); };
+    if ip_addr_is_unique_local(ip_addr_from_ipv6(ipv6_from_segments(65024, 0, 0, 0, 0, 0, 0, 1))) { panic(61759); };
+    if !ip_addr_is_private(ip_addr_from_ipv6(ipv6_from_segments(64768, 0, 0, 0, 0, 0, 0, 1))) { panic(61760); };
+    if !ip_addr_is_multicast(ip_addr_from_ipv6(ipv6_from_segments(65282, 0, 0, 0, 0, 0, 0, 1))) { panic(61761); };
+    if ip_addr_is_multicast(ip_addr_from_ipv6(ipv6_from_segments(8193, 3512, 0, 0, 0, 0, 0, 1))) { panic(61762); };
+    if !ip_addr_is_documentation(ip_addr_from_ipv6(ipv6_from_segments(8193, 3512, 0, 0, 0, 0, 0, 1))) { panic(61763); };
+    if !ip_addr_is_global(ip_addr_from_ipv6(ipv6_from_segments(8193, 18528, 18528, 0, 0, 0, 0, 34952))) { panic(61764); };
+    if ip_addr_is_global(ip_addr_from_ipv6(ipv6_from_segments(64768, 0, 0, 0, 0, 0, 0, 1))) { panic(61765); };
+    if ip_addr_is_global(ip_addr_from_ipv6(ipv6_from_segments(65152, 0, 0, 0, 0, 0, 0, 1))) { panic(61766); };
+    if ip_addr_is_global(ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 1))) { panic(61767); };
+    if ip_addr_is_global(ip_addr_from_ipv6(ipv6_from_segments(65282, 0, 0, 0, 0, 0, 0, 1))) { panic(61768); };
+    if ip_addr_is_global(ip_addr_from_ipv6(ipv6_from_segments(256, 0, 0, 0, 0, 0, 0, 1))) { panic(61769); };
+    if ip_addr_is_global(ip_addr_from_ipv6(ipv6_from_segments(8193, 3512, 0, 0, 0, 0, 0, 1))) { panic(61770); };
+}
+
+@test "reg1 ip eq compare next prev"() {
+    let a = reg1_v4(1, 2, 3, 4);
+    if !ip_addr_eq(a, reg1_v4(1, 2, 3, 4)) { panic(61771); };
+    if ip_addr_eq(a, reg1_v4(1, 2, 3, 5)) { panic(61772); };
+    if ip_addr_eq(a, ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 0, 0, 258, 772))) { panic(61773); };
+    if ip_addr_compare(a, reg1_v4(1, 2, 3, 5)) != -1 { panic(61774); };
+    if ip_addr_compare(reg1_v4(1, 2, 3, 5), a) != 1 { panic(61775); };
+    if ip_addr_compare(a, reg1_v4(1, 2, 3, 4)) != 0 { panic(61776); };
+    if ip_addr_compare(a, ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 1))) != -1 { panic(61777); };
+    if ip_addr_compare(ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 1)), a) != 1 { panic(61778); };
+    if ip_addr_compare(ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 2)), ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 1))) != 1 { panic(61779); };
+    if ip_addr_compare(ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 1, 0, 0, 0, 0)), ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 65535, 65535, 65535, 65535))) != 1 { panic(61780); };
+    let nx = ip_addr_next(a);
+    match nx {
+        Some(n) => { if !ip_addr_eq(n, reg1_v4(1, 2, 3, 5)) { panic(61781); }; },
+        None => { panic(61782); },
+    };
+    let pv = ip_addr_prev(a);
+    match pv {
+        Some(p) => { if !ip_addr_eq(p, reg1_v4(1, 2, 3, 3)) { panic(61783); }; },
+        None => { panic(61784); },
+    };
+    let nxmax = ip_addr_next(reg1_v4(255, 255, 255, 255));
+    match nxmax {
+        Some(n) => { panic(61785); },
+        None => {},
+    };
+    let pvmin = ip_addr_prev(reg1_v4(0, 0, 0, 0));
+    match pvmin {
+        Some(p) => { panic(61786); },
+        None => {},
+    };
+    let nx6 = ip_addr_next(ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 65535, 65535, 65535, 65535)));
+    match nx6 {
+        Some(n) => {
+            if n.hi != 1 { panic(61787); };
+            if n.lo != 0 { panic(61788); };
+        },
+        None => { panic(61789); },
+    };
+    let pv6 = ip_addr_prev(ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 1, 0, 0, 0, 0)));
+    match pv6 {
+        Some(p) => {
+            if p.hi != 0 { panic(61790); };
+            if p.lo != ip_u64_max() { panic(61791); };
+        },
+        None => { panic(61792); },
+    };
+    let nx6max = ip_addr_next(ip_addr_from_ipv6(ipv6_from_segments(65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535)));
+    match nx6max {
+        Some(n) => { panic(61793); },
+        None => {},
+    };
+}
+
+@test "reg1 ip octets roundtrip"() {
+    let a = reg1_v4(1, 2, 3, 4);
+    let o = ip_addr_to_octets(a);
+    if o[0] != 1 { panic(61795); };
+    if o[1] != 2 { panic(61796); };
+    if o[2] != 3 { panic(61797); };
+    if o[3] != 4 { panic(61798); };
+    if o[4] != 0 { panic(61799); };
+    if o[15] != 0 { panic(61800); };
+    let o6 = ip_addr_to_octets(ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 0, 0, 0, 1)));
+    if o6[15] != 1 { panic(61801); };
+    if o6[0] != 0 { panic(61802); };
+    if o6[14] != 0 { panic(61803); };
+    let om = ip_addr_to_octets(ip_addr_from_ipv6(ipv6_from_segments(0, 0, 0, 0, 0, 65535, 258, 772)));
+    if om[10] != 255 { panic(61804); };
+    if om[11] != 255 { panic(61805); };
+    if om[12] != 1 { panic(61806); };
+    if om[15] != 4 { panic(61807); };
+    let buf: [u8; 16] = [0u8; 16];
+    buf[0] = 5;
+    buf[1] = 6;
+    buf[2] = 7;
+    buf[3] = 8;
+    let f4 = ip_addr_from_octets(&buf, 4);
+    match f4 {
+        Some(x) => { if !ip_addr_eq(x, reg1_v4(5, 6, 7, 8)) { panic(61808); }; },
+        None => { panic(61809); },
+    };
+    let buf6: [u8; 16] = [0u8; 16];
+    buf6[15] = 1;
+    let f6 = ip_addr_from_octets(&buf6, 16);
+    match f6 {
+        Some(x) => {
+            if x.tag != 6 { panic(61810); };
+            if x.lo != 1 { panic(61811); };
+        },
+        None => { panic(61812); },
+    };
+    let fbad = ip_addr_from_octets(&buf, 5);
+    match fbad {
+        Some(x) => { panic(61813); },
+        None => {},
+    };
+}
+
+@test "reg1 ip masked_with"() {
+    let a = reg1_v4(192, 168, 1, 130);
+    let mask = reg1_v4(255, 255, 255, 0);
+    let m = ip_addr_masked_with(a, mask);
+    if !ip_addr_eq(m, reg1_v4(192, 168, 1, 0)) { panic(61815); };
+    let a6 = ip_addr_from_ipv6(ipv6_from_segments(8193, 3512, 0, 0, 0, 0, 4660, 22136));
+    let mask6 = ip_addr_from_ipv6(ipv6_from_segments(65535, 65535, 65535, 65535, 0, 0, 0, 0));
+    let m6 = ip_addr_masked_with(a6, mask6);
+    if m6.hi != 2306139568115548160 { panic(61816); };
+    if m6.lo != 0 { panic(61817); };
+    if m6.tag != 6 { panic(61818); };
+}

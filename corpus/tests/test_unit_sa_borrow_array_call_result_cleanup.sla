@@ -1,0 +1,11 @@
+fn borrow_array_sum(bytes: &[int; 4], len: int) -> int {
+    if len <= 0 { return 0; };
+    return bytes[0] + len;
+}
+
+@test "sa text borrowed array call result cleanup"() {
+    let buf: [int; 4] = [0; 4];
+    buf[0] = 120;
+    let sid = borrow_array_sum(&buf, 1);
+    if sid != 121 { panic(44401); };
+}

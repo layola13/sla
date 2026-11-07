@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn eco_kernel_module_hooks() -> i32 { let init = 1; let exit = 1; return init + exit; }
+fn main() -> i32 { let init = 1; let exit = 1; let result = init + exit; println("{}", result); return result; }
+@test "rosetta 294 eco os kernel module"() { let got = eco_kernel_module_hooks(); if got != 2 { panic(294); }; }

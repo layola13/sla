@@ -1,0 +1,6 @@
+@import "bin/beta/helpers/index.sa"
+
+@beta_bin_value() -> i32:
+L_ENTRY:
+    value = call @beta_helper_value()
+    return value

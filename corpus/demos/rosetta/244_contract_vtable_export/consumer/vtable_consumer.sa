@@ -1,0 +1,35 @@
+@import "consumer/../bridge/button_vtable.sa"
+
+@render(&item: ptr) -> i32:
+L_ENTRY:
+    data_ptr = load item+DynDraw_DATA as ptr
+    vtable_ptr = load item+DynDraw_VTABLE as ptr
+    draw_fn = load vtable_ptr+VTable_draw as ptr
+    result = call_indirect draw_fn(&data_ptr)
+    !draw_fn
+    !vtable_ptr
+    !data_ptr
+    !item
+    return result
+
+@vtable_consumer_value() -> i32:
+L_ENTRY:
+    button = alloc Button_SIZE
+    store button+Button_id, 244 as i32
+
+    fat = alloc DynDraw_SIZE
+    store fat+DynDraw_DATA, button as ptr
+    store fat+DynDraw_VTABLE, &BUTTON_VT as ptr
+
+    value = call @render(&fat)
+    ok = eq value, 244
+    !value
+    !button
+    !fat
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 244
+
+L_ERR:
+    return 0

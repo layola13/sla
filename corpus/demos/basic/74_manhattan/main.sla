@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 151_obj_param：对象参数解包求值（3+4=7）。
+// 与 73（结构体传参求积）互补，此处为坐标求和语义。
+
+struct Pt {
+    x: i32,
+    y: i32,
+}
+
+fn manhattan(p: Pt) -> i32 {
+    return p.x + p.y;
+}
+
+fn main() -> i32 {
+    let q = Pt { x: 3, y: 4 };
+    println("{}", manhattan(q));
+    return 0;
+}
+
+@test "basic 74 manhattan"() {
+    let q = Pt { x: 3, y: 4 };
+    if manhattan(q) != 7 { panic(7401); };
+}

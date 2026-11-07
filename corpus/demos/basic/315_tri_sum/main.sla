@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 下行×上行×公式三向求和对峙（61×305×245：10→55=55=55）。
+// 双向已见 305，此处加下行版收束三向（61 的下行口径）。
+
+fn sum_down(n: int) -> int {
+    let t = 0;
+    let i = n;
+    while i >= 1 {
+        t = t + i;
+        i = i - 1;
+    }
+    return t;
+}
+
+fn sum_up(n: int) -> int {
+    let t = 0;
+    for i in 1..(n + 1) {
+        t = t + i;
+    }
+    return t;
+}
+
+fn sum_form(n: int) -> int {
+    return n * (n + 1) / 2;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", sum_down(10), sum_up(10), sum_form(10));
+    return 0;
+}
+
+@test "basic 315 tri sum"() {
+    if sum_down(10) != sum_up(10) { panic(31501); };
+    if sum_up(10) != sum_form(10) { panic(31502); };
+    if sum_form(10) != 55 { panic(31503); };
+}

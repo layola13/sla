@@ -1,0 +1,72 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 光滑数三向对峙（试除判界 vs 最大素因子 vs 除尽循环：36 皆判 5-光滑）。
+// 意对标 404 phi 三向的形态版（417 互补）。
+
+fn sm_loop(n: int, y: int) -> int {
+    if n < 1 { return 0; };
+    if n == 1 { return 1; };
+    let m = n;
+    let d = 2;
+    while d * d <= m {
+        if m % d == 0 {
+            if d > y { return 0; };
+            while m % d == 0 { m = m / d; }
+        };
+        d = d + 1;
+    }
+    if m > 1 {
+        if m > y { return 0; };
+    };
+    return 1;
+}
+
+fn lpf(n: int) -> int {
+    let r = 1;
+    let m = n;
+    let d = 2;
+    while d * d <= m {
+        if m % d == 0 {
+            r = d;
+            while m % d == 0 { m = m / d; }
+        };
+        d = d + 1;
+    }
+    if m > 1 { r = m; };
+    return r;
+}
+
+fn sm_lpf(n: int, y: int) -> int {
+    if n < 1 { return 0; };
+    if n == 1 { return 1; };
+    if lpf(n) <= y { return 1; };
+    return 0;
+}
+
+fn sm_div(n: int, y: int) -> int {
+    if n < 1 { return 0; };
+    if n == 1 { return 1; };
+    let m = n;
+    let d = 2;
+    while d <= y {
+        while m % d == 0 { m = m / d; }
+        d = d + 1;
+    }
+    if m == 1 { return 1; };
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", sm_loop(36, 5), sm_lpf(36, 5), sm_div(36, 5), sm_loop(42, 5));
+    return 0;
+}
+
+@test "basic 425 tri smooth"() {
+    if sm_loop(36, 5) != 1 { panic(42501); };
+    if sm_lpf(36, 5) != 1 { panic(42502); };
+    if sm_div(36, 5) != 1 { panic(42503); };
+    if sm_loop(42, 5) != 0 { panic(42504); };
+    if sm_lpf(42, 5) != 0 { panic(42505); };
+    if sm_div(49, 7) != 1 { panic(42506); };
+}

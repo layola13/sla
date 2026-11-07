@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// gcd/lcm 吸收律（gcd(a,lcm)=a，lcm(a,gcd)=a）。
+// 意对标 401 恒等式的格版（401 互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn lcm(a: int, b: int) -> int {
+    return a / gcd(a, b) * b;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", gcd(4, lcm(4, 6)), lcm(4, gcd(4, 6)), gcd(12, lcm(12, 18)));
+    return 0;
+}
+
+@test "basic 438 absorb"() {
+    if gcd(4, lcm(4, 6)) != 4 { panic(43801); };
+    if lcm(4, gcd(4, 6)) != 4 { panic(43802); };
+    if gcd(12, lcm(12, 18)) != 12 { panic(43803); };
+    if lcm(12, gcd(12, 18)) != 12 { panic(43804); };
+}

@@ -1,0 +1,13 @@
+// expect: UseBeforeInit
+fn bad_var_while_init_only(cond: bool) -> i32 {
+    var x: i32;
+    while cond {
+        x = 1;
+        return x;
+    }
+    return x;
+}
+
+fn main() -> i32 {
+    return bad_var_while_init_only(false);
+}

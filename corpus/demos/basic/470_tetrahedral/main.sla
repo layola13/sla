@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 四面体数（T(n)=n(n+1)(n+2)/6：T(5)=35）。
+// 意对标 137 三角数的堆叠版（137 互补）。
+
+fn tetra(n: int) -> int {
+    return n * (n + 1) * (n + 2) / 6;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", tetra(5), tetra(4), tetra(1));
+    return 0;
+}
+
+@test "basic 470 tetrahedral"() {
+    if tetra(5) != 35 { panic(47001); };
+    if tetra(4) != 20 { panic(47002); };
+    if tetra(1) != 1 { panic(47003); };
+}

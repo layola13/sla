@@ -1,0 +1,6 @@
+fn go_diag_closure_main() -> i32 {
+    let base = 40;
+    let f = |x: u64| x + base;
+    let h = go f(2);
+    return 0;
+}

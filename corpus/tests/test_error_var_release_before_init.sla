@@ -1,0 +1,10 @@
+// expect: UseBeforeInit
+fn bad_var_release_before_init() -> i32 {
+    var x: i32;
+    !x;
+    return 0;
+}
+
+fn main() -> i32 {
+    return bad_var_release_before_init();
+}

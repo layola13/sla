@@ -1,0 +1,14 @@
+// Generated from build/docgen.toml and docs/api/index.md.
+#def DOC_PAGE_COUNT = 2
+
+@doc_index_value() -> i32:
+L_ENTRY:
+    value = add 274, 1
+    !value
+    return 275
+
+@doc_index_count() -> i32:
+L_ENTRY:
+    count = add 1, 1
+    !count
+    return DOC_PAGE_COUNT

@@ -1,0 +1,66 @@
+fn var_scalar_value() -> i32 {
+    var x: i32;
+    x = 41;
+    x = x + 1;
+    return x;
+}
+
+fn var_scalar_branch(cond: bool) -> i32 {
+    var x: i32;
+    if cond {
+        x = 10;
+    } else {
+        x = 20;
+    };
+    return x;
+}
+
+fn var_scalar_copy() -> i32 {
+    var a: i32;
+    var b: i32;
+    a = 5;
+    b = a;
+    return a + b;
+}
+
+fn var_bool_slot(flag: bool) -> i32 {
+    var ok: bool;
+    ok = flag;
+    if ok {
+        return 1;
+    };
+    return 2;
+}
+
+fn var_initialized_before_loop() -> i32 {
+    var x: i32;
+    x = 1;
+    let i: i32 = 0;
+    while i < 3 {
+        x = x + 2;
+        i = i + 1;
+    }
+    return x;
+}
+
+@test "var scalar slot initializes before read"() {
+    if var_scalar_value() != 42 { panic(17400); };
+}
+
+@test "var scalar slot merges initialized branches"() {
+    if var_scalar_branch(true) != 10 { panic(17401); };
+    if var_scalar_branch(false) != 20 { panic(17402); };
+}
+
+@test "var scalar slot copies after initialization"() {
+    if var_scalar_copy() != 10 { panic(17403); };
+}
+
+@test "var bool slot can drive control flow after assignment"() {
+    if var_bool_slot(true) != 1 { panic(17404); };
+    if var_bool_slot(false) != 2 { panic(17405); };
+}
+
+@test "var initialized before loop remains readable"() {
+    if var_initialized_before_loop() != 7 { panic(17406); };
+}

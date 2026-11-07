@@ -1,0 +1,9 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: Box is an independent heap allocation; an
+// arena root may not own one (design 2.2, independent heap class).
+fn neg_box() -> i32 {
+    arena {
+        let b = Box::new(5);
+    }
+    return 0;
+}

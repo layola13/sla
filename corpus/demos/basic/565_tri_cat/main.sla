@@ -1,0 +1,86 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// C(6)=132 三向收束：卷积递推 == 商式 B(6)/7 == Dyck 网格 DP
+//（132 对 132 对 132；三算法互锁，316 系三向体例）。
+// 意对标 556 cat_conv × 351 catalan × 559 dyck（三源单实现见各源）。
+
+fn cat_conv(n: int) -> int {
+    let c: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        c.push(0);
+        i = i + 1;
+    }
+    c[0] = 1;
+    let m = 1;
+    while m <= n {
+        let acc = 0;
+        let j = 0;
+        while j < m {
+            acc = acc + c[j] * c[m - 1 - j];
+            j = j + 1;
+        }
+        c[m] = acc;
+        m = m + 1;
+    }
+    return c[n];
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn cat_div(n: int) -> int {
+    return binom_mul(2 * n, n) / (n + 1);
+}
+
+fn dyck(n: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let a = 0;
+    while a <= n {
+        let b = 0;
+        while b <= n {
+            if a + b > 0 {
+                if b <= a {
+                    let up = 0;
+                    if a > 0 { up = t[(a - 1) * w + b]; };
+                    let lf = 0;
+                    if b > 0 { lf = t[a * w + b - 1]; };
+                    t[a * w + b] = up + lf;
+                };
+            };
+            b = b + 1;
+        }
+        a = a + 1;
+    }
+    return t[n * w + n];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", cat_conv(6), cat_div(6), dyck(6));
+    return 0;
+}
+
+@test "basic 565 tri cat"() {
+    if cat_conv(6) != 132 { panic(56501); };
+    if cat_div(6) != 132 { panic(56502); };
+    if dyck(6) != 132 { panic(56503); };
+    if dyck(5) != 42 { panic(56504); };
+}

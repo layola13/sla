@@ -1,0 +1,8 @@
+@import "paths/second/deep/seed.sa"
+
+@export second_path_value() -> i32:
+L_ENTRY:
+    seed = call @second_seed()
+    value = add seed, 100
+    !seed
+    return value

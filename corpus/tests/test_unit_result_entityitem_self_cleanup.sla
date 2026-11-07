@@ -1,0 +1,52 @@
+@import "sa_std/core/result.sa"
+
+struct Entity {
+    id: i32,
+}
+
+struct EntityItem<T> {
+    entity: Entity,
+    value: T,
+}
+
+struct CleanupPos {
+    x: i32,
+}
+
+struct CleanupQuery<T> {
+    items: Vec<T>,
+}
+
+impl CleanupQuery<T> {
+    fn iter_len(&self) -> i64 {
+        return len(self.items) as i64;
+    }
+
+    fn iter_at(&self, index: i64) -> T {
+        return self.items[index];
+    }
+
+    fn try_single(&self) -> Result<T, i32> {
+        if self.iter_len() != 1 {
+            return Err(77);
+        };
+        return Ok(self.iter_at(0));
+    }
+}
+
+fn cleanup_query_new<T>() -> CleanupQuery<T> {
+    let items: Vec<T> = Vec::new();
+    return CleanupQuery<T> { items: items };
+}
+
+@test "result entity item self cleanup"() {
+    let query = cleanup_query_new<EntityItem<CleanupPos>>();
+    query.items.push(EntityItem<CleanupPos> { entity: Entity { id: 9 }, value: CleanupPos { x: 33 } });
+
+    let got = query.try_single();
+    if !got.is_ok() { panic(50901); };
+
+    let item = got.unwrap();
+    if item.entity.id != 9 { panic(50902); };
+    if item.value.x != 33 { panic(50903); };
+}

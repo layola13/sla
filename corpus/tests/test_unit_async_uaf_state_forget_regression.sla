@@ -1,0 +1,65 @@
+// Regression (async cluster 1, UAF-STATE): a future construction point
+// that stores a child future's state/object into a parent future state
+// or wrapper owns the value from that store on; the constructor must
+// forget (move-out) the source register, never release it. Releasing it
+// freed the inner state at construction time, the freed block was
+// reused by the next Future allocation, and the parent future then
+// polled garbage forever (probe B of the async typing census: the
+// second poll never observed Ready). Shapes below are the typing
+// probes B (discriminating) and G (control) verbatim.
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn live_across() -> i32 {
+    let x = 40;
+    let v = future::defer_ready(2).await;
+    return x + v;
+}
+
+fn drive_b() -> i32 {
+    let fut = live_across();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(201);
+    };
+    if task::is_ready(task) != false {
+        panic(202);
+    };
+    if task::poll(task) != true {
+        panic(203);
+    };
+    if task::is_ready(task) != true {
+        panic(204);
+    };
+    return task::result(task);
+}
+
+@test "uaf-state live-across-await survives suspension"() {
+    if drive_b() != 42 {
+        panic(205);
+    };
+}
+
+fn drive_g() -> i32 {
+    let fut = future::defer_ready(41);
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(501);
+    };
+    if task::is_ready(task) != false {
+        panic(502);
+    };
+    if task::poll(task) != true {
+        panic(503);
+    };
+    if task::is_ready(task) != true {
+        panic(504);
+    };
+    return task::result(task);
+}
+
+@test "uaf-state defer ready direct task drive control"() {
+    if drive_g() != 41 {
+        panic(505);
+    };
+}

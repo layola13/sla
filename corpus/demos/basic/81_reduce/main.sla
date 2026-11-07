@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 25_reduce：`reduce(+)` 求和（=10）+ `reduceRight(*)` 求积（=24）。
+// 高阶 `reduce` 用显式循环表达（迭代器协议见 Phase 6，写法见 39/67/78）。
+
+fn main() -> i32 {
+    let a = [1, 2, 3, 4];
+    let s = 0;
+    for i in 0..4 {
+        s = s + a[i];
+    }
+    println("{}", s);
+    let p = 1;
+    let j = 4;
+    while j > 0 {
+        j = j - 1;
+        p = p * a[j];
+    }
+    println("{}", p);
+    return 0;
+}
+
+@test "basic 81 reduce"() {
+    let a = [1, 2, 3, 4];
+    let s = 0;
+    for i in 0..4 {
+        s = s + a[i];
+    }
+    if s != 10 { panic(8101); };
+    let p = 1;
+    let j = 4;
+    while j > 0 {
+        j = j - 1;
+        p = p * a[j];
+    }
+    if p != 24 { panic(8102); };
+}

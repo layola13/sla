@@ -1,0 +1,68 @@
+@import "sa_std/vec.sa"
+
+struct NestedLenColumn {
+    entity_ids: Vec<i32>,
+}
+
+struct NestedLenLocation {
+    group_id: i32,
+    row: i64,
+}
+
+struct NestedLenWorld {
+    archetypes: Vec<NestedLenColumn>,
+    locations: Vec<NestedLenLocation>,
+}
+
+fn nested_len_column_new() -> NestedLenColumn {
+    let entity_ids: Vec<i32> = Vec::new();
+    return NestedLenColumn { entity_ids: entity_ids };
+}
+
+fn nested_len_world_new() -> NestedLenWorld {
+    let archetypes: Vec<NestedLenColumn> = Vec::new();
+    let locations: Vec<NestedLenLocation> = Vec::new();
+    return NestedLenWorld { archetypes: archetypes, locations: locations };
+}
+
+fn nested_len_field_compare(location: NestedLenLocation) -> bool {
+    if location.group_id < 0 { return true; };
+    return false;
+}
+
+fn nested_len_after_index(world: NestedLenWorld, archetype_slot: i64) -> i64 {
+    return len(world.archetypes[archetype_slot].entity_ids) as i64;
+}
+
+fn nested_len_move_last(world: NestedLenWorld, location: NestedLenLocation) -> NestedLenWorld {
+    if location.group_id < 0 { return world; };
+    let archetype_slot = location.group_id as i64;
+    let last = (len(world.archetypes[archetype_slot].entity_ids) as i64) - 1;
+    if location.row != last {
+        let moved_entity_id = world.archetypes[archetype_slot].entity_ids[last];
+        world.archetypes[archetype_slot].entity_ids[location.row] = moved_entity_id;
+        world.locations[moved_entity_id].row = location.row;
+    };
+    let removed = world.archetypes[archetype_slot].entity_ids.remove(last);
+    return world;
+}
+
+@test "field less-than comparison parses after dot access"() {
+    if nested_len_field_compare(NestedLenLocation { group_id: -1, row: 0 }) != true { panic(1); };
+    if nested_len_field_compare(NestedLenLocation { group_id: 0, row: 0 }) != false { panic(2); };
+}
+
+@test "nested len after indexed field access works"() {
+    let world0 = nested_len_world_new();
+    let column = nested_len_column_new();
+    world0.archetypes.push(column);
+    world0.archetypes[0].entity_ids.push(0);
+    world0.archetypes[0].entity_ids.push(1);
+    world0.locations.push(NestedLenLocation { group_id: 0, row: 0 });
+    world0.locations.push(NestedLenLocation { group_id: 0, row: 1 });
+    if nested_len_after_index(world0, 0) != 2 { panic(3); };
+    let world1 = nested_len_move_last(world0, NestedLenLocation { group_id: 0, row: 0 });
+    if nested_len_after_index(world1, 0) != 1 { panic(4); };
+    if world1.archetypes[0].entity_ids[0] != 1 { panic(5); };
+    if world1.locations[1].row != 0 { panic(6); };
+}

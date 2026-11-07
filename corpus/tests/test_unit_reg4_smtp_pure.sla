@@ -1,0 +1,125 @@
+@import "sa_std/smtp.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Registry shard 4 coverage: pure helpers from sa_std/smtp.sla
+// (SAB registry class=declared, never probed, zero corpus
+// references at census 2026-11-06).
+// Entries: smtp_base64_encode, smtp_base64_value, smtp_dot_stuff,
+// smtp_is_digit, smtp_text, smtp_push_lit, smtp_push_slice,
+// smtp_command_bytes, smtp_slice_byte, smtp_slice_len,
+// smtp_extensions_of, smtp_status_for_reply, smtp_status_reply_code.
+
+fn v4_of(s: String) -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    let p: ptr = STR_PTR(s);
+    let i: u64 = 0;
+    while i < len(s) {
+        out.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn v4_eq(a: Vec<u8>, b: Vec<u8>) -> bool {
+    if len(a) != len(b) { return false; };
+    let i: u64 = 0;
+    while i < len(a) {
+        if a[i] != b[i] { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+@test "reg4 smtp base64 value alphabet"() {
+    let v0 = smtp_base64_value(Vec::new(), 0);
+    if len(v0) != 1 { panic(42001); };
+    if v0[0] != 65 { panic(42002); };
+    let v1 = smtp_base64_value(Vec::new(), 25);
+    if v1[0] != 90 { panic(42003); };
+    let v2 = smtp_base64_value(Vec::new(), 26);
+    if v2[0] != 97 { panic(42004); };
+    let v3 = smtp_base64_value(Vec::new(), 51);
+    if v3[0] != 122 { panic(42005); };
+    let v4 = smtp_base64_value(Vec::new(), 52);
+    if v4[0] != 48 { panic(42006); };
+    let v5 = smtp_base64_value(Vec::new(), 61);
+    if v5[0] != 57 { panic(42007); };
+    let v6 = smtp_base64_value(Vec::new(), 62);
+    if v6[0] != 43 { panic(42008); };
+    let v7 = smtp_base64_value(Vec::new(), 63);
+    if v7[0] != 47 { panic(42009); };
+    // Appends to the given vector instead of replacing it.
+    let v8 = smtp_base64_value(v4_of(format("x")), 0);
+    if len(v8) != 2 { panic(42010); };
+    if v8[1] != 65 { panic(42011); };
+}
+
+@test "reg4 smtp base64 encode known vectors"() {
+    if len(smtp_base64_encode(Vec::new())) != 0 { panic(42012); };
+    if !v4_eq(smtp_base64_encode(v4_of(format("M"))), v4_of(format("TQ=="))) { panic(42013); };
+    if !v4_eq(smtp_base64_encode(v4_of(format("Ma"))), v4_of(format("TWE="))) { panic(42014); };
+    if !v4_eq(smtp_base64_encode(v4_of(format("Man"))), v4_of(format("TWFu"))) { panic(42015); };
+    if !v4_eq(smtp_base64_encode(v4_of(format("foobar"))), v4_of(format("Zm9vYmFy"))) { panic(42016); };
+    if !v4_eq(smtp_base64_encode(v4_of(format("hello world"))), v4_of(format("aGVsbG8gd29ybGQ="))) { panic(42017); };
+}
+
+@test "reg4 smtp is digit bounds"() {
+    if smtp_is_digit(48) != true { panic(42018); };
+    if smtp_is_digit(57) != true { panic(42019); };
+    if smtp_is_digit(47) != false { panic(42020); };
+    if smtp_is_digit(58) != false { panic(42021); };
+    if smtp_is_digit(0) != false { panic(42022); };
+    if smtp_is_digit(65) != false { panic(42023); };
+}
+
+@test "reg4 smtp text and push helpers"() {
+    if !v4_eq(smtp_text(STR_PTR("NOOP"), STR_LEN("NOOP")), v4_of(format("NOOP"))) { panic(42024); };
+    let dst = smtp_push_lit(v4_of(format("AB")), STR_PTR("CD"), 2);
+    if !v4_eq(dst, v4_of(format("ABCD"))) { panic(42025); };
+    let src = v4_of(format("hello"));
+    let ssl: Slice<u8> = VEC_AS_SLICE(src);
+    let part = smtp_push_slice(Vec::new(), &ssl, 1, 4);
+    if !v4_eq(part, v4_of(format("ell"))) { panic(42026); };
+    let cmd = smtp_command_bytes(STR_PTR("MAIL FROM:"), STR_LEN("MAIL FROM:"), v4_of(format("<a@b>")));
+    if !v4_eq(cmd, v4_of(format("MAIL FROM:<a@b>"))) { panic(42027); };
+}
+
+@test "reg4 smtp slice byte and len"() {
+    let v = v4_of(format("xyz"));
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    if smtp_slice_len(&sl) != 3 { panic(42028); };
+    if smtp_slice_byte(&sl, 0) != 120 { panic(42029); };
+    if smtp_slice_byte(&sl, 1) != 121 { panic(42030); };
+    if smtp_slice_byte(&sl, 2) != 122 { panic(42031); };
+}
+
+@test "reg4 smtp dot stuff"() {
+    if len(smtp_dot_stuff(Vec::new())) != 0 { panic(42032); };
+    if !v4_eq(smtp_dot_stuff(v4_of(format("a"))), v4_of(format("a\r\n"))) { panic(42033); };
+    if !v4_eq(smtp_dot_stuff(v4_of(format(".a"))), v4_of(format("..a\r\n"))) { panic(42034); };
+    if !v4_eq(smtp_dot_stuff(v4_of(format("a\nb"))), v4_of(format("a\r\nb\r\n"))) { panic(42035); };
+    if !v4_eq(smtp_dot_stuff(v4_of(format("a\r\nb\r\n"))), v4_of(format("a\r\nb\r\n"))) { panic(42036); };
+    if !v4_eq(smtp_dot_stuff(v4_of(format("a\n.b\n"))), v4_of(format("a\r\n..b\r\n"))) { panic(42037); };
+    if !v4_eq(smtp_dot_stuff(v4_of(format("a\rb"))), v4_of(format("a\r\nb\r\n"))) { panic(42038); };
+}
+
+@test "reg4 smtp extensions of takes lines after the first"() {
+    let ext = smtp_extensions_of(v4_of(format("hello\nSTARTTLS\nAUTH")));
+    if !v4_eq(ext, v4_of(format("STARTTLS\nAUTH"))) { panic(42039); };
+    if len(smtp_extensions_of(v4_of(format("solo")))) != 0 { panic(42040); };
+    let ext2 = smtp_extensions_of(v4_of(format("\nX")));
+    if !v4_eq(ext2, v4_of(format("X"))) { panic(42041); };
+}
+
+@test "reg4 smtp status reply code roundtrip"() {
+    if smtp_status_for_reply(250) != -1250 { panic(42042); };
+    if smtp_status_for_reply(550) != -1550 { panic(42043); };
+    if smtp_status_for_reply(0) != -1000 { panic(42044); };
+    if smtp_status_reply_code(-1250) != 250 { panic(42045); };
+    if smtp_status_reply_code(-1550) != 550 { panic(42046); };
+    if smtp_status_reply_code(-1000) != 0 { panic(42047); };
+    if smtp_status_reply_code(0) != 0 { panic(42048); };
+    if smtp_status_reply_code(-999) != 0 { panic(42049); };
+    if smtp_status_reply_code(7) != 0 { panic(42050); };
+}

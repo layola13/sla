@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 三元 gcd 链（gcd(gcd(a,b),c)）。
+// 意对标 340 fib-gcd 恒等式的链式版（80/119 口径）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn gcd3(a: int, b: int, c: int) -> int {
+    return gcd(gcd(a, b), c);
+}
+
+fn main() -> i32 {
+    println("{},{}", gcd3(48, 18, 30), gcd3(100, 80, 60));
+    return 0;
+}
+
+@test "basic 347 gcd chain"() {
+    if gcd3(48, 18, 30) != 6 { panic(34701); };
+    if gcd3(100, 80, 60) != 20 { panic(34702); };
+    if gcd(48, 18) != 6 { panic(34703); };
+}

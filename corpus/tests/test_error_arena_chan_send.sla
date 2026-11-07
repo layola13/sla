@@ -1,0 +1,11 @@
+// expect: ArenaGoroutine
+// F2-A C1 corpus: escape route 5 - sending an arena-owned
+// value on a channel crosses the goroutine boundary (design 4:
+// arena values must not cross; clone out first).
+fn neg_chan_send(ch: Chan<Vec<String>>) -> i32 {
+    arena {
+        let v: Vec<String> = Vec::new();
+        ch.send(v);
+    }
+    return 0;
+}

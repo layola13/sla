@@ -1,0 +1,262 @@
+// Smoke wave 1: register-2 externs in sa_std/http_cookie.sai.
+// Handles from sla_cookie_new / sla_cookie_parse_set_cookie (real
+// Set-Cookie strings). Panic codes 54xxx.
+@import "sla_std/wrap/http_cookie.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+
+fn s1_streq(p: ptr, l: u64, lit: ptr, litl: u64) -> bool {
+    if l != litl { return false; };
+    let i: u64 = 0;
+    while i < l {
+        if PTR_BYTE_AT(p, i) != PTR_BYTE_AT(lit, i) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn s1_new(code: i32) -> u64 {
+    let h = sla_cookie_new(STR_PTR("sid"), STR_LEN("sid"), STR_PTR("abc"), STR_LEN("abc"));
+    if h == 0 { panic(code); };
+    return h;
+}
+
+fn s1_parsed(code: i32) -> u64 {
+    let h = sla_cookie_parse_set_cookie(STR_PTR("sid=abc; Path=/app; Max-Age=3600; Secure; HttpOnly"), STR_LEN("sid=abc; Path=/app; Max-Age=3600; Secure; HttpOnly"));
+    if h == 0 { panic(code); };
+    return h;
+}
+
+@test "smoke1 sa_cookie_free"() {
+    let h = s1_new(54010);
+    let rc = sla_cookie_free(^h);
+    if rc != 0 { panic(54011); };
+}
+
+@test "smoke1 sa_cookie_name"() {
+    let h = s1_parsed(54020);
+    let p = [0u64; 4];
+    let l = [0u64; 4];
+    let rc = sla_cookie_name(h, &p[0], &l[0]);
+    if rc != 0 { panic(54021); };
+    if s1_streq((p[0] as ptr), l[0], STR_PTR("sid"), STR_LEN("sid")) == false { panic(54022); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_value"() {
+    let h = s1_parsed(54030);
+    let p = [0u64; 4];
+    let l = [0u64; 4];
+    let rc = sla_cookie_value(h, &p[0], &l[0]);
+    if rc != 0 { panic(54031); };
+    if s1_streq((p[0] as ptr), l[0], STR_PTR("abc"), STR_LEN("abc")) == false { panic(54032); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_domain"() {
+    let h = sla_cookie_parse_set_cookie(STR_PTR("sid=abc; Domain=example.com"), STR_LEN("sid=abc; Domain=example.com"));
+    if h == 0 { panic(54040); };
+    let p = [0u64; 4];
+    let l = [0u64; 4];
+    let rc = sla_cookie_domain(h, &p[0], &l[0]);
+    if rc != 0 { panic(54041); };
+    if s1_streq((p[0] as ptr), l[0], STR_PTR("example.com"), STR_LEN("example.com")) == false { panic(54042); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_path"() {
+    let h = s1_parsed(54050);
+    let p = [0u64; 4];
+    let l = [0u64; 4];
+    let rc = sla_cookie_path(h, &p[0], &l[0]);
+    if rc != 0 { panic(54051); };
+    if s1_streq((p[0] as ptr), l[0], STR_PTR("/app"), STR_LEN("/app")) == false { panic(54052); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_expires"() {
+    let h = sla_cookie_parse_set_cookie(STR_PTR("e=1; Expires=Tue, 01 Jan 2030 00:00:00 GMT"), STR_LEN("e=1; Expires=Tue, 01 Jan 2030 00:00:00 GMT"));
+    if h == 0 { panic(54060); };
+    let out = [0u64; 4];
+    let rc = sla_cookie_expires(h, &out[0]);
+    if rc != 0 { panic(54061); };
+    if out[0] != 1893456000 { panic(54062); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_max_age"() {
+    let h = s1_parsed(54070);
+    let out = [0u64; 4];
+    let rc = sla_cookie_max_age(h, &out[0]);
+    if rc != 0 { panic(54071); };
+    if out[0] != 3600 { panic(54072); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_flags"() {
+    let h = s1_parsed(54080);
+    let sec = [0u64; 4];
+    let ho = [0u64; 4];
+    let part = [0u64; 4];
+    let rc = sla_cookie_flags(h, &sec[0], &ho[0], &part[0]);
+    if rc != 0 { panic(54081); };
+    if sec[0] != 1 { panic(54082); };
+    if ho[0] != 1 { panic(54083); };
+    if part[0] != 0 { panic(54084); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_same_site"() {
+    let h = sla_cookie_parse_set_cookie(STR_PTR("sid=abc; SameSite=Lax"), STR_LEN("sid=abc; SameSite=Lax"));
+    if h == 0 { panic(54090); };
+    let out = [0u64; 4];
+    let rc = sla_cookie_same_site(h, &out[0]);
+    if rc != 0 { panic(54091); };
+    if out[0] == 0 { panic(54092); };
+    sla_cookie_free(^h);
+}
+
+
+
+@test "smoke1 sa_cookie_set_domain"() {
+    let h = s1_new(54110);
+    let rc = sla_cookie_set_domain(h, STR_PTR("ex.org"), STR_LEN("ex.org"));
+    if rc != 0 { panic(54111); };
+    let p = [0u64; 4];
+    let l = [0u64; 4];
+    sla_cookie_domain(h, &p[0], &l[0]);
+    if s1_streq((p[0] as ptr), l[0], STR_PTR("ex.org"), STR_LEN("ex.org")) == false { panic(54112); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_set_path"() {
+    let h = s1_new(54120);
+    let rc = sla_cookie_set_path(h, STR_PTR("/x"), STR_LEN("/x"));
+    if rc != 0 { panic(54121); };
+    let p = [0u64; 4];
+    let l = [0u64; 4];
+    sla_cookie_path(h, &p[0], &l[0]);
+    if s1_streq((p[0] as ptr), l[0], STR_PTR("/x"), STR_LEN("/x")) == false { panic(54122); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_set_expires"() {
+    let h = s1_new(54130);
+    let rc = sla_cookie_set_expires(h, 1893456000);
+    if rc != 0 { panic(54131); };
+    let out = [0u64; 4];
+    sla_cookie_expires(h, &out[0]);
+    if out[0] != 1893456000 { panic(54132); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_set_max_age"() {
+    let h = s1_new(54140);
+    let rc = sla_cookie_set_max_age(h, 7200);
+    if rc != 0 { panic(54141); };
+    let out = [0u64; 4];
+    sla_cookie_max_age(h, &out[0]);
+    if out[0] != 7200 { panic(54142); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_clear_expiry"() {
+    let h = s1_new(54150);
+    sla_cookie_set_expires(h, 1893456000);
+    sla_cookie_set_max_age(h, 7200);
+    let rc = sla_cookie_clear_expiry(h);
+    if rc != 0 { panic(54151); };
+    let out = [0u64; 4];
+    let rc2 = sla_cookie_expires(h, &out[0]);
+    if rc2 == 0 {
+        if out[0] != 0 { panic(54152); };
+    };
+    let rc3 = sla_cookie_max_age(h, &out[0]);
+    if rc3 == 0 {
+        if out[0] != 0 { panic(54153); };
+    };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_set_secure"() {
+    let h = s1_new(54160);
+    let rc = sla_cookie_set_secure(h, 1);
+    if rc != 0 { panic(54161); };
+    let sec = [0u64; 4];
+    let ho = [0u64; 4];
+    let part = [0u64; 4];
+    sla_cookie_flags(h, &sec[0], &ho[0], &part[0]);
+    if sec[0] != 1 { panic(54162); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_set_http_only"() {
+    let h = s1_new(54170);
+    let rc = sla_cookie_set_http_only(h, 1);
+    if rc != 0 { panic(54171); };
+    let sec = [0u64; 4];
+    let ho = [0u64; 4];
+    let part = [0u64; 4];
+    sla_cookie_flags(h, &sec[0], &ho[0], &part[0]);
+    if ho[0] != 1 { panic(54172); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_set_partitioned"() {
+    let h = s1_new(54180);
+    let rc = sla_cookie_set_partitioned(h, 1);
+    if rc != 0 { panic(54181); };
+    let sec = [0u64; 4];
+    let ho = [0u64; 4];
+    let part = [0u64; 4];
+    sla_cookie_flags(h, &sec[0], &ho[0], &part[0]);
+    if part[0] != 1 { panic(54182); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_set_same_site"() {
+    let h = s1_new(54190);
+    let rc = sla_cookie_set_same_site(h, 2);
+    if rc != 0 { panic(54191); };
+    let out = [0u64; 4];
+    sla_cookie_same_site(h, &out[0]);
+    if out[0] != 2 { panic(54192); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_serialize"() {
+    let h = s1_new(54200);
+    sla_cookie_set_path(h, STR_PTR("/"), STR_LEN("/"));
+    let p = [0u64; 4];
+    let l = [0u64; 4];
+    let rc = sla_cookie_serialize(h, &p[0], &l[0]);
+    if rc != 0 { panic(54201); };
+    if l[0] <= 7 { panic(54202); };
+    if s1_streq((p[0] as ptr), 7, STR_PTR("sid=abc"), STR_LEN("sid=abc")) == false { panic(54203); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_serialize_pair"() {
+    let h = s1_new(54210);
+    let p = [0u64; 4];
+    let l = [0u64; 4];
+    let rc = sla_cookie_serialize_pair(h, &p[0], &l[0]);
+    if rc != 0 { panic(54211); };
+    if s1_streq((p[0] as ptr), l[0], STR_PTR("sid=abc"), STR_LEN("sid=abc")) == false { panic(54212); };
+    sla_cookie_free(^h);
+}
+
+@test "smoke1 sa_cookie_is_expired"() {
+    let h = s1_new(54220);
+    sla_cookie_set_expires(h, 1000);
+    let out = [0u64; 4];
+    let rc = sla_cookie_is_expired(h, 2000000000, &out[0]);
+    if rc != 0 { panic(54221); };
+    if out[0] != 1 { panic(54222); };
+    sla_cookie_set_expires(h, 1893456000);
+    let rc2 = sla_cookie_is_expired(h, 1700000000, &out[0]);
+    if rc2 != 0 { panic(54223); };
+    if out[0] != 0 { panic(54224); };
+    sla_cookie_free(^h);
+}

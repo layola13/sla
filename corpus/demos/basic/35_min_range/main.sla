@@ -1,0 +1,37 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 116_minloop / 129_range：最小值 + 区间求和。
+
+fn min_of(a: [int; 5]) -> int {
+    let m = a[0];
+    for i in 1..5 {
+        if a[i] < m {
+            m = a[i];
+        };
+    }
+    return m;
+}
+
+fn range_sum(a: [int; 5]) -> int {
+    let t = 0;
+    for i in 1..4 {
+        t = t + a[i];
+    }
+    return t;
+}
+
+fn main() -> i32 {
+    let a = [8, 3, 11, 2, 9];
+    println("{}", min_of(a));
+    let b = [10, 20, 30, 40, 50];
+    println("{}", range_sum(b));
+    return 0;
+}
+
+@test "basic 35 min range"() {
+    let a = [8, 3, 11, 2, 9];
+    if min_of(a) != 2 { panic(3501); };
+    let b = [10, 20, 30, 40, 50];
+    if range_sum(b) != 90 { panic(3502); };
+}

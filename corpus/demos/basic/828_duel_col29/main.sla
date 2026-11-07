@@ -1,0 +1,52 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Stirling 二类列对峙：建表 vs 2^(n-1)-1（(8,2)：127 对 127；(9,2)：255 对 255；(10,2)：511 对 511）。
+// 意对标 701_stir2_col（低位列互补；833 做次对角列对峙）。
+
+fn sst(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + nn * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn pow2(e: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < e {
+        r = r * 2;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{},{}", sst(8, 2), pow2(7) - 1, sst(9, 2), pow2(8) - 1, sst(10, 2));
+    return 0;
+}
+
+@test "basic 828 duel col29"() {
+    if sst(8, 2) != 127 { panic(82801); };
+    if pow2(7) - 1 != 127 { panic(82802); };
+    if sst(9, 2) != 255 { panic(82803); };
+    if pow2(8) - 1 != 255 { panic(82804); };
+    if sst(10, 2) != pow2(9) - 1 { panic(82805); };
+}

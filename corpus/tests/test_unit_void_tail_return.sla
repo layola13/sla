@@ -1,0 +1,73 @@
+// C1 regression: a void function whose body ends with an explicit
+// `return;` statement used to get a second implicit epilogue `return`
+// emitted into the same final block by the SA text codegen. The SA
+// verifier rejects the doubled terminator with FallthroughForbidden
+// (this blocked the bulk saVmPolicy closure: pol_item_copy_from and
+// every other void fn with a trailing return after control flow).
+// Shapes: trailing return after a while loop with an if clamp (the
+// pol_item_copy_from shape), straight-line trailing return, and
+// trailing return after an if/else. Run via the SA backend; the SAB
+// backend never had the doubled epilogue.
+
+struct Counter {
+    n: u64,
+}
+
+fn bump_capped(c: &Counter, n: u64, cap: u64) -> void {
+    let m = n;
+    if m > cap {
+        m = cap;
+    };
+    let i: u64 = 0;
+    while i < m {
+        c.n = c.n + 1;
+        i = i + 1;
+    }
+    return;
+}
+
+fn tail_return_straight(c: &Counter) -> void {
+    c.n = c.n + 10;
+    return;
+}
+
+fn tail_return_after_if(c: &Counter, flag: bool) -> void {
+    if flag {
+        c.n = c.n + 100;
+    } else {
+        c.n = c.n + 1000;
+    };
+    return;
+}
+
+@test "void tail return after while loop"() {
+    let v = Counter { n: 0 };
+    bump_capped(&v, 5, 3);
+    if v.n != 3 {
+        panic(43501);
+    };
+    bump_capped(&v, 2, 10);
+    if v.n != 5 {
+        panic(43502);
+    };
+}
+
+@test "void tail return straight line"() {
+    let v = Counter { n: 1 };
+    tail_return_straight(&v);
+    if v.n != 11 {
+        panic(43503);
+    };
+}
+
+@test "void tail return after if else"() {
+    let v = Counter { n: 0 };
+    tail_return_after_if(&v, true);
+    if v.n != 100 {
+        panic(43504);
+    };
+    tail_return_after_if(&v, false);
+    if v.n != 1100 {
+        panic(43505);
+    };
+}

@@ -1,0 +1,63 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 大 Schröder 续高位三对峙：迭代 vs 商式（n=10：1037718 对 1037718；n=11：5293446 对 5293446）。
+// 意对标 896_schro11 × 793_schro_qseq（高位源与商式源合流）。
+
+fn sch(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 2; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k < ii {
+            s = s + t[k] * t[ii - 1 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn qsch(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + binom_mul(n + k, k) * binom_mul(n, k) / (k + 1);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", sch(10), qsch(10), sch(11), qsch(11));
+    return 0;
+}
+
+@test "basic 898 duel schro11"() {
+    if sch(10) != 1037718 { panic(89801); };
+    if qsch(10) != 1037718 { panic(89802); };
+    if sch(11) != 5293446 { panic(89803); };
+    if qsch(11) != 5293446 { panic(89804); };
+}

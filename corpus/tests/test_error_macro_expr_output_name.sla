@@ -1,0 +1,15 @@
+// J-4 negative: the output parameter must satisfy the leading
+// output name rule shared with imported SA macros (leading `out*`
+// or a listed name). A first parameter named `result` does not
+// qualify, so omitting it is an arity error even though it declares
+// a type. Judged by standalone `sla check` (see plugin_tests.zig
+// registration).
+
+macro doubled(result: i64, x: i64) {
+    result = x + x;
+}
+
+fn f() -> i64 {
+    let y = doubled(3);
+    return y;
+}

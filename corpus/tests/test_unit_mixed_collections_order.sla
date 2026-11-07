@@ -1,0 +1,57 @@
+// Stress probe for filtered std-dep extern/export ordering.
+// Mixing HashSet + BTreeSet + Vec in one function maximizes the
+// cross-module helper closure overlap that would expose an ordering bug.
+// Run with: sa sla test tests/test_unit_mixed_collections_order.sla
+
+fn mixed_smoke() -> usize {
+    let hs = HashSet::new();
+    let bs = BTreeSet::new();
+    let v = Vec::new();
+
+    let hi = hs.insert(7);
+    let bi = bs.insert("alpha");
+    v.push(11);
+    v.push(22);
+
+    let hc = hs.contains(7);
+    let bc = bs.contains("alpha");
+    let missing_h = hs.contains(9);
+    let missing_b = bs.contains("beta");
+
+    if hi == false { panic(101); };
+    if bi == false { panic(102); };
+    if hc == false { panic(103); };
+    if bc == false { panic(104); };
+    if missing_h == true { panic(105); };
+    if missing_b == true { panic(106); };
+
+    let total = hs.len() + bs.len() + v.len();
+    return total;
+}
+
+fn set_then_set() -> usize {
+    // Second function that pulls the same set helpers again, so the
+    // filtered dep injection must de-duplicate helper decls across
+    // functions while preserving each helper's extern/body ordering.
+    let a = HashSet::new();
+    let b = BTreeSet::new();
+    let ai = a.insert(1);
+    let bi = b.insert("x");
+    if ai == false { panic(201); };
+    if bi == false { panic(202); };
+    return a.len() + b.len();
+}
+
+@test "mixed collections order"() {
+    let got = mixed_smoke();
+    if got != 4 {
+        panic(301);
+    };
+}
+
+@test "repeated set helpers"() {
+    let got = set_then_set();
+    if got != 2 {
+        panic(302);
+    };
+}

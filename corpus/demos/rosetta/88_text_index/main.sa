@@ -1,0 +1,104 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_postings_for = vtable { call = @sla__postings_for }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__postings_for(term: ptr) -> i32:
+L_ENTRY:
+    @const SLA_STR_0 = utf8:"rust"
+    tmp_1 = 4
+    tmp_0 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_0, &SLA_STR_0, tmp_1
+    !tmp_1
+    EXPAND STR_EQ tmp_2, term, tmp_0
+    tmp_3 = 1
+    tmp_4 = eq tmp_2, tmp_3
+    !tmp_2
+    !tmp_3
+    br tmp_4 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_4
+    tmp_5 = 2
+    !term
+    return tmp_5
+
+L_ELSE_1:
+    !tmp_4
+    @const SLA_STR_1 = utf8:"sla"
+    tmp_7 = 3
+    tmp_6 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_6, &SLA_STR_1, tmp_7
+    !tmp_7
+    EXPAND STR_EQ tmp_8, term, tmp_6
+    tmp_9 = 1
+    tmp_10 = eq tmp_8, tmp_9
+    !tmp_8
+    !tmp_9
+    br tmp_10 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_10
+    tmp_11 = 3
+    !term
+    return tmp_11
+
+L_ELSE_4:
+    !tmp_10
+    tmp_12 = 0
+    !term
+    return tmp_12
+
+
+
+@main() -> i32:
+L_ENTRY:
+    @const SLA_STR_2 = utf8:"sla"
+    tmp_16 = 3
+    tmp_15 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_15, &SLA_STR_2, tmp_16
+    !tmp_16
+    tmp_17 = call @sla__postings_for(tmp_15)
+    result = tmp_17
+    tmp_18 = call @sa_fmt_u64(result, 10)
+    tmp_19 = call @sa_fmt_buffer_data(tmp_18)
+    tmp_20 = call @sa_fmt_buffer_len(tmp_18)
+    tmp_21 = tmp_19
+    call @sa_print_bytes(&tmp_21, tmp_20)
+    call @sa_fmt_buffer_free(^tmp_18)
+    !tmp_21
+    !tmp_20
+    @const SLA_STR_3 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_3, 1)
+    return result
+
+@test "rosetta 088 88_text_index"():
+L_TEST_ENTRY_6:
+    @const SLA_STR_4 = utf8:"sla"
+    tmp_23 = 3
+    tmp_22 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_22, &SLA_STR_4, tmp_23
+    !tmp_23
+    tmp_24 = call @sla__postings_for(tmp_22)
+    got = tmp_24
+    tmp_25 = 3
+    tmp_26 = ne got, tmp_25
+    !tmp_25
+    br tmp_26 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_26
+    panic(88)
+
+L_ELSE_8:
+    !tmp_26
+    jmp L_MERGE_9
+
+L_MERGE_9:
+    !got
+    return
+

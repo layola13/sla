@@ -1,0 +1,15 @@
+// Positive control for the GenericOverloadConflict kind marker:
+// a generic template that stands alone (never mixed with a concrete
+// same-name declaration) plus a concrete overload pair resolved by
+// exact match must check cleanly (rc=0) -- the conflict rule must
+// not fire. (Calling a generic template directly is a separate
+// unsupported shape on this baseline and is not exercised here.)
+fn solo<T>(x: T) -> i32 { return 3; }
+fn pick(x: i32) -> i32 { return 1; }
+fn pick(x: u64) -> i32 { return 2; }
+
+fn main() -> i32 {
+    let a: i32 = 7;
+    let b: u64 = 7;
+    return pick(a) + pick(b);
+}

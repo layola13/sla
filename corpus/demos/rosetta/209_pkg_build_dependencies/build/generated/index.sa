@@ -1,0 +1,7 @@
+@import "build/generated/generated.sal"
+
+@generated_artifact_offset() -> i32:
+L_ENTRY:
+    value = add BUILD_ARTIFACT_OFFSET, 0
+    !value
+    return BUILD_ARTIFACT_OFFSET

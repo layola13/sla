@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 114_compose：`map(+1)` 后 `filter(>2)`（长 2，首元 3）。
+// 高阶链用两轮显式循环 + `push` 表达（迭代器协议见 Phase 6，写法见 39/67）。
+
+fn main() -> i32 {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    let mapped: Vec<i32> = Vec::new();
+    for i in 0..3 {
+        mapped.push(a[i] + 1);
+    }
+    let b: Vec<i32> = Vec::new();
+    for i in 0..3 {
+        if mapped[i] > 2 {
+            b.push(mapped[i]);
+        };
+    }
+    println("{},{}", len(b), b[0]);
+    return 0;
+}
+
+@test "basic 78 map filter"() {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    let mapped: Vec<i32> = Vec::new();
+    for i in 0..3 {
+        mapped.push(a[i] + 1);
+    }
+    let b: Vec<i32> = Vec::new();
+    for i in 0..3 {
+        if mapped[i] > 2 {
+            b.push(mapped[i]);
+        };
+    }
+    if len(b) != 2 { panic(7801); };
+    if b[0] != 3 { panic(7802); };
+}

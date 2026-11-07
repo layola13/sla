@@ -1,0 +1,3 @@
+#def HashState_SIZE = 8
+#def HashState_round = +0
+#def HashState_lane = +4

@@ -1,0 +1,202 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_resolver_id = vtable { call = @sla__resolver_id }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__resolver_id(operation: ptr, field: ptr, nested: u8) -> i32:
+L_ENTRY:
+    @const SLA_STR_0 = utf8:"query"
+    tmp_1 = 5
+    tmp_0 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_0, &SLA_STR_0, tmp_1
+    !tmp_1
+    EXPAND STR_EQ tmp_2, operation, tmp_0
+    tmp_3 = 1
+    tmp_4 = eq tmp_2, tmp_3
+    !tmp_2
+    !tmp_3
+    br tmp_4 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_4
+    @const SLA_STR_1 = utf8:"user"
+    tmp_6 = 4
+    tmp_5 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_5, &SLA_STR_1, tmp_6
+    !tmp_6
+    EXPAND STR_EQ tmp_7, field, tmp_5
+    tmp_8 = 1
+    tmp_9 = eq tmp_7, tmp_8
+    !tmp_7
+    !tmp_8
+    br tmp_9 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_9
+    tmp_10 = 1
+    tmp_11 = eq nested, tmp_10
+    !tmp_10
+    br tmp_11 -> L_THEN_6, L_ELSE_7
+
+L_THEN_6:
+    !tmp_11
+    tmp_12 = 12
+    !operation
+    !nested
+    !field
+    return tmp_12
+
+L_ELSE_7:
+    !tmp_11
+    tmp_13 = 11
+    !operation
+    !nested
+    !field
+    return tmp_13
+
+
+L_ELSE_4:
+    !tmp_9
+    tmp_15 = 0
+    !operation
+    !nested
+    !field
+    return tmp_15
+
+
+L_ELSE_1:
+    !tmp_4
+    @const SLA_STR_2 = utf8:"mutation"
+    tmp_18 = 8
+    tmp_17 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_17, &SLA_STR_2, tmp_18
+    !tmp_18
+    EXPAND STR_EQ tmp_19, operation, tmp_17
+    tmp_20 = 1
+    tmp_21 = eq tmp_19, tmp_20
+    !tmp_19
+    !tmp_20
+    br tmp_21 -> L_THEN_9, L_ELSE_10
+
+L_THEN_9:
+    !tmp_21
+    @const SLA_STR_3 = utf8:"createUser"
+    tmp_23 = 10
+    tmp_22 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_22, &SLA_STR_3, tmp_23
+    !tmp_23
+    EXPAND STR_EQ tmp_24, field, tmp_22
+    tmp_25 = 1
+    tmp_26 = eq tmp_24, tmp_25
+    !tmp_24
+    !tmp_25
+    br tmp_26 -> L_THEN_12, L_ELSE_13
+
+L_THEN_12:
+    !tmp_26
+    tmp_27 = 1
+    tmp_28 = eq nested, tmp_27
+    !tmp_27
+    br tmp_28 -> L_THEN_15, L_ELSE_16
+
+L_THEN_15:
+    !tmp_28
+    tmp_29 = 0
+    !operation
+    !nested
+    !field
+    return tmp_29
+
+L_ELSE_16:
+    !tmp_28
+    tmp_30 = 21
+    !operation
+    !nested
+    !field
+    return tmp_30
+
+
+L_ELSE_13:
+    !tmp_26
+    tmp_32 = 0
+    !operation
+    !nested
+    !field
+    return tmp_32
+
+
+L_ELSE_10:
+    !tmp_21
+    tmp_34 = 0
+    !operation
+    !nested
+    !field
+    return tmp_34
+
+
+
+@main() -> i32:
+L_ENTRY:
+    @const SLA_STR_4 = utf8:"query"
+    tmp_38 = 5
+    tmp_37 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_37, &SLA_STR_4, tmp_38
+    !tmp_38
+    @const SLA_STR_5 = utf8:"user"
+    tmp_40 = 4
+    tmp_39 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_39, &SLA_STR_5, tmp_40
+    !tmp_40
+    tmp_41 = 0
+    tmp_42 = call @sla__resolver_id(tmp_37, tmp_39, tmp_41)
+    !tmp_41
+    result = tmp_42
+    tmp_43 = call @sa_fmt_u64(result, 10)
+    tmp_44 = call @sa_fmt_buffer_data(tmp_43)
+    tmp_45 = call @sa_fmt_buffer_len(tmp_43)
+    tmp_46 = tmp_44
+    call @sa_print_bytes(&tmp_46, tmp_45)
+    call @sa_fmt_buffer_free(^tmp_43)
+    !tmp_46
+    !tmp_45
+    @const SLA_STR_6 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_6, 1)
+    return result
+
+@test "rosetta 094 94_graphql_router"():
+L_TEST_ENTRY_18:
+    @const SLA_STR_7 = utf8:"query"
+    tmp_48 = 5
+    tmp_47 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_47, &SLA_STR_7, tmp_48
+    !tmp_48
+    @const SLA_STR_8 = utf8:"user"
+    tmp_50 = 4
+    tmp_49 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_49, &SLA_STR_8, tmp_50
+    !tmp_50
+    tmp_51 = 0
+    tmp_52 = call @sla__resolver_id(tmp_47, tmp_49, tmp_51)
+    !tmp_51
+    got = tmp_52
+    tmp_53 = 11
+    tmp_54 = ne got, tmp_53
+    !tmp_53
+    br tmp_54 -> L_THEN_19, L_ELSE_20
+
+L_THEN_19:
+    !tmp_54
+    panic(94)
+
+L_ELSE_20:
+    !tmp_54
+    jmp L_MERGE_21
+
+L_MERGE_21:
+    !got
+    return
+

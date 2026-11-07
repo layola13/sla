@@ -1,0 +1,35 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct BundleManifest {
+    binary: bool,
+    config: bool,
+    checksums: bool,
+    signatures: bool,
+}
+
+fn release_ready(manifest: BundleManifest) -> bool {
+    if manifest.binary == true {
+        if manifest.config == true {
+            if manifest.checksums == true {
+                return manifest.signatures;
+            };
+        };
+    };
+    return false;
+}
+
+fn main() -> i32 {
+    let manifest = BundleManifest { binary: true, config: true, checksums: true, signatures: true };
+    let result = release_ready(manifest);
+    println("{}", result);
+    return 0;
+};
+
+@test "rosetta 099 99_release_bundle"() {
+    let manifest = BundleManifest { binary: true, config: true, checksums: true, signatures: true };
+    let got = release_ready(manifest);
+    if got != true {
+        panic(99);
+    };
+};

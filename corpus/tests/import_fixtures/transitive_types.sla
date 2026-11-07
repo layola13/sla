@@ -1,0 +1,32 @@
+// Defect #1 regression chain, module B: type definitions only.
+//
+// Module A (transitive_user.sla) imports this file and uses these types
+// in struct literals inside its own function bodies; the root test only
+// imports module A. Before the fix, materializing an imported module's
+// bodies was seeded with only that module's own type set, so literals of
+// types that arrive transitively (through A's import of B) failed with
+// an unlocated SyntaxError. `sa check` never materializes bodies, so the
+// defect was invisible to check-only runs.
+
+struct ChainPoint {
+    x: i32,
+    y: i32,
+}
+
+struct ChainEntry {
+    tag: [u8; 8],
+    tag_len: u64,
+    weight: i32,
+}
+
+struct ChainEntryList {
+    items: [ChainEntry; 4],
+    len: u64,
+}
+
+struct ChainPolicy {
+    entries: ChainEntryList,
+    origin: ChainPoint,
+    level: i32,
+    enabled: bool,
+}

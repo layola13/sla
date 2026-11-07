@@ -1,0 +1,14 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// #13: immediately-invoked closure literal `(|x| ...)(args)`.
+fn main() -> i32 {
+    println("{}", (|x: int| x * 2)(21));
+    return 0;
+}
+
+@test "unit iife direct"() {
+    if ((|x: int| x * 2)(21)) != 42 {
+        panic(13001);
+    };
+}

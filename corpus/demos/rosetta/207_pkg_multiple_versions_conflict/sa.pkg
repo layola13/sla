@@ -1,0 +1,5 @@
+# Future metadata only. Not compiler input.
+[package]
+name = "demo-207"
+version = "2.0.0"
+conflict = "same public symbol in two versioned packages"

@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Pascal 行生成：C(8,k+1)=C(8,k)·(8-k)/(k+1) 乘法式逐项整除（350 范式）。
+// 第 8 行：1,8,28,56,70,56,28,8,1。
+// 意对标 350 binom（单值版互补；此处整行生成，554 供三向备用）。
+
+fn row8(k: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < k {
+        r = r * (8 - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{},{},{},{},{},{}", row8(0), row8(1), row8(2), row8(3), row8(4), row8(5), row8(6), row8(7), row8(8));
+    return 0;
+}
+
+@test "basic 554 pascal row"() {
+    if row8(0) != 1 { panic(55401); };
+    if row8(1) != 8 { panic(55402); };
+    if row8(2) != 28 { panic(55403); };
+    if row8(3) != 56 { panic(55404); };
+    if row8(4) != 70 { panic(55405); };
+    if row8(5) != 56 { panic(55406); };
+    if row8(8) != 1 { panic(55407); };
+}

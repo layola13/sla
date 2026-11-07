@@ -1,0 +1,21 @@
+@import "guest/memory_export.sal"
+
+@ffi_wrapper memory_gate(*view: ptr) -> i32:
+L_ENTRY:
+    item = assume_borrow view
+    value = load item+MemoryView_value as i32
+    marker = load item+MemoryView_marker as i32
+    result = add value, marker
+    !marker
+    !value
+    !item
+    return result
+
+@export wasm_memory_export() -> i32:
+L_ENTRY:
+    view = alloc MemoryView_SIZE
+    store view+MemoryView_value, 292 as i32
+    store view+MemoryView_marker, 0 as i32
+    result = call @memory_gate(*view)
+    !view
+    return result

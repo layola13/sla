@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 梅森数素性（2^p-1：p=2/3/5 素，p=11 得 2047=23×89 合）。
+// 意对标 356 素数判定的指数版（358 计数版互补）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn pow2(n: int) -> int {
+    let p = 1;
+    let i = 0;
+    while i < n {
+        p = p * 2;
+        i = i + 1;
+    }
+    return p;
+}
+
+fn mersenne_prime(p: int) -> int {
+    return is_prime(pow2(p) - 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", mersenne_prime(2), mersenne_prime(3), mersenne_prime(5), mersenne_prime(11));
+    return 0;
+}
+
+@test "basic 391 mersenne"() {
+    if mersenne_prime(2) != 1 { panic(39101); };
+    if mersenne_prime(3) != 1 { panic(39102); };
+    if mersenne_prime(5) != 1 { panic(39103); };
+    if mersenne_prime(11) != 0 { panic(39104); };
+}

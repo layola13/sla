@@ -1,0 +1,55 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Catalan 三向：商式 × 卷积 × 比值递推（n=7：429 三锁）。
+// 意对标 727_cat_div8（商源互补；605 三向体例收束 Catalan 恒等族）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn catd(n: int) -> int {
+    return binom_mul(2 * n, n) / (n + 1);
+}
+
+fn catc(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let i = 0;
+    while i < n {
+        s = s + catc(i) * catc(n - 1 - i);
+        i = i + 1;
+    }
+    return s;
+}
+
+fn catr(n: int) -> int {
+    let c = 1;
+    let i = 0;
+    while i < n {
+        c = c * 2 * (2 * i + 1) / (i + 2);
+        i = i + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", catd(7), catc(7), catr(7));
+    return 0;
+}
+
+@test "basic 735 tri cat"() {
+    if catd(7) != 429 { panic(73501); };
+    if catc(7) != 429 { panic(73502); };
+    if catr(7) != 429 { panic(73503); };
+    if catr(6) != 132 { panic(73504); };
+}

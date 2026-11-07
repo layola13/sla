@@ -1,0 +1,37 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 真因子和双实现对峙（全量循环 vs 半程+n：s(220)=284 双边）。
+// 意对标 384 除数和对峙的真因子版（390 互补）。
+
+fn aliq_full(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i < n {
+        if n % i == 0 { s = s + i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn aliq_half(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n / 2 {
+        if n % i == 0 { s = s + i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", aliq_full(220), aliq_half(220));
+    return 0;
+}
+
+@test "basic 520 duel aliquot"() {
+    if aliq_full(220) != 284 { panic(52001); };
+    if aliq_half(220) != 284 { panic(52002); };
+    if aliq_full(220) != aliq_half(220) { panic(52003); };
+    if aliq_half(284) != 220 { panic(52004); };
+}

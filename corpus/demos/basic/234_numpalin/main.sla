@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 103_palindrome 的算术版（121 回文，123 非；30 为数组双指针版）。
+// 数字反转（`/`,`%`）+ 相等判定组合。
+
+fn is_numpal(n: int) -> int {
+    let rev = 0;
+    let m = n;
+    while m > 0 {
+        rev = rev * 10 + m % 10;
+        m = m / 10;
+    }
+    return if rev == n { 1 } else { 0 };
+}
+
+fn main() -> i32 {
+    println("{}", is_numpal(121));
+    return 0;
+}
+
+@test "basic 234 numpalin"() {
+    if is_numpal(121) != 1 { panic(23401); };
+    if is_numpal(123) != 0 { panic(23402); };
+    if is_numpal(7) != 1 { panic(23403); };
+}

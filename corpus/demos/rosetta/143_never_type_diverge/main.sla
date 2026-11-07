@@ -1,0 +1,16 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn never_type_safe_path() -> i32 {
+    let safe = true;
+    if safe == false { panic(143); };
+    return 0;
+}
+
+fn main() -> i32 {
+    let safe = true;
+    if safe == false { panic(143); };
+    println("{}", 0);
+    return 0;
+}
+@test "rosetta 143 143_never_type_diverge"() { let got = never_type_safe_path(); if got != 0 { panic(143); }; }

@@ -1,0 +1,67 @@
+@import "sa_std/vec.sa"
+
+// DEF deep-drop crash-A regression (replace semantics, index
+// shape): moving one element out of an owned Vec into another
+// place must leave an EMPTY element behind in the source slot
+// (the outer Vec keeps its length). Pre-fix the slot kept the
+// original header, so resetting the destination dropped the
+// element buffer while the source slot still owned it (and the
+// slot read back its old length -> panic 4601).
+
+struct Holder {
+    item: Vec<u8>,
+    tag: u64,
+}
+
+fn filled_vec(n: u64, seed: u8) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(seed + (i % 5) as u8);
+        i = i + 1;
+    }
+    return v;
+}
+
+fn sum_vec(v: &Vec<u8>) -> u64 {
+    let sum: u64 = 0;
+    let i: u64 = 0;
+    while i < 48 {
+        sum = sum + (v[i] as u64);
+        i = i + 1;
+    }
+    return sum;
+}
+
+fn sum_inner(v: &Vec<Vec<u8>>, which: u64) -> u64 {
+    let sum: u64 = 0;
+    let i: u64 = 0;
+    while i < 48 {
+        sum = sum + (v[which][i] as u64);
+        i = i + 1;
+    }
+    return sum;
+}
+
+@test "replace moves vec element into ptr holder field"() {
+    let dst = Box::into_raw(Box::new(Holder { item: Vec::new(), tag: 5 }));
+    let w: Vec<Vec<u8>> = Vec::new();
+    w.push(filled_vec(48, 2));
+    w.push(filled_vec(48, 3));
+    let r: u64 = 0;
+    while r < 60 {
+        (*dst).item = w[0];
+        // The source slot was moved out of: empty element, same length.
+        if len(w[0]) != 0 { panic(4601); };
+        if len(w) != 2 { panic(4602); };
+        // The destination holds the element; the sibling is untouched.
+        if sum_vec(&(*dst).item) != 93 + 96 { panic(4603); };
+        if sum_inner(&w, 1) != 93 + 144 { panic(4604); };
+        // Reset the destination (drops the moved element), then
+        // refill the source slot for the next round.
+        (*dst).item = Vec::new();
+        w[0] = filled_vec(48, 2);
+        r = r + 1;
+    }
+    if (*dst).tag != 5 { panic(4605); };
+}

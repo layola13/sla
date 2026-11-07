@@ -1,0 +1,42 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 续高位建表 L(n,k)=L(n-1,k-1)+(n+k-1)L(n-1,k)（上三角守卫，646 范式）。
+// L(7,2)=15120，L(7,3)=12600，L(7,4)=4200（709 做建表/商式对峙）。
+// 意对标 586_lah（低位建表版互补；此处为 n=7 高位行）。
+
+fn ltb(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", ltb(7, 2), ltb(7, 3), ltb(7, 4));
+    return 0;
+}
+
+@test "basic 706 lah7"() {
+    if ltb(7, 2) != 15120 { panic(70601); };
+    if ltb(7, 3) != 12600 { panic(70602); };
+    if ltb(7, 4) != 4200 { panic(70603); };
+    if ltb(6, 2) != 1800 { panic(70604); };
+}

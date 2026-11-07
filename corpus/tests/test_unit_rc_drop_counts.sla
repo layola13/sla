@@ -1,0 +1,58 @@
+@import "sa_std/core/rc.sa"
+@import "sa_std/core/result.sa"
+
+// DEF-ARC-DROP (F1) R1 mirror for Rc: the single-threaded refcount
+// face (RC_STRONG_COUNT / RC_DROP / WEAK_DROP in sa_std/core/rc.sa)
+// gets the same drop elaboration as Arc. Pre-fix: no count surface,
+// no decrements. Post-fix: exact counts at every point, both backends.
+
+struct Counter { n: i32 }
+
+struct RcHolder { data: Rc<Counter> }
+
+fn consume_and_count(a: Rc<Counter>) -> i32 {
+    return a.strong_count();
+}
+
+@test "rc count clone and callee consume"() {
+    let a = Rc::new(Counter { n: 7 });
+    if a.strong_count() != 1 { panic(7201); };
+    if a.weak_count() != 0 { panic(7202); };
+    let during = consume_and_count(a.clone());
+    if during != 2 { panic(7203); };
+    if a.strong_count() != 1 { panic(7204); };
+    if (*a).n != 7 { panic(7205); };
+}
+
+@test "rc count inner scope clone drops"() {
+    let a = Rc::new(Counter { n: 6 });
+    if (*a).n == 6 {
+        let b = a.clone();
+        if a.strong_count() != 2 { panic(7211); };
+    };
+    if a.strong_count() != 1 { panic(7212); };
+}
+
+fn make_holder(a: Rc<Counter>) -> i32 {
+    let h = RcHolder { data: a };
+    return h.data.strong_count();
+}
+
+@test "rc count struct field drop"() {
+    let probe = Rc::new(Counter { n: 8 });
+    let during = make_holder(probe.clone());
+    if during != 2 { panic(7221); };
+    if probe.strong_count() != 1 { panic(7222); };
+    if (*probe).n != 8 { panic(7223); };
+}
+
+fn extract_from_holder() -> Rc<Counter> {
+    let h = RcHolder { data: Rc::new(Counter { n: 11 }) };
+    return h.data;
+}
+
+@test "rc field extraction bumps count"() {
+    let x = extract_from_holder();
+    if x.strong_count() != 1 { panic(7231); };
+    if (*x).n != 11 { panic(7232); };
+}

@@ -1,0 +1,115 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn await_defer_ready_sub_capture() -> i32 {
+    let bump = 2;
+    let value = future::defer_ready(44).await;
+    return value - bump;
+}
+
+async fn await_local_defer_ready_sub_capture() -> i32 {
+    let bump = 2;
+    let delayed = future::defer_ready(44);
+    let value = delayed.await;
+    return value - bump;
+}
+
+async fn await_defer_ready_scaled_capture() -> i32 {
+    let bump = 1;
+    let value = future::defer_ready(20).await;
+    return (value + bump) * 2;
+}
+
+async fn await_local_defer_ready_scaled_capture() -> i32 {
+    let bump = 1;
+    let delayed = future::defer_ready(20);
+    let value = delayed.await;
+    return (value + bump) * 2;
+}
+
+fn direct_sub_resumes_on_second_poll() -> i32 {
+    let fut = await_defer_ready_sub_capture();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9841);
+    };
+    if task::is_ready(task) != false {
+        panic(9842);
+    };
+    if task::poll(task) != true {
+        panic(9843);
+    };
+    if task::is_ready(task) != true {
+        panic(9844);
+    };
+    return task::result(task);
+}
+
+fn local_sub_resumes_on_second_poll() -> i32 {
+    let fut = await_local_defer_ready_sub_capture();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9851);
+    };
+    if task::is_ready(task) != false {
+        panic(9852);
+    };
+    if task::poll(task) != true {
+        panic(9853);
+    };
+    if task::is_ready(task) != true {
+        panic(9854);
+    };
+    return task::result(task);
+}
+
+fn direct_scaled_resumes_on_second_poll() -> i32 {
+    let fut = await_defer_ready_scaled_capture();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9861);
+    };
+    if task::is_ready(task) != false {
+        panic(9862);
+    };
+    if task::poll(task) != true {
+        panic(9863);
+    };
+    if task::is_ready(task) != true {
+        panic(9864);
+    };
+    return task::result(task);
+}
+
+fn local_scaled_resumes_on_second_poll() -> i32 {
+    let fut = await_local_defer_ready_scaled_capture();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9871);
+    };
+    if task::is_ready(task) != false {
+        panic(9872);
+    };
+    if task::poll(task) != true {
+        panic(9873);
+    };
+    if task::is_ready(task) != true {
+        panic(9874);
+    };
+    return task::result(task);
+}
+
+@test "async defer ready scalar expression resumes"() {
+    if direct_sub_resumes_on_second_poll() != 42 {
+        panic(9845);
+    };
+    if local_sub_resumes_on_second_poll() != 42 {
+        panic(9855);
+    };
+    if direct_scaled_resumes_on_second_poll() != 42 {
+        panic(9865);
+    };
+    if local_scaled_resumes_on_second_poll() != 42 {
+        panic(9875);
+    };
+}

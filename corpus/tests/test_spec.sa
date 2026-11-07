@@ -1,0 +1,102 @@
+@import "sa_std/rc.sal"
+
+#struct Result_Layout {
+    is_err: u8 // offset +0
+    value: i64 // offset +8
+    error: i64 // offset +16
+}
+
+#struct Option_int_Layout {
+    has_value: u8 // offset +0
+    value: i64 // offset +8
+}
+
+@sum_range(limit: i64) -> i64:
+L_ENTRY:
+    tmp_0 = 0
+    sum = ^tmp_0
+    tmp_1 = 1
+    i_slot = stack_alloc 8
+    store i_slot+0, tmp_1 as i64
+    !tmp_1
+    jmp L_LOOP_HEAD_0
+
+L_LOOP_HEAD_0:
+    i = load i_slot+0 as i64
+    tmp_2 = slt i, limit
+    br tmp_2 -> L_LOOP_BODY_1, L_LOOP_EXIT_2
+
+L_LOOP_BODY_1:
+    !tmp_2
+    tmp_3 = add sum, i
+    sum = ^tmp_3
+    tmp_4 = add i, 1
+    store i_slot+0, tmp_4 as i64
+    !tmp_4
+    !i
+    jmp L_LOOP_HEAD_0
+
+L_LOOP_EXIT_2:
+    !tmp_2
+    !i
+    !i_slot
+    !limit
+    !sum
+    return sum
+    !sum
+
+@check_result(res: ptr, fallback: i64) -> i64:
+L_ENTRY:
+    tmp_5 = load res+0 as u8 // check error state
+    br tmp_5 -> L_TRY_ERR_4, L_TRY_OK_3
+
+L_TRY_ERR_4:
+    !tmp_5
+    tmp_6 = load res+8 as i64
+    !res
+    !res
+    !return_ty_sentinel
+    !fallback
+    tmp_7 = stack_alloc 16
+    store tmp_7+0, 1 as u8 // set is_err
+    store tmp_7+8, tmp_6 as i64
+    !tmp_6
+    return tmp_7
+
+L_TRY_OK_3:
+    !tmp_5
+    tmp_8 = load res+8 as i64
+    !res
+    val = ^tmp_8
+    !fallback
+    !val
+    return val
+    !val
+
+@process_option(opt: ptr) -> i64:
+L_ENTRY:
+    tmp_9 = load opt+0 as u8
+    br tmp_9 -> L_THEN_5, L_ELSE_6
+
+L_THEN_5:
+    !tmp_9
+    tmp_10 = load opt+8 as i64
+    val = ^tmp_10
+    !opt
+    tmp_11 = call @sum_range(val)
+    !val
+    return tmp_11
+    !val
+    jmp L_MERGE_7
+
+L_ELSE_6:
+    !tmp_9
+    !opt
+    tmp_12 = 0
+    !return_ty_sentinel
+    return tmp_12
+    !return_ty_sentinel
+    jmp L_MERGE_7
+
+L_MERGE_7:
+

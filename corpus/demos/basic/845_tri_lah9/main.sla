@@ -1,0 +1,118 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 续三向：建表行和 × 商式行和 × 递归行和（n=9：4596553 三锁）。
+// 意对标 837_lah_row9（行源互补；715 三向体例收束 Lah 续三行族）。
+
+fn lah(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn lrow(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + lah(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn ccomb(n: int, k: int) -> int {
+    if k > n { return 0; };
+    if k == 0 { return 1; };
+    if k == n { return 1; };
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        t[mm * w] = 1;
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn fact(n: int) -> int {
+    let r = 1;
+    let i = 1;
+    while i <= n {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn qrow(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + ccomb(n - 1, k - 1) * fact(n) / fact(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn rlah(n: int, k: int) -> int {
+    if k == 0 {
+        if n == 0 { return 1; };
+        return 0;
+    };
+    if k > n { return 0; };
+    if k == n { return 1; };
+    return rlah(n - 1, k - 1) + (n + k - 1) * rlah(n - 1, k);
+}
+
+fn rsum(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + rlah(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", lrow(9), qrow(9), rsum(9));
+    return 0;
+}
+
+@test "basic 845 tri lah9"() {
+    if lrow(9) != 4596553 { panic(84501); };
+    if qrow(9) != 4596553 { panic(84502); };
+    if rsum(9) != 4596553 { panic(84503); };
+    if rsum(8) != 394353 { panic(84504); };
+}

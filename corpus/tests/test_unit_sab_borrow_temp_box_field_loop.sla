@@ -1,0 +1,122 @@
+@import "sa_std/core/box.sa"
+@import "sa_std/core/cell.sa"
+@import "sa_std/core/rc.sa"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/refcell.sa"
+@import "sa_std/alloc/vec.sa"
+
+struct BorrowTempPayload {
+    value: int,
+}
+
+struct BorrowTempBoxSlot {
+    item: Box<BorrowTempPayload>,
+}
+
+struct BorrowTempNestedBoxSlot {
+    slot: BorrowTempBoxSlot,
+}
+
+struct BorrowTempVecBoxSlot {
+    items: Vec<Box<BorrowTempPayload>>,
+}
+
+struct BorrowTempMixedSlot {
+    boxed: Box<BorrowTempPayload>,
+    rc: Rc<BorrowTempPayload>,
+    arc: Arc<BorrowTempPayload>,
+}
+
+fn borrow_temp_read_box(item: &Box<BorrowTempPayload>) -> int {
+    let payload: &BorrowTempPayload = &*item;
+    return payload.value;
+}
+
+fn borrow_temp_read_rc(item: &Rc<BorrowTempPayload>) -> int {
+    let payload: &BorrowTempPayload = &*item;
+    return payload.value;
+}
+
+fn borrow_temp_read_arc(item: &Arc<BorrowTempPayload>) -> int {
+    let payload: &BorrowTempPayload = &*item;
+    return payload.value;
+}
+
+fn borrow_temp_sum_box_rc_arc(item_box: &Box<BorrowTempPayload>, item_rc: &Rc<BorrowTempPayload>, item_arc: &Arc<BorrowTempPayload>) -> int {
+    return borrow_temp_read_box(item_box) + borrow_temp_read_rc(item_rc) + borrow_temp_read_arc(item_arc);
+}
+
+@test "sab box field borrow temp in loop head phi"() {
+    let total: int = 0;
+    let i: int = 0;
+    while i < 4 {
+        let slot = BorrowTempBoxSlot { item: Box::new(BorrowTempPayload { value: i + 1 }) };
+        let borrowed_box: &Box<BorrowTempPayload> = &slot.item;
+        let payload: &BorrowTempPayload = &*borrowed_box;
+        total = total + payload.value;
+        i = i + 1;
+    }
+    if total != 10 {
+        panic(1);
+    };
+}
+
+@test "sab nested box field borrow temp in loop head phi"() {
+    let total: int = 0;
+    let i: int = 0;
+    while i < 4 {
+        let slot = BorrowTempNestedBoxSlot { slot: BorrowTempBoxSlot { item: Box::new(BorrowTempPayload { value: i + 1 }) } };
+        let borrowed_box: &Box<BorrowTempPayload> = &slot.slot.item;
+        let payload: &BorrowTempPayload = &*borrowed_box;
+        total = total + payload.value;
+        i = i + 1;
+    }
+    if total != 10 {
+        panic(2);
+    };
+}
+
+@test "sab fresh box field borrow call argument reads handle"() {
+    let slot = BorrowTempBoxSlot { item: Box::new(BorrowTempPayload { value: 42 }) };
+    if borrow_temp_read_box(&slot.item) != 42 {
+        panic(3);
+    };
+}
+
+@test "sab fresh nested box field borrow call argument reads handle"() {
+    let nested = BorrowTempNestedBoxSlot { slot: BorrowTempBoxSlot { item: Box::new(BorrowTempPayload { value: 11 }) } };
+    if borrow_temp_read_box(&nested.slot.item) != 11 {
+        panic(4);
+    };
+}
+
+@test "sab named box field borrow call argument reads handle"() {
+    let slot = BorrowTempBoxSlot { item: Box::new(BorrowTempPayload { value: 43 }) };
+    let borrowed_box: &Box<BorrowTempPayload> = &slot.item;
+    if borrow_temp_read_box(borrowed_box) != 43 {
+        panic(6);
+    };
+}
+
+@test "sab named vec box index borrow call arguments read handles"() {
+    let items: Vec<Box<BorrowTempPayload>> = Vec::new();
+    items.push(Box::new(BorrowTempPayload { value: 3 }));
+    items.push(Box::new(BorrowTempPayload { value: 4 }));
+    let holder = BorrowTempVecBoxSlot { items: items };
+    let first: &Box<BorrowTempPayload> = &holder.items[0];
+    let second: &Box<BorrowTempPayload> = &holder.items[1];
+    if borrow_temp_read_box(first) + borrow_temp_read_box(second) != 7 {
+        panic(7);
+    };
+}
+
+@test "sab fresh mixed smart field borrow call arguments"() {
+    let holder = BorrowTempMixedSlot {
+        boxed: Box::new(BorrowTempPayload { value: 2 }),
+        rc: Rc::new(BorrowTempPayload { value: 3 }),
+        arc: Arc::new(BorrowTempPayload { value: 5 }),
+    };
+    if borrow_temp_sum_box_rc_arc(&holder.boxed, &holder.rc, &holder.arc) != 10 {
+        panic(5);
+    };
+}

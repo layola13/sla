@@ -1,0 +1,10 @@
+// expect: TypeMismatch
+// FB-011: a string-literal switch pattern against an integer scrutinee
+// must be diagnosed as a type mismatch.
+fn f(x: i64) -> i64 {
+    switch x {
+        "a string against int" => { return 1; },
+        default => { return 0; },
+    };
+    return 0;
+}

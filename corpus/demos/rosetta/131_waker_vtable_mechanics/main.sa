@@ -1,0 +1,116 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/waker.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/sync/atomic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const VTABLE = vtable { clone = @clone_waker, wake = @wake_waker, wake_by_ref = @wake_by_ref_waker, drop = @drop_waker }
+@const SLA_FNPTR_VT_clone_waker = vtable { call = @clone_waker }
+@const SLA_FNPTR_VT_wake_waker = vtable { call = @wake_waker }
+@const SLA_FNPTR_VT_wake_by_ref_waker = vtable { call = @wake_by_ref_waker }
+@const SLA_FNPTR_VT_drop_waker = vtable { call = @drop_waker }
+@const SLA_FNPTR_VT_waker_vtable_wake_count = vtable { call = @sla__waker_vtable_wake_count }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@clone_waker(data: ptr, out_raw: ptr):
+L_ENTRY:
+    tmp_0 = 1
+    EXPAND ATOMIC_USIZE_FETCH_ADD tmp_1, data, tmp_0, relaxed
+    !tmp_0
+    _old = tmp_1
+    EXPAND RAW_WAKER_NEW tmp_2, data, VTABLE
+    raw = tmp_2
+    store out_raw+0, raw as ptr
+    !raw
+    !_old
+    return
+
+@wake_waker(data: ptr) -> i32:
+L_ENTRY:
+    tmp_3 = 1
+    EXPAND ATOMIC_USIZE_FETCH_ADD tmp_4, data, tmp_3, relaxed
+    !tmp_3
+    old = tmp_4
+    tmp_5 = old as i32
+    return tmp_5
+
+@wake_by_ref_waker(data: ptr) -> i32:
+L_ENTRY:
+    tmp_6 = 1
+    EXPAND ATOMIC_USIZE_FETCH_ADD tmp_7, data, tmp_6, relaxed
+    !tmp_6
+    old = tmp_7
+    tmp_8 = old as i32
+    return tmp_8
+
+@drop_waker(data: ptr):
+L_ENTRY:
+    _data = data
+    return
+
+@sla__waker_vtable_wake_count() -> u64:
+L_ENTRY:
+    tmp_9 = 0
+    count = stack_alloc AtomicUsize_SIZE
+    EXPAND ATOMIC_USIZE_INIT count, tmp_9
+    !tmp_9
+    EXPAND PTR_CAST tmp_10, count
+    data = tmp_10
+    EXPAND RAW_WAKER_NEW tmp_11, data, VTABLE
+    raw = tmp_11
+    EXPAND WAKER_FROM_RAW tmp_12, raw
+    waker = tmp_12
+    EXPAND WAKER_CLONE tmp_13, waker
+    cloned = tmp_13
+    EXPAND WAKER_WAKE_BY_REF tmp_14, cloned
+    _by_ref = tmp_14
+    EXPAND WAKER_WAKE tmp_15, cloned
+    _wake = tmp_15
+    EXPAND ATOMIC_USIZE_LOAD tmp_16, count, relaxed
+    !_by_ref
+    !_wake
+    !waker
+    !raw
+    !cloned
+    return tmp_16
+
+@main() -> i32:
+L_ENTRY:
+    tmp_17 = call @sla__waker_vtable_wake_count()
+    result = tmp_17
+    tmp_18 = call @sa_fmt_u64(result, 10)
+    tmp_19 = call @sa_fmt_buffer_data(tmp_18)
+    tmp_20 = call @sa_fmt_buffer_len(tmp_18)
+    tmp_21 = tmp_19
+    call @sa_print_bytes(&tmp_21, tmp_20)
+    call @sa_fmt_buffer_free(^tmp_18)
+    !tmp_21
+    !tmp_20
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_22 = result as i32
+    return tmp_22
+
+@test "rosetta 131 131_waker_vtable_mechanics"():
+L_TEST_ENTRY_0:
+    tmp_23 = call @sla__waker_vtable_wake_count()
+    got = tmp_23
+    tmp_24 = 3
+    tmp_25 = ne got, tmp_24
+    !tmp_24
+    br tmp_25 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_25
+    panic(131)
+
+L_ELSE_2:
+    !tmp_25
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

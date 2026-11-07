@@ -1,0 +1,21 @@
+// DEF-12: the kb shape with an EXTERN callee. The triage line
+// verified the user-function form only; this file pins the same
+// call-site shape (borrow of doc + by-value Copy reads of
+// doc.soff[i] / doc.slen[i]) against a declared extern "C" callee,
+// whose body the checker cannot inspect. The Copy-read exemption is
+// a call-site classification and must not depend on the callee
+// having a visible body. Judged by standalone `sla check`.
+
+struct Doc {
+    soff: Vec<u64>,
+    slen: Vec<u64>,
+    pool: Vec<u8>,
+}
+
+extern "C" {
+    fn ext_span_eq(doc: &Doc, off: u64, len: u64, tp: ptr, tn: u64) -> bool;
+}
+
+fn str_eq_ext(doc: &Doc, node: i64, tp: ptr, tn: u64) -> bool {
+    return unsafe { ext_span_eq(doc, doc.soff[node as u64], doc.slen[node as u64], tp, tn) };
+}

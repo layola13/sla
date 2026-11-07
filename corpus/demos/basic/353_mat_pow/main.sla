@@ -1,0 +1,47 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 斐波那契矩阵幂（M=[[1,1],[1,0]]^5=[[8,5],[5,3]]）。
+// 意对标 28 矩阵乘法的幂版（326/327 互补；标量传参避定长数组门）。
+
+fn mat_mul(a11: int, a12: int, a21: int, a22: int, b11: int, b12: int, b21: int, b22: int) -> int {
+    return a11 * b11 + a12 * b21;
+}
+
+fn mat_pow5_c11() -> int {
+    let a11 = 1;
+    let a12 = 1;
+    let a21 = 1;
+    let a22 = 0;
+    let r11 = 1;
+    let r12 = 0;
+    let r21 = 0;
+    let r22 = 1;
+    let b11 = a11;
+    let b12 = a12;
+    let b21 = a21;
+    let b22 = a22;
+    let k = 0;
+    while k < 5 {
+        let n11 = r11 * b11 + r12 * b21;
+        let n12 = r11 * b12 + r12 * b22;
+        let n21 = r21 * b11 + r22 * b21;
+        let n22 = r21 * b12 + r22 * b22;
+        r11 = n11;
+        r12 = n12;
+        r21 = n21;
+        r22 = n22;
+        k = k + 1;
+    }
+    return r11 * 1000 + r12 * 100 + r21 * 10 + r22;
+}
+
+fn main() -> i32 {
+    println("{}", mat_pow5_c11());
+    return 0;
+}
+
+@test "basic 353 mat pow"() {
+    if mat_pow5_c11() != 8553 { panic(35301); };
+    if mat_mul(1, 1, 1, 0, 1, 1, 1, 0) != 2 { panic(35302); };
+}

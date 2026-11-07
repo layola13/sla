@@ -1,0 +1,42 @@
+struct BinaryCopyParamResult {
+    first: int,
+    second: int,
+    third: int,
+}
+
+fn binary_copy_param_result(value: int, enabled: bool) -> BinaryCopyParamResult {
+    let first = value;
+    let second = 0;
+    if enabled { second = value + 4; };
+    let third = value + 6;
+    return BinaryCopyParamResult { first: first, second: second, third: third };
+}
+
+fn copy_local_identity(value: int) -> int {
+    return value;
+}
+
+fn binary_copy_local_result(value: int) -> BinaryCopyParamResult {
+    let local = copy_local_identity(value);
+    if local < 0 {
+        return BinaryCopyParamResult { first: 0, second: 0, third: 0 };
+    };
+    let first = local;
+    let second = local + 4;
+    let third = local + 6;
+    return BinaryCopyParamResult { first: first, second: second, third: third };
+}
+
+@test "direct sab binary copy param can be reused"() {
+    let got = binary_copy_param_result(10, true);
+    if got.first != 10 { panic(44001); };
+    if got.second != 14 { panic(44002); };
+    if got.third != 16 { panic(44003); };
+}
+
+@test "direct sab binary copy local from call can be reused"() {
+    let got = binary_copy_local_result(10);
+    if got.first != 10 { panic(44004); };
+    if got.second != 14 { panic(44005); };
+    if got.third != 16 { panic(44006); };
+}

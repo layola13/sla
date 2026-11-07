@@ -1,0 +1,7 @@
+// expect: InlineImplNotAllowed
+// neg: inline prefix on an impl declaration
+struct S { a: i32 }
+inline impl S {
+    fn get(self) -> i32 { return self.a; }
+}
+fn main() -> i32 { return 0; }

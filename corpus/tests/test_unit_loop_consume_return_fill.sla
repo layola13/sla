@@ -1,0 +1,115 @@
+@import "sa_std/vec.sa"
+@import "sa_std/string.sa"
+
+// REG-LOOP-CONSUME regression (positive): a binding declared before a
+// loop may be consumed inside the loop body when the consumption is
+// part of a `return` value -- the value leaves the function together
+// with the return and can never stay dead across a loop back-edge.
+// The checker used to reject this shape with LoopConditionalConsume,
+// which poisoned sa_std dns_read_name (6 registry entries) and
+// redis_parse_value (47 registry entries). The functions below are
+// distilled shapes of both std functions; before the fix this file
+// fails type checking, after the fix it runs green on both backends.
+
+struct LoopFillOut {
+    buf: Vec<u8>,
+    status: i32,
+}
+
+fn loop_put_byte(v: Vec<u8>, b: u8) -> Vec<u8> {
+    v.push(b);
+    return v;
+}
+
+// dns_read_name shape: accumulator declared before `while true`,
+// struct literal fills on return paths only, plus a post-loop fill.
+fn loop_collect(limit: u64) -> LoopFillOut {
+    let acc: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while true {
+        if i >= limit {
+            return LoopFillOut { buf: acc, status: 1 };
+        };
+        if i == 3 {
+            return LoopFillOut { buf: acc, status: 0 };
+        };
+        acc = loop_put_byte(acc, ((i + 65) as u8));
+        i = i + 1;
+    }
+    return LoopFillOut { buf: acc, status: 2 };
+}
+
+struct LoopStep {
+    buf: Vec<u8>,
+    ok: bool,
+}
+
+struct LoopAgg {
+    buf: Vec<u8>,
+    total: u64,
+}
+
+fn loop_step(v: Vec<u8>, b: u8) -> LoopStep {
+    v.push(b);
+    return LoopStep { buf: v, ok: true };
+}
+
+// redis_parse_value shape: `owned` declared before the loop, fed
+// through a by-value call each iteration and rebound from the result
+// struct, struct literal fill of `owned` on an early return path.
+fn loop_aggregate(seed: Vec<u8>, n: u64, fail_at: u64) -> LoopAgg {
+    let owned = seed;
+    let k: u64 = 0;
+    while k < n {
+        let child = loop_step(owned, 66);
+        owned = child.buf;
+        if k == fail_at {
+            return LoopAgg { buf: owned, total: k };
+        };
+        k = k + 1;
+    }
+    return LoopAgg { buf: owned, total: k };
+}
+
+fn loop_take_string(s: String) -> String {
+    return s;
+}
+
+// Call-argument consumption of a pre-loop binding inside a return:
+// also leaves with the return value, never loop-carried.
+fn loop_return_call(n: u64) -> String {
+    let s = format("xy");
+    let i: u64 = 0;
+    while i < n {
+        if i == 1 {
+            return loop_take_string(s);
+        };
+        i = i + 1;
+    }
+    return s;
+}
+
+@test "loop consume return fill dns shape"() {
+    let r = loop_collect(9);
+    if r.status != 0 { panic(74101); };
+    if len(r.buf) != 3 { panic(74102); };
+    let r2 = loop_collect(2);
+    if r2.status != 1 { panic(74103); };
+    if len(r2.buf) != 2 { panic(74104); };
+}
+
+@test "loop consume return fill redis shape"() {
+    let seed: Vec<u8> = Vec::new();
+    let a = loop_aggregate(seed, 5, 2);
+    if a.total != 2 { panic(74201); };
+    if len(a.buf) != 3 { panic(74202); };
+    let seed2: Vec<u8> = Vec::new();
+    let b = loop_aggregate(seed2, 3, 99);
+    if b.total != 3 { panic(74203); };
+    if len(b.buf) != 3 { panic(74204); };
+}
+
+@test "loop consume return call arg shape"() {
+    if len(loop_return_call(5)) != 2 { panic(74301); };
+    if len(loop_return_call(1)) != 2 { panic(74302); };
+}

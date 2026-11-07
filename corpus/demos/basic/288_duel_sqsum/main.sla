@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 循环 vs 公式平方和对峙（27×245：5→55=55）。
+// 双实现一致性锁定（单实现见 27/245）。
+
+fn sum_sq_loop(n: int) -> int {
+    let t = 0;
+    for i in 1..(n + 1) {
+        t = t + i * i;
+    }
+    return t;
+}
+
+fn sqsum_form(n: int) -> int {
+    return n * (n + 1) * (2 * n + 1) / 6;
+}
+
+fn main() -> i32 {
+    println("{}", sum_sq_loop(5));
+    return 0;
+}
+
+@test "basic 288 duel sqsum"() {
+    if sum_sq_loop(5) != sqsum_form(5) { panic(28801); };
+    if sqsum_form(5) != 55 { panic(28802); };
+}

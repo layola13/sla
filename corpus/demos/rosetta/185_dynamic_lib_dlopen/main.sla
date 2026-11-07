@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+
+extern "C" {
+    fn dlopen(path: *u8, flags: i32) -> *u8;
+    fn dlclose(handle: *u8) -> i32;
+}
+
+@no_mangle pub extern "C" fn dlopen(path: *u8, flags: i32) -> *u8 {
+    return ptr::null::<u8>();
+}
+
+@no_mangle pub extern "C" fn dlclose(handle: *u8) -> i32 {
+    return 0;
+}
+
+fn dynamic_lib_close_status() -> i32 {
+    unsafe {
+        let handle = dlopen("libdemo.so".as_ptr(), 2);
+        let closed_status = dlclose(handle);
+        return closed_status;
+    };
+}
+
+fn main() -> i32 {
+    let result = dynamic_lib_close_status();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 185 185_dynamic_lib_dlopen"() {
+    let got = dynamic_lib_close_status();
+    if got != 0 {
+        panic(185);
+    };
+}

@@ -1,0 +1,36 @@
+@import "sa_std/jwt.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Coverage shard 2 (round 3 split C1 of test_unit_reg2_jwt_slice_c):
+// jwt_push_all alone. Round 1: the combined jwt_slice file trapped
+// UseAfterMove (1009) on SAB; round 2 localized the trap to the
+// {push_all, stage} pair (splits A/B fully green). Assertions
+// unchanged.
+
+fn vb(p: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return v;
+}
+
+fn vec_byte(v: &Vec<u8>, i: u64) -> u8 {
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let b: u8 = 0;
+    SLICE_GET(b, sl, i);
+    return b;
+}
+
+@test "reg2 jwt_push_all"() {
+    let out = jwt_push_all(vb(STR_PTR("ab"), 2), vb(STR_PTR("cd"), 2));
+    if len(out) != 4 { panic(24720); };
+    if vec_byte(&out, 0) != 97 || vec_byte(&out, 3) != 100 { panic(24721); }; // abcd
+    let same = jwt_push_all(vb(STR_PTR("ab"), 2), Vec::new());
+    if len(same) != 2 { panic(24722); };
+    let onto = jwt_push_all(Vec::new(), vb(STR_PTR("xy"), 2));
+    if len(onto) != 2 || vec_byte(&onto, 0) != 120 { panic(24723); };
+}

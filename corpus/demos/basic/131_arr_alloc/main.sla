@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 446_new_array_n：定长分配 + 下标填充（60,3）。
+// SLA 定长数组长度即类型一部分（`[i32; 3]`），无 `new Array(n)` 构造，
+// 用字面量占位 + 下标写表达（与 08/28 的数组口径一致）。
+
+fn main() -> i32 {
+    let a: [i32; 3] = [0, 0, 0];
+    a[0] = 10;
+    a[1] = 20;
+    a[2] = 30;
+    println("{},{}", a[0] + a[1] + a[2], len(a));
+    return 0;
+}
+
+@test "basic 131 arr alloc"() {
+    let a: [i32; 3] = [0, 0, 0];
+    a[0] = 10;
+    a[1] = 20;
+    a[2] = 30;
+    if a[0] + a[1] + a[2] != 60 { panic(13101); };
+    if len(a) != 3 { panic(13102); };
+}

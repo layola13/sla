@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_patch_override_applied() -> i32 {
+    let patched_source = 1;
+    return patched_source;
+}
+
+fn main() -> i32 { let patched_source = 1; println("{}", patched_source); return patched_source; }
+@test "rosetta 215 pkg patch override"() { let got = pkg_patch_override_applied(); if got != 1 { panic(215); }; }

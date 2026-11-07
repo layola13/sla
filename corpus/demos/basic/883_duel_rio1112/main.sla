@@ -1,0 +1,68 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Riordan 续桥二对峙：短递推 vs 桥序（n=11：1585 对 1585；n=12：4213 对 4213）。
+// 意对标 881_motz_riob11 × 753_duel_rio910（续桥源与对峙体例合流）。
+
+fn moz(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k <= ii - 2 {
+            s = s + t[k] * t[ii - 2 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn rio(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 0; };
+    let ii = 2;
+    while ii <= n {
+        t[ii] = (ii - 1) * (2 * t[ii - 1] + 3 * t[ii - 2]) / (ii + 1);
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn rbr(n: int) -> int {
+    if n == 0 { return 1; };
+    if n == 1 { return 0; };
+    return moz(n - 1) - rbr(n - 1);
+}
+
+fn mbri(n: int) -> int {
+    return rbr(n) + rbr(n + 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", rio(11), rbr(11), rio(12), rbr(12));
+    return 0;
+}
+
+@test "basic 883 duel rio1112"() {
+    if rio(11) != 1585 { panic(88301); };
+    if rbr(11) != 1585 { panic(88302); };
+    if rio(12) != 4213 { panic(88303); };
+    if rbr(12) != 4213 { panic(88304); };
+}

@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Heron 面积（(13,14,15)→84；s=21，乘积 7056=84²）。
+// 意对标 338 勾股判定的面积版（338 互补）。
+
+fn isqrt(n: int) -> int {
+    if n <= 0 { return 0; };
+    let x = n;
+    let y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    return x;
+}
+
+fn heron(a: int, b: int, c: int) -> int {
+    let s = (a + b + c) / 2;
+    return isqrt(s * (s - a) * (s - b) * (s - c));
+}
+
+fn main() -> i32 {
+    println("{},{},{}", heron(13, 14, 15), heron(5, 5, 6), heron(5, 5, 8));
+    return 0;
+}
+
+@test "basic 486 heron"() {
+    if heron(13, 14, 15) != 84 { panic(48601); };
+    if heron(5, 5, 6) != 12 { panic(48602); };
+    if heron(5, 5, 8) != 12 { panic(48603); };
+}

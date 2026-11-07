@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+enum Shape {
+    Circle(i32),
+    Square(i32),
+}
+
+fn area(shape: Shape) -> i32 {
+    match shape {
+        Shape::Circle(r) => {
+            r * r * 3
+        },
+        Shape::Square(s) => {
+            s * s
+        },
+    }
+}
+
+fn main() -> i32 {
+    let value = area(Shape::Square(6));
+    println("{}", value);
+    return 0;
+}
+
+@test "rosetta 043 tagged union"() {
+    let value = area(Shape::Square(6));
+    if value != 36 {
+        panic(43);
+    };
+}

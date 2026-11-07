@@ -1,0 +1,53 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian-B 第 6 行 1,722,10543,23548,10543,722,1（行和 46080=2^6·6!；循环求和）。
+// 意对标 806_eulb6（单格版互补；同式行复算）。
+
+fn eub(n: int, m: int) -> int {
+    let w = m + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + m {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= m {
+            t[mm * w + nn] = (2 * nn + 1) * t[(mm - 1) * w + nn] + (2 * mm - 2 * nn + 1) * t[(mm - 1) * w + nn - 1];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + m];
+}
+
+fn ebsum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + eub(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", eub(6, 1), eub(6, 2), ebsum(6));
+    return 0;
+}
+
+@test "basic 807 eulb row6"() {
+    if eub(6, 1) != 722 { panic(80701); };
+    if eub(6, 2) != 10543 { panic(80702); };
+    if ebsum(6) != 46080 { panic(80703); };
+    if eub(6, 0) != 1 { panic(80704); };
+}

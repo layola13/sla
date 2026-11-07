@@ -1,0 +1,53 @@
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+@import "sa_std/alloc/vec.sa"
+
+// Regression (CD line, defect alpha): str_eq(&local, ...) where the local
+// is a locally-owned String trapped the SAB referee with a false
+// BorrowConflict 1008 (register = the String, expected Active mask 1,
+// actual Locked_Read mask 2). Root cause was in sci's verifier
+// (clearBorrowCtx): STRING_BUF_AS_STR borrows the borrow produced for
+// `&local`, forming a borrow-of-borrow chain; releasing the inner view
+// reset the outer view's state to plain Active, stripping its BorrowView
+// bit, so the outer release never decremented the owner's lock count.
+// Discriminating backend is the SAB path (host `sa test`); the SA backend
+// passed even before the fix. Controls that always passed: str_eq on a
+// by-value parameter, str_eq on a struct field projection, len() only.
+
+fn cd_mk_hello() -> String {
+    return format("hello");
+}
+
+fn cd_param_shape(m: String) -> bool {
+    return str_eq(&m, "hello");
+}
+
+@test "str_eq on fn-returned local string"() {
+    let m: String = cd_mk_hello();
+    if !str_eq(&m, "hello") {
+        panic(4842);
+    };
+}
+
+@test "str_eq on inline format local string"() {
+    let m: String = format("hello");
+    if !str_eq(&m, "hello") {
+        panic(4844);
+    };
+}
+
+@test "str_eq twice on same local string"() {
+    let m: String = cd_mk_hello();
+    if !str_eq(&m, "hello") {
+        panic(4846);
+    };
+    if str_eq(&m, "world") {
+        panic(4847);
+    };
+}
+
+@test "str_eq param shape control"() {
+    if !cd_param_shape(cd_mk_hello()) {
+        panic(4848);
+    };
+}

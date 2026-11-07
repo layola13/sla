@@ -1,0 +1,92 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_frame_valid = vtable { call = @sla__frame_valid }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__frame_valid(kind: u8, len: u8, checksum: u8) -> u8:
+L_ENTRY:
+    tmp_0 = 1
+    tmp_1 = tmp_0 as u8
+    tmp_2 = eq kind, tmp_1
+    !tmp_1
+    br tmp_2 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_2
+    tmp_3 = add kind, len
+    tmp_4 = eq checksum, tmp_3
+    !tmp_3
+    !checksum
+    !len
+    !kind
+    return tmp_4
+
+L_ELSE_1:
+    !tmp_2
+    tmp_5 = 0
+    !checksum
+    !len
+    !kind
+    return tmp_5
+
+
+@main() -> i32:
+L_ENTRY:
+    tmp_7 = 1
+    tmp_8 = tmp_7 as u8
+    tmp_9 = 4
+    tmp_10 = tmp_9 as u8
+    tmp_11 = 5
+    tmp_12 = tmp_11 as u8
+    tmp_13 = call @sla__frame_valid(tmp_8, tmp_10, tmp_12)
+    !tmp_8
+    !tmp_10
+    !tmp_12
+    result = tmp_13
+    tmp_14 = call @sa_fmt_bool(result)
+    tmp_15 = call @sa_fmt_buffer_data(tmp_14)
+    tmp_16 = call @sa_fmt_buffer_len(tmp_14)
+    tmp_17 = tmp_15
+    call @sa_print_bytes(&tmp_17, tmp_16)
+    call @sa_fmt_buffer_free(^tmp_14)
+    !tmp_17
+    !tmp_16
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_18 = 0
+    !result
+    return tmp_18
+
+@test "rosetta 087 87_protocol_frame"():
+L_TEST_ENTRY_3:
+    tmp_19 = 1
+    tmp_20 = tmp_19 as u8
+    tmp_21 = 4
+    tmp_22 = tmp_21 as u8
+    tmp_23 = 5
+    tmp_24 = tmp_23 as u8
+    tmp_25 = call @sla__frame_valid(tmp_20, tmp_22, tmp_24)
+    !tmp_20
+    !tmp_22
+    !tmp_24
+    got = tmp_25
+    tmp_26 = 1
+    tmp_27 = ne got, tmp_26
+    !tmp_26
+    br tmp_27 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_27
+    panic(87)
+
+L_ELSE_5:
+    !tmp_27
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !got
+    return
+

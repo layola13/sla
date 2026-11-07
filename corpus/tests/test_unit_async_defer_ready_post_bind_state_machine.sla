@@ -1,0 +1,60 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn await_local_defer_ready_then_bind() -> i32 {
+    let delayed = future::defer_ready(40);
+    let value = delayed.await;
+    let result = value + 2;
+    return result;
+}
+
+async fn await_defer_ready_then_bind() -> i32 {
+    let value = future::defer_ready(39).await;
+    let result = value + 3;
+    return result;
+}
+
+fn post_bind_defer_ready_await_resumes_on_second_poll() -> i32 {
+    let fut = await_local_defer_ready_then_bind();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9761);
+    };
+    if task::is_ready(task) != false {
+        panic(9762);
+    };
+    if task::poll(task) != true {
+        panic(9763);
+    };
+    if task::is_ready(task) != true {
+        panic(9764);
+    };
+    return task::result(task);
+}
+
+fn direct_post_bind_defer_ready_await_resumes_on_second_poll() -> i32 {
+    let fut = await_defer_ready_then_bind();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9771);
+    };
+    if task::is_ready(task) != false {
+        panic(9772);
+    };
+    if task::poll(task) != true {
+        panic(9773);
+    };
+    if task::is_ready(task) != true {
+        panic(9774);
+    };
+    return task::result(task);
+}
+
+@test "async defer ready await post binding resumes"() {
+    if post_bind_defer_ready_await_resumes_on_second_poll() != 42 {
+        panic(9765);
+    };
+    if direct_post_bind_defer_ready_await_resumes_on_second_poll() != 42 {
+        panic(9775);
+    };
+}

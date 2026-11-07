@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 模斐波那契双实现对峙（直迭代 vs Pisano 约化：(100,7) 皆得 3）。
+// 意对标 364 素数对峙的周期版（439 互补）。
+
+fn fibmod_direct(n: int, m: int) -> int {
+    if n == 0 { return 0; };
+    let a = 0;
+    let b = 1;
+    let i = 1;
+    while i <= n {
+        let t = (a + b) % m;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    return a;
+}
+
+fn pisano(m: int) -> int {
+    let a = 0;
+    let b = 1;
+    let k = 1;
+    while k <= 6 * m {
+        let t = (a + b) % m;
+        a = b;
+        b = t;
+        if a == 0 {
+            if b == 1 { return k; };
+        };
+        k = k + 1;
+    }
+    return 0;
+}
+
+fn fibmod_red(n: int, m: int) -> int {
+    return fibmod_direct(n % pisano(m), m);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", fibmod_direct(100, 7), fibmod_red(100, 7), pisano(7));
+    return 0;
+}
+
+@test "basic 444 duel fibmod"() {
+    if fibmod_direct(100, 7) != 3 { panic(44401); };
+    if fibmod_red(100, 7) != 3 { panic(44402); };
+    if fibmod_direct(100, 7) != fibmod_red(100, 7) { panic(44403); };
+    if pisano(7) != 16 { panic(44404); };
+}

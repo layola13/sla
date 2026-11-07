@@ -1,0 +1,59 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Narayana 三向：行和 × Catalan 商式 × Catalan 卷积（n=7：429 三锁）。
+// 意对标 717_nar_row7（行源互补；605 三向体例收束 Narayana 续高位族）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn nar(n: int, k: int) -> int {
+    return binom_mul(n, k) * binom_mul(n, k + 1) / n;
+}
+
+fn nsum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k < n {
+        s = s + nar(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn catd(n: int) -> int {
+    return binom_mul(2 * n, n) / (n + 1);
+}
+
+fn catc(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let i = 0;
+    while i < n {
+        s = s + catc(i) * catc(n - 1 - i);
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", nsum(7), catd(7), catc(7));
+    return 0;
+}
+
+@test "basic 725 tri nar2"() {
+    if nsum(7) != 429 { panic(72501); };
+    if catd(7) != 429 { panic(72502); };
+    if catc(7) != 429 { panic(72503); };
+    if nsum(6) != 132 { panic(72504); };
+}

@@ -1,0 +1,176 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_labeled_break_total = vtable { call = @sla__labeled_break_total }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__labeled_break_total() -> i32:
+L_ENTRY:
+    tmp_0 = 0
+    outer = tmp_0
+    tmp_1 = 0
+    total = tmp_1
+    tmp_2 = 0
+    done = tmp_2
+    jmp L_WHILE_HEAD_0
+
+L_WHILE_HEAD_0:
+    tmp_3 = 0
+    tmp_4 = eq done, tmp_3
+    !tmp_3
+    br tmp_4 -> L_WHILE_BODY_1, L_WHILE_COND_FALSE_2
+
+L_WHILE_BODY_1:
+    !tmp_4
+    tmp_5 = 1
+    tmp_6 = add outer, tmp_5
+    !tmp_5
+    !outer
+    outer = tmp_6
+    tmp_7 = 0
+    inner = tmp_7
+    jmp L_WHILE_HEAD_4
+
+L_WHILE_HEAD_4:
+    tmp_8 = 0
+    tmp_9 = eq done, tmp_8
+    !tmp_8
+    br tmp_9 -> L_WHILE_BODY_5, L_WHILE_COND_FALSE_6
+
+L_WHILE_BODY_5:
+    !tmp_9
+    tmp_10 = 1
+    tmp_11 = add inner, tmp_10
+    !tmp_10
+    !inner
+    inner = tmp_11
+    tmp_12 = 2
+    tmp_13 = eq outer, tmp_12
+    !tmp_12
+    br tmp_13 -> L_THEN_8, L_ELSE_9
+
+L_THEN_8:
+    !tmp_13
+    tmp_14 = 2
+    tmp_15 = eq inner, tmp_14
+    !tmp_14
+    br tmp_15 -> L_THEN_11, L_ELSE_12
+
+L_THEN_11:
+    !tmp_15
+    tmp_16 = 1
+    !done
+    done = tmp_16
+    jmp L_MERGE_13
+
+L_ELSE_12:
+    !tmp_15
+    tmp_17 = add total, outer
+    tmp_18 = add tmp_17, inner
+    !tmp_17
+    !total
+    total = tmp_18
+    jmp L_MERGE_13
+
+L_MERGE_13:
+    jmp L_MERGE_10
+
+L_ELSE_9:
+    !tmp_13
+    tmp_20 = add total, outer
+    tmp_21 = add tmp_20, inner
+    !tmp_20
+    !total
+    total = tmp_21
+    jmp L_MERGE_10
+
+L_MERGE_10:
+    tmp_23 = 3
+    tmp_24 = sge inner, tmp_23
+    !tmp_23
+    br tmp_24 -> L_THEN_14, L_ELSE_15
+
+L_THEN_14:
+    !tmp_24
+    jmp L_WHILE_EXIT_7
+
+L_ELSE_15:
+    !tmp_24
+    jmp L_MERGE_16
+
+L_MERGE_16:
+    jmp L_WHILE_HEAD_4
+
+L_WHILE_COND_FALSE_6:
+    !tmp_9
+    jmp L_WHILE_EXIT_7
+
+L_WHILE_EXIT_7:
+    tmp_26 = 3
+    tmp_27 = sge outer, tmp_26
+    !tmp_26
+    br tmp_27 -> L_THEN_17, L_ELSE_18
+
+L_THEN_17:
+    !tmp_27
+    tmp_28 = 1
+    !done
+    done = tmp_28
+    jmp L_MERGE_19
+
+L_ELSE_18:
+    !tmp_27
+    jmp L_MERGE_19
+
+L_MERGE_19:
+    !inner
+    jmp L_WHILE_HEAD_0
+
+L_WHILE_COND_FALSE_2:
+    !tmp_4
+    jmp L_WHILE_EXIT_3
+
+L_WHILE_EXIT_3:
+    !done
+    !outer
+    return total
+
+@main() -> i32:
+L_ENTRY:
+    tmp_30 = call @sla__labeled_break_total()
+    result = tmp_30
+    tmp_31 = call @sa_fmt_u64(result, 10)
+    tmp_32 = call @sa_fmt_buffer_data(tmp_31)
+    tmp_33 = call @sa_fmt_buffer_len(tmp_31)
+    tmp_34 = tmp_32
+    call @sa_print_bytes(&tmp_34, tmp_33)
+    call @sa_fmt_buffer_free(^tmp_31)
+    !tmp_34
+    !tmp_33
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 103 103_labeled_break"():
+L_TEST_ENTRY_20:
+    tmp_35 = call @sla__labeled_break_total()
+    got = tmp_35
+    tmp_36 = 12
+    tmp_37 = ne got, tmp_36
+    !tmp_36
+    br tmp_37 -> L_THEN_21, L_ELSE_22
+
+L_THEN_21:
+    !tmp_37
+    panic(103)
+
+L_ELSE_22:
+    !tmp_37
+    jmp L_MERGE_23
+
+L_MERGE_23:
+    !got
+    return
+

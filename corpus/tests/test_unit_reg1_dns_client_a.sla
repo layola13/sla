@@ -1,0 +1,136 @@
+@import "sa_std/dns.sla"
+@import "sa_std/fs.sai"
+@import "sa_std/vec.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/time.sai"
+@import "sa_std/status.sla"
+
+// reg-shard1 coverage: SAB registry declared entries from
+// sa_std/dns.sla, client half A: dns_next_query_id /
+// dns_read_small_file / dns_system_server / dns_send_wire.
+// Split from the combined client file so a checker failure in one
+// entry's call graph cannot mask the others (see RESULT.md).
+
+fn reg1_bytes(s: String) -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    let p: ptr = STR_PTR(s);
+    let n: u64 = len(s) as u64;
+    let i: u64 = 0;
+    while i < n {
+        out.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn reg1_veq(v: &Vec<u8>, s: String) -> bool {
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let nv: u64 = 0;
+    SLICE_GET_LEN(nv, sl);
+    let ns: u64 = len(s) as u64;
+    if nv != ns { return false; };
+    let p: ptr = STR_PTR(s);
+    let i: u64 = 0;
+    while i < ns {
+        let b: u8 = 0;
+        SLICE_GET(b, sl, i);
+        if b != PTR_BYTE_AT(p, i) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn reg1_veq_vec(a: &Vec<u8>, b: &Vec<u8>) -> bool {
+    let asl: Slice<u8> = VEC_AS_SLICE(a);
+    let na: u64 = 0;
+    SLICE_GET_LEN(na, asl);
+    let bsl: Slice<u8> = VEC_AS_SLICE(b);
+    let nb: u64 = 0;
+    SLICE_GET_LEN(nb, bsl);
+    if na != nb { return false; };
+    let i: u64 = 0;
+    while i < na {
+        let x: u8 = 0;
+        SLICE_GET(x, asl, i);
+        let y: u8 = 0;
+        SLICE_GET(y, bsl, i);
+        if x != y { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+@test "reg1 dns next query id tracks clock"() {
+    let t0: u64 = sa_time_instant_ns();
+    let id = dns_next_query_id();
+    let t1: u64 = sa_time_instant_ns();
+    let lo: u64 = (t0 >> 16) & 65535;
+    let hi: u64 = (t1 >> 16) & 65535;
+    let d: u64 = ((id as u64) + 65536 - lo) % 65536;
+    let w: u64 = (hi + 65536 - lo) % 65536;
+    if d > w + 1 { panic(62181); };
+}
+
+@test "reg1 dns read small file fixture"() {
+    // Hermetic form (2026-11-07): the fixture is created by the
+    // test itself under /tmp (previously a runner-staged file at
+    // /content/reg1-results/fixture.txt). The missing-file target
+    // is removed first so its absence is guaranteed, not assumed.
+    let fx: String = "/tmp/reg1_dns_fixture.txt";
+    let miss: String = "/tmp/reg1_dns_definitely_missing.txt";
+    let rm0: i32 = sa_fs_remove_file(STR_PTR(miss), len(miss) as u64);
+    let wr: i32 = sa_fs_write_file(STR_PTR(fx), len(fx) as u64, STR_PTR("reg1-fixture-12345"), STR_LEN("reg1-fixture-12345"));
+    if wr != SA_STD_OK { panic(62190); };
+    let r = dns_read_small_file(STR_PTR(fx), len(fx) as u64);
+    match r {
+        Ok(bytes) => {
+            if !reg1_veq(&bytes, "reg1-fixture-12345") { panic(62191); };
+        },
+        Err(e) => { panic(62192); },
+    };
+    let r2 = dns_read_small_file(STR_PTR(miss), len(miss) as u64);
+    match r2 {
+        Ok(bytes) => { panic(62193); },
+        Err(e) => {},
+    };
+}
+
+@test "reg1 dns system server matches resolv conf"() {
+    let f = dns_read_small_file(STR_PTR("/etc/resolv.conf"), STR_LEN("/etc/resolv.conf"));
+    match f {
+        Ok(bytes) => {
+            let sl: Slice<u8> = VEC_AS_SLICE(bytes);
+            let parsed = dns_resolv_conf_server(&sl);
+            let sys = dns_system_server();
+            match parsed {
+                Ok(pv) => {
+                    match sys {
+                        Ok(sv) => {
+                            if !reg1_veq_vec(&pv, &sv) { panic(62201); };
+                        },
+                        Err(e) => { panic(62202); },
+                    };
+                },
+                Err(pe) => {
+                    match sys {
+                        Ok(sv) => { panic(62203); },
+                        Err(se) => { if se != pe { panic(62204); }; },
+                    };
+                },
+            };
+        },
+        Err(e) => { panic(62205); },
+    };
+}
+
+@test "reg1 dns send wire bogus socket"() {
+    let wire: Vec<u8> = Vec::new();
+    wire.push(1);
+    wire.push(2);
+    wire.push(3);
+    wire.push(4);
+    let st = dns_send_wire(999999, wire);
+    if st == SA_STD_OK { panic(62221); };
+}

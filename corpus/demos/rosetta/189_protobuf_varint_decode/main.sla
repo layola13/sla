@@ -1,0 +1,11 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+fn protobuf_varint_value() -> u32 {
+    let value: u32 = 0u32;
+    value |= (6u32 & 0x7fu32) << 0u32;
+    value |= (0u32 & 0x7fu32) << 7u32;
+    value |= (0u32 & 0x7fu32) << 14u32;
+    return value;
+}
+fn main() -> i32 { let result = protobuf_varint_value(); println("{}", result); return result; }
+@test "rosetta 189 189_protobuf_varint_decode"() { let got = protobuf_varint_value(); if got != 6 { panic(189); }; }

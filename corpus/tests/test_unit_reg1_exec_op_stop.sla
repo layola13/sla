@@ -1,0 +1,11 @@
+@import "sa_std/executor.sla"
+
+// reg-shard1 coverage: SAB registry declared entry exec_op_stop,
+// isolated from executor_start/executor_call/executor_stop/
+// executor_share/exec_loop: on the text backend the combined file
+// (test_unit_reg1_executor.sla) fails to compile inside
+// @sla__exec_loop, which would mask this pure value entry.
+
+@test "reg1 executor exec_op_stop value"() {
+    if exec_op_stop() != 9223372036854775807 { panic(61301); };
+}

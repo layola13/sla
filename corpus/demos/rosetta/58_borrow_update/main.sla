@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/cell.sa"
+
+fn bump(value: &Cell<i32>) -> void {
+    let current = value.get();
+    value.set(current + 1);
+}
+
+fn main() -> i32 {
+    let value = Cell::new(9);
+    bump(&value);
+    println("{}", value.get());
+    return 0;
+}
+
+@test "rosetta 058 borrow update"() {
+    let value = Cell::new(9);
+    bump(&value);
+    if value.get() != 10 {
+        panic(58);
+    };
+}

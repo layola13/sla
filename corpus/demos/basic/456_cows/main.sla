@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Narayana 奶牛数（N(n)=N(n-1)+N(n-3)：N(9)=19）。
+// 意对标 449 Padovan 的同构版（449 互补，初值 1,1,1 同形异义）。
+
+fn cows(n: int) -> int {
+    if n == 0 { return 1; };
+    if n == 1 { return 1; };
+    if n == 2 { return 1; };
+    let a = 1;
+    let b = 1;
+    let c = 1;
+    let i = 2;
+    while i < n {
+        let t = c + a;
+        a = b;
+        b = c;
+        c = t;
+        i = i + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", cows(9), cows(6), cows(2));
+    return 0;
+}
+
+@test "basic 456 cows"() {
+    if cows(9) != 19 { panic(45601); };
+    if cows(6) != 6 { panic(45602); };
+    if cows(2) != 1 { panic(45603); };
+}

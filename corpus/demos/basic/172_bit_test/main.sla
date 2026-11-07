@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1248_bit_condition + 1249_bit_ternary：位测试谓词（1,0,10,20）。
+// 位运算结果须显式比零（`if (x & 1)` 按严格布尔拒识，见 129）；
+// 与 76 的纯位运算互补，此处主覆盖“位→布尔”判定。
+
+fn is_odd(x: i32) -> bool {
+    return (x & 1) != 0;
+}
+
+fn main() -> i32 {
+    let x = 5;
+    let r1 = 0;
+    if is_odd(x) { r1 = 1; };
+    let r2 = 0;
+    if is_odd(4) { r2 = 1; };
+    let r3 = 20;
+    if (5 & 3) != 0 { r3 = 10; };
+    let r4 = 20;
+    if (4 & 3) != 0 { r4 = 10; };
+    println("{},{},{},{}", r1, r2, r3, r4);
+    return 0;
+}
+
+@test "basic 172 bit test"() {
+    if is_odd(5) != true { panic(17201); };
+    if is_odd(4) != false { panic(17202); };
+    if (5 & 3) != 0 { } else { panic(17203); };
+    if (4 & 3) == 0 { } else { panic(17204); };
+}

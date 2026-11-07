@@ -1,0 +1,70 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// row5=120 三向收束：表行和 == 阶乘闭式 == 上升直乘 rise(5,1)
+//（120 对 120 对 120；三算法互锁，316 系三向体例）。
+// 意对标 580 rowval × 125 fact × 577 rising（三源单实现见各源）。
+
+fn stirling1(n: int, k: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let nn = 1;
+    while nn <= n {
+        let kk = 1;
+        while kk <= nn {
+            t[nn * w + kk] = t[(nn - 1) * w + kk - 1] + (nn - 1) * t[(nn - 1) * w + kk];
+            kk = kk + 1;
+        }
+        nn = nn + 1;
+    }
+    return t[n * w + k];
+}
+
+fn s1_row(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + stirling1(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn fact(n: int) -> int {
+    let r = 1;
+    let i = 2;
+    while i <= n {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn rising(n: int, x: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < n {
+        r = r * (x + i);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", s1_row(5), fact(5), rising(5, 1));
+    return 0;
+}
+
+@test "basic 585 tri s1"() {
+    if s1_row(5) != 120 { panic(58501); };
+    if fact(5) != 120 { panic(58502); };
+    if rising(5, 1) != 120 { panic(58503); };
+    if s1_row(4) != 24 { panic(58504); };
+}

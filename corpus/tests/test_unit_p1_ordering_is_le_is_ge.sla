@@ -1,0 +1,30 @@
+@import "sla_std/cmp.sla"
+
+// P1 coverage: Ordering.is_le / Ordering.is_ge from
+// sla_std/cmp.sla — the census name scan found no unit file
+// referencing them (its method-hit rule misses the
+// (a <=> b).is_le() form used by test_unit_bend2_parity_u32,
+// noted in RESULT.md). This file exercises the direct
+// associated-constructor form from cmp.sla itself.
+
+@test "p1 ordering is_le is_ge direct"() {
+    let lt = Ordering::less();
+    if !lt.is_le() { panic(330); };
+    if lt.is_ge() { panic(331); };
+    let eq = Ordering::equal();
+    if !eq.is_le() { panic(332); };
+    if !eq.is_ge() { panic(333); };
+    let gt = Ordering::greater();
+    if gt.is_le() { panic(334); };
+    if !gt.is_ge() { panic(335); };
+}
+
+@test "p1 ordering spaceship is_le is_ge"() {
+    let a: i32 = 3;
+    let b: i32 = 7;
+    if !(a <=> b).is_le() { panic(336); };
+    if (a <=> b).is_ge() { panic(337); };
+    if !(b <=> a).is_ge() { panic(338); };
+    if !(a <=> a).is_le() { panic(339); };
+    if !(a <=> a).is_ge() { panic(340); };
+}

@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 五边形数双实现对峙（闭式 vs 差分累加：P(5)=35 双边）。
+// 意对标 460 懒人对峙的多边形版（466 互补）。
+
+fn pent_form(n: int) -> int {
+    return n * (3 * n - 1) / 2;
+}
+
+fn pent_loop(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + 3 * k - 2;
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", pent_form(5), pent_loop(5));
+    return 0;
+}
+
+@test "basic 473 duel pent"() {
+    if pent_form(5) != 35 { panic(47301); };
+    if pent_loop(5) != 35 { panic(47302); };
+    if pent_form(5) != pent_loop(5) { panic(47303); };
+    if pent_loop(4) != 22 { panic(47304); };
+}

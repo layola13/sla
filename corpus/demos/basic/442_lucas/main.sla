@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Lucas 数（L(10)=123，L(5)=11）。
+// 意对标 237 斐波那契的伴随版（237 互补）。
+
+fn lucas(n: int) -> int {
+    if n == 0 { return 2; };
+    if n == 1 { return 1; };
+    let a = 2;
+    let b = 1;
+    let i = 1;
+    while i < n {
+        let t = a + b;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    return b;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", lucas(10), lucas(5), lucas(0));
+    return 0;
+}
+
+@test "basic 442 lucas"() {
+    if lucas(10) != 123 { panic(44201); };
+    if lucas(5) != 11 { panic(44202); };
+    if lucas(0) != 2 { panic(44203); };
+}

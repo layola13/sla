@@ -1,0 +1,11 @@
+@import "sa_std/vec.sa"
+
+@test "direct vec remove metadata"() {
+    let values: Vec<i64> = Vec::new();
+    values.push(10);
+    values.push(20);
+    values.push(30);
+    let removed = values.remove(1);
+    if removed != 20 { panic(31001); };
+    if len(values) != 2 { panic(31002); };
+};

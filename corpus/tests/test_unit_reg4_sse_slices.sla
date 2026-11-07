@@ -1,0 +1,87 @@
+@import "sa_std/sse.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Registry shard 4 coverage: sse byte-slice helpers from
+// sa_std/sse.sla (SAB registry class=declared, never probed,
+// zero corpus references at census 2026-11-06).
+// Entries: sse_slice_len, sse_slice_byte, sse_slice_copy,
+// sse_bytes_equal, sse_field_is.
+
+fn v4_of(s: String) -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    let p: ptr = STR_PTR(s);
+    let i: u64 = 0;
+    while i < len(s) {
+        out.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn v4_eq(a: Vec<u8>, b: Vec<u8>) -> bool {
+    if len(a) != len(b) { return false; };
+    let i: u64 = 0;
+    while i < len(a) {
+        if a[i] != b[i] { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+@test "reg4 sse slice len and byte"() {
+    let v = v4_of(format("data: value"));
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    if sse_slice_len(&sl) != 11 { panic(41701); };
+    if sse_slice_byte(&sl, 0) != 100 { panic(41702); };
+    if sse_slice_byte(&sl, 4) != 58 { panic(41703); };
+    if sse_slice_byte(&sl, 5) != 32 { panic(41704); };
+    if sse_slice_byte(&sl, 10) != 101 { panic(41705); };
+}
+
+@test "reg4 sse slice copy ranges"() {
+    let v = v4_of(format("data: value"));
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    if !v4_eq(sse_slice_copy(&sl, 0, 4), v4_of(format("data"))) { panic(41711); };
+    if !v4_eq(sse_slice_copy(&sl, 6, 11), v4_of(format("value"))) { panic(41712); };
+    if len(sse_slice_copy(&sl, 3, 3)) != 0 { panic(41713); };
+    if !v4_eq(sse_slice_copy(&sl, 0, 11), v4_of(format("data: value"))) { panic(41714); };
+}
+
+@test "reg4 sse bytes equal"() {
+    let a = v4_of(format("abc"));
+    let asl: Slice<u8> = VEC_AS_SLICE(a);
+    let b = v4_of(format("abc"));
+    let bsl: Slice<u8> = VEC_AS_SLICE(b);
+    if sse_bytes_equal(&asl, &bsl) != true { panic(41721); };
+    let c = v4_of(format("abd"));
+    let csl: Slice<u8> = VEC_AS_SLICE(c);
+    if sse_bytes_equal(&asl, &csl) != false { panic(41722); };
+    let d = v4_of(format("abcd"));
+    let dsl2: Slice<u8> = VEC_AS_SLICE(d);
+    if sse_bytes_equal(&asl, &dsl2) != false { panic(41723); };
+    let e1: Vec<u8> = Vec::new();
+    let e1sl: Slice<u8> = VEC_AS_SLICE(e1);
+    let e2: Vec<u8> = Vec::new();
+    let e2sl: Slice<u8> = VEC_AS_SLICE(e2);
+    if sse_bytes_equal(&e1sl, &e2sl) != true { panic(41724); };
+}
+
+@test "reg4 sse field is case insensitive name match"() {
+    let line = v4_of(format("xxDATAyy"));
+    let lsl: Slice<u8> = VEC_AS_SLICE(line);
+    let name = v4_of(format("data"));
+    let nsl: Slice<u8> = VEC_AS_SLICE(name);
+    if sse_field_is(&lsl, 2, 6, &nsl) != true { panic(41731); };
+    let name2 = v4_of(format("date"));
+    let nsl2: Slice<u8> = VEC_AS_SLICE(name2);
+    if sse_field_is(&lsl, 2, 6, &nsl2) != false { panic(41732); };
+    // Range shorter than the name cannot match.
+    if sse_field_is(&lsl, 2, 5, &nsl) != false { panic(41733); };
+    // Lowercase line bytes against an uppercase name also match.
+    let line2 = v4_of(format("retry: 5"));
+    let lsl2: Slice<u8> = VEC_AS_SLICE(line2);
+    let name3 = v4_of(format("RETRY"));
+    let nsl3: Slice<u8> = VEC_AS_SLICE(name3);
+    if sse_field_is(&lsl2, 0, 5, &nsl3) != true { panic(41734); };
+}

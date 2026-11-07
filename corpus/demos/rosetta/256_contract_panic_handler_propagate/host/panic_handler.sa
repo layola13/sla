@@ -1,0 +1,11 @@
+@export panic_hook(code: i32) -> i32:
+L_ENTRY:
+    ok = eq code, 256
+    !code
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 256
+
+L_ERR:
+    return 0

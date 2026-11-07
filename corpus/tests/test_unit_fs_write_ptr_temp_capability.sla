@@ -1,0 +1,17 @@
+@import "sa_std/fs.sa"
+@import "sa_std/fs.sai"
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+
+@test "direct sab keeps ptr-add temps valid for fs write extern"() {
+    let path_src = STR_PTR("/tmp/sla_fs_write_ptr_temp_capability.txt");
+    let path_len = STR_LEN("/tmp/sla_fs_write_ptr_temp_capability.txt");
+    let data_src = STR_PTR("SLA\n");
+    let data_len = STR_LEN("SLA\n");
+    let path_ptr = PTR_BYTE_ADD(path_src, 0);
+    let data_ptr = PTR_BYTE_ADD(data_src, 0);
+    let status = sa_fs_write_file(path_ptr, path_len, data_ptr, data_len);
+    if status != 0 {
+        panic(43201);
+    };
+}

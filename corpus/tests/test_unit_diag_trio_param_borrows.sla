@@ -1,0 +1,27 @@
+@import "sa_std/growvec.sa"
+
+// Probe (must stay LEGAL if the rule is origin-based): borrows rooted
+// at parameters are the legitimate returnable kind.
+fn first_of_vec(p: &Vec<u64>) -> &u64 {
+    return &p[0];
+}
+
+fn first_of_growvec(p: &GrowVec<u64>) -> &u64 {
+    return &p[0];
+}
+
+fn id_ref(p: &u64) -> &u64 {
+    return p;
+}
+
+fn main() -> i32 {
+    let v: Vec<u64> = Vec::new();
+    v.push(41);
+    if *first_of_vec(&v) != 41 { panic(1); };
+    let g: GrowVec<u64> = GrowVec::new();
+    g.push(42);
+    if *first_of_growvec(&g) != 42 { panic(2); };
+    let x: u64 = 43;
+    if *id_ref(&x) != 43 { panic(3); };
+    return 0;
+}

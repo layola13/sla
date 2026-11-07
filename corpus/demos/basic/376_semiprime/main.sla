@@ -1,0 +1,35 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 半素数判定（恰两个素因子计重数：6=2*3 是，12=2*2*3 否）。
+// 意对标 356 素数判定的合数版（356 互补）。
+
+fn is_semiprime(n: int) -> int {
+    if n < 4 { return 0; };
+    let c = 0;
+    let m = n;
+    let d = 2;
+    while d * d <= m {
+        while m % d == 0 {
+            c = c + 1;
+            m = m / d;
+        }
+        d = d + 1;
+    }
+    if m > 1 { c = c + 1; };
+    if c == 2 { return 1; };
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", is_semiprime(6), is_semiprime(15), is_semiprime(12), is_semiprime(4));
+    return 0;
+}
+
+@test "basic 376 semiprime"() {
+    if is_semiprime(6) != 1 { panic(37601); };
+    if is_semiprime(15) != 1 { panic(37602); };
+    if is_semiprime(12) != 0 { panic(37603); };
+    if is_semiprime(4) != 1 { panic(37604); };
+    if is_semiprime(30) != 0 { panic(37605); };
+}

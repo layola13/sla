@@ -1,0 +1,16 @@
+@import "sa_std/string.sa"
+@import "sa_std/fs.sa"
+@import "import_fixtures/pkgjson/fs_helpers.sa"
+
+fn imported_fs_exists_status(path_ptr: ptr, path_len: int) -> int {
+    let exists = SLA_FS_EXISTS(path_ptr, path_len);
+    if exists != 1 {
+        return -1;
+    };
+    return 0;
+}
+
+@test "imported fs exists direct sab"() {
+    let got = imported_fs_exists_status("/tmp/does-not-exist-package.json", 32);
+    if got != -1 { panic(39011); };
+}

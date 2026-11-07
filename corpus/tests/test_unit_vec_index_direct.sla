@@ -1,0 +1,13 @@
+@import "sa_std/vec.sa"
+
+@test "direct vec i32 index uses element width"() {
+    let values: Vec<i32> = Vec::new();
+    values.push(4);
+    values.push(5);
+    values.push(6);
+
+    let first: i32 = values[0];
+    let second: i32 = values[1];
+    let third: i32 = values[2];
+    if first + second + third != 15 { panic(9140); };
+}

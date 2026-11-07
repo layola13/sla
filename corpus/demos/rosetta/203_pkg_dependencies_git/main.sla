@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_git_dependency_count() -> i32 {
+    let pinned_git_dependency = 1;
+    return pinned_git_dependency;
+}
+
+fn main() -> i32 { let pinned_git_dependency = 1; println("{}", pinned_git_dependency); return pinned_git_dependency; }
+@test "rosetta 203 pkg dependencies git"() { let got = pkg_git_dependency_count(); if got != 1 { panic(203); }; }

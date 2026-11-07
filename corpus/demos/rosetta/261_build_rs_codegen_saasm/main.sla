@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_codegen_saasm_units() -> i32 { let emitted_module = 1; return emitted_module; }
+fn main() -> i32 { let emitted_module = 1; println("{}", emitted_module); return emitted_module; }
+@test "rosetta 261 build rs codegen saasm"() { let got = build_codegen_saasm_units(); if got != 1 { panic(261); }; }

@@ -1,0 +1,55 @@
+// Bend2 P1-6 parity corpus: Set group (base.bend @faeb02e, 9 sites —
+// the type def plus 7 public ops and the internal from_list.go helper;
+// denominator frozen in the parity table). Bend Set is a
+// Map<String, Unit> facade. Our anchors: BTreeSet (string keys) and
+// HashSet. SLA surface: new/insert/contains/len; no removal or
+// iteration entry at SLA level (see parity table).
+@import "sa_std/hashset.sa"
+@import "sa_std/btree_set.sa"
+
+@test "bend2 set new add has size"() {
+    let s = BTreeSet::new();
+    if len(s) != 0 { panic(74001); };
+    // Set.add returns the set in Bend; ours returns "was newly inserted"
+    if s.insert("alpha") != true { panic(74002); };
+    if s.insert("beta") != true { panic(74003); };
+    if s.insert("alpha") != false { panic(74004); };
+    if len(s) != 2 { panic(74005); };
+    // Set.has
+    if !s.contains("alpha") { panic(74006); };
+    if s.contains("gamma") { panic(74007); };
+}
+
+@test "bend2 set from_list"() {
+    // Set.from_list by composition (insert fold); duplicate collapses
+    let s = BTreeSet::new();
+    s.insert("x");
+    s.insert("y");
+    s.insert("x");
+    if len(s) != 2 { panic(74008); };
+    if !s.contains("x") { panic(74009); };
+    if !s.contains("y") { panic(74010); };
+}
+
+@test "bend2 set hashset int mechanics"() {
+    let s = HashSet::new();
+    s.insert(5);
+    s.insert(9);
+    if len(s) != 2 { panic(74011); };
+    if !s.contains(5) { panic(74012); };
+    if s.contains(7) { panic(74013); };
+}
+
+@test "bend2 set membership reconstruction"() {
+    // Set.to_list needs iteration. The SA layer's SET_KEYS macro is
+    // reachable from SLA on the text backend only (the SAB bridge
+    // fails it with UnknownRegister today — a frontend/SAB gap logged
+    // in the parity table; probe evidence: probes/split/probe_s4.sla).
+    // The dual-backend corpus therefore asserts membership directly.
+    let s = HashSet::new();
+    s.insert(5);
+    s.insert(9);
+    if !s.contains(5) { panic(74014); };
+    if !s.contains(9) { panic(74015); };
+    if len(s) != 2 { panic(74016); };
+}

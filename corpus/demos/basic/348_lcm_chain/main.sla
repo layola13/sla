@@ -1,0 +1,35 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 多值 lcm 链（lcm(a,b)=a/gcd(a,b)*b）。
+// 意对标 21 gcd/lcm 的链式版（91 互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn lcm(a: int, b: int) -> int {
+    return a / gcd(a, b) * b;
+}
+
+fn lcm3(a: int, b: int, c: int) -> int {
+    return lcm(lcm(a, b), c);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", lcm(4, 6), lcm3(4, 6, 8), lcm(5, 7));
+    return 0;
+}
+
+@test "basic 348 lcm chain"() {
+    if lcm(4, 6) != 12 { panic(34801); };
+    if lcm3(4, 6, 8) != 24 { panic(34802); };
+    if lcm(5, 7) != 35 { panic(34803); };
+}

@@ -1,0 +1,8 @@
+@import "versions/v1_2_3/leaf.sa"
+
+@v123_package_offset() -> i32:
+L_ENTRY:
+    leaf = call @v123_leaf_offset()
+    result = add leaf, 0
+    !leaf
+    return result

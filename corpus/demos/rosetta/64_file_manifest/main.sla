@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/slice.sa"
+
+fn file_manifest_count() -> usize {
+    let files = ["main.rs", "main.sa", "README.md"];
+    return files.len();
+}
+
+fn main() -> i32 {
+    let count = file_manifest_count();
+    println("{}", count);
+    return count;
+}
+
+@test "rosetta 064 64_file_manifest"() {
+    let got = file_manifest_count();
+    if got != 3 {
+        panic(64);
+    };
+}

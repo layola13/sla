@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Catalan 比值递推 C(n+1)=C(n)·2(2n+1)/(n+2)（C(6)=132，C(7)=429，C(8)=1430）。
+// 意对标 351_catalan（商式版互补；735 做三向收束）。
+
+fn catr(n: int) -> int {
+    let c = 1;
+    let i = 0;
+    while i < n {
+        c = c * 2 * (2 * i + 1) / (i + 2);
+        i = i + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", catr(6), catr(7), catr(8));
+    return 0;
+}
+
+@test "basic 733 cat ratio"() {
+    if catr(6) != 132 { panic(73301); };
+    if catr(7) != 429 { panic(73302); };
+    if catr(8) != 1430 { panic(73303); };
+    if catr(5) != 42 { panic(73304); };
+}

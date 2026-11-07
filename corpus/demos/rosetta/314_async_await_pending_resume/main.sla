@@ -1,0 +1,61 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/future.sa"
+@import "sa_std/core/waker.sa"
+@import "sa_std/pin.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/time.sla"
+
+// Rosetta 314: await across a real Pending suspension.
+// future::defer_ready(v) returns Pending on the first poll and Ready(v) on
+// the second, so the async state machine below suspends at the .await and
+// resumes on re-poll. Unlike demo 009 (whose block_on panics when the future
+// is not immediately ready), this block_on loops with a 1ms backoff until
+// the future completes.
+
+fn unix_now_ns() -> u64 {
+    let started = Instant::now();
+    return started.raw_ns();
+}
+
+async fn step_value(x: i32) -> i32 {
+    let v = future::defer_ready(x).await;
+    return v * 2;
+}
+
+async fn run() -> i32 {
+    let first = step_value(10).await;
+    let second = step_value(first + 1).await;
+    return second;
+}
+
+// Futures must be created and driven in the same function: the async
+// state's vtable is compiler-side metadata that does not cross function
+// boundaries, so a `future` parameter would poll with the wrong poll fn
+// and never observe readiness. Hence no `block_on(fut)` helper here.
+fn pending_resume_total() -> i32 {
+    let t = task::new(run());
+    let deadline = unix_now_ns() + 2000000000;
+    while unix_now_ns() < deadline {
+        if task::poll(t) == true {
+            return task::result(t);
+        };
+        THREAD_SLEEP_MS(1);
+    }
+    panic(314);
+}
+
+fn main() -> i32 {
+    let result = pending_resume_total();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 314 314_async_await_pending_resume"() {
+    let got = pending_resume_total();
+    if got != 42 {
+        panic(314);
+    };
+};

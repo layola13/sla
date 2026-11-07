@@ -1,0 +1,55 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Ballot 第 5 行 1,5,14,28,42,42（行和 132=Catalan(6)；行和循环求和）。
+// 意对标 647_ballot_row（低位行互补；同式高位行复算）。
+
+fn btab(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn] + t[mm * w + nn - 1];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn bsum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + btab(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", btab(5, 1), btab(5, 2), btab(5, 3));
+    return 0;
+}
+
+@test "basic 653 ballot5"() {
+    if btab(5, 1) != 5 { panic(65301); };
+    if btab(5, 2) != 14 { panic(65302); };
+    if btab(5, 3) != 28 { panic(65303); };
+    if bsum(5) != 132 { panic(65304); };
+}

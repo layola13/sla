@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn alias_import_resolved_service_count() -> i32 {
+    let aliased_registry = 1;
+    return aliased_registry;
+}
+
+fn main() -> i32 {
+    let result = alias_import_resolved_service_count();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 233 mod alias import"() {
+    let got = alias_import_resolved_service_count();
+    if got != 1 {
+        panic(233);
+    };
+}

@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+extern "C" fn add_one(x: i32) -> i32 {
+    x + 1
+}
+
+fn apply(cb: extern "C" fn(i32) -> i32, value: i32) -> i32 {
+    cb(value)
+}
+
+fn c_callback_result() -> i32 {
+    let result = apply(add_one, 41);
+    return result;
+}
+
+fn main() -> i32 {
+    let result = apply(add_one, 41);
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 114 114_callback_from_c"() {
+    let got = c_callback_result();
+    if got != 42 {
+        panic(114);
+    };
+};

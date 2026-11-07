@@ -1,0 +1,91 @@
+@import "sa_std/ip.sla"
+
+// Coverage shard 2 (SAB registry declared plane, census 2026-11-06):
+// ipv4_is_* classification family from sa_std/ip.sla. Registry status
+// was "declared, never probed" for every entry here. Addresses are
+// pinned as u32 bit literals (a<<24|b<<16|c<<8|d, dotted form in the
+// comments); expected values follow the IANA special-purpose ranges
+// the implementation documents (Rust std rule set).
+
+@test "reg2 ipv4_is_unspecified"() {
+    if !ipv4_is_unspecified(0) { panic(24101); }; // 0.0.0.0
+    if ipv4_is_unspecified(1) { panic(24102); }; // 0.0.0.1
+    if ipv4_is_unspecified(2130706433) { panic(24103); }; // 127.0.0.1
+}
+
+@test "reg2 ipv4_is_loopback"() {
+    if !ipv4_is_loopback(2130706433) { panic(24104); }; // 127.0.0.1
+    if !ipv4_is_loopback(2147418113) { panic(24105); }; // 127.255.0.1 (whole /8)
+    if ipv4_is_loopback(2147483649) { panic(24106); }; // 128.0.0.1
+    if ipv4_is_loopback(167772165) { panic(24107); }; // 10.0.0.5
+    if ipv4_is_loopback(0) { panic(24108); };
+}
+
+@test "reg2 ipv4_is_private"() {
+    if !ipv4_is_private(167772165) { panic(24109); }; // 10.0.0.5
+    if !ipv4_is_private(2886729733) { panic(24110); }; // 172.16.0.5
+    if !ipv4_is_private(3232235777) { panic(24111); }; // 192.168.1.1
+    if ipv4_is_private(2887778309) { panic(24112); }; // 172.32.0.5 (outside /12)
+    if ipv4_is_private(134744072) { panic(24113); }; // 8.8.8.8
+    if ipv4_is_private(2130706433) { panic(24114); }; // 127.0.0.1
+}
+
+@test "reg2 ipv4_is_shared"() {
+    if !ipv4_is_shared(1681915909) { panic(24115); }; // 100.64.0.5
+    if ipv4_is_shared(1686110213) { panic(24116); }; // 100.128.0.5 (outside /10)
+    if ipv4_is_shared(167772165) { panic(24117); }; // 10.0.0.5
+}
+
+@test "reg2 ipv4_is_link_local"() {
+    if !ipv4_is_link_local(2851995905) { panic(24118); }; // 169.254.1.1
+    if !ipv4_is_link_local(2851995904) { panic(24119); }; // 169.254.0.0 (range start)
+    if ipv4_is_link_local(2851930369) { panic(24120); }; // 169.253.1.1
+    if ipv4_is_link_local(167772165) { panic(24121); }; // 10.0.0.5
+}
+
+@test "reg2 ipv4_is_multicast"() {
+    if !ipv4_is_multicast(3758096385) { panic(24122); }; // 224.0.0.1
+    if !ipv4_is_multicast(4009754625) { panic(24123); }; // 239.0.0.1
+    if ipv4_is_multicast(3741319169) { panic(24124); }; // 223.0.0.1 (just below /4)
+    if ipv4_is_multicast(2130706433) { panic(24125); };
+}
+
+@test "reg2 ipv4_is_broadcast"() {
+    if !ipv4_is_broadcast(4294967295) { panic(24126); }; // 255.255.255.255
+    if ipv4_is_broadcast(4294967294) { panic(24127); }; // 255.255.255.254
+    if ipv4_is_broadcast(3232236031) { panic(24128); }; // 192.168.1.255 (directed only)
+}
+
+@test "reg2 ipv4_is_documentation"() {
+    if !ipv4_is_documentation(3221225985) { panic(24129); }; // 192.0.2.1 TEST-NET-1
+    if !ipv4_is_documentation(3221225984) { panic(24130); }; // 192.0.2.0 TEST-NET-1 start
+    if !ipv4_is_documentation(3325256711) { panic(24131); }; // 198.51.100.7 TEST-NET-2
+    if !ipv4_is_documentation(3405803785) { panic(24132); }; // 203.0.113.9 TEST-NET-3
+    if ipv4_is_documentation(3232235777) { panic(24133); }; // 192.168.1.1
+}
+
+@test "reg2 ipv4_is_benchmarking"() {
+    if !ipv4_is_benchmarking(3323068417) { panic(24134); }; // 198.18.0.1
+    if !ipv4_is_benchmarking(3323199233) { panic(24135); }; // 198.19.255.1
+    if ipv4_is_benchmarking(3323199489) { panic(24136); }; // 198.20.0.1 (outside /15)
+}
+
+@test "reg2 ipv4_is_reserved"() {
+    if !ipv4_is_reserved(4026531841) { panic(24137); }; // 240.0.0.1
+    if !ipv4_is_reserved(4294967294) { panic(24138); }; // 255.255.255.254
+    if ipv4_is_reserved(4294967295) { panic(24139); }; // broadcast excluded by impl
+    if ipv4_is_reserved(3758096385) { panic(24140); }; // 224.0.0.1 multicast, not reserved
+}
+
+@test "reg2 ipv4_is_global"() {
+    if !ipv4_is_global(134744072) { panic(24141); }; // 8.8.8.8
+    if !ipv4_is_global(16843009) { panic(24142); }; // 1.1.1.1
+    if !ipv4_is_global(3221225481) { panic(24143); }; // 192.0.0.9 (Rust: globally reachable)
+    if ipv4_is_global(3221225473) { panic(24144); }; // 192.0.0.1 (rest of 192.0.0.0/24 is not)
+    if ipv4_is_global(167772165) { panic(24145); }; // 10.0.0.5
+    if ipv4_is_global(2130706433) { panic(24146); }; // 127.0.0.1
+    if ipv4_is_global(0) { panic(24147); };
+    if ipv4_is_global(66051) { panic(24148); }; // 0.1.2.3 ("this network" /8)
+    if ipv4_is_global(3221225985) { panic(24149); }; // 192.0.2.1 documentation
+    if ipv4_is_global(4294967295) { panic(24150); };
+}

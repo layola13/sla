@@ -1,0 +1,69 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 双实现对峙：建表 vs 商式（(7,3)：12600 对 12600；(7,4)：4200 对 4200）。
+// 商式 L(n,k)=C(n-1,k-1)n!/k!（先乘后除精确整除）。
+// 意对标 706_lah7 × 商式版（两源单实现见各源；286 系对峙体例）。
+
+fn ltb(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn fact(n: int) -> int {
+    let r = 1;
+    let i = 1;
+    while i <= n {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn lahq(n: int, k: int) -> int {
+    if k == 0 { return 0; };
+    return binom_mul(n - 1, k - 1) * fact(n) / fact(k);
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", ltb(7, 3), lahq(7, 3), ltb(7, 4), lahq(7, 4));
+    return 0;
+}
+
+@test "basic 709 duel lah7"() {
+    if ltb(7, 3) != 12600 { panic(70901); };
+    if lahq(7, 3) != 12600 { panic(70902); };
+    if ltb(7, 4) != 4200 { panic(70903); };
+    if lahq(7, 4) != 4200 { panic(70904); };
+}

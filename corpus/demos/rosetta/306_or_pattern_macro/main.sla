@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+    Yellow,
+    Cyan,
+    Magenta,
+}
+
+fn is_primary(c: Color) -> bool {
+    match c {
+        Color::Red => { true },
+        Color::Green => { true },
+        Color::Blue => { true },
+        Color::Yellow => { false },
+        Color::Cyan => { false },
+        Color::Magenta => { false },
+    }
+}
+
+fn primary_score() -> i32 {
+    let count = 0;
+    if is_primary(Color::Red) { count = count + 1; };
+    if is_primary(Color::Yellow) { count = count + 1; };
+    if is_primary(Color::Blue) { count = count + 1; };
+    if is_primary(Color::Cyan) { count = count + 1; };
+    return count;
+}
+
+fn main() -> i32 {
+    let count = primary_score();
+    println("{}", count);
+    if count == 2 { return 0; } else { return 1; };
+}
+
+@test "rosetta 306 or pattern macro"() {
+    if primary_score() != 2 { panic(306); };
+}

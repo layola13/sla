@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 476_field_compound：结构体参数值语义（10）。
+// 定长数组作形参调用者可见（127），结构体作形参则为值语义：
+// 函数内 `+=` 只改本地副本，主调方读回仍为原值（双后端 + exe 核对）。
+
+struct Ctx { n: i32 }
+
+fn bumped(ctx: Ctx) -> i32 {
+    ctx.n += 1;
+    return ctx.n;
+}
+
+fn main() -> i32 {
+    let c = Ctx { n: 10 };
+    let r = bumped(c);
+    println("{},{}", r, c.n);
+    return 0;
+}
+
+@test "basic 182 struct value"() {
+    let c = Ctx { n: 10 };
+    if bumped(c) != 11 { panic(18201); };
+    if c.n != 10 { panic(18202); };
+}

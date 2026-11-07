@@ -1,0 +1,108 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 三向：建表行和 × 商式行和 × 递归行和（n=7：37633 三锁）。
+// 意对标 707_lah_row7（行源互补；605 三向体例收束 Lah 续高位族）。
+
+fn ltb(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn fact(n: int) -> int {
+    let r = 1;
+    let i = 1;
+    while i <= n {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn lahq(n: int, k: int) -> int {
+    if k == 0 { return 0; };
+    return binom_mul(n - 1, k - 1) * fact(n) / fact(k);
+}
+
+fn rlah(n: int, k: int) -> int {
+    if k == 0 {
+        if n == 0 { return 1; };
+        return 0;
+    };
+    if k > n { return 0; };
+    if k == n { return 1; };
+    return rlah(n - 1, k - 1) + (n + k - 1) * rlah(n - 1, k);
+}
+
+fn lsum(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + ltb(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn lqsum(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + lahq(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn lrsum(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + rlah(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", lsum(7), lqsum(7), lrsum(7));
+    return 0;
+}
+
+@test "basic 715 tri lah"() {
+    if lsum(7) != 37633 { panic(71501); };
+    if lqsum(7) != 37633 { panic(71502); };
+    if lrsum(7) != 37633 { panic(71503); };
+    if lsum(6) != 4051 { panic(71504); };
+}

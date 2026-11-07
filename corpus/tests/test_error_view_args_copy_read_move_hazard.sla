@@ -1,0 +1,22 @@
+// expect: BorrowConflict
+// DEF-12 preservation nail (must stay rejected): the call borrows
+// doc while also passing doc.soff BY VALUE — that moves the whole
+// Vec field out of the borrowed root, and the callee's &Doc would
+// observe the moved-from field. Unlike a Copy scalar read this is a
+// true move, so the borrowed-vs-plain rejection must survive the
+// DEF-12 Copy-read exemption. Judged by standalone `sla check`:
+// RC=1 with a BorrowConflict diagnostic on baseline AND fixed trees.
+
+struct Doc {
+    soff: Vec<u64>,
+    slen: Vec<u64>,
+    pool: Vec<u8>,
+}
+
+fn take_vec(doc: &Doc, v: Vec<u64>) -> u64 {
+    return len(v);
+}
+
+fn bad_move(doc: &Doc) -> u64 {
+    return take_vec(doc, doc.soff);
+}

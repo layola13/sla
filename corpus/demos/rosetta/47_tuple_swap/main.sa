@@ -1,0 +1,100 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_swap = vtable { call = @sla__swap }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__swap(a: ptr) -> ptr:
+L_ENTRY:
+    tmp_0 = alloc 8
+    tmp_1 = load a+4 as i32
+    store tmp_0+0, tmp_1 as i32
+    tmp_2 = load a+0 as i32
+    store tmp_0+4, tmp_2 as i32
+    return tmp_0
+
+@main() -> i32:
+L_ENTRY:
+    tmp_3 = alloc 8
+    tmp_4 = 3
+    store tmp_3+0, tmp_4 as i32
+    tmp_5 = 8
+    store tmp_3+4, tmp_5 as i32
+    tmp_6 = call @sla__swap(tmp_3)
+    !tmp_3
+    pair = tmp_6
+    tmp_7 = load pair+0 as i32
+    tmp_8 = call @sa_fmt_u64(tmp_7, 10)
+    tmp_9 = call @sa_fmt_buffer_data(tmp_8)
+    tmp_10 = call @sa_fmt_buffer_len(tmp_8)
+    tmp_11 = tmp_9
+    call @sa_print_bytes(&tmp_11, tmp_10)
+    call @sa_fmt_buffer_free(^tmp_8)
+    !tmp_11
+    !tmp_10
+    !tmp_7
+    @const SLA_STR_0 = utf8:","
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_12 = load pair+4 as i32
+    tmp_13 = call @sa_fmt_u64(tmp_12, 10)
+    tmp_14 = call @sa_fmt_buffer_data(tmp_13)
+    tmp_15 = call @sa_fmt_buffer_len(tmp_13)
+    tmp_16 = tmp_14
+    call @sa_print_bytes(&tmp_16, tmp_15)
+    call @sa_fmt_buffer_free(^tmp_13)
+    !tmp_16
+    !tmp_15
+    !tmp_12
+    @const SLA_STR_1 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_1, 1)
+    tmp_17 = 0
+    !pair
+    return tmp_17
+
+@test "rosetta 047 tuple swap"():
+L_TEST_ENTRY_0:
+    tmp_18 = alloc 8
+    tmp_19 = 3
+    store tmp_18+0, tmp_19 as i32
+    tmp_20 = 8
+    store tmp_18+4, tmp_20 as i32
+    tmp_21 = call @sla__swap(tmp_18)
+    !tmp_18
+    pair = tmp_21
+    tmp_22 = load pair+0 as i32
+    tmp_23 = 8
+    tmp_24 = ne tmp_22, tmp_23
+    !tmp_22
+    !tmp_23
+    br tmp_24 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_24
+    panic(47)
+
+L_ELSE_2:
+    !tmp_24
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    tmp_27 = load pair+4 as i32
+    tmp_28 = 3
+    tmp_29 = ne tmp_27, tmp_28
+    !tmp_27
+    !tmp_28
+    br tmp_29 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_29
+    panic(147)
+
+L_ELSE_5:
+    !tmp_29
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !pair
+    return
+

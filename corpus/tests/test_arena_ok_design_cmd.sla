@@ -1,0 +1,14 @@
+// F2-A C1 corpus (positive): the design section 1 example
+// shape - Vec<Cmd{String, Vec<String>}> is arena-safe and can
+// be built up inside the block with same-domain pushes.
+struct Cmd { name: String, args: Vec<String> }
+
+fn ok_design_cmd() -> i32 {
+    arena {
+        let cmds: Vec<Cmd> = Vec::new();
+        let c = Cmd { name: format("run"), args: Vec::new() };
+        cmds.push(c);
+        if len(cmds) != 1 { return 1; };
+    }
+    return 0;
+}

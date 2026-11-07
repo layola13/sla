@@ -1,0 +1,49 @@
+@import "sa_std/dns.sla"
+@import "sa_std/vec.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/net.sai"
+@import "sa_std/status.sla"
+
+// reg-shard1 coverage: SAB registry declared entry
+// dns_resolve_first (server address resolution -> address
+// handle). Numeric and localhost names must resolve; the empty
+// name is the coherence-only branch (either outcome recorded).
+
+fn reg1_bytes(s: String) -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    let p: ptr = STR_PTR(s);
+    let n: u64 = len(s) as u64;
+    let i: u64 = 0;
+    while i < n {
+        out.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+@test "reg1 dns resolve first"() {
+    let srv = reg1_bytes("127.0.0.1");
+    let r = dns_resolve_first(srv, 53);
+    match r {
+        Ok(h) => {
+            let _ = sa_net_addr_free(h);
+        },
+        Err(e) => { panic(62211); },
+    };
+    let srv2 = reg1_bytes("localhost");
+    let r2 = dns_resolve_first(srv2, 53);
+    match r2 {
+        Ok(h) => {
+            let _ = sa_net_addr_free(h);
+        },
+        Err(e) => { panic(62212); },
+    };
+    let srv3: Vec<u8> = Vec::new();
+    let r3 = dns_resolve_first(srv3, 53);
+    match r3 {
+        Ok(h) => { panic(62213); },
+        Err(e) => {},
+    };
+}

@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_wasm_target_count() -> i32 { let wasm32_unknown_unknown = 1; return wasm32_unknown_unknown; }
+fn main() -> i32 { let wasm32_unknown_unknown = 1; println("{}", wasm32_unknown_unknown); return wasm32_unknown_unknown; }
+@test "rosetta 268 build cross compile wasm"() { let got = build_wasm_target_count(); if got != 1 { panic(268); }; }

@@ -1,0 +1,8 @@
+@import "dev/tests/../helpers/index.sa"
+
+@dev_test_value() -> i32:
+L_ENTRY:
+    helper = call @dev_helper_value()
+    value = add helper, 0
+    !helper
+    return value

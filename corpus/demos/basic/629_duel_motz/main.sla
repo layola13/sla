@@ -1,0 +1,53 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Motzkin 双实现对峙：迭代建表 vs 递归（n=4：9 对 9；n=5：21 对 21）。
+// 意对标 626_motzkin × 递归版（两源单实现见各源；286 系对峙体例）。
+
+fn moz(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k <= ii - 2 {
+            s = s + t[k] * t[ii - 2 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn rmoz(n: int) -> int {
+    if n == 0 { return 1; };
+    if n == 1 { return 1; };
+    let s = rmoz(n - 1);
+    let k = 0;
+    while k <= n - 2 {
+        s = s + rmoz(k) * rmoz(n - 2 - k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", moz(4), rmoz(4), moz(5), rmoz(5));
+    return 0;
+}
+
+@test "basic 629 duel motz"() {
+    if moz(4) != 9 { panic(62901); };
+    if rmoz(4) != 9 { panic(62902); };
+    if moz(5) != 21 { panic(62903); };
+    if rmoz(5) != 21 { panic(62904); };
+}

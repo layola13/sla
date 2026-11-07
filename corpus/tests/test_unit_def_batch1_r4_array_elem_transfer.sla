@@ -1,0 +1,36 @@
+// DEF-BATCH1-R4 regression: owned element temporaries stored into an array
+// literal must be transfer-consumed on the store (same rule as struct field
+// stores). Before the fix, genArrayLiteralInto emitted a plain store and no
+// retire, so the element temps (struct literals / call results) stayed
+// Active at function exit and the verifier reported MemoryLeak on a
+// correct program.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Bag {
+    values: [Point; 2],
+}
+
+fn mk_point(x: i32, y: i32) -> Point {
+    return Point { x: x, y: y };
+}
+
+@test "batch1 r4 struct literal array elements"() {
+    let bag = Bag {
+        values: [Point { x: 7, y: 1 }, Point { x: 11, y: 2 }],
+    };
+    if bag.values[0].x + bag.values[1].y != 9 { panic(901); };
+}
+
+@test "batch1 r4 call result array elements"() {
+    let pts = [mk_point(1, 2), mk_point(3, 4), mk_point(5, 6)];
+    if pts[0].y + pts[1].x + pts[2].x != 10 { panic(902); };
+}
+
+@test "batch1 r4 repeat array owned element"() {
+    let pts = [mk_point(4, 5); 3];
+    if pts[0].x + pts[1].y + pts[2].x != 13 { panic(903); };
+}

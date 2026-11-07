@@ -1,0 +1,36 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/io/print.sai"
+
+// DEF-10 (PRINT-1013): a void extern call in statement position went
+// through the generic call path, which resolves only user functions,
+// so the contract's borrow prefix was dropped: `sa_print_bytes(p, n)`
+// was emitted as `call @sa_print_bytes(tmp, tmp)` and the SA checker
+// rejected it with CapabilityMismatch (1013). The expression path
+// (genExternPayloadCall) already applied abiCallArgPrefix. SAB was
+// unaffected; an explicit `&p` at the call site was the workaround.
+@test "def10 print literal ptr"() {
+    sa_print_bytes(STR_PTR("hi"), 2);
+}
+
+@test "def10 print bound ptr local"() {
+    let p = STR_PTR("hi");
+    sa_print_bytes(p, 2);
+}
+
+@test "def10 print slice ptr"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(104);
+    v.push(105);
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let p: ptr = PTR_NULL();
+    SLICE_AS_PTR(p, sl);
+    sa_print_bytes(p, 2);
+}
+
+@test "def10 print explicit borrow control"() {
+    let p = STR_PTR("hi");
+    sa_print_bytes(&p, 2);
+}

@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/ptr.sa"
+
+fn volatile_read_value() -> i32 {
+    let value: i32 = 5;
+    let seen = unsafe { ptr::read_volatile(&value) };
+    return seen;
+}
+
+fn main() -> i32 {
+    let result = volatile_read_value();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 120 120_volatile_memory_access"() {
+    let got = volatile_read_value();
+    if got != 5 {
+        panic(120);
+    };
+};

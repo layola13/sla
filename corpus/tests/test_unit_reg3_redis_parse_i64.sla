@@ -1,0 +1,13 @@
+@import "sa_std/redis.sla"
+
+// MINIM R2 (control): a redis.sla leaf helper that never reaches
+// redis_parse_value. Expected green -- discriminates "whole file
+// poisoned" from "redis_parse_value body poisoned".
+@test "minim parse i64 leaf only"() {
+    let t: Vec<u8> = Vec::new();
+    t = redis_push_lit(t, STR_PTR("42"), STR_LEN("42"));
+    let sl: Slice<u8> = VEC_AS_SLICE(t);
+    let p = redis_parse_i64(&sl, 0, 2);
+    if p.ok == false { panic(111); };
+    if p.value != 42 { panic(112); };
+}

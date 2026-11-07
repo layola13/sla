@@ -1,0 +1,302 @@
+// Bend2 P1-6 parity corpus: List group (base.bend @faeb02e, 39 clauses).
+// Bend List is a persistent cons list; our anchor is Vec (mutable,
+// index-based). Named entries exist for length/append; most other Bend
+// defs are reached by loop composition — the parity table records the
+// form per def. Cases assert Bend's value semantics throughout.
+@import "sa_std/vec.sa"
+@import "sa_std/core/option.sa"
+
+struct Pair2 {
+    a: i64,
+    b: i64,
+}
+
+fn make3() -> Vec<i64> {
+    let v: Vec<i64> = Vec::new();
+    v.push(3);
+    v.push(1);
+    v.push(2);
+    return v;
+}
+
+@test "bend2 list map length append concat"() {
+    let v = make3();
+    if len(v) != 3 { panic(72001); };
+    // List.map (loop composition)
+    let w: Vec<i64> = Vec::new();
+    let i = 0;
+    while i < len(v) {
+        w.push(v[i] * 2);
+        i = i + 1;
+    }
+    if w[0] != 6 { panic(72002); };
+    if w[2] != 4 { panic(72003); };
+    // List.append (Vec.push entry)
+    w.push(9);
+    if len(w) != 4 { panic(72004); };
+    if w[3] != 9 { panic(72005); };
+    // List.concat (loop composition)
+    let u: Vec<i64> = Vec::new();
+    u.push(7);
+    let j = 0;
+    while j < len(u) {
+        w.push(u[j]);
+        j = j + 1;
+    }
+    if len(w) != 5 { panic(72006); };
+    if w[4] != 7 { panic(72007); };
+}
+
+@test "bend2 list reverse is_empty head tail last"() {
+    let v = make3();
+    // List.reverse (swap loop)
+    let r = make3();
+    let i = 0;
+    let n = len(r);
+    while i < n / 2 {
+        let t = r[i];
+        r[i] = r[n - 1 - i];
+        r[n - 1 - i] = t;
+        i = i + 1;
+    }
+    if r[0] != 2 { panic(72008); };
+    if r[2] != 3 { panic(72009); };
+    // List.is_empty via len
+    let e: Vec<i64> = Vec::new();
+    if len(e) != 0 { panic(72010); };
+    if len(v) == 0 { panic(72011); };
+    // List.head / List.last via index (Bend returns Maybe; ours panics
+    // on empty — in-range values asserted here)
+    if v[0] != 3 { panic(72012); };
+    if v[len(v) - 1] != 2 { panic(72013); };
+    // List.tail (loop composition)
+    let t: Vec<i64> = Vec::new();
+    let k = 1;
+    while k < len(v) {
+        t.push(v[k]);
+        k = k + 1;
+    }
+    if len(t) != 2 { panic(72014); };
+    if t[0] != 1 { panic(72015); };
+}
+
+@test "bend2 list get set take drop"() {
+    let v = make3();
+    if v[1] != 1 { panic(72016); };
+    // List.set: in-range replacement (Bend is persistent, ours in place)
+    v[1] = 99;
+    if v[1] != 99 { panic(72017); };
+    // List.take
+    let t: Vec<i64> = Vec::new();
+    let i = 0;
+    while i < 2 {
+        t.push(v[i]);
+        i = i + 1;
+    }
+    if len(t) != 2 { panic(72018); };
+    if t[0] != 3 { panic(72019); };
+    // take beyond length yields the whole list in Bend
+    let t2: Vec<i64> = Vec::new();
+    let j = 0;
+    while j < len(v) {
+        t2.push(v[j]);
+        j = j + 1;
+    }
+    if len(t2) != 3 { panic(72020); };
+    // List.drop
+    let d: Vec<i64> = Vec::new();
+    let k = 2;
+    while k < len(v) {
+        d.push(v[k]);
+        k = k + 1;
+    }
+    if len(d) != 1 { panic(72021); };
+    if d[0] != 2 { panic(72022); };
+}
+
+@test "bend2 list zip range replicate"() {
+    let v = make3();
+    // List.zip (loop composition into a pair vec, truncates at shorter)
+    let u: Vec<i64> = Vec::new();
+    u.push(10);
+    u.push(20);
+    let z: Vec<Pair2> = Vec::new();
+    let i = 0;
+    while i < len(u) {
+        z.push(Pair2 { a: v[i], b: u[i] });
+        i = i + 1;
+    }
+    if len(z) != 2 { panic(72023); };
+    if z[0].a != 3 { panic(72024); };
+    if z[0].b != 10 { panic(72025); };
+    if z[1].a != 1 { panic(72026); };
+    // List.range(n) == [0, 1, ..., n-1]
+    let r: Vec<i64> = Vec::new();
+    let j = 0;
+    while j < 4 {
+        r.push(j);
+        j = j + 1;
+    }
+    if len(r) != 4 { panic(72027); };
+    if r[3] != 3 { panic(72028); };
+    // List.replicate
+    let rep: Vec<i64> = Vec::new();
+    let k = 0;
+    while k < 3 {
+        rep.push(8);
+        k = k + 1;
+    }
+    if len(rep) != 3 { panic(72029); };
+    if rep[2] != 8 { panic(72030); };
+}
+
+@test "bend2 list filter foldl foldr"() {
+    let v = make3();
+    // List.filter (loop composition)
+    let f: Vec<i64> = Vec::new();
+    let i = 0;
+    while i < len(v) {
+        if v[i] > 1 {
+            f.push(v[i]);
+        };
+        i = i + 1;
+    }
+    if len(f) != 2 { panic(72031); };
+    if f[0] != 3 { panic(72032); };
+    if f[1] != 2 { panic(72033); };
+    // List.foldl with a non-commutative step proves order: ((0*10+3)*10+1)*10+2
+    let acc = 0;
+    let j = 0;
+    while j < len(v) {
+        acc = acc * 10 + v[j];
+        j = j + 1;
+    }
+    if acc != 312 { panic(72034); };
+    // List.foldr: f(x, acc) = acc*10 + x folded from the right gives 213
+    let accr = 0;
+    let k = len(v);
+    while k > 0 {
+        k = k - 1;
+        accr = accr * 10 + v[k];
+    }
+    if accr != 213 { panic(72035); };
+}
+
+@test "bend2 list any all find contains"() {
+    let v = make3();
+    let any = false;
+    let all = true;
+    let found = false;
+    let has = false;
+    let i = 0;
+    while i < len(v) {
+        if v[i] > 2 {
+            any = true;
+        };
+        if v[i] <= 0 {
+            all = false;
+        };
+        if v[i] == 1 {
+            found = true;
+        };
+        if v[i] == 2 {
+            has = true;
+        };
+        i = i + 1;
+    }
+    if !any { panic(72036); };
+    if !all { panic(72037); };
+    if !found { panic(72038); };
+    if !has { panic(72039); };
+    // find returns the first match as a Maybe; ours via index scan
+    let idx = 0;
+    let fi = -1;
+    while idx < len(v) {
+        if v[idx] == 1 {
+            if fi < 0 {
+                fi = idx;
+            };
+        };
+        idx = idx + 1;
+    }
+    if fi != 1 { panic(72040); };
+}
+
+@test "bend2 list merge sort for_each"() {
+    // List.merge of two sorted lists (loop composition)
+    let a: Vec<i64> = Vec::new();
+    a.push(1);
+    a.push(3);
+    let b: Vec<i64> = Vec::new();
+    b.push(2);
+    b.push(4);
+    let m: Vec<i64> = Vec::new();
+    let i = 0;
+    let j = 0;
+    while i + j < len(a) + len(b) {
+        let take_b = false;
+        if i >= len(a) {
+            take_b = true;
+        };
+        if j < len(b) {
+            if i < len(a) {
+                if b[j] < a[i] {
+                    take_b = true;
+                };
+            };
+        };
+        if take_b {
+            m.push(b[j]);
+            j = j + 1;
+        };
+        if !take_b {
+            m.push(a[i]);
+            i = i + 1;
+        };
+    }
+    if len(m) != 4 { panic(72041); };
+    if m[0] != 1 { panic(72042); };
+    if m[1] != 2 { panic(72043); };
+    if m[3] != 4 { panic(72044); };
+    // List.sort (no std sort entry; insertion sort proves reachability)
+    let s = make3();
+    let x = 1;
+    while x < len(s) {
+        let key = s[x];
+        let y = x;
+        let done = false;
+        while !done {
+            if y == 0 {
+                done = true;
+            };
+            if y > 0 {
+                if s[y - 1] > key {
+                    s[y] = s[y - 1];
+                    y = y - 1;
+                };
+                if y > 0 {
+                    if s[y - 1] <= key {
+                        done = true;
+                    };
+                };
+                if y == 0 {
+                    done = true;
+                };
+            };
+        }
+        s[y] = key;
+        x = x + 1;
+    }
+    if s[0] != 1 { panic(72045); };
+    if s[1] != 2 { panic(72046); };
+    if s[2] != 3 { panic(72047); };
+    // List.for_each: effect per element (accumulated here)
+    let total = 0;
+    let k = 0;
+    let v = make3();
+    while k < len(v) {
+        total = total + v[k];
+        k = k + 1;
+    }
+    if total != 6 { panic(72048); };
+}

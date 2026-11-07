@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+@import "sa_std/thread.sa"
+
+fn worker_score(base: i32, delta: i32) -> i32 {
+    return base + delta;
+}
+
+fn thread_pool_total() -> i32 {
+    let a = thread::spawn(|| worker_score(1, 2));
+    let b = thread::spawn(|| worker_score(2, 3));
+    let c = thread::spawn(|| worker_score(3, 4));
+    let av = a.join().unwrap();
+    let bv = b.join().unwrap();
+    let cv = c.join().unwrap();
+    let total = av + bv + cv;
+    return total;
+}
+
+fn main() -> i32 {
+    let total = thread_pool_total();
+    println("{}", total);
+    return total;
+}
+
+@test "rosetta 061 61_thread_pool"() {
+    let got = thread_pool_total();
+    if got != 15 {
+        panic(61);
+    };
+}

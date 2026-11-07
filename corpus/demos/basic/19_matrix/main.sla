@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 143_mat_add / 144_transpose：2x2 矩阵加法 + 转置求和（行主序扁平 [int; 4]）。
+
+fn mat_add(a: [int; 4], b: [int; 4]) -> [int; 4] {
+    return [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]];
+}
+
+fn transpose_sum(a: [int; 4]) -> int {
+    // 转置后求和与原求和一致，此处显式按转置索引加一遍以锁定布局语义。
+    return a[0] + a[2] + a[1] + a[3];
+}
+
+fn main() -> i32 {
+    let a = [1, 2, 3, 4];
+    let b = [5, 6, 7, 8];
+    let c = mat_add(a, b);
+    println("{},{},{},{}", c[0], c[1], c[2], c[3]);
+    println("{}", transpose_sum(a));
+    return 0;
+}
+
+@test "basic 19 matrix"() {
+    let a = [1, 2, 3, 4];
+    let b = [5, 6, 7, 8];
+    let c = mat_add(a, b);
+    if c[0] != 6 { panic(1901); };
+    if c[3] != 12 { panic(1902); };
+    if transpose_sum(a) != 10 { panic(1903); };
+}

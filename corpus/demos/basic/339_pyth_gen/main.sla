@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 勾股数生成（m=2,n=1 → 3,4,5；和 12）。
+// 欧几里得公式（117 的生成版）：m²-n², 2mn, m²+n²（338 判定其和）。
+
+fn main() -> i32 {
+    let m = 2;
+    let n = 1;
+    let t1 = m * m - n * n;
+    let t2 = 2 * m * n;
+    let t3 = m * m + n * n;
+    println("{},{},{}", t1, t2, t3);
+    return 0;
+}
+
+@test "basic 339 pyth gen"() {
+    let m = 2;
+    let n = 1;
+    let t1 = m * m - n * n;
+    let t2 = 2 * m * n;
+    let t3 = m * m + n * n;
+    if t1 != 3 { panic(33901); };
+    if t2 != 4 { panic(33902); };
+    if t3 != 5 { panic(33903); };
+    if t1 * t1 + t2 * t2 != t3 * t3 { panic(33904); };
+}

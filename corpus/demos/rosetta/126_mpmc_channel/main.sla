@@ -1,0 +1,50 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+@import "sa_std/sync/mpsc.sa"
+@import "sa_std/thread.sa"
+
+fn send_pair(tx: Sender<i32>, a: i32, b: i32) -> i32 {
+    tx.send(a).unwrap();
+    tx.send(b).unwrap();
+    return 0;
+}
+
+fn mpmc_channel_total() -> i32 {
+    let (tx, rx) = mpsc::channel();
+    let left = tx.clone();
+    let right = tx.clone();
+    let producer_a = thread::spawn(^|| send_pair(left, 1, 2));
+    let producer_b = thread::spawn(^|| send_pair(right, 3, 4));
+    producer_a.join().unwrap();
+    producer_b.join().unwrap();
+    let first = rx.recv().unwrap();
+    let second = rx.recv().unwrap();
+    let third = rx.recv().unwrap();
+    let fourth = rx.recv().unwrap();
+    return first + second + third + fourth;
+}
+
+fn main() -> i32 {
+    let (tx, rx) = mpsc::channel();
+    let left = tx.clone();
+    let right = tx.clone();
+    let producer_a = thread::spawn(^|| send_pair(left, 1, 2));
+    let producer_b = thread::spawn(^|| send_pair(right, 3, 4));
+    producer_a.join().unwrap();
+    producer_b.join().unwrap();
+    let first = rx.recv().unwrap();
+    let second = rx.recv().unwrap();
+    let third = rx.recv().unwrap();
+    let fourth = rx.recv().unwrap();
+    let result = first + second + third + fourth;
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 126 126_mpmc_channel"() {
+    let got = mpmc_channel_total();
+    if got != 10 {
+        panic(126);
+    };
+};

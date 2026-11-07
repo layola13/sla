@@ -1,0 +1,5 @@
+@import "import_fixtures/std_nested/uses_vec.sla"
+
+@test "nested sla import keeps sa_std output path global"() {
+    if imported_vec_sum() != 5 { panic(1501); };
+}

@@ -1,0 +1,37 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 178_obj_sum：排序 + 切片。
+// 排序用插入排序（写法见 16）；SLA 暂无 `slice` 方法，切片用手工拷贝
+// `c = [a[1], a[2]]` 表达（行主序口径见 19/28）。
+
+fn sort3(^a: [int; 3]) -> [int; 3] {
+    for i in 1..3 {
+        let k = a[i];
+        let j = i - 1;
+        while j >= 0 && a[j] > k {
+            a[j + 1] = a[j];
+            j = j - 1;
+        }
+        a[j + 1] = k;
+    }
+    return a;
+}
+
+fn main() -> i32 {
+    let a = [3, 1, 2];
+    let s = sort3(^a);
+    let c = [s[1], s[2]];
+    println("{},{},{},{}", s[0], s[2], len(c), c[1]);
+    return 0;
+}
+
+@test "basic 65 sort slice"() {
+    let a = [3, 1, 2];
+    let s = sort3(^a);
+    if s[0] != 1 { panic(6501); };
+    if s[2] != 3 { panic(6502); };
+    let c = [s[1], s[2]];
+    if len(c) != 2 { panic(6503); };
+    if c[1] != 3 { panic(6504); };
+}

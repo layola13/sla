@@ -1,0 +1,165 @@
+// DEF-ACL regression corpus: a Copy aggregate value (POD struct /
+// enum / tuple / array) is materialised as a heap cell and every
+// aggregate store keeps only its HANDLE. Releasing the source temp
+// after such a store frees the cell the aggregate points at, so the
+// first payload fields read allocator freelist words and nested
+// handles segfault (slanginx acl / slaredis / db session, post-R8).
+// Every field is checked, word 0 included -- the original triage
+// probe that only read the last field passed on the broken toolchain.
+@derive(copy)
+struct AclPod3 {
+    a: u64,
+    b: u64,
+    c: u64,
+}
+
+@derive(copy)
+struct AclInner {
+    tag: u64,
+    hi: u64,
+    lo: u64,
+}
+
+@derive(copy)
+struct AclNested {
+    inner: AclInner,
+    len: u32,
+}
+
+enum AclWrap {
+    Val(AclPod3),
+    Empty,
+}
+
+fn acl_mk_pod3() -> AclPod3 {
+    return AclPod3 { a: 11, b: 22, c: 33 };
+}
+
+fn acl_mk_opt() -> Option<AclPod3> {
+    return Some(AclPod3 { a: 11, b: 22, c: 33 });
+}
+
+fn acl_mk_nested() -> Option<AclNested> {
+    let inner_val: AclInner = AclInner { tag: 4, hi: 0x0a000000, lo: 0 };
+    let n: u32 = 8;
+    return Some(AclNested { inner: inner_val, len: n });
+}
+
+fn acl_mk_result() -> Result<AclPod3, u32> {
+    return Ok(AclPod3 { a: 11, b: 22, c: 33 });
+}
+
+fn acl_mk_wrap() -> AclWrap {
+    return AclWrap::Val(AclPod3 { a: 11, b: 22, c: 33 });
+}
+
+fn acl_mk_tuple() -> (AclPod3, u64) {
+    return (AclPod3 { a: 11, b: 22, c: 33 }, 7);
+}
+
+fn acl_mk_array() -> [AclPod3; 2] {
+    return [AclPod3 { a: 11, b: 22, c: 33 }, AclPod3 { a: 44, b: 55, c: 66 }];
+}
+
+fn acl_mk_repeat() -> [AclPod3; 2] {
+    return [AclPod3 { a: 11, b: 22, c: 33 }; 2];
+}
+
+fn acl_mk_outer() -> AclNested {
+    return AclNested { inner: acl_mk_inner(), len: 8 };
+}
+
+fn acl_mk_inner() -> AclInner {
+    return AclInner { tag: 4, hi: 0x0a000000, lo: 0 };
+}
+
+@test "def-acl option of pod struct literal keeps every field"() {
+    match acl_mk_opt() {
+        Some(p) => {
+            if p.a != 11 { panic(31011); };
+            if p.b != 22 { panic(31012); };
+            if p.c != 33 { panic(31013); };
+        },
+        None => { panic(31010); },
+    };
+}
+
+@test "def-acl option of nested struct literal keeps every field"() {
+    match acl_mk_nested() {
+        Some(p) => {
+            if p.inner.tag != 4 { panic(31021); };
+            if p.inner.hi != 0x0a000000 { panic(31022); };
+            if p.inner.lo != 0 { panic(31023); };
+            if p.len != 8 { panic(31024); };
+        },
+        None => { panic(31020); },
+    };
+}
+
+@test "def-acl result of pod struct literal keeps every field"() {
+    match acl_mk_result() {
+        Ok(p) => {
+            if p.a != 11 { panic(31031); };
+            if p.b != 22 { panic(31032); };
+            if p.c != 33 { panic(31033); };
+        },
+        Err(e) => { panic(31030); },
+    };
+}
+
+@test "def-acl generic enum struct payload keeps every field"() {
+    match acl_mk_wrap() {
+        AclWrap::Val(p) => {
+            if p.a != 11 { panic(31041); };
+            if p.b != 22 { panic(31042); };
+            if p.c != 33 { panic(31043); };
+        },
+        AclWrap::Empty => { panic(31040); },
+    };
+}
+
+@test "def-acl tuple struct element keeps every field"() {
+    let t = acl_mk_tuple();
+    if t.1 != 7 { panic(31057); };
+    if t.0.a != 11 { panic(31051); };
+    if t.0.b != 22 { panic(31052); };
+    if t.0.c != 33 { panic(31053); };
+}
+
+@test "def-acl array of struct literals keeps every field"() {
+    let arr = acl_mk_array();
+    if arr[0].a != 11 { panic(31061); };
+    if arr[0].c != 33 { panic(31063); };
+    if arr[1].a != 44 { panic(31064); };
+    if arr[1].c != 66 { panic(31066); };
+}
+
+@test "def-acl repeat array of struct keeps every field"() {
+    let arr = acl_mk_repeat();
+    if arr[0].a != 11 { panic(31071); };
+    if arr[1].c != 33 { panic(31073); };
+}
+
+@test "def-acl struct field from call keeps every field"() {
+    let v: AclNested = acl_mk_outer();
+    if v.inner.tag != 4 { panic(31081); };
+    if v.inner.hi != 0x0a000000 { panic(31082); };
+    if v.inner.lo != 0 { panic(31083); };
+    if v.len != 8 { panic(31084); };
+}
+
+@test "def-acl option of call result keeps every field"() {
+    let o = acl_mk_opt_call();
+    match o {
+        Some(p) => {
+            if p.a != 11 { panic(31091); };
+            if p.b != 22 { panic(31092); };
+            if p.c != 33 { panic(31093); };
+        },
+        None => { panic(31090); },
+    };
+}
+
+fn acl_mk_opt_call() -> Option<AclPod3> {
+    return Some(acl_mk_pod3());
+}

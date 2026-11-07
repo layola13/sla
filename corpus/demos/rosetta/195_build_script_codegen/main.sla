@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn generated_value_surrogate() -> i32 {
+    let generated_constant = 1;
+    return generated_constant;
+}
+
+fn build_script_generated_value() -> i32 {
+    return generated_value_surrogate();
+}
+
+fn main() -> i32 {
+    let result = build_script_generated_value();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 195 195_build_script_codegen"() {
+    let got = build_script_generated_value();
+    if got != 1 { panic(195); };
+}

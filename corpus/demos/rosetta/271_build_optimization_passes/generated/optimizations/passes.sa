@@ -1,0 +1,14 @@
+// Generated from build/optimizations/passes.toml and cache/optimizations/order.txt.
+#def OPTIMIZATION_PASS_COUNT = 3
+
+@optimization_passes_value() -> i32:
+L_ENTRY:
+    value = add 270, 1
+    !value
+    return 271
+
+@optimization_passes_count() -> i32:
+L_ENTRY:
+    count = add 1, 2
+    !count
+    return OPTIMIZATION_PASS_COUNT

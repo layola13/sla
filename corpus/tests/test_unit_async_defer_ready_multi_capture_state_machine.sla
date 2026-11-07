@@ -1,0 +1,62 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn await_defer_ready_multi_capture() -> i32 {
+    let a = 1;
+    let b = 2;
+    let value = future::defer_ready(39).await;
+    return value + a + b;
+}
+
+async fn await_local_defer_ready_multi_capture() -> i32 {
+    let a = 1;
+    let b = 2;
+    let delayed = future::defer_ready(39);
+    let value = delayed.await;
+    return value + a + b;
+}
+
+fn direct_multi_capture_resume_on_second_poll() -> i32 {
+    let fut = await_defer_ready_multi_capture();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9921);
+    };
+    if task::is_ready(task) != false {
+        panic(9922);
+    };
+    if task::poll(task) != true {
+        panic(9923);
+    };
+    if task::is_ready(task) != true {
+        panic(9924);
+    };
+    return task::result(task);
+}
+
+fn local_multi_capture_resume_on_second_poll() -> i32 {
+    let fut = await_local_defer_ready_multi_capture();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9931);
+    };
+    if task::is_ready(task) != false {
+        panic(9932);
+    };
+    if task::poll(task) != true {
+        panic(9933);
+    };
+    if task::is_ready(task) != true {
+        panic(9934);
+    };
+    return task::result(task);
+}
+
+@test "async defer ready multi capture resumes"() {
+    if direct_multi_capture_resume_on_second_poll() != 42 {
+        panic(9925);
+    };
+    if local_multi_capture_resume_on_second_poll() != 42 {
+        panic(9935);
+    };
+}

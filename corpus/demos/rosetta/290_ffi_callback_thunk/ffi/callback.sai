@@ -1,0 +1,1 @@
+@extern host_register_callback(cb: ptr) -> i32

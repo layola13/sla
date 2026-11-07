@@ -1,0 +1,6 @@
+@import "packages/v2_0_0/leaf.sa"
+
+@v2_package_value() -> i32:
+L_ENTRY:
+    value = call @dep_value()
+    return value

@@ -1,0 +1,158 @@
+// DEF-DB regression corpus: assignment-statement stores of
+// heap-handle aggregate values (SAB genAssign). The store places
+// the value's cell HANDLE into the target (field / deref / array
+// element), which owns the cell from then on; the codegen used
+// to release the source register right after the store, freeing
+// the very cell the target now points at (a live use-after-free
+// since sci F1 made .release a real free). First production
+// surface: sa_plugin_db pinned sessions -- session_open ends
+// with `out.session = DbSession { state: ... }`, and every real
+// session test died with signal 11 while the same file's other
+// paths (which never assign a struct field after construction)
+// stayed green. Every test verifies ALL fields of the stored
+// value (word 0 included) after the assignment. The fixed-array
+// index-assignment branch of genAssign carries the same fix
+// (proven by the line's probes: db_micro2 3h passes SAB
+// post-fix, crashed pre-fix); it is not in this file because
+// the TEXT backend has an independent verifier-accounting
+// defect on that exact shape (index-assign of a ptr-field
+// aggregate leaves the value temp Active -> MemoryLeak 1012;
+// POD elements pass), registered with the DEF-ACL 7.1
+// verifier-accounting family.
+@import "sa_std/ptr.sa"
+@import "sa_std/task.sai"
+@import "sa_std/core/box.sa"
+@import "sa_std/vec.sa"
+
+struct DbBlk {
+    a: u64,
+    b: u64,
+    c: u64,
+}
+
+struct DbSession {
+    state: ptr,
+}
+
+struct DbOutcome {
+    status: u64,
+    value: i64,
+    epoch: u64,
+    session: DbSession,
+}
+
+struct DbState {
+    pin: ptr,
+    epoch: u64,
+    dirty: u64,
+    closed: u64,
+    blk: ptr,
+}
+
+fn db_blk_new(a: u64, b: u64, c: u64) -> ptr {
+    return Box::into_raw(Box::new(DbBlk { a: a, b: b, c: c })) as ptr;
+}
+
+fn db_blk_check(p: ptr, a: u64, b: u64, c: u64, base: i32) {
+    let t: *DbBlk = p as *DbBlk;
+    if (*t).a != a { panic(base + 1); };
+    if (*t).b != b { panic(base + 2); };
+    if (*t).c != c { panic(base + 3); };
+}
+
+// The db session_open shape end to end: outcome built with a
+// placeholder nested field, the real nested struct assigned
+// AFTER construction, outcome returned by value, the session
+// extracted by the caller and used through two deref levels.
+fn db_session_open(pin: ptr, epoch: u64) -> DbOutcome {
+    let out = DbOutcome { status: 0, value: 0, epoch: 0, session: DbSession { state: pin } };
+    let blk = db_blk_new(1, 2, 3);
+    let st = Box::new(DbState { pin: pin, epoch: epoch, dirty: 0, closed: 0, blk: blk });
+    let st_ptr = Box::into_raw(st);
+    out.epoch = epoch;
+    out.session = DbSession { state: st_ptr as ptr };
+    return out;
+}
+
+fn db_session_query(s: &DbSession, x: u64) -> u64 {
+    let st: *DbState = s.state as *DbState;
+    let blk: *DbBlk = (*st).blk as *DbBlk;
+    (*blk).a = x;
+    (*blk).b = x + 1;
+    let pin_blk: *DbBlk = (*st).pin as *DbBlk;
+    return (*blk).a + (*blk).b + (*pin_blk).c;
+}
+
+fn db_session_close(s: DbSession) {
+    let st: *DbState = s.state as *DbState;
+    (*st).closed = 1;
+    if (*st).closed != 1 { panic(49150); };
+    db_blk_check((*st).blk, 20, 21, 3, 49160);
+}
+
+@test "def_db assign store postassign nested field"() {
+    let pin = db_blk_new(100, 200, 300);
+    let so = db_session_open(pin, 42);
+    if so.status != 0 { panic(49101); };
+    if so.epoch != 42 { panic(49102); };
+    let s = so.session;
+    let r = db_session_query(&s, 10);
+    if r != 321 { panic(49103); };
+    let r2 = db_session_query(&so.session, 20);
+    if r2 != 341 { panic(49104); };
+    db_session_close(s);
+}
+
+// Field assignment whose target base is a dereference.
+struct DbHolder {
+    inner: DbSession,
+    x: u64,
+}
+
+@test "def_db assign store deref base field"() {
+    let h = Box::into_raw(Box::new(DbHolder { inner: DbSession { state: db_blk_new(0, 0, 0) }, x: 0 }));
+    let p = db_blk_new(7, 8, 9);
+    (*h).inner = DbSession { state: p };
+    if (*h).x != 0 { panic(49201); };
+    db_blk_check((*h).inner.state, 7, 8, 9, 49210);
+    db_blk_check(p, 7, 8, 9, 49220);
+}
+
+// Whole-value deref assignment of an aggregate.
+@test "def_db assign store deref whole value"() {
+    let q = Box::into_raw(Box::new(DbSession { state: db_blk_new(0, 0, 0) }));
+    let p = db_blk_new(10, 11, 12);
+    *q = DbSession { state: p };
+    db_blk_check((*q).state, 10, 11, 12, 49310);
+    db_blk_check(p, 10, 11, 12, 49320);
+}
+
+// Identifier RHS: a pre-built local struct assigned into a
+// field (the stored-value disposal's identifier branch).
+@test "def_db assign store field from local"() {
+    let pin = db_blk_new(100, 200, 300);
+    let out = DbOutcome { status: 0, value: 0, epoch: 0, session: DbSession { state: pin } };
+    let built = DbSession { state: db_blk_new(21, 22, 23) };
+    out.session = built;
+    if out.epoch != 0 { panic(49501); };
+    db_blk_check(out.session.state, 21, 22, 23, 49510);
+}
+
+// Control: scalar field post-assignment and literal-constructed
+// nested fields were never broken and must stay exact.
+@test "def_db assign store scalar control"() {
+    let pin = db_blk_new(100, 200, 300);
+    let blk = db_blk_new(1, 2, 3);
+    let st = Box::new(DbState { pin: pin, epoch: 0, dirty: 0, closed: 0, blk: blk });
+    let st_ptr = Box::into_raw(st);
+    let out = DbOutcome { status: 0, value: 0, epoch: 0, session: DbSession { state: st_ptr as ptr } };
+    out.epoch = 42;
+    out.status = 5;
+    if out.epoch != 42 { panic(49601); };
+    if out.status != 5 { panic(49602); };
+    let s = out.session;
+    let st2: *DbState = s.state as *DbState;
+    if (*st2).epoch != 0 { panic(49603); };
+    db_blk_check((*st2).blk, 1, 2, 3, 49610);
+    db_blk_check((*st2).pin, 100, 200, 300, 49620);
+}

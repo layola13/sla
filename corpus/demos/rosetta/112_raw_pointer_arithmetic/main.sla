@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/ptr.sa"
+
+fn raw_pointer_third_value() -> i32 {
+    let data: [i32; 4] = [1, 2, 3, 4];
+    let third = unsafe { *data.as_ptr().add(2) };
+    return third;
+}
+
+fn main() -> i32 {
+    let data: [i32; 4] = [1, 2, 3, 4];
+    let third = unsafe { *data.as_ptr().add(2) };
+    println("{}", third);
+    return third;
+}
+
+@test "rosetta 112 112_raw_pointer_arithmetic"() {
+    let got = raw_pointer_third_value();
+    if got != 3 {
+        panic(112);
+    };
+};

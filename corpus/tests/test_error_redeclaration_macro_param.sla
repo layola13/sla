@@ -1,0 +1,10 @@
+// expect: Redeclaration
+macro duplicate_macro_param(value, value) {
+    let result = value + 1;
+}
+
+fn use_macro_param() -> int {
+    let value = 1;
+    return value;
+}
+

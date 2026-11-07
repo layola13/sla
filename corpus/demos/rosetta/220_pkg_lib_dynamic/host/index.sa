@@ -1,0 +1,11 @@
+@import "host/../lib/iface.sai"
+@import "host/helpers/index.sa"
+
+@host_total_value() -> i32:
+L_ENTRY:
+    lib_value = call @sa_library_dynamic_value()
+    bonus = call @host_wrapper_bonus()
+    value = add lib_value, bonus
+    !lib_value
+    !bonus
+    return value

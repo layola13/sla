@@ -1,0 +1,22 @@
+@import "sa_std/sync/mutex.sa"
+@import "sa_std/core/result.sa"
+
+// P1 probe variant: same Mutex::new + lock() shape as
+// test_unit_p1_mutex_new.sla but with the Mutex created and used
+// inside a helper fn (the rosetta 102_raii_guard shape), to tell
+// whether the MemoryLeak verdict is specific to @test-body
+// locals or applies to any fn-local Mutex.
+
+fn mutex_helper_total() -> i32 {
+    let counter = Mutex::new(0);
+    {
+        let guard = counter.lock().unwrap();
+        *guard = 7;
+    }
+    let guard = counter.lock().unwrap();
+    return *guard;
+}
+
+@test "p1 mutex helper fn shape"() {
+    if mutex_helper_total() != 7 { panic(352); };
+}

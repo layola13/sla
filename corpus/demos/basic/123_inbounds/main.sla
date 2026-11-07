@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 387_inarr：下标合法性检查（1,0,1,1,0）。
+// SLA 无 `in` 运算符，用显式区间判断 `0 <= i && i < len` 表达
+
+fn in_bounds(n: i32, i: i32) -> bool {
+    return 0 <= i && i < n;
+}
+
+fn main() -> i32 {
+    let a = [10, 20, 30];
+    let n = len(a);
+    let r1 = 0;
+    if in_bounds(n, 1) { r1 = 1; };
+    let r2 = 0;
+    if in_bounds(n, 3) { r2 = 1; };
+    let r3 = 0;
+    if in_bounds(n, 0) { r3 = 1; };
+    let r4 = 0;
+    if in_bounds(n, 2) { r4 = 1; };
+    let r5 = 0;
+    if in_bounds(n, -1) { r5 = 1; };
+    println("{},{},{},{},{}", r1, r2, r3, r4, r5);
+    return 0;
+}
+
+@test "basic 123 inbounds"() {
+    if in_bounds(3, 1) != true { panic(12301); };
+    if in_bounds(3, 3) != false { panic(12302); };
+    if in_bounds(3, 0) != true { panic(12303); };
+    if in_bounds(3, 2) != true { panic(12304); };
+    if in_bounds(3, -1) != false { panic(12305); };
+}

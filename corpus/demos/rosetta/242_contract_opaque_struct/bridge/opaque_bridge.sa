@@ -1,0 +1,9 @@
+@import "bridge/../layout/private.sal"
+
+@opaque_bridge_value(&slot: ptr) -> i32:
+L_ENTRY:
+    store slot+Opaque_tag, 1 as i32
+    store slot+Opaque_payload, 242 as i32
+    value = load slot+Opaque_payload as i32
+    !slot
+    return value

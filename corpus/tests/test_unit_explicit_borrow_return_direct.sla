@@ -1,0 +1,16 @@
+struct BorrowReturnItem {
+    value: i64,
+}
+
+fn explicit_borrow_alias(value: &BorrowReturnItem) -> &BorrowReturnItem {
+    let borrowed: &BorrowReturnItem = value;
+    return borrowed;
+}
+
+@test "explicit borrow alias return transfers lifetime"() {
+    let item = BorrowReturnItem { value: 131 };
+    let returned: &BorrowReturnItem = explicit_borrow_alias(&item);
+    if returned.value != 131 {
+        panic(30949);
+    };
+}

@@ -1,0 +1,11 @@
+[package]
+name = "demo-205"
+version = "0.1.0"
+edition = "saasm-0.6"
+
+[packages]
+pkg_a = "pkg_a/main.sa"
+pkg_b = "pkg_b/main.sa"
+
+[negative]
+expected = "import cycle rejection"

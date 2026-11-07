@@ -1,0 +1,117 @@
+@import "sa_std/vec.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/core/result.sa"
+
+// Next-dimension fixture for docs/sab_parallel_runner_whole_file_memoryleak_issue_cn.md:
+// multi-lane Vec<fn(Arc<*World>) -> i32> with ordered extend, then thread::spawn
+// over the extended Arc lanes. Keep under the local SA/SAB smoke budget.
+
+struct ParallelRunnerThreadWorld {
+    value: i32,
+}
+
+struct ParallelRunnerThreadLaneHolder {
+    runs: Vec<fn(Arc<*ParallelRunnerThreadWorld>) -> i32>,
+    on_scope_runs: Vec<fn(Arc<*ParallelRunnerThreadWorld>) -> i32>,
+    run_order_positions: Vec<i64>,
+    on_scope_order_positions: Vec<i64>,
+}
+
+fn parallel_runner_thread_lane_one(world: Arc<*ParallelRunnerThreadWorld>) -> i32 {
+    return 1;
+}
+
+fn parallel_runner_thread_lane_two(world: Arc<*ParallelRunnerThreadWorld>) -> i32 {
+    return 2;
+}
+
+fn parallel_runner_thread_lane_holder_new() -> ParallelRunnerThreadLaneHolder {
+    let runs: Vec<fn(Arc<*ParallelRunnerThreadWorld>) -> i32> = Vec::new();
+    let on_scope_runs: Vec<fn(Arc<*ParallelRunnerThreadWorld>) -> i32> = Vec::new();
+    let run_order_positions: Vec<i64> = Vec::new();
+    let on_scope_order_positions: Vec<i64> = Vec::new();
+    return ParallelRunnerThreadLaneHolder {
+        runs: runs,
+        on_scope_runs: on_scope_runs,
+        run_order_positions: run_order_positions,
+        on_scope_order_positions: on_scope_order_positions,
+    };
+}
+
+fn parallel_runner_thread_lane_len(holder: ParallelRunnerThreadLaneHolder) -> i64 {
+    return (len(holder.runs) + len(holder.on_scope_runs)) as i64;
+}
+
+fn parallel_runner_thread_lane_find_order(positions: Vec<i64>, order_pos: i64) -> i64 {
+    let i: i64 = 0;
+    let n = len(positions) as i64;
+    while i < n {
+        if positions[i] == order_pos {
+            return i;
+        };
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn parallel_runner_thread_lane_spawn(holder: ParallelRunnerThreadLaneHolder, run: fn(Arc<*ParallelRunnerThreadWorld>) -> i32) -> ParallelRunnerThreadLaneHolder {
+    let order_pos = parallel_runner_thread_lane_len(holder);
+    holder.runs.push(run);
+    holder.run_order_positions.push(order_pos);
+    return holder;
+}
+
+fn parallel_runner_thread_lane_spawn_on_scope(holder: ParallelRunnerThreadLaneHolder, run: fn(Arc<*ParallelRunnerThreadWorld>) -> i32) -> ParallelRunnerThreadLaneHolder {
+    let order_pos = parallel_runner_thread_lane_len(holder);
+    holder.on_scope_runs.push(run);
+    holder.on_scope_order_positions.push(order_pos);
+    return holder;
+}
+
+fn parallel_runner_thread_lane_extend(parent: ParallelRunnerThreadLaneHolder, child: ParallelRunnerThreadLaneHolder) -> ParallelRunnerThreadLaneHolder {
+    let order_pos: i64 = 0;
+    let total = parallel_runner_thread_lane_len(child);
+    while order_pos < total {
+        let threaded_slot = parallel_runner_thread_lane_find_order(child.run_order_positions, order_pos);
+        if threaded_slot >= 0 {
+            parent = parallel_runner_thread_lane_spawn(parent, child.runs[threaded_slot]);
+        } else {
+            let local_slot = parallel_runner_thread_lane_find_order(child.on_scope_order_positions, order_pos);
+            if local_slot >= 0 {
+                parent = parallel_runner_thread_lane_spawn_on_scope(parent, child.on_scope_runs[local_slot]);
+            };
+        };
+        order_pos = order_pos + 1;
+    }
+    return parent;
+}
+
+fn parallel_runner_thread_lane_run_pair(holder: ParallelRunnerThreadLaneHolder, world: ParallelRunnerThreadWorld) -> i32 {
+    let boxed = Box::new(world);
+    let raw = Box::into_raw(boxed);
+    let shared = Arc::new(raw);
+    let run = holder.runs[0];
+    let on_scope = holder.on_scope_runs[0];
+    let first_ptr = shared.clone();
+    let second_ptr = shared.clone();
+    let a = thread::spawn(^|| run(first_ptr));
+    let b = thread::spawn(^|| on_scope(second_ptr));
+    return a.join().unwrap() + b.join().unwrap();
+}
+
+@test "parallel runner thread arc multi lane extend and spawn"() {
+    let parent = parallel_runner_thread_lane_holder_new();
+    let child0 = parallel_runner_thread_lane_holder_new();
+    let child1 = parallel_runner_thread_lane_spawn(child0, parallel_runner_thread_lane_one);
+    let child2 = parallel_runner_thread_lane_spawn_on_scope(child1, parallel_runner_thread_lane_two);
+    let out = parallel_runner_thread_lane_extend(parent, child2);
+    if len(out.runs) as i64 != 1 { panic(52601); };
+    if len(out.on_scope_runs) as i64 != 1 { panic(52602); };
+    if out.run_order_positions[0] != 0 { panic(52603); };
+    if out.on_scope_order_positions[0] != 1 { panic(52604); };
+    let world = ParallelRunnerThreadWorld { value: 7 };
+    // 1 + 2 from the two Arc world callbacks under thread::spawn after extend.
+    if parallel_runner_thread_lane_run_pair(out, world) != 3 { panic(52605); };
+}

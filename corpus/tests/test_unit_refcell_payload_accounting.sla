@@ -1,0 +1,63 @@
+@import "sa_std/core/refcell.sa"
+
+// DEF-REFCELL regression corpus: pointer-payload ownership accounting.
+// Shapes consolidated from the fix line's no-macro minim bisection set.
+// Pre-fix signatures: text backend panic 9191/9201/9301/9311 family
+// (payload freed at RefCell::new by the source-temp release, borrow
+// handles then read/write freed memory); SAB double free at
+// construction/borrow plus payload-first-word dereference on
+// multi-field field access. Every @test below fails pre-fix and
+// passes post-fix on both backends.
+
+struct RcCounter { value: i64 }
+
+fn rc_next(cell: &RefCell<RcCounter>) -> i64 {
+    let borrowed: &RcCounter = cell.borrow_mut();
+    borrowed.value = borrowed.value + 1;
+    borrowed.value
+}
+
+fn rc_read_initial(cell: &RefCell<RcCounter>) -> i64 {
+    let borrowed: &RcCounter = cell.borrow();
+    borrowed.value
+}
+
+struct RcPair { value: int, flag: bool }
+
+fn rc_pair_read(cell: &RefCell<RcPair>) -> int {
+    let borrowed: &RcPair = cell.borrow();
+    return borrowed.value;
+}
+
+fn rc_pair_write(cell: &RefCell<RcPair>, value: int) -> void {
+    let borrowed: &RcPair = cell.borrow_mut();
+    borrowed.value = value;
+}
+
+@test "refcell payload survives construction and mut borrow"() {
+    let cell = RefCell::new(RcCounter { value: 0 });
+    if rc_next(&cell) != 1 { panic(101); };
+    let borrowed: &RcCounter = cell.borrow();
+    if borrowed.value != 1 { panic(102); };
+}
+
+@test "refcell payload persists across sequential borrows"() {
+    let cell = RefCell::new(RcCounter { value: 41 });
+    if rc_next(&cell) != 42 { panic(103); };
+    if rc_next(&cell) != 43 { panic(104); };
+    if rc_read_initial(&cell) != 43 { panic(105); };
+}
+
+@test "refcell two-field payload read write helpers"() {
+    let cell = RefCell::new(RcPair { value: 50, flag: false });
+    if rc_pair_read(&cell) != 50 { panic(106); };
+    rc_pair_write(&cell, 60);
+    if rc_pair_read(&cell) != 60 { panic(109); };
+}
+
+@test "refcell two-field payload single handle write read"() {
+    let cell = RefCell::new(RcPair { value: 7, flag: true });
+    let borrowed: &RcPair = cell.borrow_mut();
+    borrowed.value = borrowed.value + 1;
+    if borrowed.value != 8 { panic(110); };
+}

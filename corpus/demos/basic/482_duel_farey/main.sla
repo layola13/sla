@@ -1,0 +1,63 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Farey 双实现对峙（φ 求和 vs 互素对枚举：|F(5)|=11 双边）。
+// 意对标 374 素数计数对峙的分数版（478 互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn phi(n: int) -> int {
+    if n <= 1 { return 1; };
+    let c = 0;
+    let k = 1;
+    while k < n {
+        if gcd(k, n) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn farey_phi(n: int) -> int {
+    let s = 1;
+    let m = 1;
+    while m <= n {
+        s = s + phi(m);
+        m = m + 1;
+    }
+    return s;
+}
+
+fn farey_brute(n: int) -> int {
+    let c = 0;
+    let b = 1;
+    while b <= n {
+        let a = 0;
+        while a <= b {
+            if gcd(a, b) == 1 { c = c + 1; };
+            a = a + 1;
+        }
+        b = b + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{}", farey_phi(5), farey_brute(5));
+    return 0;
+}
+
+@test "basic 482 duel farey"() {
+    if farey_phi(5) != 11 { panic(48201); };
+    if farey_brute(5) != 11 { panic(48202); };
+    if farey_phi(5) != farey_brute(5) { panic(48203); };
+    if farey_brute(8) != 23 { panic(48204); };
+}

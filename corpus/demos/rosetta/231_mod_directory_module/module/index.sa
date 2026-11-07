@@ -1,0 +1,6 @@
+@import "module/tree/index.sa"
+
+@export directory_value() -> i32:
+L_ENTRY:
+    tree = call @module_tree_value()
+    return tree

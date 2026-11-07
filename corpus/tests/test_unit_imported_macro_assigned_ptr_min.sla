@@ -1,0 +1,19 @@
+@import "import_fixtures/imported_assigned_output_macros.sa"
+@import "sa_std/ptr.sa"
+
+// Minimized regression for MACRO-OUT (imported_macro_assigned_outputs):
+// an imported macro whose leading output is ASSIGNED in the body writes
+// a slot-backed consumer local through a temp + store-back. The temp
+// must retire as slot-transferred (forget/move), not released --
+// releasing it freed the macro's fresh alloc and the consumer read back
+// through a dangling pointer (panic 43211/43212 in the full corpus
+// file). Solidified from probe-macro-parallel/minims/min_macro_ptr.sla.
+@test "min imported assigned ptr output"() {
+    let p: ptr = PTR_NULL();
+    SLA_IMPORTED_ASSIGNED_PTR_NEW(p, 4242);
+    let got: u64 = 0;
+    SLA_IMPORTED_ASSIGNED_PTR_GET(got, p);
+    if got != 4242 {
+        panic(9101);
+    };
+}

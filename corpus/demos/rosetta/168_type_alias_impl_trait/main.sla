@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn make_iter_surrogate() -> [i32; 3] {
+    return [1, 2, 3];
+}
+
+fn type_alias_impl_trait_result() -> i32 {
+    let _iter = make_iter_surrogate();
+    return 0;
+}
+
+fn main() -> i32 {
+    let _iter = make_iter_surrogate();
+    let result = 0;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 168 168_type_alias_impl_trait"() {
+    let got = type_alias_impl_trait_result();
+    if got != 0 { panic(168); };
+}

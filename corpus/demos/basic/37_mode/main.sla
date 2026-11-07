@@ -1,0 +1,50 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 146_mode：O(n^2) 众数（[1,3,2,3,1,3] -> 3 出现 3 次）。
+
+fn mode_of(a: [int; 6]) -> int {
+    let best = a[0];
+    let best_n = 0;
+    for i in 0..6 {
+        let n = 0;
+        for j in 0..6 {
+            if a[j] == a[i] {
+                n = n + 1;
+            };
+        }
+        if n > best_n {
+            best_n = n;
+            best = a[i];
+        };
+    }
+    return best;
+}
+
+fn mode_count(a: [int; 6]) -> int {
+    let best_n = 0;
+    for i in 0..6 {
+        let n = 0;
+        for j in 0..6 {
+            if a[j] == a[i] {
+                n = n + 1;
+            };
+        }
+        if n > best_n {
+            best_n = n;
+        };
+    }
+    return best_n;
+}
+
+fn main() -> i32 {
+    let a = [1, 3, 2, 3, 1, 3];
+    println("{},{}", mode_of(a), mode_count(a));
+    return 0;
+}
+
+@test "basic 37 mode"() {
+    let a = [1, 3, 2, 3, 1, 3];
+    if mode_of(a) != 3 { panic(3701); };
+    if mode_count(a) != 3 { panic(3702); };
+}

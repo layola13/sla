@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 381_arr_clear：清空语义（长 3->0->1，首元 9）。
+// SLA 无 `Vec.clear()`（`Undefined call`），亦无 `length=` setter，
+// 清空语义用重建绑定 `a = Vec::new()` 表达（与 269 原用例的重绑定同构）。
+
+fn main() -> i32 {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    let n0 = len(a);
+    a = Vec::new();
+    let n1 = len(a);
+    a.push(9);
+    println("{},{},{},{}", n0, n1, len(a), a[0]);
+    return 0;
+}
+
+@test "basic 121 vec rebind"() {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    if len(a) != 3 { panic(12101); };
+    a = Vec::new();
+    if len(a) != 0 { panic(12102); };
+    a.push(9);
+    if len(a) != 1 { panic(12103); };
+    if a[0] != 9 { panic(12104); };
+}

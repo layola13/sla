@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+fn dispatch(command: ptr, config_loaded: bool) -> i32 {
+    if config_loaded == true {
+        if str_eq(command, "sync") == true {
+            return 0;
+        } else {
+            if str_eq(command, "status") == true {
+                return 1;
+            } else {
+                return 64;
+            };
+        };
+    } else {
+        return 64;
+    };
+}
+
+fn main() -> i32 {
+    let code = dispatch("sync", true);
+    println("{}", code);
+    return code;
+};
+
+@test "rosetta 090 90_app_shell"() {
+    let got = dispatch("sync", true);
+    if got != 0 {
+        panic(90);
+    };
+};

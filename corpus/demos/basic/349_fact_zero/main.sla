@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 阶乘末尾零（tz(n!) = n/5 + n/25 + ...）。
+// 意对标 125 fact 的数位应用版（285 求和版互补）。
+
+fn fact_zero(n: int) -> int {
+    let c = 0;
+    let d = 5;
+    while d <= n {
+        c = c + n / d;
+        d = d * 5;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", fact_zero(10), fact_zero(25), fact_zero(7));
+    return 0;
+}
+
+@test "basic 349 fact zero"() {
+    if fact_zero(10) != 2 { panic(34901); };
+    if fact_zero(25) != 6 { panic(34902); };
+    if fact_zero(7) != 1 { panic(34903); };
+}

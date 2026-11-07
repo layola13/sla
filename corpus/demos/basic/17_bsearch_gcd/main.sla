@@ -1,0 +1,47 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 101_bsearch / 119_gcd3：二分查找 + 辗转相除。
+
+fn bsearch(a: [int; 5], target: int) -> int {
+    let lo = 0;
+    let hi = 4;
+    while lo <= hi {
+        let mid = (lo + hi) / 2;
+        if a[mid] == target {
+            return mid;
+        };
+        if a[mid] < target {
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        };
+    }
+    return -1;
+}
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn main() -> i32 {
+    let a = [1, 2, 3, 4, 5];
+    println("{}", bsearch(a, 4));
+    println("{}", gcd(48, 18));
+    return 0;
+}
+
+@test "basic 17 bsearch gcd"() {
+    let a = [1, 2, 3, 4, 5];
+    if bsearch(a, 4) != 3 { panic(1701); };
+    if bsearch(a, 9) != -1 { panic(1702); };
+    if gcd(48, 18) != 6 { panic(1703); };
+    if gcd(7, 5) != 1 { panic(1704); };
+}

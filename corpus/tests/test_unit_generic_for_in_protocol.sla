@@ -1,0 +1,35 @@
+struct Item {
+    x: i32,
+}
+
+struct Query<T> {
+    items: Vec<T>,
+}
+
+impl Query<T> {
+    fn iter_len(&self) -> i64 {
+        return len(self.items) as i64;
+    }
+
+    fn iter_at(&self, index: i64) -> T {
+        return self.items[index];
+    }
+}
+
+fn query_new<T>() -> Query<T> {
+    let items: Vec<T> = Vec::new();
+    return Query<T> { items: items };
+}
+
+@test "generic for in uses protocol impl"() {
+    let q = query_new<Item>();
+    q.items.push(Item { x: 2 });
+    q.items.push(Item { x: 3 });
+
+    let total: i32 = 0;
+    for item in q {
+        total = total + item.x;
+    }
+
+    if total != 5 { panic(1301); };
+}

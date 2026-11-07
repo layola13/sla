@@ -1,0 +1,15 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn main() -> i32 {
+    let total: i32 = [1, 2, 3].into_iter().map(|x: i32| x * 2).sum();
+    println("{}", total);
+    return 0;
+}
+
+@test "rosetta 033 iterator map"() {
+    let total: i32 = [1, 2, 3].into_iter().map(|x: i32| x * 2).sum();
+    if total != 12 {
+        panic(33);
+    };
+}

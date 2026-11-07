@@ -1,0 +1,7 @@
+@import "cycle/gamma/../alpha/index.sa"
+
+@export gamma_value() -> i32:
+L_ENTRY:
+    value = add 0, 0
+    !value
+    return 0

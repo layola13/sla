@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 200_finale：递归 fib(10)=55 + 插入排序 `[5,2,8,1]` 首尾和（1+8=9）。
+// 递归写法见 07，排序写法见 16，属收官综合。
+
+fn fib(n: int) -> int {
+    if n <= 1 {
+        return n;
+    };
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn sort4(^a: [int; 4]) -> [int; 4] {
+    for i in 1..4 {
+        let k = a[i];
+        let j = i - 1;
+        while j >= 0 && a[j] > k {
+            a[j + 1] = a[j];
+            j = j - 1;
+        }
+        a[j + 1] = k;
+    }
+    return a;
+}
+
+fn main() -> i32 {
+    let a = [5, 2, 8, 1];
+    let s = sort4(^a);
+    println("{},{}", fib(10), s[0] + s[3]);
+    return 0;
+}
+
+@test "basic 70 finale mini"() {
+    if fib(10) != 55 { panic(7001); };
+    let a = [5, 2, 8, 1];
+    let s = sort4(^a);
+    if s[0] + s[3] != 9 { panic(7002); };
+}

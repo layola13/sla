@@ -1,0 +1,69 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_emit_sum = vtable { call = @sla__emit_sum }
+@const SLA_FNPTR_VT_macro_rules_ast_sum = vtable { call = @sla__macro_rules_ast_sum }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__emit_sum(a: i32, b: i32) -> i32:
+L_ENTRY:
+    tmp_0 = add a, b
+    !b
+    !a
+    return tmp_0
+
+@sla__macro_rules_ast_sum() -> i32:
+L_ENTRY:
+    tmp_1 = 1
+    left = tmp_1
+    tmp_2 = 2
+    right = tmp_2
+    tmp_3 = call @sla__emit_sum(left, right)
+    emitted_total = tmp_3
+    tmp_4 = add emitted_total, left
+    tmp_5 = add tmp_4, right
+    !tmp_4
+    !right
+    !left
+    !emitted_total
+    return tmp_5
+
+@main() -> i32:
+L_ENTRY:
+    tmp_6 = call @sla__macro_rules_ast_sum()
+    result = tmp_6
+    tmp_7 = call @sa_fmt_u64(result, 10)
+    tmp_8 = call @sa_fmt_buffer_data(tmp_7)
+    tmp_9 = call @sa_fmt_buffer_len(tmp_7)
+    tmp_10 = tmp_8
+    call @sa_print_bytes(&tmp_10, tmp_9)
+    call @sa_fmt_buffer_free(^tmp_7)
+    !tmp_10
+    !tmp_9
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 191 191_macro_rules_ast_emit"():
+L_TEST_ENTRY_0:
+    tmp_11 = call @sla__macro_rules_ast_sum()
+    got = tmp_11
+    tmp_12 = 6
+    tmp_13 = ne got, tmp_12
+    !tmp_12
+    br tmp_13 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_13
+    panic(191)
+
+L_ELSE_2:
+    !tmp_13
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

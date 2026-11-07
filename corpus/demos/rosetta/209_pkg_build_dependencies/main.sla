@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_build_dependency_count() -> i32 {
+    let build_script_dependency = 1;
+    return build_script_dependency;
+}
+
+fn main() -> i32 { let build_script_dependency = 1; println("{}", build_script_dependency); return build_script_dependency; }
+@test "rosetta 209 pkg build dependencies"() { let got = pkg_build_dependency_count(); if got != 1 { panic(209); }; }

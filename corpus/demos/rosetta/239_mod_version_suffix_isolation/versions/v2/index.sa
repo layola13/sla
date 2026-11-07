@@ -1,0 +1,14 @@
+@import "versions/v2/layout.sal"
+@import "versions/v2/seed.sa"
+
+@export v2_value() -> i32:
+L_ENTRY:
+    slot = alloc V2_SIZE
+    seed = call @v2_seed()
+    store slot+V2_value, seed as i32
+    loaded = load slot+V2_value as i32
+    value = add loaded, 100
+    !seed
+    !loaded
+    !slot
+    return value

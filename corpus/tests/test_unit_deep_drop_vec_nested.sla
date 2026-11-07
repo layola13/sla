@@ -1,0 +1,51 @@
+@import "sa_std/vec.sa"
+
+// DEF deep-drop regression (DESIGN.md §4): a Vec<Vec<u8>> local's
+// scope-exit drop must free every inner buffer, not just the outer
+// container. Functional half of the regression: repeated build/drop
+// rounds must keep producing exact values (a double free or a
+// use-after-free in the element loop corrupts later rounds). The
+// leak half is locked by the emission assertions in plugin_tests
+// ("sla deep drop emits element and field drops on both backends")
+// and the probe_b A/B memory numbers in the batch report.
+
+fn filled_vec(n: u64, seed: u8) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(seed + (i % 7) as u8);
+        i = i + 1;
+    }
+    return v;
+}
+
+fn build_round() -> u64 {
+    let outer: Vec<Vec<u8>> = Vec::new();
+    let j: u64 = 0;
+    while j < 4 {
+        outer.push(filled_vec(64, (j * 3) as u8));
+        j = j + 1;
+    }
+    let sum: u64 = 0;
+    let a: u64 = 0;
+    while a < 4 {
+        let b: u64 = 0;
+        while b < 64 {
+            sum = sum + (outer[a][b] as u64);
+            b = b + 1;
+        }
+        a = a + 1;
+    }
+    return sum;
+}
+
+@test "deep drop frees nested vec elements"() {
+    // Per round: inners hold seed + (i % 7) for seeds 0, 3, 6, 9.
+    // sum(i%7 for i in 0..64) = 9 * (0+1+2+3+4+5+6) + 0 = 189.
+    // Round total = 4 * 189 + 64 * (0 + 3 + 6 + 9) = 756 + 1152 = 1908.
+    let r: u64 = 0;
+    while r < 25 {
+        if build_round() != 1908 { panic(4101); };
+        r = r + 1;
+    }
+}

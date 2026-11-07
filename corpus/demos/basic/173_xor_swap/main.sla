@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1251_xor_swap：异或交换（9,5）。
+// SLA 无 `^=`（无词法 token，见 119），用三遍普通 `^` 赋值表达；
+// 与 127 的临时变量交换机制互补。
+
+fn main() -> i32 {
+    let a = 5;
+    let b = 9;
+    a = a ^ b;
+    b = b ^ a;
+    a = a ^ b;
+    println("{},{}", a, b);
+    return 0;
+}
+
+@test "basic 173 xor swap"() {
+    let a = 5;
+    let b = 9;
+    a = a ^ b;
+    b = b ^ a;
+    a = a ^ b;
+    if a != 9 { panic(17301); };
+    if b != 5 { panic(17302); };
+}

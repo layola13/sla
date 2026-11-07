@@ -1,0 +1,13 @@
+// Sla std import smoke test.
+// sa_std is SA's top-level standard library package.
+
+@import "sa_std/time.sai"
+@import "sa_std/process.sai"
+
+@test "sa_std import compiles"() {
+    let now = sa_time_instant_ns();
+    let pid = sa_std_process_id();
+    if pid == 0 {
+        panic(1);
+    };
+}

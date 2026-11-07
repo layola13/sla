@@ -1,0 +1,150 @@
+// DEF-5/D-1 probe: &(*p) reborrow of a boxed value struct.
+// D-1 registration: &(*p) on a boxed value struct materialised a
+// shallow temp instead of borrowing the heap block in place — scalar
+// fields read wrong (slaredis AUTH silently disabled), callee writes
+// landed on a phantom copy (AofState flush false-success). Silent
+// corruption class: every assertion below checks an observable value,
+// never just the exit code.
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+@import "sa_std/core/box.sa"
+
+struct D1Cfg {
+    n: i64, tag: i64, name: String, items: Vec<i64>,
+}
+
+fn d1_make_cfg() -> *D1Cfg {
+    let cfg = Box::into_raw(Box::new(D1Cfg { n: 41, tag: 7, name: format("auth"), items: Vec::new() }));
+    return cfg;
+}
+
+fn d1_read_n(c: &D1Cfg) -> i64 {
+    return c.n;
+}
+
+fn d1_read_tag(c: &D1Cfg) -> i64 {
+    return c.tag;
+}
+
+fn d1_bump(c: &D1Cfg) {
+    c.n = c.n + 10;
+    c.tag = 99;
+}
+
+fn d1_name_len(c: &D1Cfg) -> u64 {
+    return STR_LEN(c.name) as u64;
+}
+
+fn d1_items_len(c: &D1Cfg) -> u64 {
+    return len(c.items) as u64;
+}
+
+fn d1_push_item(c: &D1Cfg) {
+    c.items.push(5);
+}
+
+@test "d1 scalar read through boxed reborrow"() {
+    let p = d1_make_cfg();
+    if d1_read_n(&(*p)) != 41 { panic(1801); };
+    if d1_read_tag(&(*p)) != 7 { panic(1802); };
+    let done = unsafe { Box::from_raw(p) };
+}
+
+@test "d1 callee write through boxed reborrow visible to owner"() {
+    let p = d1_make_cfg();
+    d1_bump(&(*p));
+    if (*p).n != 51 { panic(1811); };
+    if (*p).tag != 99 { panic(1812); };
+    let done = unsafe { Box::from_raw(p) };
+}
+
+@test "d1 handle field read through boxed reborrow"() {
+    let p = d1_make_cfg();
+    if d1_name_len(&(*p)) != 4 { panic(1821); };
+    if d1_items_len(&(*p)) != 0 { panic(1822); };
+    let done = unsafe { Box::from_raw(p) };
+}
+
+@test "d1 callee vec push through boxed reborrow visible to owner"() {
+    let p = d1_make_cfg();
+    d1_push_item(&(*p));
+    if len((*p).items) as u64 != 1 { panic(1831); };
+    if (*p).items[0] != 5 { panic(1832); };
+    let done = unsafe { Box::from_raw(p) };
+}
+
+@test "d1 local reborrow binding of boxed deref"() {
+    let p = d1_make_cfg();
+    let rb = &(*p);
+    if d1_read_n(rb) != 41 { panic(1841); };
+    d1_bump(rb);
+    if (*p).n != 51 { panic(1842); };
+    let done = unsafe { Box::from_raw(p) };
+}
+
+@test "d1 controls direct deref and field place borrow"() {
+    let p = d1_make_cfg();
+    if (*p).n != 41 { panic(1851); };
+    (*p).n = 43;
+    if (*p).n != 43 { panic(1852); };
+    let rn = &(*p).n;
+    if *rn != 43 { panic(1853); };
+    let done = unsafe { Box::from_raw(p) };
+}
+
+@test "d1 control owned struct borrow"() {
+    let s = D1Cfg { n: 41, tag: 7, name: format("auth"), items: Vec::new() };
+    if d1_read_n(&s) != 41 { panic(1861); };
+    d1_bump(&s);
+    if s.n != 51 { panic(1862); };
+    if s.tag != 99 { panic(1863); };
+}
+
+fn d1_get_borrow(p: *D1Cfg) -> &D1Cfg {
+    return &(*p);
+}
+
+@test "d1 borrow binding field read and write no call"() {
+    let p = d1_make_cfg();
+    let rb = &(*p);
+    if rb.n != 41 { panic(1881); };
+    rb.n = 55;
+    if (*p).n != 55 { panic(1882); };
+    let done = unsafe { Box::from_raw(p) };
+}
+
+@test "d1 borrow returned from fn reads true fields"() {
+    let p = d1_make_cfg();
+    let rb = d1_get_borrow(p);
+    if rb.n != 41 { panic(1891); };
+    if rb.tag != 7 { panic(1892); };
+    let done = unsafe { Box::from_raw(p) };
+}
+
+fn d1_read_i64(c: &i64) -> i64 {
+    return *c;
+}
+
+fn d1_set_i64(c: &i64) {
+    *c = 9;
+}
+
+@test "d1 scalar pointee reborrow still uses cell place"() {
+    let p = Box::into_raw(Box::new(41i64));
+    if d1_read_i64(&(*p)) != 41 { panic(1901); };
+    d1_set_i64(&(*p));
+    if *p != 9 { panic(1902); };
+    let done = unsafe { Box::from_raw(p) };
+}
+
+struct D1Wrap {
+    p: *D1Cfg, x: i64,
+}
+
+@test "d1 nested pointer field reborrow"() {
+    let w = D1Wrap { p: d1_make_cfg(), x: 1 };
+    if d1_read_n(&(*w.p)) != 41 { panic(1871); };
+    d1_bump(&(*w.p));
+    if (*w.p).n != 51 { panic(1872); };
+    let done = unsafe { Box::from_raw(w.p) };
+}

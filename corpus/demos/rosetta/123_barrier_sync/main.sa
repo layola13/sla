@@ -1,0 +1,266 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/arc.sa"
+@import "sa_std/sync/atomic.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/core/result.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_THREAD_VT_0 = vtable { call = @sla_thread_worker_0 }
+@const SLA_THREAD_VT_1 = vtable { call = @sla_thread_worker_1 }
+@const SLA_THREAD_VT_2 = vtable { call = @sla_thread_worker_2 }
+
+@ffi_wrapper sla_thread_spawn_0(*slot: ptr) -> i32:
+L_ENTRY:
+    worker_vt = &SLA_THREAD_VT_0
+    worker_fn = load worker_vt+0 as ptr
+    worker_raw = *worker_fn
+    worker_safe = assume_safe worker_raw
+    EXPAND THREAD_SPAWN handle, *worker_safe, *slot
+    !slot
+    return handle
+
+@sla_thread_worker_0(&slot: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load slot+16 as ptr
+    tmp_1 = call @sla__barrier_worker(tmp_0)
+    store slot+8, tmp_1 as i32
+    !slot
+    return tmp_1
+
+@ffi_wrapper sla_thread_spawn_1(*slot: ptr) -> i32:
+L_ENTRY:
+    worker_vt = &SLA_THREAD_VT_1
+    worker_fn = load worker_vt+0 as ptr
+    worker_raw = *worker_fn
+    worker_safe = assume_safe worker_raw
+    EXPAND THREAD_SPAWN handle, *worker_safe, *slot
+    !slot
+    return handle
+
+@sla_thread_worker_1(&slot: ptr) -> i32:
+L_ENTRY:
+    tmp_2 = load slot+16 as ptr
+    tmp_3 = call @sla__barrier_worker(tmp_2)
+    store slot+8, tmp_3 as i32
+    !slot
+    return tmp_3
+
+@ffi_wrapper sla_thread_spawn_2(*slot: ptr) -> i32:
+L_ENTRY:
+    worker_vt = &SLA_THREAD_VT_2
+    worker_fn = load worker_vt+0 as ptr
+    worker_raw = *worker_fn
+    worker_safe = assume_safe worker_raw
+    EXPAND THREAD_SPAWN handle, *worker_safe, *slot
+    !slot
+    return handle
+
+@sla_thread_worker_2(&slot: ptr) -> i32:
+L_ENTRY:
+    tmp_4 = load slot+16 as ptr
+    tmp_5 = call @sla__barrier_worker(tmp_4)
+    store slot+8, tmp_5 as i32
+    !slot
+    return tmp_5
+
+@const SLA_FNPTR_VT_barrier_worker = vtable { call = @sla__barrier_worker }
+@const SLA_FNPTR_VT_barrier_release_count = vtable { call = @sla__barrier_release_count }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__barrier_worker(barrier: ptr) -> i32:
+L_ENTRY:
+    EXPAND ARC_GET tmp_6, barrier
+    tmp_7 = 1
+    EXPAND ATOMIC_I32_FETCH_ADD tmp_8, tmp_6, tmp_7, seq_cst
+    !tmp_6
+    !tmp_7
+    !tmp_8
+    jmp L_WHILE_HEAD_0
+
+L_WHILE_HEAD_0:
+    EXPAND ARC_GET tmp_9, barrier
+    EXPAND ATOMIC_I32_LOAD tmp_10, tmp_9, seq_cst
+    !tmp_9
+    tmp_11 = 3
+    tmp_12 = slt tmp_10, tmp_11
+    !tmp_10
+    !tmp_11
+    br tmp_12 -> L_WHILE_BODY_1, L_WHILE_COND_FALSE_2
+
+L_WHILE_BODY_1:
+    !tmp_12
+    jmp L_WHILE_HEAD_0
+
+L_WHILE_COND_FALSE_2:
+    !tmp_12
+    jmp L_WHILE_EXIT_3
+
+L_WHILE_EXIT_3:
+    tmp_13 = 1
+    !barrier
+    return tmp_13
+
+@sla__barrier_release_count() -> i32:
+L_ENTRY:
+    tmp_14 = 0
+    tmp_15 = stack_alloc AtomicI32_SIZE
+    EXPAND ATOMIC_I32_INIT tmp_15, tmp_14
+    !tmp_14
+    EXPAND ARC_NEW tmp_16, tmp_15
+    barrier = tmp_16
+    tmp_17 = add barrier, 0
+    EXPAND ARC_CLONE tmp_17
+    left = tmp_17
+    tmp_18 = add barrier, 0
+    EXPAND ARC_CLONE tmp_18
+    middle = tmp_18
+    tmp_19 = add barrier, 0
+    EXPAND ARC_CLONE tmp_19
+    right = tmp_19
+    tmp_20 = alloc 24
+    store tmp_20+0, 0 as i32
+    store tmp_20+8, 0 as i32
+    store tmp_20+16, left as ptr
+    tmp_21 = call @sla_thread_spawn_0(*tmp_20)
+    store tmp_20+0, tmp_21 as i32
+    !tmp_21
+    a = tmp_20
+    tmp_22 = alloc 24
+    store tmp_22+0, 0 as i32
+    store tmp_22+8, 0 as i32
+    store tmp_22+16, middle as ptr
+    tmp_23 = call @sla_thread_spawn_1(*tmp_22)
+    store tmp_22+0, tmp_23 as i32
+    !tmp_23
+    b = tmp_22
+    tmp_24 = alloc 24
+    store tmp_24+0, 0 as i32
+    store tmp_24+8, 0 as i32
+    store tmp_24+16, right as ptr
+    tmp_25 = call @sla_thread_spawn_2(*tmp_24)
+    store tmp_24+0, tmp_25 as i32
+    !tmp_25
+    c = tmp_24
+    tmp_26 = load a+0 as i32
+    EXPAND THREAD_JOIN_STATUS tmp_27, tmp_26, *a
+    EXPAND THREAD_DROP tmp_26
+    tmp_28 = eq tmp_27, 0
+    br tmp_28 -> L_THREAD_JOIN_OK_4, L_THREAD_JOIN_ERR_5
+
+L_THREAD_JOIN_OK_4:
+    !tmp_28
+    tmp_30 = load a+8 as i32
+    EXPAND RESULT_NEW_OK tmp_29, tmp_30
+    !tmp_30
+    jmp L_THREAD_JOIN_END_6
+
+L_THREAD_JOIN_ERR_5:
+    !tmp_28
+    EXPAND RESULT_NEW_ERR tmp_29, tmp_27
+    jmp L_THREAD_JOIN_END_6
+
+L_THREAD_JOIN_END_6:
+    !tmp_27
+    !tmp_26
+    !a
+    EXPAND RESULT_UNWRAP tmp_31, tmp_29
+    !tmp_29
+    tmp_32 = load b+0 as i32
+    EXPAND THREAD_JOIN_STATUS tmp_33, tmp_32, *b
+    EXPAND THREAD_DROP tmp_32
+    tmp_34 = eq tmp_33, 0
+    br tmp_34 -> L_THREAD_JOIN_OK_7, L_THREAD_JOIN_ERR_8
+
+L_THREAD_JOIN_OK_7:
+    !tmp_34
+    tmp_36 = load b+8 as i32
+    EXPAND RESULT_NEW_OK tmp_35, tmp_36
+    !tmp_36
+    jmp L_THREAD_JOIN_END_9
+
+L_THREAD_JOIN_ERR_8:
+    !tmp_34
+    EXPAND RESULT_NEW_ERR tmp_35, tmp_33
+    jmp L_THREAD_JOIN_END_9
+
+L_THREAD_JOIN_END_9:
+    !tmp_33
+    !tmp_32
+    !b
+    EXPAND RESULT_UNWRAP tmp_37, tmp_35
+    !tmp_35
+    tmp_38 = add tmp_31, tmp_37
+    !tmp_31
+    !tmp_37
+    tmp_39 = load c+0 as i32
+    EXPAND THREAD_JOIN_STATUS tmp_40, tmp_39, *c
+    EXPAND THREAD_DROP tmp_39
+    tmp_41 = eq tmp_40, 0
+    br tmp_41 -> L_THREAD_JOIN_OK_10, L_THREAD_JOIN_ERR_11
+
+L_THREAD_JOIN_OK_10:
+    !tmp_41
+    tmp_43 = load c+8 as i32
+    EXPAND RESULT_NEW_OK tmp_42, tmp_43
+    !tmp_43
+    jmp L_THREAD_JOIN_END_12
+
+L_THREAD_JOIN_ERR_11:
+    !tmp_41
+    EXPAND RESULT_NEW_ERR tmp_42, tmp_40
+    jmp L_THREAD_JOIN_END_12
+
+L_THREAD_JOIN_END_12:
+    !tmp_40
+    !tmp_39
+    !c
+    EXPAND RESULT_UNWRAP tmp_44, tmp_42
+    !tmp_42
+    tmp_45 = add tmp_38, tmp_44
+    !tmp_38
+    !tmp_44
+    !left
+    !barrier
+    !middle
+    !right
+    return tmp_45
+
+@main() -> i32:
+L_ENTRY:
+    tmp_46 = call @sla__barrier_release_count()
+    result = tmp_46
+    tmp_47 = call @sa_fmt_u64(result, 10)
+    tmp_48 = call @sa_fmt_buffer_data(tmp_47)
+    tmp_49 = call @sa_fmt_buffer_len(tmp_47)
+    tmp_50 = tmp_48
+    call @sa_print_bytes(&tmp_50, tmp_49)
+    call @sa_fmt_buffer_free(^tmp_47)
+    !tmp_50
+    !tmp_49
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 123 123_barrier_sync"():
+L_TEST_ENTRY_13:
+    tmp_51 = call @sla__barrier_release_count()
+    got = tmp_51
+    tmp_52 = 3
+    tmp_53 = ne got, tmp_52
+    !tmp_52
+    br tmp_53 -> L_THEN_14, L_ELSE_15
+
+L_THEN_14:
+    !tmp_53
+    panic(123)
+
+L_ELSE_15:
+    !tmp_53
+    jmp L_MERGE_16
+
+L_MERGE_16:
+    !got
+    return
+

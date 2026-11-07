@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Narayana 第 2 列 50,105,196（N(6,2)=50，N(7,2)=105，N(8,2)=196；列纵深）。
+// 意对标 716_nar7（单格版互补；同式列复算）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn nar(n: int, k: int) -> int {
+    return binom_mul(n, k) * binom_mul(n, k + 1) / n;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", nar(6, 2), nar(7, 2), nar(8, 2));
+    return 0;
+}
+
+@test "basic 723 nar col2"() {
+    if nar(6, 2) != 50 { panic(72301); };
+    if nar(7, 2) != 105 { panic(72302); };
+    if nar(8, 2) != 196 { panic(72303); };
+    if nar(5, 2) != 20 { panic(72304); };
+}

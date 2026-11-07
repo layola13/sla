@@ -1,0 +1,3 @@
+[case]
+name = "throughput"
+samples = 128

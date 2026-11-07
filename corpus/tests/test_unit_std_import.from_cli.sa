@@ -1,0 +1,25 @@
+@import "sa_std/time.sai"
+@import "sa_std/process.sai"
+@test "sa_std import compiles"():
+L_TEST_ENTRY_0:
+    tmp_0 = call @sa_time_instant_ns()
+    now = tmp_0
+    tmp_1 = call @sa_std_process_id()
+    pid = tmp_1
+    tmp_2 = 0
+    tmp_3 = eq pid, tmp_2
+    br tmp_3 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_3
+    panic(1)
+
+L_ELSE_2:
+    !tmp_3
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !now
+    !pid
+    return
+

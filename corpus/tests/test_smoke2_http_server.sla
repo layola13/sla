@@ -1,0 +1,1224 @@
+// Smoke wave 2: register-2 externs in sa_std/http_server.sai (v1 + v2).
+// Peer is a raw TCP client built from the net wraps: the request bytes
+// are written into the listen backlog before accept runs, so every test
+// is single-threaded and hermetic on 127.0.0.1 with per-test ports.
+// Panic codes 644xx.
+@import "sla_std/wrap/http_server.sla"
+@import "sla_std/wrap/http_client.sla"
+@import "sla_std/wrap/net.sla"
+@import "sla_std/wrap/fs.sla"
+@import "sla_std/wrap/os/fd.sla"
+@import "sa_std/task.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+fn s2_mem_eq(p: ptr, n: u64, lit: ptr, m: u64) -> bool {
+    if n != m { return false; };
+    let i: u64 = 0;
+    while i < n {
+        let bp: ptr = PTR_BYTE_ADD(p, i);
+        let bq: ptr = PTR_BYTE_ADD(lit, i);
+        if PTR_READ_U8(bp) != PTR_READ_U8(bq) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn s2_contains(p: ptr, n: u64, lit: ptr, m: u64) -> bool {
+    if n < m { return false; };
+    let i: u64 = 0;
+    while i + m <= n {
+        if s2_mem_eq_tail(p, i, lit, m) { return true; };
+        i = i + 1;
+    }
+    return false;
+}
+
+fn s2_mem_eq_tail(p: ptr, off: u64, lit: ptr, m: u64) -> bool {
+    let j: u64 = 0;
+    while j < m {
+        let bp: ptr = PTR_BYTE_ADD(p, off + j);
+        let bq: ptr = PTR_BYTE_ADD(lit, j);
+        if PTR_READ_U8(bp) != PTR_READ_U8(bq) { return false; };
+        j = j + 1;
+    }
+    return true;
+}
+
+fn s2_srv1(base: u64, out_port: ptr, code: i32) -> ptr {
+    let i: u64 = 0;
+    while i < 30 {
+        let sc = [0u64; 4];
+        if sla_http_server_new(&sc[0]) != 0 { panic(code); };
+        let srv = (sc[0] as ptr);
+        if sla_http_server_start(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), ((base + i) as u16)) == 0 {
+            PTR_WRITE_U64(out_port, base + i);
+            return srv;
+        };
+        sla_http_server_free(srv);
+        i = i + 1;
+    }
+    panic(code + 1);
+    return PTR_NULL();
+}
+
+fn s2_srv2(base: u64, out_port: ptr, code: i32) -> ptr {
+    let i: u64 = 0;
+    while i < 30 {
+        let sc = [0u64; 4];
+        if sla_http_server_new_v2(&sc[0]) != 0 { panic(code); };
+        let srv = (sc[0] as ptr);
+        if sla_http_server_start_v2(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), ((base + i) as u16)) == 0 {
+            PTR_WRITE_U64(out_port, base + i);
+            return srv;
+        };
+        sla_http_server_free_v2(srv);
+        i = i + 1;
+    }
+    panic(code + 1);
+    return PTR_NULL();
+}
+
+fn s2_raw_conn(port: u64, code: i32) -> u64 {
+    let cli = [0u64; 4];
+    if sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]) != 0 { panic(code); };
+    sla_std_net_tcp_stream_set_read_timeout(cli[0], 3000000000);
+    return cli[0];
+}
+
+fn s2_raw_write(cli: u64, p: ptr, n: u64, code: i32) -> void {
+    let wr = [0u64; 4];
+    if sla_std_net_tcp_stream_write(cli, p, n, &wr[0]) != 0 { panic(code); };
+    if wr[0] != n { panic(code + 1); };
+}
+
+// Read until EOF or read timeout; copy into bp (cap bytes); return total.
+fn s2_raw_read_all(cli: u64, bp: ptr, cap: u64) -> u64 {
+    let total: u64 = 0;
+    let scratch = [0u8; 512];
+    let done = false;
+    while !done {
+        let rd = [0u64; 4];
+        let rc = sla_std_net_tcp_stream_read(cli, &scratch[0], 512, &rd[0]);
+        if rc != 0 || rd[0] == 0 {
+            done = true;
+        } else {
+            let i: u64 = 0;
+            while i < rd[0] {
+                if total + i < cap {
+                    let dp: ptr = PTR_BYTE_ADD(bp, total + i);
+                    PTR_WRITE_U8(dp, scratch[i]);
+                };
+                i = i + 1;
+            }
+            total = total + rd[0];
+        };
+    }
+    return total;
+}
+
+fn s2_read_exact(cli: u64, bp: ptr, n: u64, code: i32) -> void {
+    let got: u64 = 0;
+    let scratch = [0u8; 512];
+    while got < n {
+        let want = n - got;
+        let rd = [0u64; 4];
+        let rc = sla_std_net_tcp_stream_read(cli, &scratch[0], want, &rd[0]);
+        if rc != 0 { panic(code); };
+        if rd[0] == 0 { panic(code + 1); };
+        let i: u64 = 0;
+        while i < rd[0] {
+            let dp: ptr = PTR_BYTE_ADD(bp, got + i);
+            PTR_WRITE_U8(dp, scratch[i]);
+            i = i + 1;
+        }
+        got = got + rd[0];
+    }
+}
+
+// Read response head (up to and including CRLFCRLF); return total bytes.
+fn s2_read_head(cli: u64, bp: ptr, cap: u64, code: i32) -> u64 {
+    let total: u64 = 0;
+    let scratch = [0u8; 512];
+    let found = false;
+    while !found {
+        let rd = [0u64; 4];
+        let rc = sla_std_net_tcp_stream_read(cli, &scratch[0], 512, &rd[0]);
+        if rc != 0 || rd[0] == 0 { panic(code); };
+        let i: u64 = 0;
+        while i < rd[0] {
+            if total + i < cap {
+                let dp: ptr = PTR_BYTE_ADD(bp, total + i);
+                PTR_WRITE_U8(dp, scratch[i]);
+            };
+            i = i + 1;
+        }
+        total = total + rd[0];
+        if s2_contains(bp, total, STR_PTR("\r\n\r\n"), STR_LEN("\r\n\r\n")) { found = true; };
+        if total > 8192 { panic(code + 1); };
+    }
+    return total;
+}
+
+// Build a masked client->server WS frame at bp; return frame length.
+fn s2_ws_frame(bp: ptr, opcode: u8, payload: ptr, plen: u64) -> u64 {
+    let b0: ptr = PTR_BYTE_ADD(bp, 0);
+    PTR_WRITE_U8(b0, 128 + opcode);
+    let b1: ptr = PTR_BYTE_ADD(bp, 1);
+    PTR_WRITE_U8(b1, (128 + plen) as u8);
+    let mask = [0u8; 4];
+    mask[0] = 42;
+    mask[1] = 17;
+    mask[2] = 92;
+    mask[3] = 9;
+    let k: u64 = 0;
+    while k < 4 {
+        let mp: ptr = PTR_BYTE_ADD(bp, 2 + k);
+        PTR_WRITE_U8(mp, mask[k]);
+        k = k + 1;
+    }
+    let i: u64 = 0;
+    while i < plen {
+        let sp: ptr = PTR_BYTE_ADD(payload, i);
+        let dp: ptr = PTR_BYTE_ADD(bp, 6 + i);
+        PTR_WRITE_U8(dp, PTR_READ_U8(sp) ^ mask[i % 4]);
+        i = i + 1;
+    }
+    return 6 + plen;
+}
+
+fn s2_ws_upgrade_req() -> ptr {
+    return STR_PTR("GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n");
+}
+
+fn s2_ws_upgrade_req_len() -> u64 {
+    return STR_LEN("GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n");
+}
+
+// ---------------- v1 tests ----------------
+
+@test "smoke2 sa_http_server_start"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24401, pp, 64410);
+    // Listener is live: a raw TCP connect succeeds.
+    let cli = s2_raw_conn(pc[0], 64412);
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_accept"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24402, pp, 64420);
+    let cli = s2_raw_conn(pc[0], 64422);
+    let req_lit = "GET /a HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    s2_raw_write(cli, STR_PTR(req_lit), STR_LEN(req_lit), 64423);
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(64424); };
+    if aq[0] == 0 { panic(64425); };
+    sla_http_server_req_free((aq[0] as ptr));
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_req_get_method"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24403, pp, 64430);
+    let cli = s2_raw_conn(pc[0], 64432);
+    let req_lit = "POST /m HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+    s2_raw_write(cli, STR_PTR(req_lit), STR_LEN(req_lit), 64433);
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(64434); };
+    let req = (aq[0] as ptr);
+    let mp = [0u64; 4];
+    let ml = [0u64; 4];
+    if sla_http_server_req_get_method(req, &mp[0], &ml[0]) != 0 { panic(64435); };
+    if !s2_mem_eq((mp[0] as ptr), ml[0], STR_PTR("POST"), STR_LEN("POST")) { panic(64436); };
+    sla_http_server_req_free(req);
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_req_get_path"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24404, pp, 64440);
+    let cli = s2_raw_conn(pc[0], 64442);
+    let req_lit = "GET /v1path?q=9 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    s2_raw_write(cli, STR_PTR(req_lit), STR_LEN(req_lit), 64443);
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(64444); };
+    let req = (aq[0] as ptr);
+    let vp = [0u64; 4];
+    let vl = [0u64; 4];
+    if sla_http_server_req_get_path(req, &vp[0], &vl[0]) != 0 { panic(64445); };
+    if !s2_mem_eq((vp[0] as ptr), vl[0], STR_PTR("/v1path"), STR_LEN("/v1path")) { panic(64446); };
+    sla_http_server_req_free(req);
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_req_get_header"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24405, pp, 64450);
+    let cli = s2_raw_conn(pc[0], 64452);
+    let req_lit = "GET /h HTTP/1.1\r\nHost: 127.0.0.1\r\nX-T: zz\r\nConnection: close\r\n\r\n";
+    s2_raw_write(cli, STR_PTR(req_lit), STR_LEN(req_lit), 64453);
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(64454); };
+    let req = (aq[0] as ptr);
+    let vp = [0u64; 4];
+    let vl = [0u64; 4];
+    if sla_http_server_req_get_header(req, STR_PTR("X-T"), STR_LEN("X-T"), &vp[0], &vl[0]) != 0 { panic(64455); };
+    if !s2_mem_eq((vp[0] as ptr), vl[0], STR_PTR("zz"), STR_LEN("zz")) { panic(64456); };
+    // Absent header must report failure, not fabricate a value.
+    let xp = [0u64; 4];
+    let xl = [0u64; 4];
+    if sla_http_server_req_get_header(req, STR_PTR("X-Absent"), STR_LEN("X-Absent"), &xp[0], &xl[0]) == 0 { panic(64457); };
+    sla_http_server_req_free(req);
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_req_get_body"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24406, pp, 64460);
+    let cli = s2_raw_conn(pc[0], 64462);
+    let req_lit = "POST /b HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 4\r\nConnection: close\r\n\r\nBODY";
+    s2_raw_write(cli, STR_PTR(req_lit), STR_LEN(req_lit), 64463);
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(64464); };
+    let req = (aq[0] as ptr);
+    let bp = [0u64; 4];
+    let bl = [0u64; 4];
+    if sla_http_server_req_get_body(req, &bp[0], &bl[0]) != 0 { panic(64465); };
+    if !s2_mem_eq((bp[0] as ptr), bl[0], STR_PTR("BODY"), STR_LEN("BODY")) { panic(64466); };
+    sla_http_server_req_free(req);
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_resp_new"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24407, pp, 64470);
+    let cli = s2_raw_conn(pc[0], 64472);
+    let req_lit = "GET /n HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    s2_raw_write(cli, STR_PTR(req_lit), STR_LEN(req_lit), 64473);
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(64474); };
+    let req = (aq[0] as ptr);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new(req, 201, &rp[0]) != 0 { panic(64475); };
+    if rp[0] == 0 { panic(64476); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_send(resp, STR_PTR("created"), STR_LEN("created")) != 0 { panic(64477); };
+    sla_http_server_resp_free(resp);
+    sla_http_server_req_free(req);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("201"), STR_LEN("201")) { panic(64478); };
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_resp_set_content_type"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24408, pp, 64480);
+    let cli = s2_raw_conn(pc[0], 64482);
+    let req_lit = "GET /ct HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    s2_raw_write(cli, STR_PTR(req_lit), STR_LEN(req_lit), 64483);
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(64484); };
+    let req = (aq[0] as ptr);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new(req, 200, &rp[0]) != 0 { panic(64485); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_set_content_type(resp, STR_PTR("text/x-w2"), STR_LEN("text/x-w2")) != 0 { panic(64486); };
+    if sla_http_server_resp_send(resp, STR_PTR("ct-body"), STR_LEN("ct-body")) != 0 { panic(64487); };
+    sla_http_server_resp_free(resp);
+    sla_http_server_req_free(req);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("text/x-w2"), STR_LEN("text/x-w2")) { panic(64488); };
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_resp_send"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24409, pp, 64490);
+    let cli = s2_raw_conn(pc[0], 64492);
+    let req_lit = "GET /s HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    s2_raw_write(cli, STR_PTR(req_lit), STR_LEN(req_lit), 64493);
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(64494); };
+    let req = (aq[0] as ptr);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new(req, 200, &rp[0]) != 0 { panic(64495); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_send(resp, STR_PTR("v1-resp-body"), STR_LEN("v1-resp-body")) != 0 { panic(64496); };
+    sla_http_server_resp_free(resp);
+    sla_http_server_req_free(req);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if total < 12 { panic(64497); };
+    if !s2_mem_eq(bp, 12, STR_PTR("HTTP/1.1 200"), STR_LEN("HTTP/1.1 200")) { panic(64498); };
+    if !s2_contains(bp, total, STR_PTR("v1-resp-body"), STR_LEN("v1-resp-body")) { panic(64499); };
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+// ---------------- v1 stream tests ----------------
+
+fn s2_accept_v1(srv: ptr, cli: u64, req_lit: ptr, req_len: u64, code: i32) -> ptr {
+    s2_raw_write(cli, req_lit, req_len, code);
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(code + 1); };
+    return (aq[0] as ptr);
+}
+
+@test "smoke2 sa_http_server_resp_stream_new"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24410, pp, 64500);
+    let cli = s2_raw_conn(pc[0], 64502);
+    let req_lit = "GET /st HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v1(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64503);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_stream_new(req, 200, &rp[0]) != 0 { panic(64505); };
+    if rp[0] == 0 { panic(64506); };
+    let sresp = (rp[0] as ptr);
+    if sla_http_server_resp_stream_end(sresp) != 0 { panic(64507); };
+    sla_http_server_resp_stream_free(sresp);
+    sla_http_server_req_free(req);
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_resp_stream_write"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24411, pp, 64510);
+    let cli = s2_raw_conn(pc[0], 64512);
+    let req_lit = "GET /st HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v1(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64513);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_stream_new(req, 200, &rp[0]) != 0 { panic(64515); };
+    let sresp = (rp[0] as ptr);
+    if sla_http_server_resp_stream_write(sresp, STR_PTR("chunk-A"), STR_LEN("chunk-A")) != 0 { panic(64516); };
+    if sla_http_server_resp_stream_end(sresp) != 0 { panic(64517); };
+    sla_http_server_resp_stream_free(sresp);
+    sla_http_server_req_free(req);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("chunk-A"), STR_LEN("chunk-A")) { panic(64518); };
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_resp_stream_flush"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24412, pp, 64520);
+    let cli = s2_raw_conn(pc[0], 64522);
+    let req_lit = "GET /st HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v1(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64523);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_stream_new(req, 200, &rp[0]) != 0 { panic(64525); };
+    let sresp = (rp[0] as ptr);
+    if sla_http_server_resp_stream_write(sresp, STR_PTR("flush-me"), STR_LEN("flush-me")) != 0 { panic(64526); };
+    if sla_http_server_resp_stream_flush(sresp) != 0 { panic(64527); };
+    // After flush the chunk must be readable before end is called.
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    s2_read_exact(cli, bp, 8, 64528);
+    if sla_http_server_resp_stream_end(sresp) != 0 { panic(64529); };
+    sla_http_server_resp_stream_free(sresp);
+    sla_http_server_req_free(req);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("flush-me"), STR_LEN("flush-me")) { panic(64530); };
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_resp_stream_end"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24413, pp, 64540);
+    let cli = s2_raw_conn(pc[0], 64542);
+    let req_lit = "GET /st HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v1(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64543);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_stream_new(req, 200, &rp[0]) != 0 { panic(64545); };
+    let sresp = (rp[0] as ptr);
+    if sla_http_server_resp_stream_write(sresp, STR_PTR("end-chunk"), STR_LEN("end-chunk")) != 0 { panic(64546); };
+    if sla_http_server_resp_stream_end(sresp) != 0 { panic(64547); };
+    sla_http_server_resp_stream_free(sresp);
+    sla_http_server_req_free(req);
+    // End must terminate the body: read_all ends at EOF with the chunk in it.
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("end-chunk"), STR_LEN("end-chunk")) { panic(64548); };
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_resp_stream_free"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24414, pp, 64550);
+    let cli = s2_raw_conn(pc[0], 64552);
+    let req_lit = "GET /st HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v1(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64553);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_stream_new(req, 200, &rp[0]) != 0 { panic(64555); };
+    let sresp = (rp[0] as ptr);
+    if sla_http_server_resp_stream_write(sresp, STR_PTR("x"), STR_LEN("x")) != 0 { panic(64556); };
+    if sla_http_server_resp_stream_end(sresp) != 0 { panic(64557); };
+    if sla_http_server_resp_stream_free(sresp) != 0 { panic(64558); };
+    sla_http_server_req_free(req);
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_resp_free"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24415, pp, 64560);
+    let cli = s2_raw_conn(pc[0], 64562);
+    let req_lit = "GET /f HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v1(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64563);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new(req, 200, &rp[0]) != 0 { panic(64565); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_send(resp, STR_PTR("f"), STR_LEN("f")) != 0 { panic(64566); };
+    if sla_http_server_resp_free(resp) != 0 { panic(64567); };
+    sla_http_server_req_free(req);
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_req_free"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24416, pp, 64570);
+    let cli = s2_raw_conn(pc[0], 64572);
+    let req_lit = "GET /f HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v1(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64573);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new(req, 200, &rp[0]) != 0 { panic(64575); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_send(resp, STR_PTR("f"), STR_LEN("f")) != 0 { panic(64576); };
+    sla_http_server_resp_free(resp);
+    if sla_http_server_req_free(req) != 0 { panic(64577); };
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_free"() {
+    let sc = [0u64; 4];
+    if sla_http_server_new(&sc[0]) != 0 { panic(64580); };
+    let srv = (sc[0] as ptr);
+    if sla_http_server_start(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 24417) != 0 { panic(64581); };
+    if sla_http_server_free(srv) != 0 { panic(64582); };
+}
+
+// ---------------- v1 websocket tests ----------------
+
+fn s2_upgrade_v1(srv: ptr, cli: u64, code: i32) -> ptr {
+    s2_raw_write(cli, s2_ws_upgrade_req(), s2_ws_upgrade_req_len(), code);
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(code + 1); };
+    let req = (aq[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_server_websocket_upgrade(req, &wc[0]) != 0 { panic(code + 2); };
+    if wc[0] == 0 { panic(code + 3); };
+    // Note: a successful upgrade consumes the request handle.
+    return (wc[0] as ptr);
+}
+
+@test "smoke2 sa_http_server_websocket_upgrade"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24418, pp, 64590);
+    let cli = s2_raw_conn(pc[0], 64592);
+    let ws = s2_upgrade_v1(srv, cli, 64593);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_read_head(cli, bp, 1024, 64597);
+    if !s2_contains(bp, total, STR_PTR("101"), STR_LEN("101")) { panic(64598); };
+    sla_http_server_websocket_free(ws);
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_websocket_write"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24419, pp, 64600);
+    let cli = s2_raw_conn(pc[0], 64602);
+    let ws = s2_upgrade_v1(srv, cli, 64603);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    s2_read_head(cli, bp, 1024, 64607);
+    // Client sends one masked text frame "hi-ws1".
+    let fbuf = [0u8; 64];
+    let fp: ptr = PTR_BYTE_ADD(&fbuf, 0);
+    let flen = s2_ws_frame(fp, 1, STR_PTR("hi-ws1"), STR_LEN("hi-ws1"));
+    s2_raw_write(cli, fp, flen, 64608);
+    let op = [0u64; 4];
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_server_websocket_read(ws, 4096, &op[0], &dp[0], &dl[0]) != 0 { panic(64609); };
+    if op[0] != 1 { panic(64610); };
+    if !s2_mem_eq((dp[0] as ptr), dl[0], STR_PTR("hi-ws1"), STR_LEN("hi-ws1")) { panic(64611); };
+    if sla_http_server_websocket_write(ws, 1, STR_PTR("srv-push"), STR_LEN("srv-push")) != 0 { panic(64612); };
+    // Server frame is unmasked: 0x81, len, payload.
+    s2_read_exact(cli, bp, 10, 64613);
+    if buf[0] != 129 { panic(64614); };
+    if buf[1] != 8 { panic(64615); };
+    if !s2_mem_eq_tail(bp, 2, STR_PTR("srv-push"), STR_LEN("srv-push")) { panic(64616); };
+    sla_http_server_websocket_free(ws);
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_websocket_free"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24420, pp, 64620);
+    let cli = s2_raw_conn(pc[0], 64622);
+    let ws = s2_upgrade_v1(srv, cli, 64623);
+    if sla_http_server_websocket_free(ws) != 0 { panic(64627); };
+    sla_std_close(cli);
+    sla_http_server_free(srv);
+}
+
+@test "smoke2 sa_http_server_set_max_body_bytes"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv1(24421, pp, 64630);
+    if sla_http_server_set_max_body_bytes(srv, 1048576) != 0 { panic(64632); };
+    // Normal request still served under a generous limit.
+    let cli = s2_raw_conn(pc[0], 64633);
+    let req_lit = "POST /mb HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 4\r\nConnection: close\r\n\r\nBODY";
+    let req = s2_accept_v1(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64634);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new(req, 200, &rp[0]) != 0 { panic(64636); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_send(resp, STR_PTR("ok"), STR_LEN("ok")) != 0 { panic(64637); };
+    sla_http_server_resp_free(resp);
+    sla_http_server_req_free(req);
+    sla_std_close(cli);
+    // Tighten to 4 bytes: an 10-byte body must now be rejected at accept.
+    if sla_http_server_set_max_body_bytes(srv, 4) != 0 { panic(64638); };
+    let cli2 = s2_raw_conn(pc[0], 64639);
+    let big_lit = "POST /mb HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 10\r\nConnection: close\r\n\r\n0123456789";
+    s2_raw_write(cli2, STR_PTR(big_lit), STR_LEN(big_lit), 64640);
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) == 0 { panic(64641); };
+    sla_std_close(cli2);
+    sla_http_server_free(srv);
+}
+
+// ---------------- v2 tests ----------------
+
+fn s2_accept_v2(srv: ptr, cli: u64, req_lit: ptr, req_len: u64, code: i32) -> ptr {
+    s2_raw_write(cli, req_lit, req_len, code);
+    let aq = [0u64; 4];
+    if sla_http_server_accept_v2(srv, 30000, &aq[0]) != 0 { panic(code + 1); };
+    return (aq[0] as ptr);
+}
+
+fn s2_head_len(bp: ptr, total: u64) -> u64 {
+    if total < 4 { return 0; };
+    let i: u64 = 0;
+    while i + 4 <= total {
+        let a: ptr = PTR_BYTE_ADD(bp, i);
+        let b: ptr = PTR_BYTE_ADD(bp, i + 1);
+        let c: ptr = PTR_BYTE_ADD(bp, i + 2);
+        let d: ptr = PTR_BYTE_ADD(bp, i + 3);
+        if PTR_READ_U8(a) == 13 && PTR_READ_U8(b) == 10 && PTR_READ_U8(c) == 13 && PTR_READ_U8(d) == 10 {
+            return i + 4;
+        };
+        i = i + 1;
+    }
+    return 0;
+}
+
+@test "smoke2 sa_http_server_start_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24431, pp, 64650);
+    let cli = s2_raw_conn(pc[0], 64652);
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_accept_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24432, pp, 64660);
+    // With no connection queued, a short-timeout accept must fail.
+    let aq = [0u64; 4];
+    if sla_http_server_accept_v2(srv, 200, &aq[0]) == 0 { panic(64663); };
+    let cli = s2_raw_conn(pc[0], 64664);
+    let req_lit = "GET /a2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    s2_raw_write(cli, STR_PTR(req_lit), STR_LEN(req_lit), 64665);
+    if sla_http_server_accept_v2(srv, 30000, &aq[0]) != 0 { panic(64666); };
+    if aq[0] == 0 { panic(64667); };
+    sla_http_server_req_free_v2((aq[0] as ptr));
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+fn s2_hist_total(srv: ptr) -> u64 {
+    let total: u64 = 0;
+    let seg: u32 = 0;
+    while seg < 8 {
+        let bucket: u32 = 0;
+        while bucket < 32 {
+            total = total + sla_http_server_hist_v2(srv, seg, bucket);
+            bucket = bucket + 1;
+        }
+        seg = seg + 1;
+    }
+    return total;
+}
+
+fn s2_serve_one_v2(srv: ptr, cli: u64, code: i32) -> void {
+    let req_lit = "GET /hist HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), code);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new_v2(req, 200, &rp[0]) != 0 { panic(code + 2); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_send_v2(resp, STR_PTR("h"), STR_LEN("h"), 5000) != 0 { panic(code + 3); };
+    sla_http_server_resp_free_v2(resp);
+    sla_http_server_req_free_v2(req);
+    let buf = [0u8; 256];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    s2_raw_read_all(cli, bp, 256);
+}
+
+@test "smoke2 sa_http_server_hist_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24433, pp, 64670);
+    let cli = s2_raw_conn(pc[0], 64672);
+    s2_serve_one_v2(srv, cli, 64673);
+    if s2_hist_total(srv) == 0 { panic(64677); };
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_hist_reset_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24434, pp, 64680);
+    let cli = s2_raw_conn(pc[0], 64682);
+    s2_serve_one_v2(srv, cli, 64683);
+    if sla_http_server_hist_reset_v2(srv) != 0 { panic(64687); };
+    if s2_hist_total(srv) != 0 { panic(64688); };
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_req_free_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24435, pp, 64690);
+    let cli = s2_raw_conn(pc[0], 64692);
+    let req_lit = "GET /f2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64693);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new_v2(req, 200, &rp[0]) != 0 { panic(64695); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_send_v2(resp, STR_PTR("f"), STR_LEN("f"), 5000) != 0 { panic(64696); };
+    sla_http_server_resp_free_v2(resp);
+    if sla_http_server_req_free_v2(req) != 0 { panic(64697); };
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_resp_new_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24436, pp, 64700);
+    let cli = s2_raw_conn(pc[0], 64702);
+    let req_lit = "GET /n2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64703);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new_v2(req, 202, &rp[0]) != 0 { panic(64705); };
+    if rp[0] == 0 { panic(64706); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_send_v2(resp, STR_PTR("acc"), STR_LEN("acc"), 5000) != 0 { panic(64707); };
+    sla_http_server_resp_free_v2(resp);
+    sla_http_server_req_free_v2(req);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("202"), STR_LEN("202")) { panic(64708); };
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_resp_add_header_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24437, pp, 64710);
+    let cli = s2_raw_conn(pc[0], 64712);
+    let req_lit = "GET /h2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64713);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new_v2(req, 200, &rp[0]) != 0 { panic(64715); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_add_header_v2(resp, STR_PTR("X-Echo"), STR_LEN("X-Echo"), STR_PTR("w2v2"), STR_LEN("w2v2")) != 0 { panic(64716); };
+    if sla_http_server_resp_send_v2(resp, STR_PTR("hb"), STR_LEN("hb"), 5000) != 0 { panic(64717); };
+    sla_http_server_resp_free_v2(resp);
+    sla_http_server_req_free_v2(req);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("X-Echo"), STR_LEN("X-Echo")) { panic(64718); };
+    if !s2_contains(bp, total, STR_PTR("w2v2"), STR_LEN("w2v2")) { panic(64719); };
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_resp_send_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24438, pp, 64720);
+    let cli = s2_raw_conn(pc[0], 64722);
+    let req_lit = "GET /s2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64723);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new_v2(req, 200, &rp[0]) != 0 { panic(64725); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_send_v2(resp, STR_PTR("v2-resp-body"), STR_LEN("v2-resp-body"), 5000) != 0 { panic(64726); };
+    sla_http_server_resp_free_v2(resp);
+    sla_http_server_req_free_v2(req);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("200"), STR_LEN("200")) { panic(64727); };
+    if !s2_contains(bp, total, STR_PTR("v2-resp-body"), STR_LEN("v2-resp-body")) { panic(64728); };
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_resp_send_head_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24439, pp, 64730);
+    let cli = s2_raw_conn(pc[0], 64732);
+    let req_lit = "GET /hd HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64733);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new_v2(req, 200, &rp[0]) != 0 { panic(64735); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_send_head_v2(resp, 5, 5000) != 0 { panic(64736); };
+    sla_http_server_resp_free_v2(resp);
+    sla_http_server_req_free_v2(req);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("ength: 5"), STR_LEN("ength: 5")) { panic(64737); };
+    // Head only: no body bytes may follow the header block.
+    if s2_head_len(bp, total) != total { panic(64738); };
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_req_get_target_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24440, pp, 64740);
+    let cli = s2_raw_conn(pc[0], 64742);
+    let req_lit = "GET /p?q=1&x=2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64743);
+    let tp = [0u64; 4];
+    let tl = [0u64; 4];
+    if sla_http_server_req_get_target_v2(req, &tp[0], &tl[0]) != 0 { panic(64745); };
+    if !s2_mem_eq((tp[0] as ptr), tl[0], STR_PTR("/p?q=1&x=2"), STR_LEN("/p?q=1&x=2")) { panic(64746); };
+    sla_http_server_req_free_v2(req);
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_req_get_query_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24441, pp, 64750);
+    let cli = s2_raw_conn(pc[0], 64752);
+    let req_lit = "GET /p?q=1&x=2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64753);
+    let qp = [0u64; 4];
+    let ql = [0u64; 4];
+    if sla_http_server_req_get_query_v2(req, &qp[0], &ql[0]) != 0 { panic(64755); };
+    if !s2_mem_eq((qp[0] as ptr), ql[0], STR_PTR("q=1&x=2"), STR_LEN("q=1&x=2")) { panic(64756); };
+    sla_http_server_req_free_v2(req);
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+// sa_http_server_resp_send_file_v2 is NOT in this green file: it is
+// blocked by W2-DEF-SENDFILE-FD-GAP (needs a raw OS fd; the SLA fs
+// surface only yields registry handles). The honest attempt lives in
+// minims/minim_server_send_file_fd.sla; see WAVE2_REPORT.
+
+@test "smoke2 sa_http_server_req_peer_addr_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24443, pp, 64780);
+    let cli = s2_raw_conn(pc[0], 64782);
+    let req_lit = "GET /pa HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64783);
+    let big = [0u64; 8];
+    let ol = [0u64; 4];
+    let op2 = [0u64; 4];
+    if sla_http_server_req_peer_addr_v2(req, &big[0], 64, &ol[0], &op2[0]) != 0 { panic(64785); };
+    let bp2: ptr = PTR_BYTE_ADD(&big, 0);
+    if !s2_mem_eq(bp2, ol[0], STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1")) { panic(64786); };
+    // Peer port must equal the raw client's own local port.
+    let la = [0u64; 4];
+    if sla_std_net_tcp_stream_local_addr(cli, &la[0]) != 0 { panic(64787); };
+    if op2[0] != (sla_net_addr_port(la[0]) as u64) { panic(64788); };
+    sla_http_server_req_free_v2(req);
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_resp_free_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24444, pp, 64790);
+    let cli = s2_raw_conn(pc[0], 64792);
+    let req_lit = "GET /f2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64793);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new_v2(req, 200, &rp[0]) != 0 { panic(64795); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_send_v2(resp, STR_PTR("f"), STR_LEN("f"), 5000) != 0 { panic(64796); };
+    if sla_http_server_resp_free_v2(resp) != 0 { panic(64797); };
+    sla_http_server_req_free_v2(req);
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_free_v2"() {
+    let sc = [0u64; 4];
+    if sla_http_server_new_v2(&sc[0]) != 0 { panic(64800); };
+    let srv = (sc[0] as ptr);
+    if sla_http_server_start_v2(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 24445) != 0 { panic(64801); };
+    if sla_http_server_free_v2(srv) != 0 { panic(64802); };
+}
+
+// ---------------- v2 stream tests ----------------
+
+@test "smoke2 sa_http_server_resp_stream_new_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24446, pp, 64810);
+    let cli = s2_raw_conn(pc[0], 64812);
+    let req_lit = "GET /st2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64813);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_stream_new_v2(req, 200, &rp[0]) != 0 { panic(64815); };
+    if rp[0] == 0 { panic(64816); };
+    let sresp = (rp[0] as ptr);
+    if sla_http_server_resp_stream_end_v2(sresp, 5000) != 0 { panic(64817); };
+    sla_http_server_resp_stream_free_v2(sresp);
+    sla_http_server_req_free_v2(req);
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_resp_stream_add_header_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24447, pp, 64820);
+    let cli = s2_raw_conn(pc[0], 64822);
+    let req_lit = "GET /st2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64823);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_stream_new_v2(req, 200, &rp[0]) != 0 { panic(64825); };
+    let sresp = (rp[0] as ptr);
+    if sla_http_server_resp_stream_add_header_v2(sresp, STR_PTR("X-Stream"), STR_LEN("X-Stream"), STR_PTR("w2s"), STR_LEN("w2s")) != 0 { panic(64826); };
+    if sla_http_server_resp_stream_write_v2(sresp, STR_PTR("sb"), STR_LEN("sb"), 5000) != 0 { panic(64827); };
+    if sla_http_server_resp_stream_end_v2(sresp, 5000) != 0 { panic(64828); };
+    sla_http_server_resp_stream_free_v2(sresp);
+    sla_http_server_req_free_v2(req);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("X-Stream"), STR_LEN("X-Stream")) { panic(64829); };
+    if !s2_contains(bp, total, STR_PTR("w2s"), STR_LEN("w2s")) { panic(64830); };
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_resp_stream_write_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24448, pp, 64840);
+    let cli = s2_raw_conn(pc[0], 64842);
+    let req_lit = "GET /st2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64843);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_stream_new_v2(req, 200, &rp[0]) != 0 { panic(64845); };
+    let sresp = (rp[0] as ptr);
+    if sla_http_server_resp_stream_write_v2(sresp, STR_PTR("chunk-B"), STR_LEN("chunk-B"), 5000) != 0 { panic(64846); };
+    if sla_http_server_resp_stream_end_v2(sresp, 5000) != 0 { panic(64847); };
+    sla_http_server_resp_stream_free_v2(sresp);
+    sla_http_server_req_free_v2(req);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("chunk-B"), STR_LEN("chunk-B")) { panic(64848); };
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_resp_stream_flush_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24449, pp, 64850);
+    let cli = s2_raw_conn(pc[0], 64852);
+    let req_lit = "GET /st2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64853);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_stream_new_v2(req, 200, &rp[0]) != 0 { panic(64855); };
+    let sresp = (rp[0] as ptr);
+    if sla_http_server_resp_stream_write_v2(sresp, STR_PTR("flush-v2"), STR_LEN("flush-v2"), 5000) != 0 { panic(64856); };
+    if sla_http_server_resp_stream_flush_v2(sresp) != 0 { panic(64857); };
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    s2_read_exact(cli, bp, 8, 64858);
+    if sla_http_server_resp_stream_end_v2(sresp, 5000) != 0 { panic(64859); };
+    sla_http_server_resp_stream_free_v2(sresp);
+    sla_http_server_req_free_v2(req);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("flush-v2"), STR_LEN("flush-v2")) { panic(64860); };
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_resp_stream_end_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24450, pp, 64870);
+    let cli = s2_raw_conn(pc[0], 64872);
+    let req_lit = "GET /st2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64873);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_stream_new_v2(req, 200, &rp[0]) != 0 { panic(64875); };
+    let sresp = (rp[0] as ptr);
+    if sla_http_server_resp_stream_write_v2(sresp, STR_PTR("end-v2"), STR_LEN("end-v2"), 5000) != 0 { panic(64876); };
+    if sla_http_server_resp_stream_end_v2(sresp, 5000) != 0 { panic(64877); };
+    sla_http_server_resp_stream_free_v2(sresp);
+    sla_http_server_req_free_v2(req);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_raw_read_all(cli, bp, 1024);
+    if !s2_contains(bp, total, STR_PTR("end-v2"), STR_LEN("end-v2")) { panic(64878); };
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_resp_stream_free_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24451, pp, 64880);
+    let cli = s2_raw_conn(pc[0], 64882);
+    let req_lit = "GET /st2 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    let req = s2_accept_v2(srv, cli, STR_PTR(req_lit), STR_LEN(req_lit), 64883);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_stream_new_v2(req, 200, &rp[0]) != 0 { panic(64885); };
+    let sresp = (rp[0] as ptr);
+    if sla_http_server_resp_stream_write_v2(sresp, STR_PTR("x"), STR_LEN("x"), 5000) != 0 { panic(64886); };
+    if sla_http_server_resp_stream_end_v2(sresp, 5000) != 0 { panic(64887); };
+    if sla_http_server_resp_stream_free_v2(sresp) != 0 { panic(64888); };
+    sla_http_server_req_free_v2(req);
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+// ---------------- v2 websocket tests ----------------
+
+fn s2_upgrade_v2(srv: ptr, cli: u64, code: i32) -> ptr {
+    s2_raw_write(cli, s2_ws_upgrade_req(), s2_ws_upgrade_req_len(), code);
+    let aq = [0u64; 4];
+    if sla_http_server_accept_v2(srv, 30000, &aq[0]) != 0 { panic(code + 1); };
+    let req = (aq[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_server_websocket_upgrade_v2(req, &wc[0]) != 0 { panic(code + 2); };
+    if wc[0] == 0 { panic(code + 3); };
+    return (wc[0] as ptr);
+}
+
+@test "smoke2 sa_http_server_websocket_upgrade_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24452, pp, 64890);
+    let cli = s2_raw_conn(pc[0], 64892);
+    let ws = s2_upgrade_v2(srv, cli, 64893);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    let total = s2_read_head(cli, bp, 1024, 64897);
+    if !s2_contains(bp, total, STR_PTR("101"), STR_LEN("101")) { panic(64898); };
+    sla_http_server_websocket_free_v2(ws);
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_websocket_poll_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24453, pp, 64900);
+    let cli = s2_raw_conn(pc[0], 64902);
+    let ws = s2_upgrade_v2(srv, cli, 64903);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    s2_read_head(cli, bp, 1024, 64907);
+    // Idle socket: per the std contract (sa_http_server.zig
+    // pollWebSocketV2 -> pollStream), a poll that times out with no
+    // events returns a non-ok timeout status, not ok+0. Pin both facts.
+    let ev = [0u64; 4];
+    if sla_http_server_websocket_poll_v2(ws, 1, 300, &ev[0]) == 0 { panic(64908); };
+    if ev[0] != 0 { panic(64909); };
+    // After the client sends a frame, poll must report readable.
+    let fbuf = [0u8; 64];
+    let fp: ptr = PTR_BYTE_ADD(&fbuf, 0);
+    let flen = s2_ws_frame(fp, 1, STR_PTR("poll-me"), STR_LEN("poll-me"));
+    s2_raw_write(cli, fp, flen, 64910);
+    if sla_http_server_websocket_poll_v2(ws, 1, 5000, &ev[0]) != 0 { panic(64911); };
+    if ev[0] == 0 { panic(64912); };
+    sla_http_server_websocket_free_v2(ws);
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_websocket_write_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24454, pp, 64920);
+    let cli = s2_raw_conn(pc[0], 64922);
+    let ws = s2_upgrade_v2(srv, cli, 64923);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    s2_read_head(cli, bp, 1024, 64927);
+    // Server pushes a fixed payload; the raw peer parses the frame.
+    let wr = [0u64; 4];
+    if sla_http_server_websocket_write_v2(ws, 1, STR_PTR("srv-v2-push"), STR_LEN("srv-v2-push"), &wr[0]) != 0 { panic(64932); };
+    if wr[0] != 11 { panic(64933); };
+    s2_read_exact(cli, bp, 13, 64934);
+    if buf[0] != 129 { panic(64935); };
+    if buf[1] != 11 { panic(64936); };
+    if !s2_mem_eq_tail(bp, 2, STR_PTR("srv-v2-push"), STR_LEN("srv-v2-push")) { panic(64937); };
+    sla_http_server_websocket_free_v2(ws);
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_websocket_close_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24455, pp, 64940);
+    let cli = s2_raw_conn(pc[0], 64942);
+    let ws = s2_upgrade_v2(srv, cli, 64943);
+    let buf = [0u8; 1024];
+    let bp: ptr = PTR_BYTE_ADD(&buf, 0);
+    s2_read_head(cli, bp, 1024, 64947);
+    if sla_http_server_websocket_close_v2(ws, 1000, STR_PTR(""), 0) != 0 { panic(64948); };
+    // The peer must observe a close frame (0x88) as the next frame.
+    s2_read_exact(cli, bp, 2, 64949);
+    if buf[0] != 136 { panic(64950); };
+    sla_http_server_websocket_free_v2(ws);
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_websocket_free_v2"() {
+    let pc = [0u64; 4];
+    let pp: ptr = PTR_BYTE_ADD(&pc, 0);
+    let srv = s2_srv2(24456, pp, 64960);
+    let cli = s2_raw_conn(pc[0], 64962);
+    let ws = s2_upgrade_v2(srv, cli, 64963);
+    if sla_http_server_websocket_free_v2(ws) != 0 { panic(64967); };
+    sla_std_close(cli);
+    sla_http_server_free_v2(srv);
+}
+
+fn s2_sf_peer(arg: u64) -> void {
+    let port: u64 = arg & 65535;
+    let code: i32 = (arg >> 24) as i32;
+    let fd = sla_fs_file_open(STR_PTR("smoke2_sendfile.txt"), STR_LEN("smoke2_sendfile.txt"), 1);
+    if fd <= 0 { panic(code); };
+    let sc = [0u64; 4];
+    if sla_http_server_new_v2(&sc[0]) != 0 { panic(code + 1); };
+    let srv = (sc[0] as ptr);
+    if sla_http_server_start_v2(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u16)) != 0 { panic(code + 2); };
+    let aq = [0u64; 4];
+    if sla_http_server_accept_v2(srv, 30000, &aq[0]) != 0 { panic(code + 3); };
+    let req = (aq[0] as ptr);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new_v2(req, 200, &rp[0]) != 0 { panic(code + 4); };
+    let resp = (rp[0] as ptr);
+    let raw = [0u64; 4];
+    if sla_std_fd_as_raw((fd as u64), &raw[0]) != 0 { panic(code + 8); };
+    let sent = [0u64; 4];
+    if sla_http_server_resp_send_file_v2(resp, (raw[0] as i64), 0, 14, 5000, &sent[0]) != 0 { panic(code + 9); };
+    if sent[0] != 14 { panic(code + 10); };
+    sla_http_server_resp_free_v2(resp);
+    sla_http_server_req_free_v2(req);
+    sla_http_server_free_v2(srv);
+}
+
+@test "smoke2 sa_http_server_resp_send_file_v2"() {
+    if sla_fs_write_file(STR_PTR("smoke2_sendfile.txt"), STR_LEN("smoke2_sendfile.txt"), STR_PTR("hello-sendfile"), STR_LEN("hello-sendfile")) != 0 { panic(64760); };
+    let h = go s2_sf_peer(24950 + 64761 * 16777216);
+    let url = "http://127.0.0.1:24950/f";
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(64762); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, STR_PTR(url), STR_LEN(url), &rq[0]) != 0 { panic(64763); };
+    let req = (rq[0] as ptr);
+    let rs = [0u64; 4];
+    if sla_http_client_req_send(req, &rs[0]) != 0 { panic(64764); };
+    let resp = (rs[0] as ptr);
+    if sla_http_client_resp_status(resp) != 200 { panic(64765); };
+    // The body must be the file's exact bytes: a registry handle that
+    // merely collides numerically with some unrelated open fd would
+    // send that fd's content instead (or fail), so status+sent counts
+    // alone cannot prove this entry.
+    let bp = [0u64; 4];
+    let bl = [0u64; 4];
+    if sla_http_client_resp_body_slice(resp, &bp[0], &bl[0]) != 0 { panic(64766); };
+    if bl[0] != 14 { panic(64767); };
+    let got: ptr = (bp[0] as ptr);
+    let want: ptr = STR_PTR("hello-sendfile");
+    let i: u64 = 0;
+    while i < 14 {
+        let a: ptr = PTR_BYTE_ADD(got, i);
+        let b: ptr = PTR_BYTE_ADD(want, i);
+        if PTR_READ_U8(a) != PTR_READ_U8(b) { panic(64768); };
+        i = i + 1;
+    }
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}

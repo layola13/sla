@@ -1,0 +1,35 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 269_arr_rebind：数组生长（长 2->4，首尾和 8）。
+// SLA 无 `concat` 返回新数组，生长语义用 `Vec::push` 表达
+//（与 39/53/103 的 Vec 口径一致）。
+
+fn main() -> i32 {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(9);
+    let n0 = len(a);
+    let i = 0;
+    while i < 2 {
+        a.push(7);
+        i = i + 1;
+    }
+    println("{},{},{}", n0, len(a), a[0] + a[3]);
+    return 0;
+}
+
+@test "basic 112 vec grow"() {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(9);
+    if len(a) != 2 { panic(11201); };
+    let i = 0;
+    while i < 2 {
+        a.push(7);
+        i = i + 1;
+    }
+    if len(a) != 4 { panic(11202); };
+    if a[0] + a[3] != 8 { panic(11203); };
+}

@@ -1,0 +1,5 @@
+@import "import_fixtures/nested/uses_contract.sla"
+
+fn call_nested_contract() -> i32 {
+    return imported_nested_contract_value();
+}

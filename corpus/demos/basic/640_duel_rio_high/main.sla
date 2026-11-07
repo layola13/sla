@@ -1,0 +1,70 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Riordan 高位对峙：短递推 vs 卷积（n=5：6 对 6；n=6：15 对 15）。
+// 意对标 638_rio_high × 639_duel_rio（高位源与对峙体例合流）。
+
+fn moz(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k <= ii - 2 {
+            s = s + t[k] * t[ii - 2 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn rio(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 0; };
+    let ii = 2;
+    while ii <= n {
+        t[ii] = (ii - 1) * (2 * t[ii - 1] + 3 * t[ii - 2]) / (ii + 1);
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn rconv(n: int) -> int {
+    if n == 0 { return 1; };
+    if n == 1 { return 0; };
+    let s = 0;
+    let k = 0;
+    while k <= n - 2 {
+        s = s + rconv(k) * moz(n - 2 - k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", rio(5), rconv(5), rio(6), rconv(6));
+    return 0;
+}
+
+@test "basic 640 duel rio high"() {
+    if rio(5) != 6 { panic(64001); };
+    if rconv(5) != 6 { panic(64002); };
+    if rio(6) != 15 { panic(64003); };
+    if rconv(6) != 15 { panic(64004); };
+}

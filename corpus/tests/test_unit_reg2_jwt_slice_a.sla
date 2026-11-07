@@ -1,0 +1,33 @@
+@import "sa_std/jwt.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Coverage shard 2 (round 2 split A of test_unit_reg2_jwt_slice):
+// jwt_vec_from_ptr / jwt_collect. Round 1: text all green; SAB run
+// trapped UseAfterMove (1009) with no per-test attribution, so the
+// file was split to attribute the trap. Original preserved in ../repro/.
+
+fn vec_byte(v: &Vec<u8>, i: u64) -> u8 {
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let b: u8 = 0;
+    SLICE_GET(b, sl, i);
+    return b;
+}
+
+@test "reg2 jwt_vec_from_ptr"() {
+    let v = jwt_vec_from_ptr(STR_PTR("hello-jwt"), 9);
+    if len(v) != 9 { panic(24701); };
+    if vec_byte(&v, 0) != 104 { panic(24702); }; // h
+    if vec_byte(&v, 4) != 111 { panic(24703); }; // o
+    if vec_byte(&v, 5) != 45 { panic(24704); }; // -
+    if vec_byte(&v, 8) != 116 { panic(24705); }; // t
+    let empty = jwt_vec_from_ptr(STR_PTR("hello-jwt"), 0);
+    if len(empty) != 0 { panic(24706); };
+}
+
+@test "reg2 jwt_collect"() {
+    let v = jwt_collect(STR_PTR("collect-me"), 10);
+    if len(v) != 10 { panic(24707); };
+    if vec_byte(&v, 0) != 99 { panic(24708); }; // c
+    if vec_byte(&v, 9) != 101 { panic(24709); }; // e
+}

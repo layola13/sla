@@ -1,0 +1,4 @@
+@test "str eq lowers direct sab"() {
+    if str_eq("abc", "abc") == false { panic(28100); };
+    if str_eq("abc", "abd") == true { panic(28101); };
+}

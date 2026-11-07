@@ -1,0 +1,61 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 有序 Bell 加权和 F(n)=sum k!S(n,k)（F(6)=4683，F(7)=47293，F(8)=545835）。
+// 意对标 588_fubini（低位加权版互补；745 做三向收束）。
+
+fn fact(n: int) -> int {
+    let r = 1;
+    let i = 1;
+    while i <= n {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn svt(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + nn * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn fubw(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + fact(k) * svt(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", fubw(6), fubw(7), fubw(8));
+    return 0;
+}
+
+@test "basic 741 fubw"() {
+    if fubw(6) != 4683 { panic(74101); };
+    if fubw(7) != 47293 { panic(74102); };
+    if fubw(8) != 545835 { panic(74103); };
+    if fubw(5) != 541 { panic(74104); };
+}

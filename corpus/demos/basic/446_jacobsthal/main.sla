@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Jacobsthal 数（J(n)=J(n-1)+2J(n-2)：J(7)=43）。
+// 意对标 442 Lucas 的加权版（442 互补）。
+
+fn jacobsthal(n: int) -> int {
+    if n == 0 { return 0; };
+    if n == 1 { return 1; };
+    let a = 0;
+    let b = 1;
+    let i = 1;
+    while i < n {
+        let t = b + 2 * a;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    return b;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", jacobsthal(7), jacobsthal(5), jacobsthal(1));
+    return 0;
+}
+
+@test "basic 446 jacobsthal"() {
+    if jacobsthal(7) != 43 { panic(44601); };
+    if jacobsthal(5) != 11 { panic(44602); };
+    if jacobsthal(1) != 1 { panic(44603); };
+}

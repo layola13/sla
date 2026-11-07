@@ -1,0 +1,53 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Motzkin 高位对峙：迭代 vs 递归（n=5：21 对 21；n=6：51 对 51）。
+// 意对标 628_motz_high × 629_duel_motz（高位源与对峙体例合流）。
+
+fn moz(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k <= ii - 2 {
+            s = s + t[k] * t[ii - 2 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn rmoz(n: int) -> int {
+    if n == 0 { return 1; };
+    if n == 1 { return 1; };
+    let s = rmoz(n - 1);
+    let k = 0;
+    while k <= n - 2 {
+        s = s + rmoz(k) * rmoz(n - 2 - k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", moz(5), rmoz(5), moz(6), rmoz(6));
+    return 0;
+}
+
+@test "basic 630 duel motz high"() {
+    if moz(5) != 21 { panic(63001); };
+    if rmoz(5) != 21 { panic(63002); };
+    if moz(6) != 51 { panic(63003); };
+    if rmoz(6) != 51 { panic(63004); };
+}

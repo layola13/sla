@@ -1,0 +1,20 @@
+// F2-A C1 corpus (positive): the @arena attribute sugar - the
+// whole function body is one arena domain (Jev U1 = C; the
+// sugar's equivalent expansion of the block form). Parameters
+// stay ordinary-domain; body roots are arena-owned.
+@arena fn ok_arena_fn() -> i32 {
+    let v: Vec<String> = Vec::new();
+    v.push(format("x"));
+    return len(v) as i32;
+}
+
+@arena fn ok_arena_fn_tail() -> i32 {
+    let v: Vec<String> = Vec::new();
+    0
+}
+
+fn ok_arena_fn_use() -> i32 {
+    if ok_arena_fn() != 1 { return 1; };
+    if ok_arena_fn_tail() != 0 { return 2; };
+    return 0;
+}

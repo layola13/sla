@@ -1,0 +1,5 @@
+@leaf_value() -> i32:
+L_ENTRY:
+    value = add 2, 0
+    !value
+    return 2

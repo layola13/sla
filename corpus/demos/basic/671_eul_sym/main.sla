@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian 对称性：E(5,1)=E(5,3)=26，E(6,1)=E(6,4)=57（镜像双算一致）。
+// 意对标 666_eulerian（单格版互补；行列镜像互锁，619 体例）。
+
+fn eul(n: int, m: int) -> int {
+    let w = m + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + m {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= m {
+            t[mm * w + nn] = (mm - nn) * t[(mm - 1) * w + nn - 1] + (nn + 1) * t[(mm - 1) * w + nn];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + m];
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", eul(5, 1), eul(5, 3), eul(6, 1), eul(6, 4));
+    return 0;
+}
+
+@test "basic 671 eul sym"() {
+    if eul(5, 1) != 26 { panic(67101); };
+    if eul(5, 3) != 26 { panic(67102); };
+    if eul(6, 1) != 57 { panic(67103); };
+    if eul(6, 4) != 57 { panic(67104); };
+}

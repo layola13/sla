@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Heron 双实现对峙（牛顿开方 vs 平方回验：(13,14,15) 皆得 84）。
+// 意对标 434 四元组对峙的几何版（486 互补）。
+
+fn isqrt(n: int) -> int {
+    if n <= 0 { return 0; };
+    let x = n;
+    let y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    return x;
+}
+
+fn heron_sqrt(a: int, b: int, c: int) -> int {
+    let s = (a + b + c) / 2;
+    return isqrt(s * (s - a) * (s - b) * (s - c));
+}
+
+fn heron_sq(a: int, b: int, c: int) -> int {
+    let s = (a + b + c) / 2;
+    let q = s * (s - a) * (s - b) * (s - c);
+    let r = isqrt(q);
+    if r * r == q { return r; };
+    return 0 - 1;
+}
+
+fn main() -> i32 {
+    println("{},{}", heron_sqrt(13, 14, 15), heron_sq(13, 14, 15));
+    return 0;
+}
+
+@test "basic 490 duel heron"() {
+    if heron_sqrt(13, 14, 15) != 84 { panic(49001); };
+    if heron_sq(13, 14, 15) != 84 { panic(49002); };
+    if heron_sqrt(13, 14, 15) != heron_sq(13, 14, 15) { panic(49003); };
+    if heron_sq(5, 5, 6) != 12 { panic(49004); };
+}

@@ -1,0 +1,28 @@
+// DEF-2 regression corpus (POTENTIAL_ISSUES #15 headline shape): a
+// string literal passed to a by-value String parameter. On the
+// 6004af4 basepoint the SAB backend passes the literal's bare Slice
+// cell {ptr, len@8} straight through; String consumers rebuild views
+// with the Vec layout (len@16), reading out of bounds — signal 11.
+// The text backend converts the literal into an owned StringBuf at
+// the call boundary (STRING_BUF_FROM_UTF8_UNCHECKED); the SAB backend
+// now mirrors that conversion. The temporary/variable shapes are the
+// controls that passed on both backends all along.
+@import "sa_std/string.sa"
+
+fn echo(s: String) -> String {
+    return s;
+}
+
+@test "def2 string param literal arg"() {
+    if !str_eq(echo("hi"), "hi") { panic(1221); };
+}
+
+@test "def2 string param temporary arg"() {
+    if !str_eq(echo(format("hello")), "hello") { panic(1222); };
+}
+
+@test "def2 string param variable arg"() {
+    let t: String = format("abcde");
+    let r = echo(t);
+    if STR_LEN(r) as u64 != 5 { panic(1223); };
+}

@@ -1,0 +1,39 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/string.sa"
+
+// DEF-HASHMAP-XTALK (A-form) ownership: dropping a map must return
+// every entry's heap value cell exactly once. Many map lifetimes in
+// a loop: a double free crashes the test binary, a missed free is
+// caught by the line's RSS harness.
+
+@test "xtalk drop churn"() {
+    let round: i32 = 0;
+    while round < 200 {
+        let m: HashMap<i32, i32> = HashMap::new();
+        let i: i32 = 0;
+        while i < 20 {
+            m.insert(i, i * 10 + round);
+            i = i + 1;
+        }
+        if m.get(7).copied().unwrap_or(0) != 70 + round { panic(79501); };
+        if len(m) != 20 { panic(79502); };
+        round = round + 1;
+    }
+}
+
+@test "xtalk drop nested scopes"() {
+    let outer: HashMap<i32, i32> = HashMap::new();
+    outer.insert(1, 100);
+    let r: i32 = 0;
+    while r < 50 {
+        let inner: HashMap<i32, i32> = HashMap::new();
+        let i: i32 = 0;
+        while i < 12 {
+            inner.insert(i, i + r);
+            i = i + 1;
+        }
+        if inner.get(3).copied().unwrap_or(0) != 3 + r { panic(79601); };
+        r = r + 1;
+    }
+    if outer.get(1).copied().unwrap_or(0) != 100 { panic(79602); };
+}

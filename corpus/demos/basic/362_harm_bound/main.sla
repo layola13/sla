@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 调和和整数缩放版（100*H_4=208，避 f64 显示坑 #29）。
+// 意对标 141 求和系的倒数版（239 f64 版互补，本例纯 int）。
+
+fn harm_scaled(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        s = s + 100 / i;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", harm_scaled(4), harm_scaled(2));
+    return 0;
+}
+
+@test "basic 362 harm bound"() {
+    if harm_scaled(4) != 208 { panic(36201); };
+    if harm_scaled(2) != 150 { panic(36202); };
+    if harm_scaled(1) != 100 { panic(36203); };
+}

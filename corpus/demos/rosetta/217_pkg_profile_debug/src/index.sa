@@ -1,0 +1,8 @@
+@import "src/profiles/debug/index.sa"
+
+@src_package_value() -> i32:
+L_ENTRY:
+    profile = call @debug_package_value()
+    value = add 200, profile
+    !profile
+    return value

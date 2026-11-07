@@ -1,0 +1,71 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct ParkState {
+    thread_published: bool,
+    thread_parked: bool,
+    wake_requested: bool,
+}
+
+fn publish_thread() -> ParkState {
+    return ParkState {
+        thread_published: true,
+        thread_parked: false,
+        wake_requested: false,
+    };
+}
+
+fn park_thread(state: ParkState) -> ParkState {
+    return ParkState {
+        thread_published: state.thread_published,
+        thread_parked: true,
+        wake_requested: state.wake_requested,
+    };
+}
+
+fn unpark_thread(state: ParkState) -> ParkState {
+    return ParkState {
+        thread_published: state.thread_published,
+        thread_parked: state.thread_parked,
+        wake_requested: true,
+    };
+}
+
+fn resume_after_unpark(state: ParkState) -> i32 {
+    if state.thread_published == true {
+        if state.thread_parked == true {
+            if state.wake_requested == true {
+                return 1;
+            } else {
+                return 0;
+            };
+        } else {
+            return 0;
+        };
+    } else {
+        return 0;
+    };
+}
+
+fn park_unpark_result() -> i32 {
+    let published = publish_thread();
+    let parked = park_thread(published);
+    let unparked = unpark_thread(parked);
+    return resume_after_unpark(unparked);
+}
+
+fn main() -> i32 {
+    let published = publish_thread();
+    let parked = park_thread(published);
+    let unparked = unpark_thread(parked);
+    let result = resume_after_unpark(unparked);
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 130 130_park_unpark_thread"() {
+    let got = park_unpark_result();
+    if got != 1 {
+        panic(130);
+    };
+};

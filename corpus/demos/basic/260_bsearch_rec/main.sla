@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 101_bsearch 的递归版（17 为循环版：命中 3，未中 -1）。
+// 与 120 的递归口径一致，此处为区间递归。
+
+fn bsearch_rec(a: [int; 5], target: int, lo: int, hi: int) -> int {
+    if lo > hi { return -1; };
+    let mid = (lo + hi) / 2;
+    if a[mid] == target { return mid; };
+    if a[mid] < target { return bsearch_rec(a, target, mid + 1, hi); };
+    return bsearch_rec(a, target, lo, mid - 1);
+}
+
+fn main() -> i32 {
+    let a = [2, 4, 6, 8, 10];
+    println("{},{}", bsearch_rec(a, 8, 0, 4), bsearch_rec(a, 7, 0, 4));
+    return 0;
+}
+
+@test "basic 260 bsearch rec"() {
+    let a = [2, 4, 6, 8, 10];
+    if bsearch_rec(a, 8, 0, 4) != 3 { panic(26001); };
+    if bsearch_rec(a, 7, 0, 4) != -1 { panic(26002); };
+    if bsearch_rec(a, 2, 0, 4) != 0 { panic(26003); };
+    if bsearch_rec(a, 10, 0, 4) != 4 { panic(26004); };
+}

@@ -1,0 +1,48 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+fn join2_ready_pair_sum() -> i32 {
+    let left = future::ready(11);
+    let right = future::ready(31);
+    let joined = future::join2(left, right);
+    let task = task::new(joined);
+    if task::poll(task) != true {
+        panic(9501);
+    };
+    if task::is_ready(task) != true {
+        panic(9502);
+    };
+    let pair = task::result(task);
+    let left_value = future::pair_left(pair);
+    let right_value = future::pair_right(pair);
+    if left_value != 11 {
+        panic(9503);
+    };
+    if right_value != 31 {
+        panic(9504);
+    };
+    return left_value + right_value;
+}
+
+fn join2_waits_for_pending() -> bool {
+    let left = future::ready(7);
+    let right = future::pending::<i32>();
+    let joined = future::join2(left, right);
+    let task = task::new(joined);
+    if task::poll(task) == true {
+        return false;
+    };
+    return task::is_ready(task) == false;
+}
+
+@test "future join2 ready pair runtime"() {
+    if join2_ready_pair_sum() != 42 {
+        panic(9505);
+    };
+}
+
+@test "future join2 pending runtime"() {
+    if join2_waits_for_pending() != true {
+        panic(9506);
+    };
+}

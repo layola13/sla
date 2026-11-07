@@ -1,0 +1,25 @@
+@import "sa_std/redis.sla"
+
+// BISECT A: constructors + scalar accessors only (no aggregate).
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+@test "bisect a constructors"() {
+    let e = redis_empty_value();
+    if redis_value_kind(&e) != SA_REDIS_KIND_INVALID { panic(201); };
+    let i = redis_int_value(0 - 77);
+    if redis_value_kind(&i) != SA_REDIS_KIND_INTEGER { panic(202); };
+    if redis_value_int(&i) != 0 - 77 { panic(203); };
+    if redis_value_is_null(&i) { panic(204); };
+    let b = redis_bulk_value(reg3_bytes(STR_PTR("data"), STR_LEN("data")));
+    if redis_value_kind(&b) != SA_REDIS_KIND_BULK { panic(205); };
+    if redis_bytes_eq(redis_value_bulk(&b), reg3_bytes(STR_PTR("data"), STR_LEN("data"))) == false { panic(206); };
+    let s = redis_simple_value(reg3_bytes(STR_PTR("OK"), STR_LEN("OK")));
+    if redis_value_kind(&s) != SA_REDIS_KIND_SIMPLE { panic(207); };
+    let er = redis_error_value(reg3_bytes(STR_PTR("ERR x"), STR_LEN("ERR x")));
+    if redis_value_kind(&er) != SA_REDIS_KIND_ERROR { panic(208); };
+    let n = redis_null_value();
+    if redis_value_is_null(&n) == false { panic(209); };
+}

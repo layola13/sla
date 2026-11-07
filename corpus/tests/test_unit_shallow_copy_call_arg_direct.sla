@@ -1,0 +1,73 @@
+@import "sa_std/string.sa"
+
+struct MiniSnapshotChange {
+    reason: int,
+    has_active_file: bool,
+    active_file: ptr,
+    active_file_len: int,
+}
+
+fn mini_change_should_warm(change: MiniSnapshotChange) -> bool {
+    if change.reason != 4 { return false; };
+    return change.has_active_file;
+}
+
+fn mini_change_warm_file_len(change: MiniSnapshotChange) -> int {
+    if mini_change_should_warm(change) {
+        return change.active_file_len;
+    };
+    return 0;
+}
+
+fn mini_change_reason(change: MiniSnapshotChange) -> int {
+    return change.reason;
+}
+
+fn mini_change_make(file: ptr, file_len: int, reason: int) -> MiniSnapshotChange {
+    return MiniSnapshotChange {
+        reason: reason,
+        has_active_file: true,
+        active_file: file,
+        active_file_len: file_len,
+    };
+}
+
+@test "direct sab shallow copies preserved aggregate call arg"() {
+    let file = "main.ts";
+    let change = MiniSnapshotChange {
+        reason: 4,
+        has_active_file: true,
+        active_file: STR_PTR(file),
+        active_file_len: STR_LEN(file),
+    };
+    if mini_change_warm_file_len(change) != 7 { panic(51600); };
+}
+
+@test "direct sab shallow copy preserved aggregate false branch"() {
+    let file = "skip.ts";
+    let change = MiniSnapshotChange {
+        reason: 1,
+        has_active_file: true,
+        active_file: STR_PTR(file),
+        active_file_len: STR_LEN(file),
+    };
+    if mini_change_warm_file_len(change) != 0 { panic(51601); };
+}
+
+@test "direct sab shallow copy preserved aggregate used by later statement"() {
+    let file = "again.ts";
+    let change = MiniSnapshotChange {
+        reason: 4,
+        has_active_file: true,
+        active_file: STR_PTR(file),
+        active_file_len: STR_LEN(file),
+    };
+    if mini_change_warm_file_len(change) != 8 { panic(51602); };
+    if mini_change_reason(change) != 4 { panic(51603); };
+}
+
+@test "direct sab call result aggregate can feed by-value static call"() {
+    let file = "nested.ts";
+    let got = mini_change_warm_file_len(mini_change_make(STR_PTR(file), STR_LEN(file), 4));
+    if got != 9 { panic(51604); };
+}

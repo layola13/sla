@@ -1,0 +1,54 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 173_fib_loop / 128_sieve：fib 循环 + 试除法素数计数。
+
+fn fib(n: i32) -> i32 {
+    if n <= 1 {
+        return n;
+    };
+    let a: i32 = 0;
+    let b: i32 = 1;
+    for _i in 2..(n + 1) {
+        let c = a + b;
+        a = b;
+        b = c;
+    }
+    return b;
+}
+
+fn is_prime(n: int) -> bool {
+    if n < 2 {
+        return false;
+    };
+    let d = 2;
+    while d * d <= n {
+        if n % d == 0 {
+            return false;
+        };
+        d = d + 1;
+    }
+    return true;
+}
+
+fn prime_count(limit: int) -> int {
+    let n = 0;
+    for i in 2..(limit + 1) {
+        if is_prime(i) {
+            n = n + 1;
+        };
+    }
+    return n;
+}
+
+fn main() -> i32 {
+    println("{}", fib(10));
+    println("{}", prime_count(20));
+    return 0;
+}
+
+@test "basic 18 fib sieve"() {
+    if fib(10) != 55 { panic(1801); };
+    if fib(0) != 0 { panic(1802); };
+    if prime_count(20) != 8 { panic(1803); };
+}

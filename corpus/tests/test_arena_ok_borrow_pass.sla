@@ -1,0 +1,13 @@
+// F2-A C1 corpus (positive): passing an arena root by borrow
+// to an ordinary function is allowed; only by-value moves are
+// escape route 3 (design 3).
+fn count(x: &Vec<String>) -> i32 { return 7; }
+
+fn ok_borrow_pass() -> i32 {
+    arena {
+        let v: Vec<String> = Vec::new();
+        let n = count(&v);
+        if n != 7 { return 1; };
+    }
+    return 0;
+}

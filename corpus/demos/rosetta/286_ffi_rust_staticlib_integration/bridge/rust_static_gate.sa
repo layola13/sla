@@ -1,0 +1,13 @@
+@import "bridge/rust_static_gate.sal"
+@import "bridge/../ffi/rust_staticlib.sai"
+
+@ffi_wrapper rust_staticlib_gate(*slot: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow slot
+    tag = load view+RustStaticProbe_tag as i32
+    minor = load view+RustStaticProbe_minor as i32
+    result = add tag, minor
+    !minor
+    !tag
+    !view
+    return result

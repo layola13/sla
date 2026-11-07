@@ -1,0 +1,1 @@
+@extern panic_msg(code: i32, msg: ptr, len: u64) -> void

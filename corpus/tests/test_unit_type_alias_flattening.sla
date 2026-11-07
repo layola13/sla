@@ -1,0 +1,25 @@
+struct Transform {
+    x: i32,
+    y: i32,
+}
+
+struct Velocity {
+    vx: i32,
+    vy: i32,
+}
+
+type BulletData = Transform & Velocity & { damage: i32 };
+
+fn make_bullet() -> i32 {
+    let bullet = BulletData { x: 1, y: 2, vx: 3, vy: 4, damage: 5 };
+    if bullet.x != 1 { panic(31400); };
+    if bullet.y != 2 { panic(31401); };
+    if bullet.vx != 3 { panic(31402); };
+    if bullet.vy != 4 { panic(31403); };
+    if bullet.damage != 5 { panic(31404); };
+    return bullet.x + bullet.vx + bullet.damage;
+}
+
+@test "type alias flattens composed struct fields"() {
+    if make_bullet() != 9 { panic(31410); };
+}

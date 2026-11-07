@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 372_ushr + 412_shift_compound：位移（4,-4,32,32）。
+// SLA 有 `>>`/`<<`（算术右移），无 `>>>`（parser 拒绝第三个 `>`），
+// 无 `<<=`（无词法 token，见 #6 同类），用 `a = a << 2` 表达。
+
+fn main() -> i32 {
+    let a = 8;
+    a = a << 2;
+    println("{},{},{},{}", 8 >> 1, -8 >> 1, 8 << 2, a);
+    return 0;
+}
+
+@test "basic 119 shift"() {
+    if 8 >> 1 != 4 { panic(11901); };
+    if -8 >> 1 != -4 { panic(11902); };
+    if 8 << 2 != 32 { panic(11903); };
+    let a = 8;
+    a = a << 2;
+    if a != 32 { panic(11904); };
+}

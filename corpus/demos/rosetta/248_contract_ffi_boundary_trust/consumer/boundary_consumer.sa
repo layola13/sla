@@ -1,0 +1,18 @@
+@import "consumer/../layout/slot.sal"
+@import "consumer/../bridge/boundary.sa"
+
+@boundary_consumer_value() -> i32:
+L_ENTRY:
+    slot = alloc Slot_SIZE
+    store slot+Slot_value, 248 as i32
+    result = call @boundary(*slot)
+    ok = eq result, 249
+    !result
+    !slot
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 248
+
+L_ERR:
+    return 0

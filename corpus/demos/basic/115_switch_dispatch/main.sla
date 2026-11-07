@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 271_switch_arms：switch 分发 + else-if 链（12,100）。
+// switch 写法与 33/107 同口径（一臂 return，其余赋值 + 尾 return）；
+// 条件链用显式 `else if`（与 04/34 的分支口径一致）。
+
+fn main() -> i32 {
+    let x = 2;
+    let r: i32 = 0;
+    switch x {
+        1 => { r = 1; },
+        2 => { r = x + 10; },
+        default => {},
+    };
+    let ok = x == 2;
+    let s: i32 = 300;
+    if ok {
+        s = 100;
+    } else if x == 1 {
+        s = 200;
+    };
+    println("{},{}", r, s);
+    return 0;
+}
+
+@test "basic 115 switch dispatch"() {
+    let x = 2;
+    let r: i32 = 0;
+    switch x {
+        1 => { r = 1; },
+        2 => { r = x + 10; },
+        default => {},
+    };
+    if r != 12 { panic(11501); };
+    let ok = x == 2;
+    let s: i32 = 300;
+    if ok {
+        s = 100;
+    } else if x == 1 {
+        s = 200;
+    };
+    if s != 100 { panic(11502); };
+}

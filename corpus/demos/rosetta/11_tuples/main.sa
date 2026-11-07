@@ -1,0 +1,130 @@
+@import "sa_std/io/print.sai"
+@rosetta_011_first() -> i64:
+L_ENTRY:
+    pair = alloc 16
+    tmp_0 = 3
+    store pair+0, tmp_0 as i64
+    tmp_1 = 4
+    store pair+8, tmp_1 as i64
+    tmp_2 = load pair+0 as i64
+    !pair
+    return tmp_2
+
+@rosetta_011_second() -> i64:
+L_ENTRY:
+    pair = alloc 16
+    tmp_3 = 3
+    store pair+0, tmp_3 as i64
+    tmp_4 = 4
+    store pair+8, tmp_4 as i64
+    tmp_5 = load pair+8 as i64
+    !pair
+    return tmp_5
+
+@rosetta_011_value() -> i64:
+L_ENTRY:
+    pair = alloc 16
+    tmp_6 = 3
+    store pair+0, tmp_6 as i64
+    tmp_7 = 4
+    store pair+8, tmp_7 as i64
+    tmp_8 = load pair+0 as i64
+    tmp_9 = 10
+    tmp_10 = mul tmp_8, tmp_9
+    tmp_11 = load pair+8 as i64
+    tmp_12 = add tmp_10, tmp_11
+    !pair
+    return tmp_12
+
+@main() -> i64:
+L_ENTRY:
+    tmp_13 = call @rosetta_011_first()
+    first = tmp_13
+    tmp_14 = call @rosetta_011_second()
+    second = tmp_14
+    tmp_15 = 3
+    tmp_16 = ne first, tmp_15
+    br tmp_16 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_16
+    panic(11)
+
+L_ELSE_1:
+    !tmp_16
+    jmp L_MERGE_2
+
+L_MERGE_2:
+    tmp_19 = 4
+    tmp_20 = ne second, tmp_19
+    br tmp_20 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_20
+    panic(11)
+
+L_ELSE_4:
+    !tmp_20
+    jmp L_MERGE_5
+
+L_MERGE_5:
+    @const SLA_STR_0 = utf8:"(3, 4)\n"
+    tmp_24 = 7
+    call @sa_print_bytes(&SLA_STR_0, tmp_24)
+    tmp_25 = 0
+    !first
+    !second
+    return tmp_25
+
+@test "rosetta 011 tuples"():
+L_TEST_ENTRY_6:
+    tmp_26 = call @rosetta_011_first()
+    first = tmp_26
+    tmp_27 = call @rosetta_011_second()
+    second = tmp_27
+    tmp_28 = call @rosetta_011_value()
+    encoded = tmp_28
+    tmp_29 = 3
+    tmp_30 = ne first, tmp_29
+    br tmp_30 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_30
+    panic(11)
+
+L_ELSE_8:
+    !tmp_30
+    jmp L_MERGE_9
+
+L_MERGE_9:
+    tmp_33 = 4
+    tmp_34 = ne second, tmp_33
+    br tmp_34 -> L_THEN_10, L_ELSE_11
+
+L_THEN_10:
+    !tmp_34
+    panic(12)
+
+L_ELSE_11:
+    !tmp_34
+    jmp L_MERGE_12
+
+L_MERGE_12:
+    tmp_37 = 34
+    tmp_38 = ne encoded, tmp_37
+    br tmp_38 -> L_THEN_13, L_ELSE_14
+
+L_THEN_13:
+    !tmp_38
+    panic(13)
+
+L_ELSE_14:
+    !tmp_38
+    jmp L_MERGE_15
+
+L_MERGE_15:
+    !first
+    !encoded
+    !second
+    return
+

@@ -1,0 +1,5 @@
+# Future metadata only. Not compiler input.
+[package]
+name = "demo-209"
+version = "0.1.0"
+build-dependencies = ["build/generated"]

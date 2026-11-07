@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 196_str_len_sum：`len("hello") + len("world") = 10`。
+// 字面量与变量两种 `len` 路径均已修复（见 #10），此处各取一条断言。
+
+fn main() -> i32 {
+    let t = len("hello") + len("world");
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 69 len sum"() {
+    if len("hello") + len("world") != 10 { panic(6901); };
+    let a = "hello";
+    let b = "world";
+    if len(a) + len(b) != 10 { panic(6902); };
+}

@@ -1,0 +1,14 @@
+// expect: GenericOverloadConflict
+// Negative: generic templates do not participate in overloading. A
+// name that carries a generic template must stand alone; combining it
+// with a concrete same-name function is rejected at monomorphization.
+// Judge with a standalone `sla check` (exit 1, Monomorphization Error
+// naming `pick`, with the (error.GenericOverloadConflict) kind token);
+// never via the test runner.
+
+fn pick<T>(x: T) -> i32 { return 1; }
+fn pick(x: i32) -> i32 { return 2; }
+
+fn main() -> i32 {
+    return pick(7);
+}

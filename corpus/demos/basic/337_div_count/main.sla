@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 因子个数（d(12)=6，d(13)=2）。
+// 意对标 tsgosa 183_prime_upto 的计数版（334 为因子和版）：整除计数。
+
+fn dcount(n: int) -> int {
+    let c = 0;
+    let d = 1;
+    while d <= n {
+        if n % d == 0 { c = c + 1; };
+        d = d + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{}", dcount(12), dcount(13));
+    return 0;
+}
+
+@test "basic 337 div count"() {
+    if dcount(12) != 6 { panic(33701); };
+    if dcount(13) != 2 { panic(33702); };
+    if dcount(1) != 1 { panic(33703); };
+}

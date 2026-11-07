@@ -1,0 +1,19 @@
+@import "sa_std/redis.sla"
+
+// BISECT D: redis_value_child_bulk only (returns &Vec<u8> borrowed
+// from a by-value child copy inside the callee).
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+@test "bisect d child bulk"() {
+    let items: Vec<RedisValue> = Vec::new();
+    items.push(redis_int_value(42));
+    items.push(redis_bulk_value(reg3_bytes(STR_PTR("foo"), STR_LEN("foo"))));
+    items.push(redis_null_value());
+    let agg = redis_empty_value();
+    agg.kind = SA_REDIS_KIND_ARRAY;
+    agg.items = items;
+    if redis_bytes_eq(redis_value_child_bulk(&agg, 1), reg3_bytes(STR_PTR("foo"), STR_LEN("foo"))) == false { panic(213); };
+}

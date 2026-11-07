@@ -1,0 +1,55 @@
+// Sla tuple and destructuring smoke tests.
+
+fn tuple_value() -> int {
+    let pair = (3, 4);
+    return pair.0 * 10 + pair.1;
+}
+
+struct Inner {
+    x: int,
+}
+
+fn tuple_chain_value() -> int {
+    let pair = (Inner { x: 5 }, 1);
+    return pair.0.x;
+}
+
+fn borrowed_tuple_chain_value() -> int {
+    let pair = (Inner { x: 7 }, 1);
+    let value = &pair.0.x;
+    return *value;
+}
+
+fn destructure_value() -> int {
+    let (x, y) = (2, 5);
+    let sum = x + y;
+    return sum;
+}
+
+@test "tuple field access"() {
+    let got = tuple_value();
+    if got != 34 {
+        panic(1);
+    };
+}
+
+@test "tuple field access chain"() {
+    let got = tuple_chain_value();
+    if got != 5 {
+        panic(3);
+    };
+}
+
+@test "borrowed tuple field access chain"() {
+    let got = borrowed_tuple_chain_value();
+    if got != 7 {
+        panic(4);
+    };
+}
+
+@test "tuple destructuring"() {
+    let got = destructure_value();
+    if got != 7 {
+        panic(2);
+    };
+}

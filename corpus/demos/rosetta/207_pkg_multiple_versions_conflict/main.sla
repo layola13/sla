@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_multiple_versions_conflict() -> i32 {
+    let conflict_reported = 1;
+    return conflict_reported;
+}
+
+fn main() -> i32 { let conflict_reported = 1; println("{}", conflict_reported); return conflict_reported; }
+@test "rosetta 207 pkg multiple versions conflict"() { let got = pkg_multiple_versions_conflict(); if got != 1 { panic(207); }; }

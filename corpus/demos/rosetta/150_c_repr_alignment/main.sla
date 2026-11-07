@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Pair { a: u8, b: u32 }
+fn c_repr_pair_sum() -> u32 {
+    let pair = Pair { a: 1, b: 2 };
+    let left = pair.a as u32;
+    let right = pair.b;
+    return left + right;
+}
+fn main() -> i32 {
+    let pair = Pair { a: 1, b: 2 };
+    let left = pair.a as u32;
+    let right = pair.b;
+    let result = left + right;
+    println("{}", result);
+    return result;
+}
+@test "rosetta 150 150_c_repr_alignment"() { let got = c_repr_pair_sum(); if got != 3 { panic(150); }; }

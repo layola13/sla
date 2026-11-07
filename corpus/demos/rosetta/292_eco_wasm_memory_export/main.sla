@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn eco_wasm_memory_exports() -> i32 { let linear_memory = 1; return linear_memory; }
+fn main() -> i32 { let linear_memory = 1; println("{}", linear_memory); return linear_memory; }
+@test "rosetta 292 eco wasm memory export"() { let got = eco_wasm_memory_exports(); if got != 1 { panic(292); }; }

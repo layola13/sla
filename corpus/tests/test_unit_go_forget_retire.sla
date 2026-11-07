@@ -1,0 +1,33 @@
+// Goroutine syntax batch closing line: mem::forget retirements in
+// plain-fn contexts. The chan A-form (view+forget) and user-written
+// mem::forget both retire through the backends' forget emission.
+// Pre-fix, the SAB backend's forget only marked the register consumed
+// in codegen bookkeeping and emitted no verifier-visible consume, so
+// the host verifier reported MemoryLeak at plain-fn exit (the small
+// @test-context probes masked it). Regression: fails on SAB pre-fix,
+// passes on both backends post-fix.
+
+@import "sa_std/task.sai"
+
+fn forget_owned_string() -> u64 {
+    let s: String = format("hello");
+    mem::forget(s);
+    return 7;
+}
+
+fn worker_roundtrip(ch: Chan<u64>) {
+    let (v, closed) = ch.recv();
+    if closed { panic(9512); };
+    ch.send(v + 1);
+}
+
+@test "forget and chan views retire in plain fn"() {
+    if forget_owned_string() != 7 { panic(9511); };
+    let ch: Chan<u64> = Chan::new(1);
+    ch.send(41);
+    worker_roundtrip(ch);
+    let (got, closed2) = ch.recv();
+    if closed2 { panic(9513); };
+    if got != 42 { panic(9514); };
+    ch.destroy();
+}

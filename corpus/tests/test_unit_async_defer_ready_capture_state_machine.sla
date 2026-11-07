@@ -1,0 +1,60 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn await_defer_ready_with_capture() -> i32 {
+    let bump = 2;
+    let value = future::defer_ready(40).await;
+    return value + bump;
+}
+
+async fn await_local_defer_ready_with_capture() -> i32 {
+    let bump = 3;
+    let delayed = future::defer_ready(39);
+    let value = delayed.await;
+    return bump + value;
+}
+
+fn captured_defer_ready_await_resumes_on_second_poll() -> i32 {
+    let fut = await_defer_ready_with_capture();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9781);
+    };
+    if task::is_ready(task) != false {
+        panic(9782);
+    };
+    if task::poll(task) != true {
+        panic(9783);
+    };
+    if task::is_ready(task) != true {
+        panic(9784);
+    };
+    return task::result(task);
+}
+
+fn captured_local_defer_ready_await_resumes_on_second_poll() -> i32 {
+    let fut = await_local_defer_ready_with_capture();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9791);
+    };
+    if task::is_ready(task) != false {
+        panic(9792);
+    };
+    if task::poll(task) != true {
+        panic(9793);
+    };
+    if task::is_ready(task) != true {
+        panic(9794);
+    };
+    return task::result(task);
+}
+
+@test "async defer ready await captured addend resumes"() {
+    if captured_defer_ready_await_resumes_on_second_poll() != 42 {
+        panic(9785);
+    };
+    if captured_local_defer_ready_await_resumes_on_second_poll() != 42 {
+        panic(9795);
+    };
+}

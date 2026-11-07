@@ -1,0 +1,42 @@
+@import "sa_std/vec.sa"
+
+// DEF deep-drop regression (DESIGN.md §4.3): reassigning a local
+// Vec binding must drop the overwritten value before the new one
+// is stored. Functional half: the binding must read back as the
+// new value after every reassignment (dropping the incoming value
+// or corrupting the slot breaks the readback). The leak half is
+// locked by the probe_a A/B memory numbers in the batch report.
+
+fn filled_vec(n: u64, seed: u8) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(seed + (i % 5) as u8);
+        i = i + 1;
+    }
+    return v;
+}
+
+fn sum_vec(v: &Vec<u8>) -> u64 {
+    let sum: u64 = 0;
+    let i: u64 = 0;
+    while i < 48 {
+        sum = sum + (v[i] as u64);
+        i = i + 1;
+    }
+    return sum;
+}
+
+@test "deep drop frees overwritten local vec"() {
+    // sum = 48 * seed + 93 (see struct field case for the math).
+    let v: Vec<u8> = filled_vec(48, 1);
+    if sum_vec(&v) != 93 + 48 { panic(4301); };
+    let r: u64 = 0;
+    while r < 25 {
+        v = filled_vec(48, 4);
+        if sum_vec(&v) != 93 + 192 { panic(4302); };
+        v = filled_vec(48, 1);
+        if sum_vec(&v) != 93 + 48 { panic(4303); };
+        r = r + 1;
+    }
+}

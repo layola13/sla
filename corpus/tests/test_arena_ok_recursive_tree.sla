@@ -1,0 +1,15 @@
+// F2-A C1 corpus (positive): a recursive type whose closure
+// stays inside the flat value world is arena-safe - recursion
+// alone is not a violation (contrast the 2.4 File case).
+struct Tree { label: String, kids: Vec<Tree> }
+
+fn ok_recursive_tree() -> i32 {
+    arena {
+        let leaf = Tree { label: format("leaf"), kids: Vec::new() };
+        let kids: Vec<Tree> = Vec::new();
+        kids.push(leaf);
+        let root = Tree { label: format("root"), kids: kids };
+        if len(root.kids) != 1 { return 1; };
+    }
+    return 0;
+}

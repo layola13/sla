@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 区间素数和（<=20 和为 77）。
+// 意对标 281 求和版的素数版（238 表版互补）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn prime_sum(limit: int) -> int {
+    let s = 0;
+    let k = 2;
+    while k <= limit {
+        if is_prime(k) == 1 { s = s + k; };
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", prime_sum(20), prime_sum(10));
+    return 0;
+}
+
+@test "basic 358 prime sum"() {
+    if prime_sum(20) != 77 { panic(35801); };
+    if prime_sum(10) != 17 { panic(35802); };
+    if prime_sum(2) != 2 { panic(35803); };
+}

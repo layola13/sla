@@ -1,0 +1,9 @@
+@import "leaf.sa"
+
+@mid_value() -> i32:
+L_ENTRY:
+    leaf = call @leaf_value()
+    value = add leaf, 0
+    !leaf
+    !value
+    return 235

@@ -1,0 +1,36 @@
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+
+fn ptr_byte_add_read_second() -> u8 {
+    let p = PTR_BYTE_ADD(STR_PTR("az"), 1);
+    return PTR_READ_U8(p);
+}
+
+fn ptr_byte_add_compare_loop(lhs: ptr, rhs: ptr, len: u64) -> bool {
+    let i: u64 = 0;
+    while i < len {
+        let left_p = PTR_BYTE_ADD(lhs, i);
+        let right_p = PTR_BYTE_ADD(rhs, i);
+        let left = PTR_READ_U8(left_p);
+        let right = PTR_READ_U8(right_p);
+        if left != right {
+            return false;
+        };
+        i = i + 1;
+    }
+    return true;
+}
+
+@test "sa ptr byte add result has pointer type"() {
+    let value = ptr_byte_add_read_second();
+    if value != 122 {
+        panic(43311);
+    };
+}
+
+@test "direct sab ptr byte add stack slot temps are non owning"() {
+    let ok = ptr_byte_add_compare_loop(STR_PTR("az"), STR_PTR("az"), 2);
+    if ok != true {
+        panic(43312);
+    };
+}

@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 152_enum_calc：周末判断（Sun=1，Mon=0，Sat=1）。
+// SLA 用 `enum + match` 表达（写法见 15 与 rosetta 60，全臂列举避通配）。
+
+enum D {
+    Sun,
+    Mon,
+    Tue,
+    Wed,
+    Thu,
+    Fri,
+    Sat,
+}
+
+fn is_weekend(d: D) -> i32 {
+    let r = match d {
+        D::Sun => { 1 },
+        D::Mon => { 0 },
+        D::Tue => { 0 },
+        D::Wed => { 0 },
+        D::Thu => { 0 },
+        D::Fri => { 0 },
+        D::Sat => { 1 },
+    };
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", is_weekend(D::Sun), is_weekend(D::Mon), is_weekend(D::Sat));
+    return 0;
+}
+
+@test "basic 75 weekend"() {
+    if is_weekend(D::Sun) != 1 { panic(7501); };
+    if is_weekend(D::Mon) != 0 { panic(7502); };
+    if is_weekend(D::Sat) != 1 { panic(7503); };
+}

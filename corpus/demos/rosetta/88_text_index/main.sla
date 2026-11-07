@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+fn postings_for(term: ptr) -> i32 {
+    if str_eq(term, "rust") == true {
+        return 2;
+    } else {
+        if str_eq(term, "sla") == true {
+            return 3;
+        } else {
+            return 0;
+        };
+    };
+}
+
+fn main() -> i32 {
+    let result = postings_for("sla");
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 088 88_text_index"() {
+    let got = postings_for("sla");
+    if got != 3 {
+        panic(88);
+    };
+};

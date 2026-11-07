@@ -1,0 +1,209 @@
+@import "sa_std/redis.sla"
+
+// REG-SHARD3 coverage: SAB registry `declared` entries for the
+// redis.sla value/step constructors and accessors (redis_empty_value,
+// redis_int_value, redis_bulk_value, redis_simple_value,
+// redis_error_value, redis_null_value, redis_value_kind,
+// redis_value_int, redis_value_is_null, redis_value_bulk,
+// redis_value_child, redis_value_child_bulk, redis_value_child_count,
+// redis_value_child_int, redis_value_child_is_null,
+// redis_value_child_kind, redis_value_pair_count,
+// redis_pubsub_normalize, redis_step, redis_step_value,
+// redis_expect_ok, redis_clear_multi, redis_empty_text,
+// redis_empty_client, redis_client_close). All class=declared, zero
+// corpus references at registry stamp ee7b41c3.
+
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+fn reg3_crlf(v: Vec<u8>) -> Vec<u8> {
+    v.push(13);
+    v.push(10);
+    return v;
+}
+
+@test "reg3 redis empty client and close"() {
+    let c = redis_empty_client();
+    if c.handle != 0 { panic(4301); };
+    if c.open { panic(4302); };
+    if c.failed { panic(4303); };
+    if c.in_multi { panic(4304); };
+    if (len(c.pending) as u64) != 0 { panic(4305); };
+    // Closing a never-opened client is a no-op success.
+    if redis_client_close(c) != SA_STD_OK { panic(4306); };
+    let t = redis_empty_text();
+    if (len(t) as u64) != 0 { panic(4307); };
+}
+
+@test "reg3 redis value constructors"() {
+    let e = redis_empty_value();
+    if redis_value_kind(&e) != SA_REDIS_KIND_INVALID { panic(4311); };
+    if redis_value_int(&e) != 0 { panic(4312); };
+    if redis_value_is_null(&e) { panic(4313); };
+    if redis_value_child_count(&e) != 0 { panic(4314); };
+    if redis_value_pair_count(&e) != 0 { panic(4315); };
+    if (len(redis_value_bulk(&e)) as u64) != 0 { panic(4316); };
+
+    let i = redis_int_value(0 - 77);
+    if redis_value_kind(&i) != SA_REDIS_KIND_INTEGER { panic(4317); };
+    if redis_value_int(&i) != 0 - 77 { panic(4318); };
+    if redis_value_is_null(&i) { panic(4319); };
+
+    let b = redis_bulk_value(reg3_bytes(STR_PTR("data"), STR_LEN("data")));
+    if redis_value_kind(&b) != SA_REDIS_KIND_BULK { panic(4320); };
+    if redis_bytes_eq(redis_value_bulk(&b), reg3_bytes(STR_PTR("data"), STR_LEN("data"))) == false { panic(4321); };
+
+    let s = redis_simple_value(reg3_bytes(STR_PTR("OK"), STR_LEN("OK")));
+    if redis_value_kind(&s) != SA_REDIS_KIND_SIMPLE { panic(4322); };
+    if redis_bytes_eq(redis_value_bulk(&s), reg3_bytes(STR_PTR("OK"), STR_LEN("OK"))) == false { panic(4323); };
+
+    let er = redis_error_value(reg3_bytes(STR_PTR("ERR x"), STR_LEN("ERR x")));
+    if redis_value_kind(&er) != SA_REDIS_KIND_ERROR { panic(4324); };
+    if redis_bytes_eq(redis_value_bulk(&er), reg3_bytes(STR_PTR("ERR x"), STR_LEN("ERR x"))) == false { panic(4325); };
+
+    let n = redis_null_value();
+    if redis_value_kind(&n) != SA_REDIS_KIND_NULL { panic(4326); };
+    if redis_value_is_null(&n) == false { panic(4327); };
+}
+
+@test "reg3 redis value child accessors"() {
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, STR_PTR("*2"), STR_LEN("*2"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR(":42"), STR_LEN(":42"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR("$3"), STR_LEN("$3"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR("foo"), STR_LEN("foo"));
+    w = reg3_crlf(w);
+    let r = redis_parse_reply(w);
+    if r.ready == false { panic(4331); };
+    let v = r.value;
+    if redis_value_child_count(&v) != 2 { panic(4332); };
+    if redis_value_child_kind(&v, 0) != SA_REDIS_KIND_INTEGER { panic(4333); };
+    if redis_value_child_int(&v, 0) != 42 { panic(4334); };
+    if redis_value_child_kind(&v, 1) != SA_REDIS_KIND_BULK { panic(4335); };
+    if redis_bytes_eq(redis_value_child_bulk(&v, 1), reg3_bytes(STR_PTR("foo"), STR_LEN("foo"))) == false { panic(4336); };
+    if redis_value_child_is_null(&v, 0) { panic(4337); };
+    if redis_value_pair_count(&v) != 1 { panic(4338); };
+    let c0 = redis_value_child(&v, 0);
+    if redis_value_int(&c0) != 42 { panic(4339); };
+    // Out-of-range child reads yield the empty (INVALID) value.
+    let c9 = redis_value_child(&v, 9);
+    if redis_value_kind(&c9) != SA_REDIS_KIND_INVALID { panic(4340); };
+    if redis_value_child_kind(&v, 9) != SA_REDIS_KIND_INVALID { panic(4341); };
+    if redis_value_child_int(&v, 9) != 0 { panic(4342); };
+}
+
+@test "reg3 redis value child null and pair counts"() {
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, STR_PTR("*2"), STR_LEN("*2"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR("_"), STR_LEN("_"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR(":1"), STR_LEN(":1"));
+    w = reg3_crlf(w);
+    let r = redis_parse_reply(w);
+    if r.ready == false { panic(4351); };
+    if redis_value_child_is_null(&r.value, 0) == false { panic(4352); };
+    if redis_value_child_is_null(&r.value, 1) { panic(4353); };
+    // Pair count is defined for MAP/ARRAY only.
+    let b = redis_bulk_value(reg3_bytes(STR_PTR("x"), STR_LEN("x")));
+    if redis_value_pair_count(&b) != 0 { panic(4354); };
+    let m: Vec<u8> = Vec::new();
+    m = redis_push_lit(m, STR_PTR("%1"), STR_LEN("%1"));
+    m = reg3_crlf(m);
+    m = redis_push_lit(m, STR_PTR("$1"), STR_LEN("$1"));
+    m = reg3_crlf(m);
+    m = redis_push_lit(m, STR_PTR("k"), STR_LEN("k"));
+    m = reg3_crlf(m);
+    m = redis_push_lit(m, STR_PTR(":7"), STR_LEN(":7"));
+    m = reg3_crlf(m);
+    let rm = redis_parse_reply(m);
+    if rm.ready == false { panic(4355); };
+    if redis_value_pair_count(&rm.value) != 1 { panic(4356); };
+    if redis_value_child_int(&rm.value, 1) != 7 { panic(4357); };
+}
+
+@test "reg3 redis pubsub normalize"() {
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, STR_PTR("*1"), STR_LEN("*1"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR(":5"), STR_LEN(":5"));
+    w = reg3_crlf(w);
+    let r = redis_parse_reply(w);
+    if r.ready == false { panic(4361); };
+    if redis_value_kind(&r.value) != SA_REDIS_KIND_ARRAY { panic(4362); };
+    let nv = redis_pubsub_normalize(r.value);
+    if redis_value_kind(&nv) != SA_REDIS_KIND_PUSH { panic(4363); };
+    if redis_value_child_count(&nv) != 1 { panic(4364); };
+    // Non-array values pass through untouched.
+    let iv = redis_pubsub_normalize(redis_int_value(9));
+    if redis_value_kind(&iv) != SA_REDIS_KIND_INTEGER { panic(4365); };
+    if redis_value_int(&iv) != 9 { panic(4366); };
+}
+
+@test "reg3 redis step constructors"() {
+    let cl = redis_empty_client();
+    cl.handle = 7;
+    let st = redis_step(cl, 0 - 9, redis_int_value(3));
+    if st.status != 0 - 9 { panic(4371); };
+    if redis_value_int(&st.reply) != 3 { panic(4372); };
+    if (len(st.error_text) as u64) != 0 { panic(4373); };
+    if st.client.handle != 7 { panic(4374); };
+}
+
+@test "reg3 redis step_value error mapping"() {
+    let ok_step = redis_step_value(redis_empty_client(), redis_int_value(5));
+    if ok_step.status != SA_STD_OK { panic(4381); };
+    if redis_value_int(&ok_step.reply) != 5 { panic(4382); };
+    let err_step = redis_step_value(redis_empty_client(), redis_error_value(reg3_bytes(STR_PTR("ERR boom"), STR_LEN("ERR boom"))));
+    if err_step.status != SA_REDIS_STATUS_REPLY_ERROR { panic(4383); };
+    if redis_bytes_eq(err_step.error_text, reg3_bytes(STR_PTR("ERR boom"), STR_LEN("ERR boom"))) == false { panic(4384); };
+    if redis_value_kind(&err_step.reply) != SA_REDIS_KIND_ERROR { panic(4385); };
+    // Blob errors map the same way.
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, STR_PTR("!5"), STR_LEN("!5"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR("error"), STR_LEN("error"));
+    w = reg3_crlf(w);
+    let r = redis_parse_reply(w);
+    if r.ready == false { panic(4386); };
+    let blob_step = redis_step_value(redis_empty_client(), r.value);
+    if blob_step.status != SA_REDIS_STATUS_REPLY_ERROR { panic(4387); };
+    if redis_bytes_eq(blob_step.error_text, reg3_bytes(STR_PTR("error"), STR_LEN("error"))) == false { panic(4388); };
+}
+
+@test "reg3 redis expect_ok"() {
+    let ok = redis_step(redis_empty_client(), SA_STD_OK, redis_simple_value(reg3_bytes(STR_PTR("OK"), STR_LEN("OK"))));
+    let out = redis_expect_ok(ok);
+    if out.status != SA_STD_OK { panic(4391); };
+    if redis_value_kind(&out.reply) != SA_REDIS_KIND_SIMPLE { panic(4392); };
+    // A non-OK simple string is a protocol failure (NET).
+    let queued = redis_step(redis_empty_client(), SA_STD_OK, redis_simple_value(reg3_bytes(STR_PTR("QUEUED"), STR_LEN("QUEUED"))));
+    let out2 = redis_expect_ok(queued);
+    if out2.status != SA_STD_ERR_NET { panic(4393); };
+    if redis_value_kind(&out2.reply) != SA_REDIS_KIND_INVALID { panic(4394); };
+    // A non-simple reply also fails the OK check.
+    let ints = redis_step(redis_empty_client(), SA_STD_OK, redis_int_value(1));
+    let out3 = redis_expect_ok(ints);
+    if out3.status != SA_STD_ERR_NET { panic(4395); };
+    // An already-failed step passes through untouched.
+    let failed = redis_step(redis_empty_client(), 0 - 5, redis_empty_value());
+    let out4 = redis_expect_ok(failed);
+    if out4.status != 0 - 5 { panic(4396); };
+}
+
+@test "reg3 redis clear_multi"() {
+    let cl = redis_empty_client();
+    cl.in_multi = true;
+    cl.handle = 7;
+    let st = redis_step(cl, 0 - 3, redis_int_value(1));
+    let out = redis_clear_multi(st);
+    if out.client.in_multi { panic(4401); };
+    if out.client.handle != 7 { panic(4402); };
+    if out.status != 0 - 3 { panic(4403); };
+    if redis_value_int(&out.reply) != 1 { panic(4404); };
+}

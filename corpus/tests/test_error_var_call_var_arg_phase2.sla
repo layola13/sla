@@ -1,0 +1,13 @@
+fn accepts_i32(value: i32) -> i32 {
+    return value;
+}
+
+fn bad_var_call_var_arg_phase2() -> i32 {
+    var x: i32;
+    x = 1;
+    return accepts_i32(var x);
+}
+
+fn main() -> i32 {
+    return bad_var_call_var_arg_phase2();
+}

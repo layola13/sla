@@ -1,0 +1,18 @@
+// expect: BorrowConflict
+@import "sa_std/growvec.sa"
+
+// F1 borrow discipline: an element reference must not escape the
+// container's lifetime. Here the GrowVec is a local that is dropped
+// at the closing brace, so returning &g[0] would dangle. The checker
+// must reject this file (mirrors the Vec element-borrow discipline:
+// element addresses are stable only while the container lives).
+fn growvec_escape_ref() -> &u64 {
+    let g: GrowVec<u64> = GrowVec::new();
+    g.push(41);
+    return &g[0];
+}
+
+@test "growvec ref escape must not compile"() {
+    let r = growvec_escape_ref();
+    if *r != 41 { panic(1); };
+}

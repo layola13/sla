@@ -1,0 +1,96 @@
+// 306 - Or-Patterns
+// SA: 用 OR_TAG 宏模拟 Rust 的 Red | Green | Blue or-pattern
+// OR_TAG 将多个 tag 检查合并为单一布尔结果
+
+@import "sa_std/io/print.sai"
+
+@const RESULT_OK = utf8:"2\n"
+@const RESULT_ERR = utf8:"error\n"
+
+#def TAG_RED = 0
+#def TAG_GREEN = 1
+#def TAG_BLUE = 2
+#def TAG_YELLOW = 3
+#def TAG_CYAN = 4
+#def TAG_MAGENTA = 5
+
+#def Color_SIZE = 8
+#def Color_tag = +0
+
+// OR_TAG_3: 检查 %tag 是否等于 %t1 或 %t2 或 %t3
+[MACRO] OR_TAG_3 %out, %tag, %t1, %t2, %t3
+    _ot1 = eq %tag, %t1
+    _ot2 = eq %tag, %t2
+    _ot3 = eq %tag, %t3
+    _ot12 = or _ot1, _ot2
+    %out = or _ot12, _ot3
+    !_ot1
+    !_ot2
+    !_ot3
+    !_ot12
+[END_MACRO]
+
+// OR_TAG_2: 检查 %tag 是否等于 %t1 或 %t2
+[MACRO] OR_TAG_2 %out, %tag, %t1, %t2
+    _ot_a = eq %tag, %t1
+    _ot_b = eq %tag, %t2
+    %out = or _ot_a, _ot_b
+    !_ot_a
+    !_ot_b
+[END_MACRO]
+
+@is_primary(&color: ptr) -> i32:
+L_ENTRY:
+    tag = load color+Color_tag as u32
+    EXPAND OR_TAG_3 result, tag, TAG_RED, TAG_GREEN, TAG_BLUE
+    !tag
+    !color
+    return result
+
+@main() -> i32:
+L_ENTRY:
+    // colors = [Red, Yellow, Blue, Cyan]
+    c0 = alloc Color_SIZE
+    store c0+Color_tag, TAG_RED as u32
+
+    c1 = alloc Color_SIZE
+    store c1+Color_tag, TAG_YELLOW as u32
+
+    c2 = alloc Color_SIZE
+    store c2+Color_tag, TAG_BLUE as u32
+
+    c3 = alloc Color_SIZE
+    store c3+Color_tag, TAG_CYAN as u32
+
+    r0 = call @is_primary(&c0)
+    r1 = call @is_primary(&c1)
+    r2 = call @is_primary(&c2)
+    r3 = call @is_primary(&c3)
+
+    count0 = add r0, r1
+    count1 = add r2, r3
+    count = add count0, count1
+
+    ok = eq count, 2
+    !r0
+    !r1
+    !r2
+    !r3
+    !count0
+    !count1
+    !count
+    !c0
+    !c1
+    !c2
+    !c3
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    !ok
+    call @sa_print_bytes(&RESULT_OK, 2)
+    return 0
+
+L_ERR:
+    !ok
+    call @sa_print_bytes(&RESULT_ERR, 6)
+    return 1

@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// f64 减乘除（278 只覆盖加法，此处补全四则：5.0/10.0/3.0）。
+// 裸 f64 不直打（打印截断见 #29），以比较转 int 旗输出（1,1,1）。
+
+fn main() -> i32 {
+    let s = 7.5 - 2.5;
+    let m = 2.5 * 4.0;
+    let d = 7.5 / 2.5;
+    println("{},{},{}", if s == 5.0 { 1 } else { 0 }, if m == 10.0 { 1 } else { 0 }, if d == 3.0 { 1 } else { 0 });
+    return 0;
+}
+
+@test "basic 239 f64 arith"() {
+    let s = 7.5 - 2.5;
+    let m = 2.5 * 4.0;
+    let d = 7.5 / 2.5;
+    if s != 5.0 { panic(23901); };
+    if m != 10.0 { panic(23902); };
+    if d != 3.0 { panic(23903); };
+}

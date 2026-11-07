@@ -1,0 +1,100 @@
+// Goroutine syntax batch P2: Chan<T> channels end to end.
+// Payload transfer uses the runtime's fixed 16-byte slot; ownership
+// of a sent value moves to the receiver.
+
+@import "sa_std/task.sai"
+
+fn pp_worker(ch: Chan<u64>) {
+    let (v1, closed1) = ch.recv();
+    if closed1 { panic(9501); };
+    ch.send(v1 + 1);
+    let (v2, closed2) = ch.recv();
+    if closed2 { panic(9502); };
+    ch.send(v2 + 1);
+}
+
+@test "chan ping-pong over one unbuffered channel"() {
+    let ch: Chan<u64> = Chan::new(0);
+    let h = go pp_worker(ch);
+    ch.send(10);
+    let (r1, closed1) = ch.recv();
+    if closed1 { panic(9503); };
+    if r1 != 11 { panic(9504); };
+    ch.send(20);
+    let (r2, closed2) = ch.recv();
+    if closed2 { panic(9505); };
+    if r2 != 21 { panic(9506); };
+    let st = sa_task_join(h);
+    if st != 0 { panic(9507); };
+    ch.destroy();
+}
+
+@test "chan buffered fifo len cap and close drain"() {
+    let ch: Chan<u64> = Chan::new(3);
+    if ch.cap() != 3 { panic(9508); };
+    ch.send(1);
+    ch.send(2);
+    ch.send(3);
+    if ch.len() != 3 { panic(9509); };
+    let (a, closeda) = ch.recv();
+    if closeda { panic(9510); };
+    if a != 1 { panic(9511); };
+    ch.close();
+    let (b, closedb) = ch.recv();
+    if closedb { panic(9512); };
+    if b != 2 { panic(9513); };
+    let (c, closedc) = ch.recv();
+    if closedc { panic(9514); };
+    if c != 3 { panic(9515); };
+    let (d, closedd) = ch.recv();
+    if !closedd { panic(9516); };
+    if d != 0 { panic(9517); };
+    ch.destroy();
+}
+
+struct PairMsg {
+    a: u64,
+    b: u64,
+}
+
+@test "chan struct and tuple payloads"() {
+    let ch: Chan<PairMsg> = Chan::new(1);
+    ch.send(PairMsg { a: 30, b: 12 });
+    let (m, closed) = ch.recv();
+    if closed { panic(9518); };
+    if m.a != 30 { panic(9519); };
+    if m.b != 12 { panic(9520); };
+    ch.destroy();
+
+    let tc: Chan<(u64, bool)> = Chan::new(1);
+    tc.send((7, true));
+    let (t, closedt) = tc.recv();
+    if closedt { panic(9521); };
+    if t.0 != 7 { panic(9522); };
+    if !t.1 { panic(9523); };
+    tc.destroy();
+}
+
+@test "chan string payload moves ownership"() {
+    let ch: Chan<String> = Chan::new(1);
+    let s: String = format("hello");
+    ch.send(s);
+    let (got, closed) = ch.recv();
+    if closed { panic(9524); };
+    if got.len() != 5 { panic(9525); };
+    ch.destroy();
+}
+
+@test "chan carries a channel handle"() {
+    let inner: Chan<u64> = Chan::new(1);
+    inner.send(99);
+    let outer: Chan<Chan<u64>> = Chan::new(1);
+    outer.send(inner);
+    let (got_ch, closed) = outer.recv();
+    if closed { panic(9526); };
+    let (v, closedv) = got_ch.recv();
+    if closedv { panic(9527); };
+    if v != 99 { panic(9528); };
+    got_ch.destroy();
+    outer.destroy();
+}

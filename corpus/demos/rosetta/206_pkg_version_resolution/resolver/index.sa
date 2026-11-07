@@ -1,0 +1,26 @@
+@import "resolver/../versions/v1_2_3/index.sa"
+@import "resolver/../versions/v1_4_0/index.sa"
+
+@resolver_offset() -> i32:
+L_ENTRY:
+    old = call @v123_package_offset()
+    newer = call @v140_package_offset()
+    use_newer = eq newer, 6
+    !old
+    !newer
+    br use_newer -> L_NEWER, L_OLDER
+
+L_NEWER:
+    !use_newer
+    return 6
+
+L_OLDER:
+    !use_newer
+    return 2
+
+@resolved_value() -> i32:
+L_ENTRY:
+    offset = call @resolver_offset()
+    value = add 200, offset
+    !offset
+    return value

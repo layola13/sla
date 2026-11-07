@@ -1,0 +1,19 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/vec_packed.sla"
+
+// MINIM V6 (SAB isolation): sa_vec_u16_extend_packed.
+@test "minim vec u16 extend packed"() {
+    let src: [u8; 4] = [0u8; 4];
+    src[0] = 52;
+    src[1] = 18;
+    src[2] = 255;
+    src[3] = 0;
+    let sp: ptr = PTR_BYTE_ADD(&src, 0);
+    let v: Vec<u16> = Vec::new();
+    v = sa_vec_u16_extend_packed(v, sp, 2);
+    if (len(v) as u64) != 2 { panic(171); };
+    if v[0] != 4660 { panic(172); };
+    if v[1] != 255 { panic(173); };
+}

@@ -1,0 +1,12 @@
+// expect: BorrowAnnotationInvalid
+// The origin annotation must name one of the function's own
+// parameters.
+@import "sa_std/fs.sai"
+
+struct FsReadBuffer {
+    raw: u64,
+}
+
+fn bad(owner: &FsReadBuffer) -> &[u8][stranger] {
+    return __slice_view(sa_fs_read_buffer_data(owner.raw), sa_fs_read_buffer_len(owner.raw));
+}

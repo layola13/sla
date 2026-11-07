@@ -1,0 +1,99 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const VALUES = struct { f0: 4 = hex:\x01\x00\x00\x00, f1: 4 = hex:\x02\x00\x00\x00, f2: 4 = hex:\x03\x00\x00\x00 }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@main() -> i32:
+L_ENTRY:
+    tmp_0 = &VALUES
+    tmp_1 = 0
+    tmp_2 = 0
+    tmp_3 = ptr_add tmp_0, tmp_2
+    tmp_4 = load tmp_3+0 as i32
+    tmp_5 = add tmp_1, tmp_4
+    !tmp_2
+    !tmp_3
+    !tmp_4
+    !tmp_1
+    tmp_6 = 4
+    tmp_7 = ptr_add tmp_0, tmp_6
+    tmp_8 = load tmp_7+0 as i32
+    tmp_9 = add tmp_5, tmp_8
+    !tmp_6
+    !tmp_7
+    !tmp_8
+    !tmp_5
+    tmp_10 = 8
+    tmp_11 = ptr_add tmp_0, tmp_10
+    tmp_12 = load tmp_11+0 as i32
+    tmp_13 = add tmp_9, tmp_12
+    !tmp_10
+    !tmp_11
+    !tmp_12
+    !tmp_9
+    !tmp_0
+    sum = tmp_13
+    tmp_14 = call @sa_fmt_u64(sum, 10)
+    tmp_15 = call @sa_fmt_buffer_data(tmp_14)
+    tmp_16 = call @sa_fmt_buffer_len(tmp_14)
+    tmp_17 = tmp_15
+    call @sa_print_bytes(&tmp_17, tmp_16)
+    call @sa_fmt_buffer_free(^tmp_14)
+    !tmp_17
+    !tmp_16
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_18 = 0
+    !sum
+    return tmp_18
+
+@test "rosetta 029 const data"():
+L_TEST_ENTRY_0:
+    tmp_19 = &VALUES
+    tmp_20 = 0
+    tmp_21 = 0
+    tmp_22 = ptr_add tmp_19, tmp_21
+    tmp_23 = load tmp_22+0 as i32
+    tmp_24 = add tmp_20, tmp_23
+    !tmp_21
+    !tmp_22
+    !tmp_23
+    !tmp_20
+    tmp_25 = 4
+    tmp_26 = ptr_add tmp_19, tmp_25
+    tmp_27 = load tmp_26+0 as i32
+    tmp_28 = add tmp_24, tmp_27
+    !tmp_25
+    !tmp_26
+    !tmp_27
+    !tmp_24
+    tmp_29 = 8
+    tmp_30 = ptr_add tmp_19, tmp_29
+    tmp_31 = load tmp_30+0 as i32
+    tmp_32 = add tmp_28, tmp_31
+    !tmp_29
+    !tmp_30
+    !tmp_31
+    !tmp_28
+    !tmp_19
+    sum = tmp_32
+    tmp_33 = 6
+    tmp_34 = ne sum, tmp_33
+    !tmp_33
+    br tmp_34 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_34
+    panic(29)
+
+L_ELSE_2:
+    !tmp_34
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !sum
+    return
+

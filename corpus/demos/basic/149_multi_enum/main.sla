@@ -1,0 +1,37 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 842_top_multi_enum：多枚举显式判别值（3）。
+// SLA 枚举支持显式判别值（`A = 1`，探针已验证）；`match` 须以变量
+// 作 scrutinee（直接 `match E::A` 不可解析），此处以函数参数过渡。
+
+enum E { A = 1, B = 2 }
+enum F { C = 2, D = 5 }
+
+fn ve(e: E) -> i32 {
+    let r = match e {
+        E::A => { 1 },
+        E::B => { 2 },
+    };
+    return r;
+}
+
+fn vf(f: F) -> i32 {
+    let r = match f {
+        F::C => { 2 },
+        F::D => { 5 },
+    };
+    return r;
+}
+
+fn main() -> i32 {
+    println("{}", ve(E::A) + vf(F::C));
+    return 0;
+}
+
+@test "basic 149 multi enum"() {
+    if ve(E::A) != 1 { panic(14901); };
+    if ve(E::B) != 2 { panic(14902); };
+    if vf(F::D) != 5 { panic(14903); };
+    if ve(E::A) + vf(F::C) != 3 { panic(14904); };
+}

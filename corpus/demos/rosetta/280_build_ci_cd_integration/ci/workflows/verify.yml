@@ -1,0 +1,3 @@
+name: verify
+on:
+  pull_request: {}

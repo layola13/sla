@@ -1,0 +1,14 @@
+@import "consumer/../host/panic_handler.sa"
+
+@panic_consumer_value() -> i32:
+L_ENTRY:
+    value = call @panic_hook(256)
+    ok = eq value, 256
+    !value
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 256
+
+L_ERR:
+    return 0

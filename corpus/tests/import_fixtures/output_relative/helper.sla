@@ -1,0 +1,3 @@
+fn output_relative_helper() -> i32 {
+    return 41;
+}

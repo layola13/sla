@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1075_generic_erased：泛型调用类型推断（7）。
+// 104 覆盖显式具化（`id<int>(5)`），此处为省略具化的推断调用
+//（探针已验证双后端；字符串实例仍暂略，见 104）。
+
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+fn main() -> i32 {
+    println("{}", id(7));
+    return 0;
+}
+
+@test "basic 190 generic infer"() {
+    if id(7) != 7 { panic(19001); };
+    if id(true) != true { panic(19002); };
+}

@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_semver_major_breaks() -> i32 {
+    let removed_required_field = 1;
+    return removed_required_field;
+}
+
+fn main() -> i32 {
+    let result = contract_semver_major_breaks();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 247 contract semver major break"() {
+    let got = contract_semver_major_breaks();
+    if got != 1 { panic(247); };
+}

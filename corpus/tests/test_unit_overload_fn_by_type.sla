@@ -1,0 +1,19 @@
+@import "sa_std/string.sa"
+
+// Function overloading (full scope, exact-after-inference): plain
+// user functions with the same name dispatch on the concrete argument
+// type after inference. On the baseline checker this file fails with
+// `Redeclaration: function `pick` is already defined`.
+
+fn pick(x: i32) -> i32 { return 1; }
+fn pick(x: f64) -> i32 { return 2; }
+fn pick(s: String) -> i32 { return 3; }
+
+@test "overload fn by type"() {
+    let a: i32 = 41;
+    let b: f64 = 2.5;
+    if pick(a) != 1 { panic(101); };
+    if pick(b) != 2 { panic(102); };
+    let s: String = format("abc");
+    if pick(s) != 3 { panic(103); };
+};

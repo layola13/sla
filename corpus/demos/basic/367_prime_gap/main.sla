@@ -1,0 +1,42 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 素数最大间隙（<=30 最大间隙 6，即 23→29）。
+// 意对标 358 求和版的间隙版（357 计数版互补）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn prime_gap_max(limit: int) -> int {
+    let g = 0;
+    let prev = 2;
+    let k = 3;
+    while k <= limit {
+        if is_prime(k) == 1 {
+            let d = k - prev;
+            if d > g { g = d; };
+            prev = k;
+        };
+        k = k + 1;
+    }
+    return g;
+}
+
+fn main() -> i32 {
+    println("{},{}", prime_gap_max(30), prime_gap_max(10));
+    return 0;
+}
+
+@test "basic 367 prime gap"() {
+    if prime_gap_max(30) != 6 { panic(36701); };
+    if prime_gap_max(10) != 2 { panic(36702); };
+}

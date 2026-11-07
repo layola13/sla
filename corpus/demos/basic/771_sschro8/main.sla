@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 小 Schröder 高位二 s(8)=20793（s(7)=4279 对 4279；短递推一步 `[45·4279-5418]/9`）。
+// 意对标 768_sschro_high（n=7 版互补；772 做高位二对峙）。
+
+fn ssho(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        t[ii] = ((6 * ii - 3) * t[ii - 1] - (ii - 2) * t[ii - 2]) / (ii + 1);
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn main() -> i32 {
+    println("{},{}", ssho(7), ssho(8));
+    return 0;
+}
+
+@test "basic 771 sschro8"() {
+    if ssho(8) != 20793 { panic(77101); };
+    if ssho(7) != 4279 { panic(77102); };
+    if ssho(6) != 903 { panic(77103); };
+}

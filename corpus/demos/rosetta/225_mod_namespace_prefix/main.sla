@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn mod_namespace_prefix_segments() -> i32 { let namespace = 1; let symbol = 1; return namespace + symbol; }
+fn main() -> i32 { let namespace = 1; let symbol = 1; let result = namespace + symbol; println("{}", result); return result; }
+@test "rosetta 225 mod namespace prefix"() { let got = mod_namespace_prefix_segments(); if got != 2 { panic(225); }; }

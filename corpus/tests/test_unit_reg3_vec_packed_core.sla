@@ -1,0 +1,22 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/vec_packed.sla"
+
+// MINIM V3 (control): sa_vec_export_packed_core -- pure pointer
+// function, no Vec-by-value parameter.
+@test "minim vec export packed core"() {
+    let src: [u8; 16] = [0u8; 16];
+    src[0] = 170;
+    src[1] = 187;
+    src[8] = 204;
+    src[9] = 221;
+    let sp: ptr = PTR_BYTE_ADD(&src, 0);
+    let dst: [u8; 4] = [0u8; 4];
+    let dp: ptr = PTR_BYTE_ADD(&dst, 0);
+    let (st, n) = sa_vec_export_packed_core(sp, 2, 8, 2, dp, 4);
+    if st != 0 { panic(141); };
+    if n != 4 { panic(142); };
+    if dst[0] != 170 { panic(143); };
+    if dst[3] != 221 { panic(144); };
+}

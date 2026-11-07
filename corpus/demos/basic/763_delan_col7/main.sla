@@ -1,0 +1,48 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Delannoy 第 7 列纵深 D(4,7)=2241，D(5,7)=7183，D(6,7)=19825（列视角复算）。
+// 意对标 756_delan7（行视角互补；同值列复算）。
+
+fn delan(m: int, n: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= m * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= m {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let b = 0;
+    while b <= n {
+        t[b] = 1;
+        b = b + 1;
+    }
+    let mm = 1;
+    while mm <= m {
+        let nn = 1;
+        while nn <= n {
+            t[mm * w + nn] = t[(mm - 1) * w + nn] + t[(mm - 1) * w + nn - 1] + t[mm * w + nn - 1];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[m * w + n];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", delan(4, 7), delan(5, 7), delan(6, 7));
+    return 0;
+}
+
+@test "basic 763 delan col7"() {
+    if delan(4, 7) != 2241 { panic(76301); };
+    if delan(5, 7) != 7183 { panic(76302); };
+    if delan(6, 7) != 19825 { panic(76303); };
+    if delan(3, 7) != 575 { panic(76304); };
+}

@@ -1,0 +1,117 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/slice.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_sum = vtable { call = @sla__sum }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__sum(values: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load values+Slice_ptr as ptr
+    tmp_1 = load values+Slice_len as u64
+    tmp_2 = stack_alloc 4
+    store tmp_2+0, 0 as i32
+    tmp_3 = stack_alloc 8
+    store tmp_3+0, 0 as u64
+    jmp L_SLICE_SUM_HEAD_0
+
+L_SLICE_SUM_HEAD_0:
+    tmp_4 = load tmp_3+0 as u64
+    tmp_5 = eq tmp_4, tmp_1
+    br tmp_5 -> L_SLICE_SUM_DONE_2, L_SLICE_SUM_BODY_1
+
+L_SLICE_SUM_BODY_1:
+    !tmp_5
+    tmp_6 = mul tmp_4, 4
+    tmp_7 = ptr_add tmp_0, tmp_6
+    tmp_8 = load tmp_7+0 as i32
+    tmp_9 = load tmp_2+0 as i32
+    tmp_10 = add tmp_9, tmp_8
+    store tmp_2+0, tmp_10 as i32
+    tmp_11 = add tmp_4, 1
+    store tmp_3+0, tmp_11 as u64
+    !tmp_6
+    !tmp_7
+    !tmp_8
+    !tmp_9
+    !tmp_10
+    !tmp_11
+    !tmp_4
+    jmp L_SLICE_SUM_HEAD_0
+
+L_SLICE_SUM_DONE_2:
+    !tmp_5
+    !tmp_4
+    tmp_12 = load tmp_2+0 as i32
+    !tmp_0
+    !tmp_1
+    return tmp_12
+
+@main() -> i32:
+L_ENTRY:
+    values = alloc 16
+    tmp_13 = 1
+    store values+0, tmp_13 as i32
+    tmp_14 = 2
+    store values+4, tmp_14 as i32
+    tmp_15 = 3
+    store values+8, tmp_15 as i32
+    tmp_16 = 4
+    store values+12, tmp_16 as i32
+    tmp_17 = 4
+    tmp_18 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_18, values, tmp_17
+    !tmp_17
+    tmp_19 = call @sla__sum(tmp_18)
+    tmp_20 = call @sa_fmt_u64(tmp_19, 10)
+    tmp_21 = call @sa_fmt_buffer_data(tmp_20)
+    tmp_22 = call @sa_fmt_buffer_len(tmp_20)
+    tmp_23 = tmp_21
+    call @sa_print_bytes(&tmp_23, tmp_22)
+    call @sa_fmt_buffer_free(^tmp_20)
+    !tmp_23
+    !tmp_22
+    !tmp_19
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_24 = 0
+    !values
+    return tmp_24
+
+@test "rosetta 044 slice iteration"():
+L_TEST_ENTRY_3:
+    values = alloc 16
+    tmp_25 = 1
+    store values+0, tmp_25 as i32
+    tmp_26 = 2
+    store values+4, tmp_26 as i32
+    tmp_27 = 3
+    store values+8, tmp_27 as i32
+    tmp_28 = 4
+    store values+12, tmp_28 as i32
+    tmp_29 = 4
+    tmp_30 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_30, values, tmp_29
+    !tmp_29
+    tmp_31 = call @sla__sum(tmp_30)
+    total = tmp_31
+    tmp_32 = 10
+    tmp_33 = ne total, tmp_32
+    !tmp_32
+    br tmp_33 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_33
+    panic(44)
+
+L_ELSE_5:
+    !tmp_33
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !values
+    !total
+    return
+

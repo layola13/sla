@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 272_destructure_defaults：双字段读取（3）+ 数组对读取（3）。
+// SLA 尚无解构语法（`const {a} = p` 不可解析），用显式字段/索引表达
+//（与 86_destructure 的数组口径一致，此处主覆盖结构体侧）。
+
+struct P { a: i32, b: i32 }
+
+fn main() -> i32 {
+    let p = P { a: 1, b: 2 };
+    let x = p.a;
+    let y = p.b;
+    let q = [1, 2];
+    let m = q[0];
+    let n = q[1];
+    println("{},{}", x + y, m + n);
+    return 0;
+}
+
+@test "basic 114 struct pair"() {
+    let p = P { a: 1, b: 2 };
+    if p.a + p.b != 3 { panic(11401); };
+    let q = [1, 2];
+    if q[0] + q[1] != 3 { panic(11402); };
+}

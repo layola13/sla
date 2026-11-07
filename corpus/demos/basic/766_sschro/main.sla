@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 小 Schröder 数短递推 s(n)=((6n-3)s(n-1)-(n-2)s(n-2))/(n+1)（精确整除）。
+// s(2)=3，s(3)=11，s(4)=45（769 做短递推/半大数对峙）。
+// 意对标 606_schroder（大数姐妹；S(n)=2s(n)，773 做桥接）。
+
+fn ssho(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        t[ii] = ((6 * ii - 3) * t[ii - 1] - (ii - 2) * t[ii - 2]) / (ii + 1);
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", ssho(2), ssho(3), ssho(4));
+    return 0;
+}
+
+@test "basic 766 sschro"() {
+    if ssho(2) != 3 { panic(76601); };
+    if ssho(3) != 11 { panic(76602); };
+    if ssho(4) != 45 { panic(76603); };
+    if ssho(1) != 1 { panic(76604); };
+}

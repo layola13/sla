@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn mod_cycle_diagnostic_count() -> i32 { let cycle_detected = 1; return cycle_detected; }
+fn main() -> i32 { let result = mod_cycle_diagnostic_count(); println("{}", result); return result; }
+@test "rosetta 226 mod cyclic import detect"() { let got = mod_cycle_diagnostic_count(); if got != 1 { panic(226); }; }

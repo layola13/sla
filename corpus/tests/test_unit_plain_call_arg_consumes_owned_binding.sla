@@ -1,0 +1,39 @@
+@import "sa_std/vec.sa"
+
+struct PlainCallBag {
+    values: Vec<u64>,
+}
+
+struct PlainCallHolder {
+    bag: PlainCallBag,
+    marker: u64,
+}
+
+fn plain_call_bag_new() -> PlainCallBag {
+    let values: Vec<u64> = Vec::new();
+    values.push(11);
+    values.push(22);
+    return PlainCallBag { values: values };
+}
+
+fn plain_call_holder_new(marker: u64, bag: PlainCallBag) -> PlainCallHolder {
+    return PlainCallHolder { bag: bag, marker: marker };
+}
+
+@test "plain by-value function call consumes owned identifier"() {
+    let bag = plain_call_bag_new();
+    let holder = plain_call_holder_new(7, bag);
+
+    if holder.marker != 7 {
+        panic(43101);
+    };
+    if len(holder.bag.values) != 2 {
+        panic(43102);
+    };
+    if holder.bag.values[0] != 11 {
+        panic(43103);
+    };
+    if holder.bag.values[1] != 22 {
+        panic(43104);
+    };
+}

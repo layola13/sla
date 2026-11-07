@@ -1,0 +1,119 @@
+// DEF-ZRANGE regression corpus: VEC_PUSH stores a heap-handle element's
+// HANDLE word itself (no clone), and a Vec index read hands out that
+// same handle for field projection. The codegen nevertheless emitted a
+// plain release for (1) a heap-handle element temp right after pushing
+// it and (2) the element handle at the end of a direct field projection
+// (rows[i].score / rows[i].member). While sci's native release was a
+// no-op this was latent; since sci 75007ee3 release really frees, the
+// push freed the element the new slot points at and the projection
+// freed the element the Vec still owns -- later reads take allocator
+// freelist words as field values and nested handles segfault
+// (slaredis ZRANGE, post-R8). Sibling of DEF-ACL, whose store sites
+// were fixed but which did not cover Vec push / Vec element projection.
+// Every field is checked, word 0 included, after unrelated allocations
+// so freed cells are actually reused.
+
+struct ZrTagVal {
+    tag: u64,
+    val: u64,
+}
+
+struct ZrRow {
+    member: Vec<u8>,
+    score: f64,
+}
+
+fn zr_mk_member(b0: u8, b1: u8) -> Vec<u8> {
+    let m: Vec<u8> = Vec::new();
+    m.push(b0);
+    m.push(b1);
+    return m;
+}
+
+fn zr_mk_rows2() -> Vec<ZrRow> {
+    let rows: Vec<ZrRow> = Vec::new();
+    rows.push(ZrRow { member: zr_mk_member(111, 110), score: 1.0 });
+    rows.push(ZrRow { member: zr_mk_member(116, 119), score: 2.5 });
+    return rows;
+}
+
+fn zr_read_scores(rows: &Vec<ZrRow>) -> f64 {
+    let total: f64 = 0.0;
+    let i: u64 = 0;
+    while i < len(rows) {
+        total = total + rows[i].score;
+        i = i + 1;
+    }
+    return total;
+}
+
+@test "def-zrange push pod struct literal then index field reads"() {
+    let v: Vec<ZrTagVal> = Vec::new();
+    v.push(ZrTagVal { tag: 1, val: 10 });
+    v.push(ZrTagVal { tag: 2, val: 20 });
+    if v[0].tag != 1 { panic(42011); };
+    if v[0].val != 10 { panic(42012); };
+    if v[1].tag != 2 { panic(42013); };
+    if v[1].val != 20 { panic(42014); };
+}
+
+@test "def-zrange push literal survives unrelated allocations"() {
+    let v: Vec<ZrTagVal> = Vec::new();
+    v.push(ZrTagVal { tag: 1, val: 10 });
+    let junk: Vec<u64> = Vec::new();
+    let i: u64 = 0;
+    while i < 64 {
+        junk.push(i * 3 + 1);
+        i = i + 1;
+    }
+    if len(junk) != 64 { panic(42021); };
+    if v[0].tag != 1 { panic(42022); };
+    if v[0].val != 10 { panic(42023); };
+}
+
+@test "def-zrange rows with owned vec member keep every field"() {
+    let rows: Vec<ZrRow> = Vec::new();
+    rows.push(ZrRow { member: zr_mk_member(97, 98), score: 0.5 });
+    rows.push(ZrRow { member: zr_mk_member(99, 100), score: 1.5 });
+    if rows[0].score != 0.5 { panic(42031); };
+    if rows[1].score != 1.5 { panic(42032); };
+    if rows[0].member[0] != 97 { panic(42033); };
+    if rows[0].member[1] != 98 { panic(42034); };
+    if rows[1].member[0] != 99 { panic(42035); };
+    if rows[1].member[1] != 100 { panic(42036); };
+    if len(rows[1].member) != 2 { panic(42037); };
+}
+
+@test "def-zrange vec returned whole reads back through index"() {
+    let rows = zr_mk_rows2();
+    if len(rows) != 2 { panic(42041); };
+    if rows[0].score != 1.0 { panic(42042); };
+    if rows[1].score != 2.5 { panic(42043); };
+    if rows[0].member[0] != 111 { panic(42044); };
+    if rows[0].member[1] != 110 { panic(42045); };
+    if rows[1].member[0] != 116 { panic(42046); };
+    if rows[1].member[1] != 119 { panic(42047); };
+    let total = zr_read_scores(&rows);
+    if total != 3.5 { panic(42048); };
+}
+
+@test "def-zrange vec literal of structs keeps every field"() {
+    let v: Vec<ZrTagVal> = vec(ZrTagVal { tag: 5, val: 50 }, ZrTagVal { tag: 6, val: 60 });
+    if len(v) != 2 { panic(42051); };
+    if v[0].tag != 5 { panic(42052); };
+    if v[0].val != 50 { panic(42053); };
+    if v[1].tag != 6 { panic(42054); };
+    if v[1].val != 60 { panic(42055); };
+}
+
+@test "def-zrange push named locals still readable"() {
+    let a = ZrTagVal { tag: 1, val: 10 };
+    let b = ZrTagVal { tag: 2, val: 20 };
+    let v: Vec<ZrTagVal> = Vec::new();
+    v.push(a);
+    v.push(b);
+    if v[0].tag != 1 { panic(42061); };
+    if v[0].val != 10 { panic(42062); };
+    if v[1].tag != 2 { panic(42063); };
+    if v[1].val != 20 { panic(42064); };
+}

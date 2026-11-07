@@ -1,0 +1,102 @@
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/sync/atomic.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/core/result.sa"
+
+// DEF-ARC-DROP (F1) R4: the DEF-ARC heap-churn sensitization probe,
+// converted to assertions. Every churn round creates and drops Box
+// and Arc handles of the same size classes the layers then read
+// through: with drop elaboration active, an early free or a count
+// imbalance poisons the values read here (the probe's original
+// purpose), while a missing drop leaks silently — the count tests
+// in test_unit_arc_drop_counts.sla cover that side. C4's expected
+// value is 4,4 (fetch_add lands before both loads), correcting the
+// original probe header's 3,4.
+
+fn churn(rounds: i32) -> i32 {
+    var i: i32;
+    i = 0;
+    var acc: i32;
+    acc = 0;
+    while i < rounds {
+        let b = Box::new(7328197);
+        acc = acc + *b;
+        let a = Arc::new(AtomicI32::new(147869));
+        let _o = (*a).fetch_add(1, Ordering::SeqCst);
+        let c = a.clone();
+        acc = acc + (*c).load(Ordering::SeqCst);
+        i = i + 1;
+    }
+    return acc;
+}
+
+@test "churn c1 poisoned heap then arc atomic"() {
+    let _sink = churn(64);
+    let a = Arc::new(AtomicI32::new(0));
+    let v0 = (*a).load(Ordering::SeqCst);
+    let _o = (*a).fetch_add(1, Ordering::SeqCst);
+    let v1 = (*a).load(Ordering::SeqCst);
+    if v0 != 0 { panic(7601); };
+    if v1 != 1 { panic(7602); };
+}
+
+fn consume_arc(a: Arc<AtomicI32>) -> i32 {
+    return (*a).load(Ordering::SeqCst);
+}
+
+@test "churn c2 clone survives callee and churn"() {
+    let a = Arc::new(AtomicI32::new(5));
+    let keep = a.clone();
+    let _seen = consume_arc(a);
+    let _sink = churn(64);
+    let v0 = (*keep).load(Ordering::SeqCst);
+    let _o = (*keep).fetch_add(1, Ordering::SeqCst);
+    let v1 = (*keep).load(Ordering::SeqCst);
+    if v0 != 5 { panic(7611); };
+    if v1 != 6 { panic(7612); };
+}
+
+fn make_clone() -> Arc<AtomicI32> {
+    let a = Arc::new(AtomicI32::new(9));
+    return a.clone();
+}
+
+@test "churn c3 returned clone survives churn"() {
+    let b = make_clone();
+    let _sink = churn(64);
+    let v = (*b).load(Ordering::SeqCst);
+    if v != 9 { panic(7621); };
+}
+
+@test "churn c4 churn between clone and reads"() {
+    let a = Arc::new(AtomicI32::new(3));
+    let b = a.clone();
+    let _sink = churn(64);
+    let _o = (*b).fetch_add(1, Ordering::SeqCst);
+    let v0 = (*a).load(Ordering::SeqCst);
+    let v1 = (*b).load(Ordering::SeqCst);
+    if v0 != 4 { panic(7631); };
+    if v1 != 4 { panic(7632); };
+}
+
+fn worker(barrier: Arc<AtomicI32>) -> i32 {
+    let _old = (*barrier).fetch_add(1, Ordering::SeqCst);
+    while (*barrier).load(Ordering::SeqCst) < 3 {
+    }
+    return 1;
+}
+
+@test "churn c5 barrier after churn"() {
+    let _sink = churn(64);
+    let barrier = Arc::new(AtomicI32::new(0));
+    let left = barrier.clone();
+    let middle = barrier.clone();
+    let right = barrier.clone();
+    let a = thread::spawn(^|| worker(left));
+    let b = thread::spawn(^|| worker(middle));
+    let c = thread::spawn(^|| worker(right));
+    let total = a.join().unwrap() + b.join().unwrap() + c.join().unwrap();
+    if total != 3 { panic(7641); };
+    if barrier.strong_count() != 1 { panic(7642); };
+}

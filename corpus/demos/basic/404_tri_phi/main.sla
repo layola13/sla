@@ -1,0 +1,67 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// phi 三向对峙（循环 vs 积式 vs 逆序累加：φ(12)=4）。
+// 意对标 395 互素和三向的 phi 版（399 互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn phi_loop(n: int) -> int {
+    if n <= 1 { return 1; };
+    let c = 0;
+    let k = 1;
+    while k < n {
+        if gcd(k, n) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn phi_prod(n: int) -> int {
+    if n <= 1 { return 1; };
+    let r = n;
+    let m = n;
+    let d = 2;
+    while d * d <= m {
+        if m % d == 0 {
+            r = r / d * (d - 1);
+            while m % d == 0 { m = m / d; }
+        };
+        d = d + 1;
+    }
+    if m > 1 { r = r / m * (m - 1); };
+    return r;
+}
+
+fn phi_acc(n: int) -> int {
+    if n <= 1 { return 1; };
+    let c = 0;
+    let k = n - 1;
+    while k >= 1 {
+        if gcd(k, n) == 1 { c = c + 1; };
+        k = k - 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", phi_loop(12), phi_prod(12), phi_acc(12));
+    return 0;
+}
+
+@test "basic 404 tri phi"() {
+    if phi_loop(12) != 4 { panic(40401); };
+    if phi_prod(12) != 4 { panic(40402); };
+    if phi_acc(12) != 4 { panic(40403); };
+    if phi_prod(10) != 4 { panic(40404); };
+    if phi_loop(12) != phi_acc(12) { panic(40405); };
+}

@@ -1,0 +1,64 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Motzkin 高位二对峙：迭代建表 vs 二项直和（n=6：51 对 51；n=7：127 对 127）。
+// 直和 M(n)=sum C(n,2k)Catalan(k)（n=7：1,21,70,35 精确求和）。
+// 意对标 631_motz7 × 633_motz_closed（高位源与直和源合流；递归止 n=6，632 起用直和）。
+
+fn moz(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k <= ii - 2 {
+            s = s + t[k] * t[ii - 2 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn cmot(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while 2 * k <= n {
+        s = s + binom_mul(n, 2 * k) * binom_mul(2 * k, k) / (k + 1);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", moz(6), cmot(6), moz(7), cmot(7));
+    return 0;
+}
+
+@test "basic 632 duel motz7"() {
+    if moz(6) != 51 { panic(63201); };
+    if cmot(6) != 51 { panic(63202); };
+    if moz(7) != 127 { panic(63203); };
+    if cmot(7) != 127 { panic(63204); };
+}

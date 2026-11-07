@@ -1,0 +1,3 @@
+#def LspState_SIZE = 8
+#def LspState_req = +0
+#def LspState_seq = +4

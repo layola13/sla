@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Vec 扫描最小（250 的镜像版：1）。
+// 与 250 同构，取反比较子（与 60 之于 16 同例）。
+
+fn main() -> i32 {
+    let w: Vec<i32> = Vec::new();
+    w.push(5);
+    w.push(1);
+    w.push(9);
+    w.push(3);
+    let m = w[0];
+    for i in 1..len(w) {
+        if w[i] < m { m = w[i]; };
+    }
+    println("{}", m);
+    return 0;
+}
+
+@test "basic 251 vec min"() {
+    let w: Vec<i32> = Vec::new();
+    w.push(5);
+    w.push(1);
+    w.push(9);
+    w.push(3);
+    let m = w[0];
+    for i in 1..len(w) {
+        if w[i] < m { m = w[i]; };
+    }
+    if m != 1 { panic(25101); };
+}

@@ -1,0 +1,46 @@
+@import "sa_std/ptr.sa"
+
+struct FixedArrayLayoutProbe {
+    server: ptr,
+    open: bool,
+    count: i64,
+    slots: [ptr; 4],
+    active: [bool; 4],
+    times: [i64; 4],
+    ready: bool,
+}
+
+fn fixed_array_layout_probe_empty() -> FixedArrayLayoutProbe {
+    return FixedArrayLayoutProbe {
+        server: PTR_NULL(),
+        open: false,
+        count: 7,
+        slots: ["", "", "", ""],
+        active: [false; 4],
+        times: [0i64; 4],
+        ready: true,
+    };
+}
+
+fn fixed_array_layout_probe_active(probe: &FixedArrayLayoutProbe) -> i64 {
+    let total: i64 = 0;
+    let index = 0;
+    while index < 4 {
+        if probe.active[index] {
+            total = total + 1;
+        };
+        index = index + 1;
+    }
+    return total;
+}
+
+@test "fixed array struct fields preserve following layout"() {
+    let probe = fixed_array_layout_probe_empty();
+    if probe.count != 7 { panic(52911); };
+    if probe.ready == false { panic(52912); };
+    if fixed_array_layout_probe_active(&probe) != 0 { panic(52913); };
+    probe.active[0] = true;
+    probe.times[3] = 99;
+    if fixed_array_layout_probe_active(&probe) != 1 { panic(52914); };
+    if probe.times[3] != 99 { panic(52915); };
+}

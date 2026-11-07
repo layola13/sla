@@ -1,0 +1,73 @@
+struct ScalarCleanupWorld {
+    values: Vec<i32>,
+}
+
+struct ScalarCleanupParam {
+    world: ScalarCleanupWorld,
+    allow: i32,
+}
+
+impl ScalarCleanupWorld {
+    fn iter_len(&self) -> i64 {
+        return len(self.values) as i64;
+    }
+}
+
+fn scalar_cleanup_world_with_one() -> ScalarCleanupWorld {
+    let world = ScalarCleanupWorld { values: Vec::new() };
+    world.values.push(17);
+    return world;
+}
+
+fn scalar_cleanup_query(world: ScalarCleanupWorld, allow_component_id: i32) -> ScalarCleanupParam {
+    return ScalarCleanupParam { world: world, allow: allow_component_id };
+}
+
+fn scalar_cleanup_run_identity(param: ScalarCleanupParam) -> ScalarCleanupParam {
+    return param;
+}
+
+fn scalar_cleanup_wrapper(
+    world: ScalarCleanupWorld,
+    allow_component_id: i32,
+    run: fn(ScalarCleanupParam) -> ScalarCleanupParam,
+) -> ScalarCleanupWorld {
+    let param0 = scalar_cleanup_query(world, allow_component_id);
+    let param1 = run(param0);
+    return param1.world;
+}
+
+fn scalar_cleanup_component_id_for_type(allow_type_id: i32) -> i32 {
+    return allow_type_id;
+}
+
+fn scalar_cleanup_wrapper_auto(
+    world: ScalarCleanupWorld,
+    allow_type_id: i32,
+    run: fn(ScalarCleanupParam) -> ScalarCleanupParam,
+) -> ScalarCleanupWorld {
+    let allow_component_id = scalar_cleanup_component_id_for_type(allow_type_id);
+    return scalar_cleanup_wrapper(world, allow_component_id, run);
+}
+
+fn scalar_cleanup_ignore_param(allow_component_id: i32) -> i32 {
+    return 5;
+}
+
+@test "scalar wrapper consumes pass through parameter"() {
+    let world = ScalarCleanupWorld { values: Vec::new() };
+    world.values.push(41);
+
+    let out = scalar_cleanup_wrapper(world, 7, scalar_cleanup_run_identity);
+    if len(out.values) != 1 { panic(51201); };
+    if out.values[0] != 41 { panic(51202); };
+    if scalar_cleanup_ignore_param(99) != 5 { panic(51203); };
+
+    let world2 = ScalarCleanupWorld { values: Vec::new() };
+    world2.values.push(42);
+    let out2 = scalar_cleanup_wrapper_auto(world2, 8, scalar_cleanup_run_identity);
+    if len(out2.values) != 1 { panic(51204); };
+    if out2.values[0] != 42 { panic(51205); };
+
+    if scalar_cleanup_world_with_one().iter_len() != 1 { panic(51206); };
+}

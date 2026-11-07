@@ -1,0 +1,6 @@
+# Future metadata only. Not compiler input.
+[package]
+name = "demo-220"
+version = "0.1.0"
+library = "lib"
+host = "host"

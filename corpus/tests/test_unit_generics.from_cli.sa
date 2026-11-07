@@ -1,0 +1,86 @@
+@some_int(v: i64) -> ptr:
+L_ENTRY:
+    opt = alloc 16
+    tmp_0 = 1
+    store opt+0, tmp_0 as u8
+    store opt+8, v as i64
+    !v
+    return opt
+
+@none_int() -> ptr:
+L_ENTRY:
+    opt = alloc 16
+    tmp_1 = 0
+    store opt+0, tmp_1 as u8
+    tmp_2 = 0
+    store opt+8, tmp_2 as i64
+    return opt
+
+@unwrap_or(opt: ptr, fallback: i64) -> i64:
+L_ENTRY:
+    tmp_3 = load opt+0 as u8
+    br tmp_3 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_3
+    tmp_4 = load opt+8 as i64
+    v = tmp_4
+    !opt
+    !fallback
+    return v
+
+L_ELSE_1:
+    !tmp_3
+    !opt
+    return fallback
+
+
+@test "some returns value"():
+L_TEST_ENTRY_3:
+    tmp_6 = 42
+    tmp_7 = call @some_int(tmp_6)
+    opt = tmp_7
+    tmp_8 = 0
+    tmp_9 = call @unwrap_or(opt, tmp_8)
+    result = tmp_9
+    tmp_10 = 42
+    tmp_11 = ne result, tmp_10
+    br tmp_11 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_11
+    panic(1)
+
+L_ELSE_5:
+    !tmp_11
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !opt
+    !result
+    return
+
+@test "none returns fallback"():
+L_TEST_ENTRY_7:
+    tmp_14 = call @none_int()
+    opt = tmp_14
+    tmp_15 = 99
+    tmp_16 = call @unwrap_or(opt, tmp_15)
+    result = tmp_16
+    tmp_17 = 99
+    tmp_18 = ne result, tmp_17
+    br tmp_18 -> L_THEN_8, L_ELSE_9
+
+L_THEN_8:
+    !tmp_18
+    panic(1)
+
+L_ELSE_9:
+    !tmp_18
+    jmp L_MERGE_10
+
+L_MERGE_10:
+    !opt
+    !result
+    return
+

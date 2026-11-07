@@ -1,0 +1,29 @@
+// REG2-D3 regression: passing a nested @derive(copy) struct by value
+// materializes a copy whose nested-field allocation is a separate
+// register; it must be settled where it is stored into the copy (and a
+// nested struct literal's source record must be settled after it is
+// copied into the outer literal). Before the fix both backends left
+// the nested allocation Active at @test exit (error[MemoryLeak]).
+
+@derive(copy)
+struct D3Inner {
+    x: u64,
+    y: u64,
+    z: u64,
+}
+
+@derive(copy)
+struct D3Outer {
+    inner: D3Inner,
+    n: u32,
+}
+
+fn d3_use_outer(o: D3Outer) -> u64 {
+    return o.inner.x + o.inner.y + o.inner.z;
+}
+
+@test "reg2d3 nested copy struct by value arg"() {
+    let o = D3Outer { inner: D3Inner { x: 1u64, y: 2u64, z: 3u64 }, n: 9u32 };
+    if d3_use_outer(o) != 6 { panic(11); };
+    if o.n != 9 { panic(12); };
+}

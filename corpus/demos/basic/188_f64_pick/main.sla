@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 475_f64_mixed_ternary：f64 三元钳零（2.5,true）。
+// 与 185 的整数嵌套三元互补：此处为 f64 条件 + f64 分支
+//（探针已验证三线；混合传参用 f64 字面量，见 README）。
+
+fn pick(c: f64) -> f64 {
+    return c >= 0.0 ? c : 0.0;
+}
+
+fn main() -> i32 {
+    println("{},{}", pick(2.5) == 2.5, pick(-1.0) == 0.0);
+    return 0;
+}
+
+@test "basic 188 f64 pick"() {
+    if pick(2.5) != 2.5 { panic(18801); };
+    if pick(-1.0) != 0.0 { panic(18802); };
+    if pick(0.0) != 0.0 { panic(18803); };
+}

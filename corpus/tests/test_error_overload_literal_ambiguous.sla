@@ -1,0 +1,14 @@
+// expect: AmbiguousCall
+// Negative: an untyped integer literal adapts to ANY integer member,
+// so with both an i32 and an i64 member it matches two overloads and
+// the call is rejected as ambiguous, listing both candidates. There is
+// no conversion ranking to break the tie; the call site must annotate.
+// Judge with a standalone `sla check` (exit 1, AmbiguousCall naming
+// pick(i32) and pick(i64)); never via the test runner.
+
+fn pick(x: i32) -> i32 { return 1; }
+fn pick(x: i64) -> i32 { return 2; }
+
+fn main() -> i32 {
+    return pick(7);
+}

@@ -1,0 +1,14 @@
+struct VarPoint {
+    x: i32,
+    y: i32,
+}
+
+fn bad_var_aggregate_phase1() -> i32 {
+    var point: VarPoint;
+    point = VarPoint { x: 1, y: 2 };
+    return point.x;
+}
+
+fn main() -> i32 {
+    return bad_var_aggregate_phase1();
+}

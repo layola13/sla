@@ -1,0 +1,78 @@
+@import "sa_std/string.sa"
+@import "sa_std/fs.sa"
+@import "sa_std/env.sai"
+@import "import_fixtures/pkgjson/fs_helpers.sa"
+@import "import_fixtures/pkgjson/ptr_helpers.sa"
+
+// SCATTER-3 (7c) regression: `let out = SLA_BUF_ALLOC(n)` binds a
+// fresh owning allocation temp. The text backend materialised the
+// binding as `out = add tmp, 0` and then RELEASED the temp — a real
+// free of the malloc base since the native release became physical —
+// so the buffer was dead on arrival: the next same-size allocation
+// (the clone) reused the chunk and the copy overwrote the source
+// path, after which fs_exists on the original path failed
+// (tsconfig_buffer_cleanup). The temp of a transferred raw_ptr call
+// value must be forgotten (move-consumed), never released.
+
+struct Scatter3Path {
+    ptr: ptr,
+    len: int,
+}
+
+fn scatter3_buf_append(dst: ptr, off: int, src: ptr, n: int) -> int {
+    let i = 0;
+    while i < n {
+        SLA_BYTE_PUT(dst, off + i, SLA_BYTE_AT(src, i));
+        i = i + 1;
+    }
+    return off + n;
+}
+
+fn scatter3_env_dir_len(h: u64) -> u64 {
+    return sa_env_buffer_len(h);
+}
+
+fn scatter3_env_dir_copy(h: u64, out: ptr, n: int) -> int {
+    let d = sa_env_buffer_data(h);
+    let draw = SLA_PTR_ADD(d, 0);
+    let w = scatter3_buf_append(out, 0, draw, n);
+    !draw;
+    !d;
+    return w;
+}
+
+fn scatter3_join_fixture(name: ptr, name_len: int) -> Scatter3Path {
+    let h = sa_env_get(STR_PTR("SA_SLA_FIXTURE_DIR"), STR_LEN("SA_SLA_FIXTURE_DIR"));
+    if h == 0 {
+        panic(96201);
+    };
+    let dir_len = scatter3_env_dir_len(h);
+    let total = dir_len + name_len;
+    let out = SLA_BUF_ALLOC(total + 1);
+    let w = scatter3_env_dir_copy(h, out, dir_len);
+    w = scatter3_buf_append(out, w, name, name_len);
+    SLA_BYTE_PUT(out, total, 0);
+    !h;
+    return Scatter3Path { ptr: out, len: total };
+}
+
+fn scatter3_buf_clone(src: ptr, n: int) -> Scatter3Path {
+    let out = SLA_BUF_ALLOC(n);
+    let off = 0;
+    off = scatter3_buf_append(out, off, src, n);
+    return Scatter3Path { ptr: out, len: n };
+}
+
+@test "scatter3 alloc-bound path survives clone"() {
+    let p1 = scatter3_join_fixture(STR_PTR("tsconfig_cleanup.json"), STR_LEN("tsconfig_cleanup.json"));
+    if SLA_FS_EXISTS(p1.ptr, p1.len) != 1 { panic(96202); };
+    let c = scatter3_buf_clone(p1.ptr, p1.len + 1);
+    let s = Scatter3Path { ptr: c.ptr, len: p1.len };
+    if SLA_FS_EXISTS(p1.ptr, p1.len) != 1 { panic(96203); };
+    if SLA_FS_EXISTS(s.ptr, s.len) != 1 { panic(96204); };
+    let i = 0;
+    while i < p1.len {
+        if SLA_BYTE_AT(s.ptr, i) != SLA_BYTE_AT(p1.ptr, i) { panic(96205); };
+        i = i + 1;
+    }
+}

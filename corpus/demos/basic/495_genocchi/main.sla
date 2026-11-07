@@ -1,0 +1,84 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Genocchi 数（G(2)=-1，G(4)=1，G(6)=-3；经 Bernoulli）。
+// 意对标 491 Bernoulli 的组合版（491 互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    if x < 0 { x = 0 - x; };
+    if y < 0 { y = 0 - y; };
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn binom(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn bern_frac(m: int, want_den: int) -> int {
+    if m == 0 { return 1; };
+    let num = 0;
+    let den = 1;
+    let k = 0;
+    while k < m {
+        let bn = bern_frac(k, 0);
+        let bd = bern_frac(k, 1);
+        let tnum = binom(m + 1, k) * bn;
+        let tden = bd;
+        let s_num = num * tden + tnum * den;
+        let s_den = den * tden;
+        let g = gcd(s_num, s_den);
+        num = s_num / g;
+        den = s_den / g;
+        k = k + 1;
+    }
+    let fnum = 0 - num;
+    let fden = den * (m + 1);
+    let g = gcd(fnum, fden);
+    if want_den == 1 { return fden / g; };
+    return fnum / g;
+}
+
+fn pow2(e: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < e {
+        r = r * 2;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn genocchi(n: int) -> int {
+    let bn = bern_frac(n, 0);
+    let bd = bern_frac(n, 1);
+    let num = 2 * (1 - pow2(n)) * bn;
+    let den = bd;
+    let g = gcd(num, den);
+    return num / g;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", genocchi(2), genocchi(4), genocchi(6));
+    return 0;
+}
+
+@test "basic 495 genocchi"() {
+    if genocchi(2) != 0 - 1 { panic(49501); };
+    if genocchi(4) != 1 { panic(49502); };
+    if genocchi(6) != 0 - 3 { panic(49503); };
+}

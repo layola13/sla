@@ -1,0 +1,38 @@
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_catch_unwind_observable = vtable { call = @sla__catch_unwind_observable }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__catch_unwind_observable() -> i32:
+L_ENTRY:
+    tmp_0 = 0
+    caught_status = tmp_0
+    return caught_status
+
+@main() -> i32:
+L_ENTRY:
+    tmp_1 = call @sla__catch_unwind_observable()
+    return tmp_1
+
+@test "rosetta 173 173_catch_unwind_panic"():
+L_TEST_ENTRY_0:
+    tmp_2 = call @sla__catch_unwind_observable()
+    got = tmp_2
+    tmp_3 = 0
+    tmp_4 = ne got, tmp_3
+    !tmp_3
+    br tmp_4 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_4
+    panic(173)
+
+L_ELSE_2:
+    !tmp_4
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

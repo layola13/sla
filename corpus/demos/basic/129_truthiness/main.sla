@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 442_boolean_ctor：整数真值（1,5,3 原用例输出）。
+// SLA 条件须为严格布尔（`if (x)` 直接 TypeMismatch），真值语义用
+// 显式 `!= 0` 表达（与 14 的布尔口径一致）。
+
+fn truthy(x: i32) -> bool {
+    return x != 0;
+}
+
+fn main() -> i32 {
+    let r1 = 0;
+    if truthy(1) { r1 = 1; };
+    let r2 = 0;
+    if truthy(0) { r2 = 2; };
+    let r3 = 0;
+    if truthy(5) { r3 = 5; };
+    println("{},{},{}", r1, r2, r3);
+    return 0;
+}
+
+@test "basic 129 truthiness"() {
+    if truthy(1) != true { panic(12901); };
+    if truthy(0) != false { panic(12902); };
+    if truthy(5) != true { panic(12903); };
+    if truthy(0 - 3) != true { panic(12904); };
+}

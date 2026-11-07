@@ -1,0 +1,56 @@
+enum DirectSwitchMode {
+    Build,
+    Inspect,
+    Unknown,
+}
+
+fn direct_switch_number(value: u8) -> i32 {
+    let result: i32 = 0;
+    switch value {
+        1 => {
+            result = 10;
+        },
+        2 => {
+            return 20;
+        },
+        default => {},
+    };
+    return result;
+}
+
+fn direct_switch_enum(mode: DirectSwitchMode) -> i32 {
+    switch mode {
+        DirectSwitchMode::Build => {
+            return 1;
+        },
+        DirectSwitchMode::Inspect => {
+            return 2;
+        },
+        default => {},
+    };
+    return 0;
+}
+
+@test "direct sab lowers switch statement over number"() {
+    if direct_switch_number(1) != 10 {
+        panic(42001);
+    };
+    if direct_switch_number(2) != 20 {
+        panic(42002);
+    };
+    if direct_switch_number(3) != 0 {
+        panic(42003);
+    };
+}
+
+@test "direct sab lowers switch statement over enum"() {
+    if direct_switch_enum(DirectSwitchMode::Build) != 1 {
+        panic(42004);
+    };
+    if direct_switch_enum(DirectSwitchMode::Inspect) != 2 {
+        panic(42005);
+    };
+    if direct_switch_enum(DirectSwitchMode::Unknown) != 0 {
+        panic(42006);
+    };
+}

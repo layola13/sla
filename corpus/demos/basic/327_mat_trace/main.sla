@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 2x2 迹（对角和=5）。
+// 意对标 tsgosa 143_mat_add 的迹版（19 为加法/转置版）。
+
+fn trace2(a: int, d: int) -> int {
+    return a + d;
+}
+
+fn main() -> i32 {
+    println("{}", trace2(1, 4));
+    return 0;
+}
+
+@test "basic 327 mat trace"() {
+    if trace2(1, 4) != 5 { panic(32701); };
+    if trace2(0, 0) != 0 { panic(32702); };
+}

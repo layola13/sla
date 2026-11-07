@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 定长数组动态界（215 为 Vec 版：150）。
+// `0..len(a)` 定长上界（215 首覆动态界，此处为定长版）。
+
+fn main() -> i32 {
+    let a = [10, 20, 30, 40, 50];
+    let s = 0;
+    for i in 0..len(a) {
+        s = s + a[i];
+    }
+    println("{}", s);
+    return 0;
+}
+
+@test "basic 275 fixed dynrange"() {
+    let a = [10, 20, 30, 40, 50];
+    let s = 0;
+    for i in 0..len(a) {
+        s = s + a[i];
+    }
+    if s != 150 { panic(27501); };
+}

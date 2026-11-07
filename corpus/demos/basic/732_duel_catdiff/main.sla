@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Catalan 差式对峙：差式 vs 商式（n=5：42 对 42；n=6：132 对 132）。
+// 意对标 731_cat_diff × 727_cat_div8（差源与商源合流）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn catd(n: int) -> int {
+    return binom_mul(2 * n, n) / (n + 1);
+}
+
+fn catdf(n: int) -> int {
+    return binom_mul(2 * n, n) - binom_mul(2 * n, n + 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", catdf(5), catd(5), catdf(6), catd(6));
+    return 0;
+}
+
+@test "basic 732 duel catdiff"() {
+    if catdf(5) != 42 { panic(73201); };
+    if catd(5) != 42 { panic(73202); };
+    if catdf(6) != 132 { panic(73203); };
+    if catd(6) != 132 { panic(73204); };
+}

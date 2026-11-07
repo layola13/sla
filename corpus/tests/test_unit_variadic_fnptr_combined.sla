@@ -1,0 +1,73 @@
+// Extern variadic batch, fn-pointer face — combined-module corpus
+// (follow-up line for the C2 sab_carried_indirect_sig ruling).
+//
+// One module defines TWO variadic functions sharing the same fixed
+// prefix: va2 (i32, ...) -> i64 and va_mix2 (i32, ...) -> f64. Both
+// are called through C variadic fn-pointers, in both orders, plus a
+// mixed direct/indirect control.
+//
+// Baseline behaviour (pre-C2 staging trees 27b0477 / 0e52f7e5): the
+// host loses the indirect call's signature provenance — the vtable
+// slot inference requires shape-equal candidates and the fallback
+// scan has no reliable key — so the FP call is mistyped/misresolved
+// (SAB: wrong callee's values; text: trailing f64 argument mistyped
+// as ptr). Each definition alone in a module passes (see
+// test_unit_variadic_fnptr.sla and test_unit_variadic_fnptr_fp.sla).
+
+extern "C" fn va2(fixed: i32, args: ...) -> i64 {
+    let a = va_next_i32(args);
+    let b = va_next_i32(args);
+    return fixed as i64 + a as i64 + b as i64;
+}
+
+extern "C" fn va_mix2(fixed: i32, args: ...) -> f64 {
+    let a = va_next_i32(args);
+    let b = va_next_f64(args);
+    return fixed as f64 + a as f64 + b;
+}
+
+@test "combined variadic fn ptr gp target"() {
+    let f: extern "C" fn(i32, ...) -> i64 = va2;
+    let small: i16 = 20;
+    let r = unsafe { f(1, small, 22) };
+    if r != 43 {
+        panic(7311);
+    };
+}
+
+@test "combined variadic fn ptr fp target"() {
+    let g: extern "C" fn(i32, ...) -> f64 = va_mix2;
+    let frac: f32 = 0.5;
+    let r = unsafe { g(1, 2, frac) };
+    if r != 3.5 {
+        panic(7312);
+    };
+}
+
+@test "combined variadic direct gp and indirect fp"() {
+    let direct = unsafe { va2(1, 20, 22) };
+    if direct != 43 {
+        panic(7313);
+    };
+    let g: extern "C" fn(i32, ...) -> f64 = va_mix2;
+    let frac: f32 = 0.5;
+    let r = unsafe { g(1, 2, frac) };
+    if r != 3.5 {
+        panic(7314);
+    };
+}
+
+@test "combined variadic fn ptr both targets reverse order"() {
+    let g: extern "C" fn(i32, ...) -> f64 = va_mix2;
+    let frac: f32 = 0.5;
+    let rf = unsafe { g(1, 2, frac) };
+    if rf != 3.5 {
+        panic(7315);
+    };
+    let f: extern "C" fn(i32, ...) -> i64 = va2;
+    let small: i16 = 20;
+    let ri = unsafe { f(1, small, 22) };
+    if ri != 43 {
+        panic(7316);
+    };
+}

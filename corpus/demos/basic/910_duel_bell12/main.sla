@@ -1,0 +1,63 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Bell 高位四对峙：二项递推 vs Aitken 三角（n=11：678570 对 678570；n=12：4213597 对 4213597）。
+// 意对标 909_bell12 × 908_duel_bell11（高位源与对峙体例合流）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn bell(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let k = 0;
+    while k <= n - 1 {
+        s = s + binom_mul(n - 1, k) * bell(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn bt(n: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        t[mm * w] = t[(mm - 1) * w + mm - 1];
+        let nn = 1;
+        while nn <= mm {
+            t[mm * w + nn] = t[mm * w + nn - 1] + t[(mm - 1) * w + nn - 1];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w];
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", bell(11), bt(11), bell(12), bt(12));
+    return 0;
+}
+
+@test "basic 910 duel bell12"() {
+    if bell(11) != 678570 { panic(91001); };
+    if bt(11) != 678570 { panic(91002); };
+    if bell(12) != 4213597 { panic(91003); };
+    if bt(12) != 4213597 { panic(91004); };
+}

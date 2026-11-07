@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn destructured_sum() -> i32 {
+    let (x, y) = (2, 5);
+    let sum = x + y;
+    return sum;
+}
+
+fn main() -> i32 {
+    let result = destructured_sum();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 012 12_destructuring"() {
+    let got = destructured_sum();
+    if got != 7 {
+        panic(12);
+    };
+};

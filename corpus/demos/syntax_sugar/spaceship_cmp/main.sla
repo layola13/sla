@@ -1,0 +1,23 @@
+@import "sla_std/cmp.sla"
+
+@derive(ord)
+struct SortKey {
+    group: i64,
+    order: i64,
+}
+
+@test "spaceship returns std Ordering"() {
+    let earlier = SortKey { group: 1, order: 20 };
+    let later = SortKey { group: 2, order: 0 };
+    let same = SortKey { group: 1, order: 20 };
+
+    let first_order = earlier <=> later;
+    if first_order.is_lt() != true { panic(34200); };
+    if ordering_value(first_order) != -1 { panic(34201); };
+
+    let equal_order = earlier <=> same;
+    if equal_order.is_eq() != true { panic(34202); };
+
+    let numeric_order = 9 <=> 4;
+    if numeric_order.is_gt() != true { panic(34203); };
+}

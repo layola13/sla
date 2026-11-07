@@ -1,0 +1,215 @@
+@import "sa_std/vec.sa"
+@import "sa_std/string.sa"
+
+// DEF-AOF-EXIT69 regression corpus.
+//
+// The checker treats two ownership-transfer points as non-consuming:
+// (a) extracting a field out of an owned struct binding, and
+// (b) passing a named local by value to a callee. In both cases the
+// source binding stays live (it can be read again, passed on, and
+// drops its heap handles at scope exit). The code generators used to
+// materialize the transfer as an alias -- the field's Vec/String
+// handle (or, for by-value args, a field-by-field record copy sharing
+// every handle field) -- so the callee/extraction owner and the
+// still-live source dropped the same allocation twice (sa_vec_free
+// releases buffer + handle cell), segfaulting in free() on slaredis
+// startup-failure exit paths (exit 69 came back as SIGSEGV/SIGABRT).
+//
+// Fix: at these transfer points, handle fields materialize as
+// independently-owned clones (Vec/String/GrowVec clone; nested
+// structs recurse), extending the DEF-5 clone_on_extract rule from
+// borrow-rooted places to owned roots and to struct-typed results.
+// Every test below crashes (double free) on the pre-fix compiler and
+// passes after; the assertions also pin clone independence: mutating
+// the transferred value must not disturb the source.
+
+struct OtcCfg {
+    enabled: bool,
+    path: Vec<u8>,
+    mode: u8,
+}
+
+struct OtcRes {
+    status: i32,
+    cfg: OtcCfg,
+}
+
+fn otc_make_cfg() -> OtcCfg {
+    let v: Vec<u8> = Vec::new();
+    v.push(120);
+    v.push(121);
+    return OtcCfg { enabled: true, path: v, mode: 1 };
+}
+
+fn otc_make_res() -> OtcRes {
+    return OtcRes { status: 0, cfg: otc_make_cfg() };
+}
+
+fn otc_callee_sum(c: OtcCfg) -> i32 {
+    let total: i32 = 0;
+    let i: i64 = 0;
+    while i < len(c.path) as i64 {
+        total = total + c.path[i] as i32;
+        i = i + 1;
+    }
+    return total;
+}
+
+fn otc_callee_push(c: OtcCfg) -> i64 {
+    c.path.push(122);
+    return len(c.path) as i64;
+}
+
+fn otc_use_res(r: OtcRes) -> i32 {
+    return r.status;
+}
+
+@test "struct field extraction from owned parent keeps both owners alive"() {
+    let res = otc_make_res();
+    let cfg = res.cfg;
+    if cfg.enabled != true { panic(9750); };
+    if len(cfg.path) != 2 { panic(9751); };
+    if cfg.path[0] != 120 { panic(9752); };
+    // The parent stays fully usable after the extraction.
+    if res.status != 0 { panic(9753); };
+    if len(res.cfg.path) != 2 { panic(9754); };
+    if res.cfg.path[1] != 121 { panic(9755); };
+    // The extraction is an independent owner: growing it must not
+    // touch the parent's buffer.
+    cfg.path.push(122);
+    if len(cfg.path) != 3 { panic(9756); };
+    if len(res.cfg.path) != 2 { panic(9757); };
+}
+
+@test "vec field extraction from owned parent clones the handle"() {
+    let cfg = otc_make_cfg();
+    let p = cfg.path;
+    if len(p) != 2 { panic(9758); };
+    if p[0] != 120 { panic(9759); };
+    p.push(122);
+    if len(p) != 3 { panic(9760); };
+    if len(cfg.path) != 2 { panic(9761); };
+    if cfg.path[1] != 121 { panic(9762); };
+}
+
+@test "named local passed by value stays usable in the caller"() {
+    let cfg = otc_make_cfg();
+    let total: i32 = otc_callee_sum(cfg);
+    if total != 241 { panic(9763); };
+    // The caller's binding survived the by-value call with its own
+    // allocation intact.
+    if len(cfg.path) != 2 { panic(9764); };
+    if cfg.path[0] != 120 { panic(9765); };
+    if cfg.path[1] != 121 { panic(9766); };
+}
+
+@test "by value callee mutates only its own copy"() {
+    let cfg = otc_make_cfg();
+    let n: i64 = otc_callee_push(cfg);
+    if n != 3 { panic(9767); };
+    if len(cfg.path) != 2 { panic(9768); };
+}
+
+@test "field extraction then parent passed by value"() {
+    let res = otc_make_res();
+    let cfg = res.cfg;
+    let s: i32 = otc_use_res(res);
+    if s != 0 { panic(9769); };
+    if cfg.enabled != true { panic(9770); };
+    if len(cfg.path) != 2 { panic(9771); };
+    if cfg.path[1] != 121 { panic(9772); };
+}
+
+fn otc_extract_once() -> i32 {
+    let res = otc_make_res();
+    let cfg = res.cfg;
+    if len(cfg.path) != 2 { return 1; };
+    if len(res.cfg.path) != 2 { return 2; };
+    return cfg.path[0] as i32 + res.cfg.path[1] as i32;
+}
+
+fn otc_byval_once() -> i32 {
+    let cfg = otc_make_cfg();
+    let total: i32 = otc_callee_sum(cfg);
+    if len(cfg.path) != 2 { return 3; };
+    return total;
+}
+
+// The semantic tests above assert ownership independence. Note on
+// pre-fix discrimination: under the canonical default invocation
+// (SAB backend) this file fails pre-fix at lowering time
+// (UnsupportedSabDirectFeature -- owned-root struct extraction was
+// not lowerable at all). On the text backend the double free is a
+// process-level heap fault whose visibility depends on heap layout:
+// standalone repro binaries of these exact shapes exit SIGSEGV /
+// SIGABRT pre-fix deterministically (and 69 post-fix), while an
+// in-process test driver can recycle the freed chunk benignly. The
+// stress tests below therefore pin the semantics under heap churn
+// (independence assertions across 100 transfer iterations with
+// pattern-filled victim allocations), and the crash-level evidence
+// lives in the standalone repros + the slaredis AOF acceptance
+// suite (phase 3: corrupt AOF must exit 69, pre-fix 139).
+
+@test "field extraction stress keeps heap victims intact"() {
+    let i: i64 = 0;
+    while i < 100 {
+        if otc_extract_once() != 241 { panic(9777); };
+        let a: Vec<u8> = Vec::new();
+        let b: Vec<u8> = Vec::new();
+        let j: i64 = 0;
+        while j < 24 {
+            a.push(65);
+            b.push(66);
+            j = j + 1;
+        }
+        if len(a) != 24 { panic(9778); };
+        if len(b) != 24 { panic(9779); };
+        if a[23] != 65 { panic(9780); };
+        if b[23] != 66 { panic(9781); };
+        i = i + 1;
+    }
+}
+
+@test "by value argument stress keeps heap victims intact"() {
+    let i: i64 = 0;
+    while i < 100 {
+        if otc_byval_once() != 241 { panic(9782); };
+        let a: Vec<u8> = Vec::new();
+        let b: Vec<u8> = Vec::new();
+        let j: i64 = 0;
+        while j < 24 {
+            a.push(67);
+            b.push(68);
+            j = j + 1;
+        }
+        if len(a) != 24 { panic(9783); };
+        if len(b) != 24 { panic(9784); };
+        if a[23] != 67 { panic(9785); };
+        if b[23] != 68 { panic(9786); };
+        i = i + 1;
+    }
+}
+
+struct OtcNamed {
+    name: String,
+    tag: u8,
+}
+
+struct OtcNamedRes {
+    status: i32,
+    named: OtcNamed,
+}
+
+fn otc_make_named_res() -> OtcNamedRes {
+    let s: String = format("aof");
+    return OtcNamedRes { status: 0, named: OtcNamed { name: s, tag: 7 } };
+}
+
+@test "string field extraction from owned parent clones the buffer"() {
+    let res = otc_make_named_res();
+    let named = res.named;
+    if named.tag != 7 { panic(9773); };
+    if len(named.name) != 3 { panic(9774); };
+    if len(res.named.name) != 3 { panic(9775); };
+    if res.status != 0 { panic(9776); };
+}

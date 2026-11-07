@@ -1,0 +1,14 @@
+@import "consumer/../impl/plugin_impl.sa"
+
+@plugin_consumer_value() -> i32:
+L_ENTRY:
+    value = call @plugin_dispatch(254)
+    ok = eq value, 254
+    !value
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 254
+
+L_ERR:
+    return 0

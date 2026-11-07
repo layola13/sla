@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct WorkflowState {
+    lint_ok: bool,
+    tests_ok: bool,
+    package_ok: bool,
+}
+
+fn completed_steps(state: WorkflowState) -> i32 {
+    let lint = bool_to_i32(state.lint_ok);
+    let tests = bool_to_i32(state.tests_ok);
+    let package = bool_to_i32(state.package_ok);
+    return lint + tests + package;
+}
+
+fn bool_to_i32(value: bool) -> i32 {
+    if value {
+        return 1;
+    };
+    return 0;
+}
+
+fn main() -> i32 {
+    let state = WorkflowState {
+        lint_ok: true,
+        tests_ok: true,
+        package_ok: false,
+    };
+    let done = completed_steps(state);
+    println("{}", done);
+    return done;
+};
+
+@test "rosetta 080 80_workflow"() {
+    let state = WorkflowState {
+        lint_ok: true,
+        tests_ok: true,
+        package_ok: false,
+    };
+    if completed_steps(state) != 2 {
+        panic(80);
+    };
+};

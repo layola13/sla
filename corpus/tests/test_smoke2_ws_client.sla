@@ -1,0 +1,248 @@
+// smoke-wave2: honest smokes for sa_std/ws_client.sai remaining entries.
+// Peer: an SLA v2-server websocket echo running in a goroutine on a unique
+// loopback port. The client sleeps briefly after spawning the peer so the
+// listener is up before connecting (connect to a not-yet-listening port is
+// refused instantly; probe C evidence).
+@import "sla_std/wrap/http_server.sla"
+@import "sla_std/wrap/ws_client.sla"
+@import "sla_std/wrap/fs.sla"
+@import "sla_std/wrap/time.sla"
+@import "sa_std/task.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+fn s2_mem_eq(p: ptr, n: u64, q: ptr, m: u64) -> bool {
+    if n != m { return false; };
+    let i: u64 = 0;
+    while i < n {
+        let a: ptr = PTR_BYTE_ADD(p, i);
+        let b: ptr = PTR_BYTE_ADD(q, i);
+        if PTR_READ_U8(a) != PTR_READ_U8(b) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+// Echo peers (v1 server surface; its read/write are the proven pair).
+// Two straight-line forms with no conditionals around the frame calls:
+// conditional/loop forms of this peer trip the text backend's move
+// checker (UseAfterMove trap at the control-flow join, expanded
+// ptr_add on a Consumed register) while the SAB backend accepts them;
+// the straight-line form below is the shape that passes both arms in
+// test_smoke2_http_client_ws.sla (peer s2_ws_echo1_stay). See
+// WAVE2_REPORT section 6. Packed arg: port | code<<24.
+
+// Echoes exactly one frame verbatim (ping answered with pong), then
+// does a final read for the client's close frame.
+fn s2_ws_echo1f(arg: u64) -> void {
+    let port: u64 = arg & 65535;
+    let code: i32 = (arg >> 24) as i32;
+    let sc = [0u64; 4];
+    if sla_http_server_new(&sc[0]) != 0 { panic(code); };
+    let srv = (sc[0] as ptr);
+    if sla_http_server_start(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u16)) != 0 { panic(code + 1); };
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(code + 2); };
+    let req = (aq[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_server_websocket_upgrade(req, &wc[0]) != 0 { panic(code + 3); };
+    let ws = (wc[0] as ptr);
+    let op = [0u64; 4];
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_server_websocket_read(ws, 4096, &op[0], &dp[0], &dl[0]) != 0 { panic(code + 4); };
+    let wop: u8 = (op[0] as u8);
+    if op[0] == 9 { wop = 10; };
+    if sla_http_server_websocket_write(ws, wop, (dp[0] as ptr), dl[0]) != 0 { panic(code + 5); };
+    let rc2 = sla_http_server_websocket_read(ws, 4096, &op[0], &dp[0], &dl[0]);
+    sla_http_server_websocket_free(ws);
+    sla_http_server_free(srv);
+}
+
+// No echo: just the final read for the client's close frame.
+fn s2_ws_echo0(arg: u64) -> void {
+    let port: u64 = arg & 65535;
+    let code: i32 = (arg >> 24) as i32;
+    let sc = [0u64; 4];
+    if sla_http_server_new(&sc[0]) != 0 { panic(code); };
+    let srv = (sc[0] as ptr);
+    if sla_http_server_start(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u16)) != 0 { panic(code + 1); };
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(code + 2); };
+    let req = (aq[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_server_websocket_upgrade(req, &wc[0]) != 0 { panic(code + 3); };
+    let ws = (wc[0] as ptr);
+    let op = [0u64; 4];
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    let rc2 = sla_http_server_websocket_read(ws, 4096, &op[0], &dp[0], &dl[0]);
+    sla_http_server_websocket_free(ws);
+    sla_http_server_free(srv);
+}
+
+fn s2_ws_url(port: u64, ob: ptr) -> u64 {
+    // "ws://127.0.0.1:<port>/ws"
+    let pre = "ws://127.0.0.1:";
+    let pp: ptr = STR_PTR(pre);
+    let pl: u64 = STR_LEN(pre);
+    let n: u64 = 0;
+    let i: u64 = 0;
+    while i < pl {
+        let s: ptr = PTR_BYTE_ADD(pp, i);
+        let d: ptr = PTR_BYTE_ADD(ob, n);
+        PTR_WRITE_U8(d, PTR_READ_U8(s));
+        n = n + 1;
+        i = i + 1;
+    }
+    let digits = [0u8; 8];
+    let dp0: ptr = PTR_BYTE_ADD(&digits, 0);
+    let v: u64 = port;
+    let nd: u64 = 0;
+    while v > 0 {
+        let d: ptr = PTR_BYTE_ADD(dp0, nd);
+        PTR_WRITE_U8(d, (48 + ((v % 10) as u8)));
+        nd = nd + 1;
+        v = v / 10;
+    }
+    let k: u64 = nd;
+    while k > 0 {
+        k = k - 1;
+        let s: ptr = PTR_BYTE_ADD(dp0, k);
+        let d: ptr = PTR_BYTE_ADD(ob, n);
+        PTR_WRITE_U8(d, PTR_READ_U8(s));
+        n = n + 1;
+    }
+    let suf = "/ws";
+    let sp: ptr = STR_PTR(suf);
+    let sl: u64 = STR_LEN(suf);
+    let j: u64 = 0;
+    while j < sl {
+        let s: ptr = PTR_BYTE_ADD(sp, j);
+        let d: ptr = PTR_BYTE_ADD(ob, n);
+        PTR_WRITE_U8(d, PTR_READ_U8(s));
+        n = n + 1;
+        j = j + 1;
+    }
+    return n;
+}
+
+fn s2_connect(port: u64, code: i32) -> u64 {
+    let ub = [0u8; 64];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_ws_url(port, ubp);
+    sla_time_sleep_ms(100);
+    let hc: u64 = 0;
+    if sla_std_ws_client_connect(ubp, ulen, &hc) != 0 { panic(code); };
+    if hc == 0 { panic(code + 1); };
+    return hc;
+}
+
+@test "smoke2 sa_std_ws_client_send_text"() {
+    let h = go s2_ws_echo1f(24700 + 65700 * 16777216);
+    let hc = s2_connect(24700, 65703);
+    if sla_std_ws_client_send_text(hc, STR_PTR("std-ws-3"), STR_LEN("std-ws-3")) != 0 { panic(65704); };
+    let op: u64 = 0;
+    let bh: u64 = 0;
+    if sla_std_ws_client_recv(hc, &op, &bh) != 0 { panic(65705); };
+    if op != 1 { panic(65706); };
+    let dp: ptr = sa_std_ws_client_buffer_data(bh);
+    if !s2_mem_eq(dp, 8, STR_PTR("std-ws-3"), STR_LEN("std-ws-3")) { panic(65707); };
+    sla_std_ws_client_buffer_free(^bh);
+    sla_std_ws_client_close(hc, 1000, STR_PTR(""), 0);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_std_ws_client_send_binary"() {
+    let h = go s2_ws_echo1f(24701 + 65710 * 16777216);
+    let hc = s2_connect(24701, 65713);
+    let payload = [0u8; 4];
+    payload[0] = 1;
+    payload[1] = 2;
+    payload[2] = 3;
+    payload[3] = 250;
+    let pp: ptr = PTR_BYTE_ADD(&payload, 0);
+    if sla_std_ws_client_send_binary(hc, pp, 4) != 0 { panic(65714); };
+    let op: u64 = 0;
+    let bh: u64 = 0;
+    if sla_std_ws_client_recv(hc, &op, &bh) != 0 { panic(65715); };
+    if op != 2 { panic(65716); };
+    if sla_std_ws_client_buffer_len(bh) != 4 { panic(65717); };
+    let dp: ptr = sa_std_ws_client_buffer_data(bh);
+    if !s2_mem_eq(dp, 4, pp, 4) { panic(65718); };
+    sla_std_ws_client_buffer_free(^bh);
+    sla_std_ws_client_close(hc, 1000, STR_PTR(""), 0);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_std_ws_client_ping"() {
+    // Ping transmits (wire-verified against the python peer, probe K),
+    // but a pong can never be asserted through this surface: the std
+    // recv silently consumes opcode 0xA (sa_ws_client.zig recvImpl:
+    // "unsolicited pong: ignore"), and the v1 server read auto-pongs
+    // internally. W2-DEF-WSCLIENT-PONG-SWALLOWED registers that gap.
+    // The honest ping smoke here: rc + the connection stays fully
+    // functional — a text echo round trip right after the ping, with
+    // the server's auto-pong transparently consumed by recv.
+    let h = go s2_ws_echo1f(24702 + 65720 * 16777216);
+    let hc = s2_connect(24702, 65723);
+    if sla_std_ws_client_ping(hc, STR_PTR("pg"), STR_LEN("pg")) != 0 { panic(65724); };
+    if sla_std_ws_client_send_text(hc, STR_PTR("after-ping"), STR_LEN("after-ping")) != 0 { panic(65725); };
+    let op: u64 = 0;
+    let bh: u64 = 0;
+    if sla_std_ws_client_recv(hc, &op, &bh) != 0 { panic(65726); };
+    if op != 1 { panic(65727); };
+    let dp: ptr = sa_std_ws_client_buffer_data(bh);
+    if !s2_mem_eq(dp, 10, STR_PTR("after-ping"), STR_LEN("after-ping")) { panic(65728); };
+    sla_std_ws_client_buffer_free(^bh);
+    sla_std_ws_client_close(hc, 1000, STR_PTR(""), 0);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_std_ws_client_recv"() {
+    let h = go s2_ws_echo1f(24703 + 65730 * 16777216);
+    let hc = s2_connect(24703, 65733);
+    if sla_std_ws_client_send_text(hc, STR_PTR("recv-me"), STR_LEN("recv-me")) != 0 { panic(65734); };
+    let op: u64 = 0;
+    let bh: u64 = 0;
+    if sla_std_ws_client_recv(hc, &op, &bh) != 0 { panic(65735); };
+    if op != 1 { panic(65736); };
+    if bh == 0 { panic(65737); };
+    let dp: ptr = sa_std_ws_client_buffer_data(bh);
+    if !s2_mem_eq(dp, 7, STR_PTR("recv-me"), STR_LEN("recv-me")) { panic(65738); };
+    sla_std_ws_client_buffer_free(^bh);
+    sla_std_ws_client_close(hc, 1000, STR_PTR(""), 0);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_std_ws_client_close"() {
+    let h = go s2_ws_echo0(24704 + 65740 * 16777216);
+    let hc = s2_connect(24704, 65743);
+    if sla_std_ws_client_close(hc, 1000, STR_PTR("bye"), STR_LEN("bye")) != 0 { panic(65744); };
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_std_ws_client_buffer_len"() {
+    let h = go s2_ws_echo1f(24705 + 65750 * 16777216);
+    let hc = s2_connect(24705, 65753);
+    if sla_std_ws_client_send_text(hc, STR_PTR("len-8-by"), STR_LEN("len-8-by")) != 0 { panic(65754); };
+    let op: u64 = 0;
+    let bh: u64 = 0;
+    if sla_std_ws_client_recv(hc, &op, &bh) != 0 { panic(65755); };
+    if sla_std_ws_client_buffer_len(bh) != 8 { panic(65756); };
+    sla_std_ws_client_buffer_free(^bh);
+    sla_std_ws_client_close(hc, 1000, STR_PTR(""), 0);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_std_ws_client_buffer_free"() {
+    let h = go s2_ws_echo1f(24706 + 65760 * 16777216);
+    let hc = s2_connect(24706, 65763);
+    if sla_std_ws_client_send_text(hc, STR_PTR("free-me"), STR_LEN("free-me")) != 0 { panic(65764); };
+    let op: u64 = 0;
+    let bh: u64 = 0;
+    if sla_std_ws_client_recv(hc, &op, &bh) != 0 { panic(65765); };
+    if sla_std_ws_client_buffer_free(^bh) != 0 { panic(65766); };
+    sla_std_ws_client_close(hc, 1000, STR_PTR(""), 0);
+    sa_task_join(h);
+}

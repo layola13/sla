@@ -1,0 +1,41 @@
+@import "sa_std/core/option.sa"
+
+struct QcPoint {
+    x: i32,
+    y: i32,
+}
+
+@test "optional chain Some yields Some field"() {
+    let p: Option<QcPoint> = Some(QcPoint { x: 1, y: 2 });
+    if (p?.x ?? -1) != 1 { panic(95101); };
+};
+
+@test "optional chain None yields None"() {
+    let q: Option<QcPoint> = None;
+    if (q?.x ?? -1) != -1 { panic(95102); };
+};
+
+@test "optional chain picks second field"() {
+    let p: Option<QcPoint> = Some(QcPoint { x: 1, y: 2 });
+    if (p?.y ?? -1) != 2 { panic(95103); };
+};
+
+struct QcCounter {
+    v: i32,
+}
+
+impl QcCounter {
+    fn get(self) -> i32 {
+        return self.v;
+    }
+}
+
+@test "optional call dispatches on Some"() {
+    let o: Option<QcCounter> = Some(QcCounter { v: 41 });
+    if (o?.get() ?? -1) != 41 { panic(95201); };
+};
+
+@test "optional call yields None on None"() {
+    let n: Option<QcCounter> = None;
+    if (n?.get() ?? -1) != -1 { panic(95202); };
+};

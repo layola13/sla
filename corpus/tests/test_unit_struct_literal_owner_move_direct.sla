@@ -1,0 +1,22 @@
+@import "sa_std/vec.sa"
+
+// Guard: transferring an owned local into a struct-literal field must emit a
+// SAB-visible move_ on the source, not only mark codegen state consumed.
+
+struct CleanupQuery {
+    items: Vec<i32>,
+}
+
+fn cleanup_query_from_items(items: Vec<i32>) -> CleanupQuery {
+    return CleanupQuery { items: items };
+}
+
+@test "struct literal moves owned vec field cleanly"() {
+    let items: Vec<i32> = Vec::new();
+    items.push(1);
+    items.push(2);
+    let query = cleanup_query_from_items(items);
+    if len(query.items) as i64 != 2 { panic(52801); };
+    if query.items[0] != 1 { panic(52802); };
+    if query.items[1] != 2 { panic(52803); };
+}

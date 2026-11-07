@@ -1,0 +1,191 @@
+@import "sa_std/redis.sla"
+
+// REG-SHARD3 coverage: SAB registry `declared` entries for the
+// redis.sla transaction / pipeline / pub-sub session surface
+// (redis_multi, redis_exec, redis_discard, redis_scan,
+// redis_subscribe, redis_psubscribe, redis_unsubscribe,
+// redis_punsubscribe, redis_pipeline_new, redis_pipeline_add,
+// redis_pipeline_execute, redis_poll, redis_poll_wait,
+// redis_sub_poll). All class=declared, zero corpus references at
+// registry stamp ee7b41c3. Driven on closed / in-multi-flagged
+// clients, whose contract paths are deterministic status codes --
+// no server, no I/O, no waiting.
+
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+fn reg3_crlf(v: Vec<u8>) -> Vec<u8> {
+    v.push(13);
+    v.push(10);
+    return v;
+}
+
+@test "reg3 redis multi exec discard gates"() {
+    // MULTI on a closed client reaches the command gate.
+    let m = redis_multi(redis_empty_client());
+    if m.status != SA_STD_ERR_INVALID_HANDLE { panic(5401); };
+    // MULTI inside MULTI is an argument error, before any I/O.
+    let in_multi = redis_empty_client();
+    in_multi.in_multi = true;
+    let m2 = redis_multi(in_multi);
+    if m2.status != SA_STD_ERR_INVALID_ARGUMENT { panic(5402); };
+    // EXEC / DISCARD outside MULTI are argument errors.
+    let e1 = redis_exec(redis_empty_client());
+    if e1.status != SA_STD_ERR_INVALID_ARGUMENT { panic(5403); };
+    let d1 = redis_discard(redis_empty_client());
+    if d1.status != SA_STD_ERR_INVALID_ARGUMENT { panic(5404); };
+}
+
+@test "reg3 redis exec discard clear multi flag"() {
+    // In-multi but closed: the command gate fires, and the
+    // clear-multi wrapper still resets the flag on the way out.
+    let c1 = redis_empty_client();
+    c1.in_multi = true;
+    let e = redis_exec(c1);
+    if e.status != SA_STD_ERR_INVALID_HANDLE { panic(5411); };
+    if e.client.in_multi { panic(5412); };
+    let c2 = redis_empty_client();
+    c2.in_multi = true;
+    let d = redis_discard(c2);
+    if d.status != SA_STD_ERR_INVALID_HANDLE { panic(5413); };
+    if d.client.in_multi { panic(5414); };
+}
+
+@test "reg3 redis scan gates"() {
+    // Negative cursor is an argument error with an empty key set.
+    let s1 = redis_scan(redis_empty_client(), 0 - 1, reg3_bytes(STR_PTR("*"), STR_LEN("*")), 0);
+    if s1.status != SA_STD_ERR_INVALID_ARGUMENT { panic(5421); };
+    if s1.next_cursor != 0 { panic(5422); };
+    if (len(s1.keys) as u64) != 0 { panic(5423); };
+    // Valid scan on a closed client surfaces the command gate.
+    let s2 = redis_scan(redis_empty_client(), 0, reg3_bytes(STR_PTR("*"), STR_LEN("*")), 10);
+    if s2.status != SA_STD_ERR_INVALID_HANDLE { panic(5424); };
+    if s2.next_cursor != 0 { panic(5425); };
+    if (len(s2.keys) as u64) != 0 { panic(5426); };
+}
+
+@test "reg3 redis subscribe family gates"() {
+    let s1 = redis_subscribe(redis_empty_client(), reg3_bytes(STR_PTR("news"), STR_LEN("news")));
+    if s1.status != SA_STD_ERR_INVALID_HANDLE { panic(5431); };
+    if redis_value_kind(&s1.reply) != SA_REDIS_KIND_INVALID { panic(5432); };
+    let s2 = redis_psubscribe(redis_empty_client(), reg3_bytes(STR_PTR("n*"), STR_LEN("n*")));
+    if s2.status != SA_STD_ERR_INVALID_HANDLE { panic(5433); };
+    let s3 = redis_unsubscribe(redis_empty_client(), reg3_bytes(STR_PTR("news"), STR_LEN("news")));
+    if s3.status != SA_STD_ERR_INVALID_HANDLE { panic(5434); };
+    // Empty channel/pattern: UNSUBSCRIBE goes out bare, same gate.
+    let empty: Vec<u8> = Vec::new();
+    let s4 = redis_unsubscribe(redis_empty_client(), empty);
+    if s4.status != SA_STD_ERR_INVALID_HANDLE { panic(5435); };
+    let empty2: Vec<u8> = Vec::new();
+    let s5 = redis_punsubscribe(redis_empty_client(), empty2);
+    if s5.status != SA_STD_ERR_INVALID_HANDLE { panic(5436); };
+    let s6 = redis_punsubscribe(redis_empty_client(), reg3_bytes(STR_PTR("n*"), STR_LEN("n*")));
+    if s6.status != SA_STD_ERR_INVALID_HANDLE { panic(5437); };
+}
+
+@test "reg3 redis pipeline build and execute gate"() {
+    let pipe = redis_pipeline_new();
+    if pipe.count != 0 { panic(5441); };
+    if (len(pipe.frame) as u64) != 0 { panic(5442); };
+    pipe = redis_pipeline_add(pipe, redis_args_verb(STR_PTR("PING"), STR_LEN("PING")));
+    if pipe.count != 1 { panic(5443); };
+    // The pipelined frame is exactly the single command's frame
+    // ("*1" CRLF "$4" CRLF "PING" CRLF = 14 bytes), checked in
+    // place through a slice borrow.
+    if (len(pipe.frame) as u64) != 14 { panic(5444); };
+    let fsl: Slice<u8> = VEC_AS_SLICE(pipe.frame);
+    if redis_slice_byte(&fsl, 0) != 42 { panic(5445); };
+    if redis_slice_byte(&fsl, 4) != 36 { panic(5446); };
+    if redis_slice_byte(&fsl, 8) != 80 { panic(5450); };
+    pipe = redis_pipeline_add(pipe, redis_args_verb(STR_PTR("PING"), STR_LEN("PING")));
+    if pipe.count != 2 { panic(5447); };
+    if (len(pipe.frame) as u64) != 28 { panic(5448); };
+    // Execute on a closed client: handle gate, zero replies.
+    let out = redis_pipeline_execute(redis_empty_client(), pipe);
+    if out.status != SA_STD_ERR_INVALID_HANDLE { panic(5453); };
+    if (len(out.replies) as u64) != 0 { panic(5454); };
+    if out.client.open { panic(5455); };
+}
+
+@test "reg3 redis pipeline execute state gates"() {
+    // Failed client reports NET before the handle gate.
+    let dead = redis_empty_client();
+    dead.failed = true;
+    let pipe = redis_pipeline_new();
+    let out1 = redis_pipeline_execute(dead, pipe);
+    if out1.status != SA_STD_ERR_NET { panic(5451); };
+    // In-multi execution is an argument error (checked after the
+    // open gate): an open-flagged in-multi client reaches it.
+    let busy = redis_empty_client();
+    busy.open = true;
+    busy.in_multi = true;
+    let pipe2 = redis_pipeline_new();
+    let out2 = redis_pipeline_execute(busy, pipe2);
+    if out2.status != SA_STD_ERR_INVALID_ARGUMENT { panic(5452); };
+}
+
+@test "reg3 redis poll constructor"() {
+    // has_message=false: the message passes through unnormalized.
+    let p1 = redis_poll(redis_empty_client(), 0 - 3, false, redis_int_value(5));
+    if p1.status != 0 - 3 { panic(5461); };
+    if p1.has_message { panic(5462); };
+    if redis_value_kind(&p1.message) != SA_REDIS_KIND_INTEGER { panic(5463); };
+    if redis_value_int(&p1.message) != 5 { panic(5464); };
+    // has_message=true: an ARRAY message normalizes to PUSH.
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, STR_PTR("*1"), STR_LEN("*1"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR(":5"), STR_LEN(":5"));
+    w = reg3_crlf(w);
+    let r = redis_parse_reply(w);
+    if r.ready == false { panic(5465); };
+    let p2 = redis_poll(redis_empty_client(), SA_STD_OK, true, r.value);
+    if p2.has_message == false { panic(5466); };
+    if redis_value_kind(&p2.message) != SA_REDIS_KIND_PUSH { panic(5467); };
+}
+
+@test "reg3 redis sub_poll gates"() {
+    // Closed client: handle gate, no message.
+    let p1 = redis_sub_poll(redis_empty_client(), 10);
+    if p1.status != SA_STD_ERR_INVALID_HANDLE { panic(5471); };
+    if p1.has_message { panic(5472); };
+    // Failed client: NET, no message.
+    let dead = redis_empty_client();
+    dead.failed = true;
+    let p2 = redis_sub_poll(dead, 10);
+    if p2.status != SA_STD_ERR_NET { panic(5473); };
+    if p2.has_message { panic(5474); };
+    // A complete message already buffered in pending is delivered
+    // without touching the handle.
+    let buffered = redis_empty_client();
+    buffered.open = true;
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, STR_PTR("*2"), STR_LEN("*2"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR("$7"), STR_LEN("$7"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR("message"), STR_LEN("message"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR("$2"), STR_LEN("$2"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR("hi"), STR_LEN("hi"));
+    w = reg3_crlf(w);
+    buffered.pending = w;
+    let p3 = redis_sub_poll(buffered, 10);
+    if p3.status != SA_STD_OK { panic(5475); };
+    if p3.has_message == false { panic(5476); };
+    if redis_value_kind(&p3.message) != SA_REDIS_KIND_PUSH { panic(5477); };
+    if redis_bytes_eq(redis_value_child_bulk(&p3.message, 1), reg3_bytes(STR_PTR("hi"), STR_LEN("hi"))) == false { panic(5478); };
+    if (len(p3.client.pending) as u64) != 0 { panic(5479); };
+}
+
+@test "reg3 redis poll_wait dead handle"() {
+    // Handle 0 cannot produce a message: the poll must come back
+    // empty-handed (an error status, or the documented IO-quiet
+    // empty result) -- never with a fabricated message.
+    let p = redis_poll_wait(redis_empty_client());
+    if p.has_message { panic(5481); };
+    if redis_value_kind(&p.message) != SA_REDIS_KIND_INVALID { panic(5482); };
+}

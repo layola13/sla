@@ -1,0 +1,56 @@
+// Regression: compiler defect #2 (select2 right child could never win).
+//
+// Both children are loop-shaped spin futures with very different
+// lengths, so the winner is decided purely by poll counts, never by
+// wall-clock timing. Before the fix, loop awaits were compiled eagerly:
+// the left child ran to completion during construction and the race
+// always resolved to the left, so the right-wins case below failed.
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn spin_tag(n: i32, tag: i32) -> i32 {
+    let i: i32 = 0;
+    while i < n {
+        let tick: i32 = future::defer_ready(0).await;
+        i = i + 1 + tick;
+    }
+    return tag;
+}
+
+@test "select2 right child wins when it finishes first"() {
+    let race = future::select2(spin_tag(5000, 100), spin_tag(10, 200));
+    let t = task::new(race);
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 100000 {
+            panic(7601);
+        };
+    }
+    let either = task::result(t);
+    if future::either_side(either) != 2 {
+        panic(7602);
+    };
+    if future::either_right(either) != 200 {
+        panic(7603);
+    };
+}
+
+@test "select2 left child wins when it finishes first"() {
+    let race = future::select2(spin_tag(10, 100), spin_tag(5000, 200));
+    let t = task::new(race);
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 100000 {
+            panic(7611);
+        };
+    }
+    let either = task::result(t);
+    if future::either_side(either) != 1 {
+        panic(7612);
+    };
+    if future::either_left(either) != 100 {
+        panic(7613);
+    };
+}

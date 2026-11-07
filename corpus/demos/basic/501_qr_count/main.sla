@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 二次剩余计数（含 0：mod 7 有 {0,1,2,4} 共 4 个）。
+// 意对标 499 符号判定的计数版（499 互补）。
+
+fn qr_count(p: int) -> int {
+    let c = 0;
+    let r = 0;
+    while r < p {
+        let i = 0;
+        let hit = 0;
+        while i < p {
+            if i * i % p == r { hit = 1; };
+            i = i + 1;
+        }
+        if hit == 1 { c = c + 1; };
+        r = r + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", qr_count(7), qr_count(11), qr_count(5));
+    return 0;
+}
+
+@test "basic 501 qr count"() {
+    if qr_count(7) != 4 { panic(50101); };
+    if qr_count(11) != 6 { panic(50102); };
+    if qr_count(5) != 3 { panic(50103); };
+}

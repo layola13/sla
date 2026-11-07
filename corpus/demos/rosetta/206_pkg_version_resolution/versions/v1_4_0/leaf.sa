@@ -1,0 +1,7 @@
+#def V140_OFFSET = 6
+
+@v140_leaf_offset() -> i32:
+L_ENTRY:
+    value = add V140_OFFSET, 0
+    !value
+    return V140_OFFSET

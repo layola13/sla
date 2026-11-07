@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 347_math_sqrt 的立方版（117 为平方版：3,3,4）。
+// 循环试乘（117 口径之三次方版）。
+
+fn cbrt_try(n: int) -> int {
+    let r = 0;
+    while (r + 1) * (r + 1) * (r + 1) <= n {
+        r = r + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", cbrt_try(27), cbrt_try(28), cbrt_try(64));
+    return 0;
+}
+
+@test "basic 318 cbrt"() {
+    if cbrt_try(27) != 3 { panic(31801); };
+    if cbrt_try(28) != 3 { panic(31802); };
+    if cbrt_try(64) != 4 { panic(31803); };
+    if cbrt_try(1) != 1 { panic(31804); };
+}

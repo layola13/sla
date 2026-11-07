@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 互素和（sum_{k<n,gcd=1} k：n=9 → 27）。
+// 意对标 346 互素判定的求和版（336-phi 计数版互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn coprime_sum(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k < n {
+        if gcd(k, n) == 1 { s = s + k; };
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", coprime_sum(9), coprime_sum(10));
+    return 0;
+}
+
+@test "basic 381 coprime sum"() {
+    if coprime_sum(9) != 27 { panic(38101); };
+    if coprime_sum(10) != 20 { panic(38102); };
+}

@@ -1,0 +1,7 @@
+@import "src/targets/helpers/target.sal"
+@import "src/targets/helpers/index.sa"
+
+@targets_package_value() -> i32:
+L_ENTRY:
+    value = call @targets_helper_value()
+    return value

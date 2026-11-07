@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Delannoy 数（D(3,3)=63；D(m,n)=D(m-1,n)+D(m-1,n-1)+D(m,n-1)）。
+// 意对标 360 立方和的格路版（19-矩阵系互补；464 做对峙，465 做三向）。
+
+fn delannoy(m: int, n: int) -> int {
+    if m == 0 { return 1; };
+    if n == 0 { return 1; };
+    return delannoy(m - 1, n) + delannoy(m - 1, n - 1) + delannoy(m, n - 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", delannoy(3, 3), delannoy(2, 2), delannoy(1, 1));
+    return 0;
+}
+
+@test "basic 461 delannoy"() {
+    if delannoy(3, 3) != 63 { panic(46101); };
+    if delannoy(2, 2) != 13 { panic(46102); };
+    if delannoy(1, 1) != 3 { panic(46103); };
+}

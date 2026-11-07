@@ -1,0 +1,1 @@
+@extern major_value(slot: i32) -> i32

@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 183_prime_upto 的求和版（238 为表版：20 以内素数和 77）。
+// 试除判定（46 口径）+ 累加（27 口径）组合。
+
+fn main() -> i32 {
+    let psum = 0;
+    let c = 2;
+    while c <= 20 {
+        let d = 2;
+        let is_p = 1;
+        while d * d <= c {
+            if c % d == 0 { is_p = 0; };
+            d = d + 1;
+        }
+        if is_p == 1 { psum = psum + c; };
+        c = c + 1;
+    }
+    println("{}", psum);
+    return 0;
+}
+
+@test "basic 281 prime sum"() {
+    let psum = 0;
+    let c = 2;
+    while c <= 20 {
+        let d = 2;
+        let is_p = 1;
+        while d * d <= c {
+            if c % d == 0 { is_p = 0; };
+            d = d + 1;
+        }
+        if is_p == 1 { psum = psum + c; };
+        c = c + 1;
+    }
+    if psum != 77 { panic(28101); };
+}

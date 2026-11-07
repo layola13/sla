@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Harshad 双实现对峙（循环 dsum 版 vs 递归 dsum 版：18 皆判是）。
+// 意对标 411 数位和对峙的整除版（410 互补）。
+
+fn dsum_loop(n: int) -> int {
+    let s = 0;
+    let m = n;
+    while m > 0 {
+        s = s + m % 10;
+        m = m / 10;
+    }
+    return s;
+}
+
+fn dsum_rec(n: int) -> int {
+    if n < 10 { return n; };
+    return n % 10 + dsum_rec(n / 10);
+}
+
+fn harsh_loop(n: int) -> int {
+    if n < 1 { return 0; };
+    if n % dsum_loop(n) == 0 { return 1; };
+    return 0;
+}
+
+fn harsh_rec(n: int) -> int {
+    if n < 1 { return 0; };
+    if n % dsum_rec(n) == 0 { return 1; };
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", harsh_loop(18), harsh_rec(18), harsh_loop(19));
+    return 0;
+}
+
+@test "basic 415 duel harshad"() {
+    if harsh_loop(18) != 1 { panic(41501); };
+    if harsh_rec(18) != 1 { panic(41502); };
+    if harsh_loop(18) != harsh_rec(18) { panic(41503); };
+    if harsh_loop(19) != 0 { panic(41504); };
+}

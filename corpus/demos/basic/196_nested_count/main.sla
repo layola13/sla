@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1278_nested_loop：3x4 纯嵌套计数（12）。
+// 与 146（嵌套 + continue）互补，此处无分支，覆盖裸双层 `for in` 区间。
+
+fn main() -> i32 {
+    let s = 0;
+    for i in 0..3 {
+        for j in 0..4 {
+            s = s + 1;
+        }
+    }
+    println("{}", s);
+    return 0;
+}
+
+@test "basic 196 nested count"() {
+    let s = 0;
+    for i in 0..3 {
+        for j in 0..4 {
+            s = s + 1;
+        }
+    }
+    if s != 12 { panic(19601); };
+}

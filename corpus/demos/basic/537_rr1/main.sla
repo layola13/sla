@@ -1,0 +1,61 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Rogers-Ramanujan 第一恒等式（小规模）：相邻部差 ≥2 的分拆数
+// == 部皆 ≡1,4 (mod 5) 的分拆数（n=7：3 对 3；n=8：4 对 4）。
+// 意对标 534 euler_duel（Euler 对峙版互补；此处为 RR 对峙）。
+
+fn rr_gap(rem: int, lo: int) -> int {
+    if rem == 0 { return 1; };
+    let cnt = 0;
+    let p = lo;
+    while p <= rem {
+        cnt = cnt + rr_gap(rem - p, p + 2);
+        p = p + 1;
+    }
+    return cnt;
+}
+
+fn rr_mod(n: int) -> int {
+    let dp: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        dp.push(0);
+        i = i + 1;
+    }
+    dp[0] = 1;
+    let k = 1;
+    let s = k;
+    while s <= n {
+        dp[s] = dp[s] + dp[s - k];
+        s = s + 1;
+    }
+    k = 4;
+    s = k;
+    while s <= n {
+        dp[s] = dp[s] + dp[s - k];
+        s = s + 1;
+    }
+    k = 6;
+    s = k;
+    while s <= n {
+        dp[s] = dp[s] + dp[s - k];
+        s = s + 1;
+    }
+    return dp[n];
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", rr_gap(7, 1), rr_mod(7), rr_gap(8, 1), rr_mod(8));
+    return 0;
+}
+
+@test "basic 537 rr1"() {
+    if rr_gap(7, 1) != 3 { panic(53701); };
+    if rr_mod(7) != 3 { panic(53702); };
+    if rr_gap(8, 1) != 4 { panic(53703); };
+    if rr_mod(8) != 4 { panic(53704); };
+    if rr_gap(7, 1) != rr_mod(7) { panic(53705); };
+    if rr_gap(8, 1) != rr_mod(8) { panic(53706); };
+}

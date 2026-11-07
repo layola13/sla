@@ -1,0 +1,9 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: Arc is reference-counted; it can never be an
+// arena root (design 2.2).
+fn neg_arc() -> i32 {
+    arena {
+        let a = Arc::new(5);
+    }
+    return 0;
+}

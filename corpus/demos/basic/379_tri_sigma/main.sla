@@ -1,0 +1,48 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 除数和三向对峙（全量循环 vs 半程+n vs 逆序累加：σ(12)=28）。
+// 意对标 368 立方三向的除数和版（377 互补）。
+
+fn sigma_full(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        if n % i == 0 { s = s + i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn sigma_half(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n / 2 {
+        if n % i == 0 { s = s + i; };
+        i = i + 1;
+    }
+    return s + n;
+}
+
+fn sigma_rev(n: int) -> int {
+    let s = 0;
+    let i = n;
+    while i >= 1 {
+        if n % i == 0 { s = s + i; };
+        i = i - 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", sigma_full(12), sigma_half(12), sigma_rev(12));
+    return 0;
+}
+
+@test "basic 379 tri sigma"() {
+    if sigma_full(12) != 28 { panic(37901); };
+    if sigma_half(12) != 28 { panic(37902); };
+    if sigma_rev(12) != 28 { panic(37903); };
+    if sigma_full(12) != sigma_half(12) { panic(37904); };
+    if sigma_half(12) != sigma_rev(12) { panic(37905); };
+}

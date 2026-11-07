@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Lah 数商式 L(n,k)=C(n-1,k-1)·n!/k!（先乘后除精确整除）。
+// L(4,2)=36，L(4,3)=12，L(5,2)=240（590 做递推对峙）。
+// 意对标 558 ballot（同为商式族；此处为 Lah 三元商式）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn fact(n: int) -> int {
+    let r = 1;
+    let i = 2;
+    while i <= n {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn lah(n: int, k: int) -> int {
+    return binom_mul(n - 1, k - 1) * fact(n) / fact(k);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", lah(4, 2), lah(4, 3), lah(5, 2));
+    return 0;
+}
+
+@test "basic 586 lah"() {
+    if lah(4, 2) != 36 { panic(58601); };
+    if lah(4, 3) != 12 { panic(58602); };
+    if lah(5, 2) != 240 { panic(58603); };
+    if lah(3, 2) != 6 { panic(58604); };
+}

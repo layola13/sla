@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 冰雹轨迹峰值（27 攀至 9232；7 峰值 52）。
+// 意对标 236 序列版的峰值版（283 最值版互补；432 做对峙）。
+
+fn collatz_peak(n: int) -> int {
+    let m = n;
+    let peak = n;
+    while m != 1 {
+        if m % 2 == 0 { m = m / 2; } else { m = 3 * m + 1; };
+        if m > peak { peak = m; };
+    }
+    return peak;
+}
+
+fn main() -> i32 {
+    println("{},{}", collatz_peak(7), collatz_peak(27));
+    return 0;
+}
+
+@test "basic 429 collatz peak"() {
+    if collatz_peak(7) != 52 { panic(42901); };
+    if collatz_peak(27) != 9232 { panic(42902); };
+}

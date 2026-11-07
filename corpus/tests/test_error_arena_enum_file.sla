@@ -1,0 +1,13 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: enum payloads are closure edges - an enum
+// with a File payload is not arena-safe (design 2.2).
+enum FileMsg { F(File), Empty }
+
+fn id_file_msg(x: FileMsg) -> FileMsg { return x; }
+
+fn neg_enum_file(p: FileMsg) -> i32 {
+    arena {
+        let m = id_file_msg(p);
+    }
+    return 0;
+}

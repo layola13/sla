@@ -1,0 +1,6 @@
+[bundle]
+assets = [
+  "assets/text/logo.txt",
+  "assets/text/tagline.txt",
+]
+output = "generated/asset_bundle.sa"

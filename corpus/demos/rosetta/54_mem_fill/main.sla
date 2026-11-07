@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/mem.sa"
+
+fn main() -> i32 {
+    let data = [0u8; 4];
+    data.fill(7);
+    println("{},{},{},{}", data[0], data[1], data[2], data[3]);
+    return 0;
+}
+
+@test "rosetta 054 mem fill"() {
+    let data = [0u8; 4];
+    data.fill(7);
+    if data[0] != 7 {
+        panic(54);
+    };
+    if data[1] != 7 {
+        panic(154);
+    };
+    if data[2] != 7 {
+        panic(254);
+    };
+    if data[3] != 7 {
+        panic(354);
+    };
+}

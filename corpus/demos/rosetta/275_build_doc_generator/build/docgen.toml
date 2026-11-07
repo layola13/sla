@@ -1,0 +1,3 @@
+[docgen]
+source = "docs"
+output = "generated/docs"

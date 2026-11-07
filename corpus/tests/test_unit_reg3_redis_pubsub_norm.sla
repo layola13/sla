@@ -1,0 +1,20 @@
+@import "sa_std/redis.sla"
+
+// BISECT E: redis_pubsub_normalize only.
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+@test "bisect e pubsub normalize"() {
+    let items: Vec<RedisValue> = Vec::new();
+    items.push(redis_int_value(42));
+    items.push(redis_bulk_value(reg3_bytes(STR_PTR("foo"), STR_LEN("foo"))));
+    items.push(redis_null_value());
+    let agg = redis_empty_value();
+    agg.kind = SA_REDIS_KIND_ARRAY;
+    agg.items = items;
+    let nv = redis_pubsub_normalize(agg);
+    if redis_value_kind(&nv) != SA_REDIS_KIND_PUSH { panic(219); };
+    if redis_value_child_count(&nv) != 3 { panic(220); };
+}

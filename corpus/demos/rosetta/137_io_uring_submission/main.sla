@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn io_uring_submission_count() -> i32 {
+    let queue_depth = 2;
+    let submitted = submit_io(queue_depth, 0);
+    return submit_io(queue_depth, submitted);
+}
+
+fn submit_io(depth: i32, used: i32) -> i32 {
+    if used < depth {
+        return used + 1;
+    } else {
+        return used;
+    };
+}
+
+fn main() -> i32 {
+    let queue_depth = 2;
+    let submitted = submit_io(queue_depth, 0);
+    let result = submit_io(queue_depth, submitted);
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 137 137_io_uring_submission"() {
+    let got = io_uring_submission_count();
+    if got != 2 {
+        panic(137);
+    };
+};

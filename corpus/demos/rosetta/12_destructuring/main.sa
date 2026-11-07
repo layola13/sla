@@ -1,0 +1,61 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_destructured_sum = vtable { call = @sla__destructured_sum }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__destructured_sum() -> i32:
+L_ENTRY:
+    tmp_0 = alloc 8
+    tmp_1 = 2
+    store tmp_0+0, tmp_1 as i32
+    tmp_2 = 5
+    store tmp_0+4, tmp_2 as i32
+    x = load tmp_0+0 as i32
+    y = load tmp_0+4 as i32
+    !tmp_0
+    tmp_3 = add x, y
+    sum = tmp_3
+    !x
+    !y
+    return sum
+
+@main() -> i32:
+L_ENTRY:
+    tmp_4 = call @sla__destructured_sum()
+    result = tmp_4
+    tmp_5 = call @sa_fmt_u64(result, 10)
+    tmp_6 = call @sa_fmt_buffer_data(tmp_5)
+    tmp_7 = call @sa_fmt_buffer_len(tmp_5)
+    tmp_8 = tmp_6
+    call @sa_print_bytes(&tmp_8, tmp_7)
+    call @sa_fmt_buffer_free(^tmp_5)
+    !tmp_8
+    !tmp_7
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 012 12_destructuring"():
+L_TEST_ENTRY_0:
+    tmp_9 = call @sla__destructured_sum()
+    got = tmp_9
+    tmp_10 = 7
+    tmp_11 = ne got, tmp_10
+    !tmp_10
+    br tmp_11 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_11
+    panic(12)
+
+L_ELSE_2:
+    !tmp_11
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

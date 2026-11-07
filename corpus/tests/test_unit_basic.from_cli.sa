@@ -1,0 +1,133 @@
+@add(a: i64, b: i64) -> i64:
+L_ENTRY:
+    tmp_0 = add a, b
+    !b
+    !a
+    return tmp_0
+
+@factorial(n: i64) -> i64:
+L_ENTRY:
+    tmp_1 = 1
+    tmp_2 = sle n, tmp_1
+    br tmp_2 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_2
+    tmp_3 = 1
+    !n
+    return tmp_3
+
+L_ELSE_1:
+    !tmp_2
+    tmp_4 = 1
+    tmp_5 = sub n, tmp_4
+    tmp_6 = call @factorial(tmp_5)
+    tmp_7 = mul n, tmp_6
+    !n
+    return tmp_7
+
+
+@test "add two positive numbers"():
+L_TEST_ENTRY_3:
+    tmp_9 = 3
+    tmp_10 = 4
+    tmp_11 = call @add(tmp_9, tmp_10)
+    result = tmp_11
+    tmp_12 = 7
+    tmp_13 = eq result, tmp_12
+    ok = tmp_13
+    br ok -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !ok
+    jmp L_MERGE_6
+
+L_ELSE_5:
+    !ok
+    panic(1)
+
+L_MERGE_6:
+    !result
+    return
+
+@test "add with zero"():
+L_TEST_ENTRY_7:
+    tmp_16 = 0
+    tmp_17 = 42
+    tmp_18 = call @add(tmp_16, tmp_17)
+    result = tmp_18
+    tmp_19 = 42
+    tmp_20 = eq result, tmp_19
+    ok = tmp_20
+    br ok -> L_THEN_8, L_ELSE_9
+
+L_THEN_8:
+    !ok
+    jmp L_MERGE_10
+
+L_ELSE_9:
+    !ok
+    panic(1)
+
+L_MERGE_10:
+    !result
+    return
+
+@test "factorial of 5"():
+L_TEST_ENTRY_11:
+    tmp_23 = 5
+    tmp_24 = call @factorial(tmp_23)
+    result = tmp_24
+    tmp_25 = 120
+    tmp_26 = eq result, tmp_25
+    ok = tmp_26
+    br ok -> L_THEN_12, L_ELSE_13
+
+L_THEN_12:
+    !ok
+    jmp L_MERGE_14
+
+L_ELSE_13:
+    !ok
+    panic(1)
+
+L_MERGE_14:
+    !result
+    return
+
+@test "add is commutative"():
+L_TEST_ENTRY_15:
+    tmp_29 = 2
+    tmp_30 = 3
+    tmp_31 = call @add(tmp_29, tmp_30)
+    ab = tmp_31
+    tmp_32 = 3
+    tmp_33 = 2
+    tmp_34 = call @add(tmp_32, tmp_33)
+    ba = tmp_34
+    tmp_35 = eq ab, ba
+    ok = tmp_35
+    br ok -> L_THEN_16, L_ELSE_17
+
+L_THEN_16:
+    !ok
+    jmp L_MERGE_18
+
+L_ELSE_17:
+    !ok
+    panic(1)
+
+L_MERGE_18:
+    !ba
+    !ab
+    return
+
+@test ignored "this test is skipped by default"():
+L_TEST_ENTRY_19:
+    tmp_38 = 1
+    tmp_39 = 1
+    tmp_40 = call @add(tmp_38, tmp_39)
+    x = tmp_40
+    !x
+    return
+

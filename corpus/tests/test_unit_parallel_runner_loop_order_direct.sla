@@ -1,0 +1,39 @@
+@import "sa_std/vec.sa"
+
+struct MiniFnPtrLoopHolder {
+    runs: Vec<fn(i32) -> i32>,
+    run_order_positions: Vec<i64>,
+}
+
+fn mini_fn_ptr_loop_inc(value: i32) -> i32 {
+    return value + 1;
+}
+
+fn mini_fn_ptr_loop_holder_new() -> MiniFnPtrLoopHolder {
+    let runs: Vec<fn(i32) -> i32> = Vec::new();
+    let run_order_positions: Vec<i64> = Vec::new();
+    return MiniFnPtrLoopHolder { runs: runs, run_order_positions: run_order_positions };
+}
+
+fn mini_fn_ptr_loop_holder_push(holder: MiniFnPtrLoopHolder, run: fn(i32) -> i32) -> MiniFnPtrLoopHolder {
+    let order_pos = len(holder.runs) as i64;
+    holder.runs.push(run);
+    holder.run_order_positions.push(order_pos);
+    return holder;
+}
+
+fn mini_fn_ptr_loop_holder_check_orders(holder: MiniFnPtrLoopHolder) -> i64 {
+    let order_pos: i64 = 0;
+    let total = len(holder.run_order_positions) as i64;
+    while order_pos < total {
+        if holder.run_order_positions[order_pos] != order_pos { panic(52101); };
+        order_pos = order_pos + 1;
+    }
+    return total;
+}
+
+@test "parallel runner loop order skeleton"() {
+    let holder0 = mini_fn_ptr_loop_holder_new();
+    let holder1 = mini_fn_ptr_loop_holder_push(holder0, mini_fn_ptr_loop_inc);
+    if mini_fn_ptr_loop_holder_check_orders(holder1) != 1 { panic(52102); };
+}

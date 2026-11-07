@@ -1,0 +1,14 @@
+// Member symbols are directly referenceable: a member of an overload
+// set can be called, or taken as a function value, through its member
+// symbol (`pick__ov_i32`). A bare reference to the set name itself is
+// an AmbiguousCall error (see the fn-value diagnostic); the member
+// symbol is the explicit remedy that diagnostic names.
+
+fn pick(x: i32) -> i32 { return 1; }
+fn pick(x: f64) -> i32 { return 2; }
+
+@test "overload member symbol escape hatch"() {
+    let f = pick__ov_i32;
+    if f(7) != 1 { panic(1201); };
+    if pick__ov_f64(2.5) != 2 { panic(1202); };
+};

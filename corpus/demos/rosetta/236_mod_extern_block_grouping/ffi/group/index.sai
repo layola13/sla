@@ -1,0 +1,2 @@
+@extern ffi_probe_contract(&slot: ptr) -> i32
+@extern ffi_reset_contract(&slot: ptr) -> i32

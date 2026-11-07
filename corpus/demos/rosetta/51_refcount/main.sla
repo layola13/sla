@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/rc.sa"
+
+fn main() -> i32 {
+    let value = Rc::new(5);
+    let clone = value.clone();
+    let left = *value;
+    let right = *clone;
+    println("{}", left + right);
+    return 0;
+}
+
+@test "rosetta 051 refcount"() {
+    let value = Rc::new(5);
+    let clone = value.clone();
+    let left = *value;
+    let right = *clone;
+    if left + right != 10 {
+        panic(51);
+    };
+}

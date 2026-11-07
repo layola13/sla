@@ -1,0 +1,3 @@
+[hooks]
+pre_compile = "hooks/pre-compile.sh"
+output = "generated/precompile.sa"

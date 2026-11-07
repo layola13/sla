@@ -1,0 +1,48 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Narayana 行和对峙：行和 vs Catalan 商式（n=6：132 对 132；n=7：429 对 429）。
+// 意对标 717_nar_row7 × 351_catalan（行源与商式源合流；599 体例续高位）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn nar(n: int, k: int) -> int {
+    return binom_mul(n, k) * binom_mul(n, k + 1) / n;
+}
+
+fn nsum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k < n {
+        s = s + nar(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn catd(n: int) -> int {
+    return binom_mul(2 * n, n) / (n + 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", nsum(6), catd(6), nsum(7), catd(7));
+    return 0;
+}
+
+@test "basic 719 duel nar7"() {
+    if nsum(6) != 132 { panic(71901); };
+    if catd(6) != 132 { panic(71902); };
+    if nsum(7) != 429 { panic(71903); };
+    if catd(7) != 429 { panic(71904); };
+}

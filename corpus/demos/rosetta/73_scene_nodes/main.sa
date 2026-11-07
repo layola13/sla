@@ -1,0 +1,115 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_scene_nodes_sum = vtable { call = @sla__scene_nodes_sum }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__scene_nodes_sum() -> i32:
+L_ENTRY:
+    nodes = alloc 12
+    tmp_0 = 4
+    store nodes+0, tmp_0 as i32
+    tmp_1 = 5
+    store nodes+4, tmp_1 as i32
+    tmp_2 = 6
+    store nodes+8, tmp_2 as i32
+    tmp_3 = 0
+    tmp_4 = 0
+    tmp_5 = ptr_add nodes, tmp_4
+    tmp_6 = load tmp_5+0 as i32
+    tmp_7 = add tmp_3, tmp_6
+    !tmp_4
+    !tmp_5
+    !tmp_6
+    !tmp_3
+    tmp_8 = 4
+    tmp_9 = ptr_add nodes, tmp_8
+    tmp_10 = load tmp_9+0 as i32
+    tmp_11 = add tmp_7, tmp_10
+    !tmp_8
+    !tmp_9
+    !tmp_10
+    !tmp_7
+    tmp_12 = 8
+    tmp_13 = ptr_add nodes, tmp_12
+    tmp_14 = load tmp_13+0 as i32
+    tmp_15 = add tmp_11, tmp_14
+    !tmp_12
+    !tmp_13
+    !tmp_14
+    !tmp_11
+    !nodes
+    return tmp_15
+
+@main() -> i32:
+L_ENTRY:
+    nodes = alloc 12
+    tmp_16 = 4
+    store nodes+0, tmp_16 as i32
+    tmp_17 = 5
+    store nodes+4, tmp_17 as i32
+    tmp_18 = 6
+    store nodes+8, tmp_18 as i32
+    tmp_19 = 0
+    tmp_20 = 0
+    tmp_21 = ptr_add nodes, tmp_20
+    tmp_22 = load tmp_21+0 as i32
+    tmp_23 = add tmp_19, tmp_22
+    !tmp_20
+    !tmp_21
+    !tmp_22
+    !tmp_19
+    tmp_24 = 4
+    tmp_25 = ptr_add nodes, tmp_24
+    tmp_26 = load tmp_25+0 as i32
+    tmp_27 = add tmp_23, tmp_26
+    !tmp_24
+    !tmp_25
+    !tmp_26
+    !tmp_23
+    tmp_28 = 8
+    tmp_29 = ptr_add nodes, tmp_28
+    tmp_30 = load tmp_29+0 as i32
+    tmp_31 = add tmp_27, tmp_30
+    !tmp_28
+    !tmp_29
+    !tmp_30
+    !tmp_27
+    tmp_32 = call @sa_fmt_u64(tmp_31, 10)
+    tmp_33 = call @sa_fmt_buffer_data(tmp_32)
+    tmp_34 = call @sa_fmt_buffer_len(tmp_32)
+    tmp_35 = tmp_33
+    call @sa_print_bytes(&tmp_35, tmp_34)
+    call @sa_fmt_buffer_free(^tmp_32)
+    !tmp_35
+    !tmp_34
+    !tmp_31
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_36 = 0
+    !nodes
+    return tmp_36
+
+@test "rosetta 073 73_scene_nodes"():
+L_TEST_ENTRY_0:
+    tmp_37 = call @sla__scene_nodes_sum()
+    got = tmp_37
+    tmp_38 = 15
+    tmp_39 = ne got, tmp_38
+    !tmp_38
+    br tmp_39 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_39
+    panic(73)
+
+L_ELSE_2:
+    !tmp_39
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

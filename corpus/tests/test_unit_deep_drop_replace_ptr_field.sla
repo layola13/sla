@@ -1,0 +1,89 @@
+@import "sa_std/vec.sa"
+
+// DEF deep-drop crash-A regression (replace semantics, Jev A1):
+// assigning a deep place read into another place must MOVE the
+// value out of the source place (the source is left holding an
+// empty handle), never alias it. Pre-fix shape: the transfer was a
+// bare header store, so both holders owned the same buffers; the
+// exec-side reset dropped them and the conn-side reset dropped
+// them AGAIN (slaredis goroutine double deep-drop, ROOTCAUSE §7).
+// Functional oracles: the source reads back EMPTY right after the
+// transfer (pre-fix it still reads the full batch -> panic 4504),
+// readbacks of the moved values stay exact across rounds, and a
+// same-size scratch allocation interleaved between the two resets
+// keeps its contents (a double free corrupts it).
+
+struct Batch {
+    items: Vec<Vec<u8>>,
+    buf: Vec<u8>,
+    tag: u64,
+}
+
+fn filled_vec(n: u64, seed: u8) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(seed + (i % 5) as u8);
+        i = i + 1;
+    }
+    return v;
+}
+
+fn sum_vec(v: &Vec<u8>) -> u64 {
+    let sum: u64 = 0;
+    let i: u64 = 0;
+    while i < 48 {
+        sum = sum + (v[i] as u64);
+        i = i + 1;
+    }
+    return sum;
+}
+
+fn sum_inner(v: &Vec<Vec<u8>>, which: u64) -> u64 {
+    let sum: u64 = 0;
+    let i: u64 = 0;
+    while i < 48 {
+        sum = sum + (v[which][i] as u64);
+        i = i + 1;
+    }
+    return sum;
+}
+
+@test "replace moves deep fields between raw ptr holders"() {
+    // sum(i%5 for i in 0..48) = 93; a filled_vec(48, s) sums to 93 + 48*s.
+    let src = Box::into_raw(Box::new(Batch { items: Vec::new(), buf: filled_vec(48, 1), tag: 1 }));
+    let dst = Box::into_raw(Box::new(Batch { items: Vec::new(), buf: Vec::new(), tag: 2 }));
+    (*src).items.push(filled_vec(48, 2));
+    (*src).items.push(filled_vec(48, 3));
+    let r: u64 = 0;
+    while r < 60 {
+        // The transfer under test (crash-A shape, both plan kinds:
+        // items is .deep_vec, buf is .buffer).
+        (*dst).items = (*src).items;
+        (*dst).buf = (*src).buf;
+        // dst owns the batch now: exact readbacks.
+        if sum_inner(&(*dst).items, 0) != 93 + 96 { panic(4501); };
+        if sum_inner(&(*dst).items, 1) != 93 + 144 { panic(4502); };
+        if sum_vec(&(*dst).buf) != 93 + 48 { panic(4503); };
+        // The source places were moved out of: they read back empty.
+        if len((*src).items) != 0 { panic(4504); };
+        if len((*src).buf) != 0 { panic(4505); };
+        // Interleave a same-size-class allocation between the resets.
+        let scratch = filled_vec(48, 9);
+        // Exec-side reset drops the batch.
+        (*dst).items = Vec::new();
+        (*dst).buf = Vec::new();
+        // Conn-side reset: post-fix drops empty handles; pre-fix this
+        // was the second deep drop of the same buffers.
+        (*src).items = Vec::new();
+        (*src).buf = Vec::new();
+        if sum_vec(&scratch) != 93 + 432 { panic(4506); };
+        // Refill the source for the next round.
+        (*src).items.push(filled_vec(48, 2));
+        (*src).items.push(filled_vec(48, 3));
+        (*src).buf = filled_vec(48, 1);
+        r = r + 1;
+    }
+    if (*src).tag != 1 { panic(4507); };
+    if (*dst).tag != 2 { panic(4508); };
+}

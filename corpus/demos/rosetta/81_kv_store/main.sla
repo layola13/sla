@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+@import "sa_std/btree_map.sa"
+
+fn kv_lookup_alpha() -> i32 {
+    let kv = BTreeMap::new();
+    kv.insert("alpha", 5);
+    return kv["alpha"];
+}
+
+fn main() -> i32 {
+    let result = kv_lookup_alpha();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 081 81_kv_store"() {
+    let got = kv_lookup_alpha();
+    if got != 5 {
+        panic(81);
+    };
+};

@@ -1,0 +1,476 @@
+@import "sa_std/core/box.sa"
+@import "sa_std/core/cell.sa"
+@import "sa_std/core/rc.sa"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/refcell.sa"
+@import "sa_std/alloc/vec.sa"
+
+struct BorrowPayload {
+    value: int,
+}
+
+struct BorrowBoxSlot {
+    item: Box<BorrowPayload>,
+}
+
+struct BorrowRcSlot {
+    item: Rc<BorrowPayload>,
+}
+
+struct BorrowArcSlot {
+    item: Arc<BorrowPayload>,
+}
+
+struct BorrowRcBoxSlot {
+    item: Rc<Box<BorrowPayload>>,
+}
+
+struct BorrowBoxRcSlot {
+    item: Box<Rc<BorrowPayload>>,
+}
+
+struct BorrowNestedBoxSlot {
+    slot: BorrowBoxSlot,
+}
+
+struct BorrowRefCellSlot {
+    cell: Rc<RefCell<BorrowPayload>>,
+}
+
+struct BorrowRefCellBoxSlot {
+    cell: Rc<RefCell<Box<BorrowPayload>>>,
+}
+
+struct BorrowVecBoxSlot {
+    items: Vec<Box<BorrowPayload>>,
+}
+
+struct BorrowArcRefCellSlot {
+    cell: Arc<RefCell<BorrowPayload>>,
+}
+
+struct BorrowVecRcRefCellBoxSlot {
+    items: Vec<Rc<RefCell<Box<BorrowPayload>>>>,
+}
+
+struct BorrowVecArcRefCellSlot {
+    items: Vec<Arc<RefCell<BorrowPayload>>>,
+}
+
+struct BorrowBoxRcRefCellBoxSlot {
+    item: Box<Rc<RefCell<Box<BorrowPayload>>>>,
+}
+
+struct BorrowOuterVecRcRefCellBoxSlot {
+    nested: BorrowVecRcRefCellBoxSlot,
+}
+
+struct BorrowMixedSmartSlot {
+    boxed: Box<BorrowPayload>,
+    rc: Rc<BorrowPayload>,
+    arc: Arc<BorrowPayload>,
+    rc_cell_box: Rc<RefCell<Box<BorrowPayload>>>,
+}
+
+fn borrow_read_box(item: &Box<BorrowPayload>) -> int {
+    let payload: &BorrowPayload = &*item;
+    return payload.value;
+}
+
+fn borrow_read_rc(item: &Rc<BorrowPayload>) -> int {
+    let payload: &BorrowPayload = &*item;
+    return payload.value;
+}
+
+fn borrow_read_arc(item: &Arc<BorrowPayload>) -> int {
+    let payload: &BorrowPayload = &*item;
+    return payload.value;
+}
+
+fn borrow_read_rc_box(item: &Rc<Box<BorrowPayload>>) -> int {
+    let boxed: &Box<BorrowPayload> = &*item;
+    let payload: &BorrowPayload = &*boxed;
+    return payload.value;
+}
+
+fn borrow_read_box_rc(item: &Box<Rc<BorrowPayload>>) -> int {
+    let rc_value: &Rc<BorrowPayload> = &*item;
+    let payload: &BorrowPayload = &*rc_value;
+    return payload.value;
+}
+
+fn borrow_refcell_read(cell: &RefCell<BorrowPayload>) -> int {
+    let borrowed: &BorrowPayload = cell.borrow();
+    return borrowed.value;
+}
+
+fn borrow_refcell_write(cell: &RefCell<BorrowPayload>, value: int) -> void {
+    let borrowed: &BorrowPayload = cell.borrow_mut();
+    borrowed.value = value;
+}
+
+fn borrow_refcell_box_read(cell: &RefCell<Box<BorrowPayload>>) -> int {
+    let borrowed_box: &Box<BorrowPayload> = cell.borrow();
+    let payload: &BorrowPayload = &*borrowed_box;
+    return payload.value;
+}
+
+fn borrow_refcell_box_write(cell: &RefCell<Box<BorrowPayload>>, value: int) -> void {
+    let borrowed_box: &Box<BorrowPayload> = cell.borrow_mut();
+    let payload: &BorrowPayload = &*borrowed_box;
+    payload.value = value;
+}
+
+fn borrow_sum_box_rc_arc(item_box: &Box<BorrowPayload>, item_rc: &Rc<BorrowPayload>, item_arc: &Arc<BorrowPayload>) -> int {
+    return borrow_read_box(item_box) + borrow_read_rc(item_rc) + borrow_read_arc(item_arc);
+}
+
+fn borrow_sum_refcell_box_pair(left: &RefCell<Box<BorrowPayload>>, right: &RefCell<Box<BorrowPayload>>) -> int {
+    return borrow_refcell_box_read(left) + borrow_refcell_box_read(right);
+}
+
+fn borrow_refcell_box_copy_increment(dst: &RefCell<Box<BorrowPayload>>, src: &RefCell<Box<BorrowPayload>>) -> void {
+    let value = borrow_refcell_box_read(src);
+    borrow_refcell_box_write(dst, value + 1);
+}
+
+fn borrow_deep_return_value(flag: bool) -> int {
+    let holder = BorrowBoxRcRefCellBoxSlot { item: Box::new(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 61 })))) };
+    if flag {
+        return borrow_refcell_box_read(&**holder.item);
+    };
+    borrow_refcell_box_write(&**holder.item, 67);
+    return borrow_refcell_box_read(&**holder.item);
+}
+
+fn borrow_pick_index(flag: bool) -> int {
+    if flag {
+        return 1;
+    };
+    return 0;
+}
+
+@test "borrowed field call argument releases before field owner temp"() {
+    let nested = BorrowNestedBoxSlot { slot: BorrowBoxSlot { item: Box::new(BorrowPayload { value: 11 }) } };
+    if borrow_read_box(&nested.slot.item) != 11 {
+        panic(1);
+    };
+}
+
+@test "borrowed field temp releases across loop iterations"() {
+    let total: int = 0;
+    let i: int = 0;
+    while i < 4 {
+        let slot = BorrowNestedBoxSlot { slot: BorrowBoxSlot { item: Box::new(BorrowPayload { value: i + 1 }) } };
+        let borrowed_box: &Box<BorrowPayload> = &slot.slot.item;
+        let payload: &BorrowPayload = &*borrowed_box;
+        total = total + payload.value;
+        i = i + 1;
+    }
+    if total != 10 {
+        panic(2);
+    };
+}
+
+@test "borrowed field temp releases across branch merge"() {
+    let left = BorrowRcSlot { item: Rc::new(BorrowPayload { value: 7 }) };
+    let right = BorrowBoxSlot { item: Box::new(BorrowPayload { value: 13 }) };
+    let total: int = 0;
+    let choose_left = true;
+    if choose_left {
+        let borrowed_rc: &Rc<BorrowPayload> = &left.item;
+        total = total + borrow_read_rc(borrowed_rc);
+    } else {
+        let borrowed_box: &Box<BorrowPayload> = &right.item;
+        total = total + borrow_read_box(borrowed_box);
+    };
+    if total != 7 {
+        panic(3);
+    };
+}
+
+@test "borrowed rc refcell field releases before owner temp"() {
+    let holder = BorrowRefCellSlot { cell: Rc::new(RefCell::new(BorrowPayload { value: 5 })) };
+    let borrowed_cell: &RefCell<BorrowPayload> = &*holder.cell;
+    borrow_refcell_write(borrowed_cell, 21);
+    if borrow_refcell_read(borrowed_cell) != 21 {
+        panic(4);
+    };
+}
+
+@test "borrowed arc field releases before owner temp"() {
+    let holder = BorrowArcSlot { item: Arc::new(BorrowPayload { value: 31 }) };
+    let borrowed_arc: &Arc<BorrowPayload> = &holder.item;
+    if borrow_read_arc(borrowed_arc) != 31 {
+        panic(5);
+    };
+}
+
+@test "nested rc box field borrow releases all temporaries"() {
+    let holder = BorrowRcBoxSlot { item: Rc::new(Box::new(BorrowPayload { value: 41 })) };
+    let borrowed_rc_box: &Rc<Box<BorrowPayload>> = &holder.item;
+    if borrow_read_rc_box(borrowed_rc_box) != 41 {
+        panic(6);
+    };
+}
+
+@test "nested box rc field borrow releases all temporaries"() {
+    let holder = BorrowBoxRcSlot { item: Box::new(Rc::new(BorrowPayload { value: 43 })) };
+    let borrowed_box_rc: &Box<Rc<BorrowPayload>> = &holder.item;
+    if borrow_read_box_rc(borrowed_box_rc) != 43 {
+        panic(7);
+    };
+}
+
+@test "rc refcell box field borrow releases nested temporaries"() {
+    let holder = BorrowRefCellBoxSlot { cell: Rc::new(RefCell::new(Box::new(BorrowPayload { value: 53 }))) };
+    let borrowed_cell: &RefCell<Box<BorrowPayload>> = &*holder.cell;
+    borrow_refcell_box_write(borrowed_cell, 59);
+    if borrow_refcell_box_read(borrowed_cell) != 59 {
+        panic(8);
+    };
+}
+
+@test "repeated smart pointer field borrows release each owner temp"() {
+    let holder = BorrowRcSlot { item: Rc::new(BorrowPayload { value: 17 }) };
+    let total: int = 0;
+    let i: int = 0;
+    while i < 3 {
+        let borrowed_rc: &Rc<BorrowPayload> = &holder.item;
+        total = total + borrow_read_rc(borrowed_rc);
+        i = i + 1;
+    }
+    if total != 51 {
+        panic(9);
+    };
+}
+
+@test "vec field smart pointer index borrow releases owner temps"() {
+    let items: Vec<Box<BorrowPayload>> = Vec::new();
+    items.push(Box::new(BorrowPayload { value: 3 }));
+    items.push(Box::new(BorrowPayload { value: 4 }));
+    let holder = BorrowVecBoxSlot { items: items };
+    let first: &Box<BorrowPayload> = &holder.items[0];
+    let second: &Box<BorrowPayload> = &holder.items[1];
+    if borrow_read_box(first) + borrow_read_box(second) != 7 {
+        panic(10);
+    };
+}
+
+@test "direct nested rc refcell borrow call argument releases temps"() {
+    let holder = BorrowRefCellBoxSlot { cell: Rc::new(RefCell::new(Box::new(BorrowPayload { value: 61 }))) };
+    borrow_refcell_box_write(&*holder.cell, 67);
+    if borrow_refcell_box_read(&*holder.cell) != 67 {
+        panic(11);
+    };
+}
+
+@test "arc refcell field borrow releases deref owner temp"() {
+    let holder = BorrowArcRefCellSlot { cell: Arc::new(RefCell::new(BorrowPayload { value: 71 })) };
+    let cell: &RefCell<BorrowPayload> = &*holder.cell;
+    borrow_refcell_write(cell, 79);
+    if borrow_refcell_read(cell) != 79 {
+        panic(12);
+    };
+}
+
+@test "vec rc refcell box indexed borrow releases nested owner temps"() {
+    let items: Vec<Rc<RefCell<Box<BorrowPayload>>>> = Vec::new();
+    items.push(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 2 }))));
+    items.push(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 5 }))));
+    let holder = BorrowVecRcRefCellBoxSlot { items: items };
+    let first_cell: &RefCell<Box<BorrowPayload>> = &*holder.items[0];
+    let second_cell: &RefCell<Box<BorrowPayload>> = &*holder.items[1];
+    borrow_refcell_box_write(first_cell, 13);
+    borrow_refcell_box_write(second_cell, 17);
+    if borrow_refcell_box_read(first_cell) + borrow_refcell_box_read(second_cell) != 30 {
+        panic(13);
+    };
+}
+
+@test "vec arc refcell indexed borrow survives loop and branch temps"() {
+    let items: Vec<Arc<RefCell<BorrowPayload>>> = Vec::new();
+    items.push(Arc::new(RefCell::new(BorrowPayload { value: 3 })));
+    items.push(Arc::new(RefCell::new(BorrowPayload { value: 7 })));
+    let holder = BorrowVecArcRefCellSlot { items: items };
+    let total: int = 0;
+    let i: int = 0;
+    while i < 4 {
+        if i < 2 {
+            let cell: &RefCell<BorrowPayload> = &*holder.items[0];
+            total = total + borrow_refcell_read(cell);
+        } else {
+            let cell: &RefCell<BorrowPayload> = &*holder.items[1];
+            total = total + borrow_refcell_read(cell);
+        };
+        i = i + 1;
+    }
+    if total != 20 {
+        panic(14);
+    };
+}
+
+@test "box rc refcell box chained deref releases all owner temps"() {
+    let holder = BorrowBoxRcRefCellBoxSlot { item: Box::new(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 83 })))) };
+    let rc_value: &Rc<RefCell<Box<BorrowPayload>>> = &*holder.item;
+    let cell: &RefCell<Box<BorrowPayload>> = &*rc_value;
+    borrow_refcell_box_write(cell, 89);
+    if borrow_refcell_box_read(cell) != 89 {
+        panic(15);
+    };
+}
+
+@test "mixed direct borrow arguments release before repeated owner use"() {
+    let holder = BorrowRcBoxSlot { item: Rc::new(Box::new(BorrowPayload { value: 97 })) };
+    if borrow_read_rc_box(&holder.item) != 97 {
+        panic(16);
+    };
+    if borrow_read_rc_box(&holder.item) != 97 {
+        panic(17);
+    };
+}
+
+@test "multi argument smart pointer borrows release all owners"() {
+    let holder = BorrowMixedSmartSlot {
+        boxed: Box::new(BorrowPayload { value: 2 }),
+        rc: Rc::new(BorrowPayload { value: 3 }),
+        arc: Arc::new(BorrowPayload { value: 5 }),
+        rc_cell_box: Rc::new(RefCell::new(Box::new(BorrowPayload { value: 7 }))),
+    };
+    if borrow_sum_box_rc_arc(&holder.boxed, &holder.rc, &holder.arc) != 10 {
+        panic(18);
+    };
+    borrow_refcell_box_write(&*holder.rc_cell_box, 11);
+    if borrow_refcell_box_read(&*holder.rc_cell_box) != 11 {
+        panic(19);
+    };
+    if borrow_sum_box_rc_arc(&holder.boxed, &holder.rc, &holder.arc) != 10 {
+        panic(20);
+    };
+}
+
+@test "nested owner chain through struct and vec index releases temps"() {
+    let items: Vec<Rc<RefCell<Box<BorrowPayload>>>> = Vec::new();
+    items.push(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 13 }))));
+    items.push(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 17 }))));
+    let holder = BorrowOuterVecRcRefCellBoxSlot { nested: BorrowVecRcRefCellBoxSlot { items: items } };
+    let first_cell: &RefCell<Box<BorrowPayload>> = &*holder.nested.items[0];
+    let second_cell: &RefCell<Box<BorrowPayload>> = &*holder.nested.items[1];
+    if borrow_sum_refcell_box_pair(first_cell, second_cell) != 30 {
+        panic(21);
+    };
+    borrow_refcell_box_write(first_cell, 19);
+    borrow_refcell_box_write(second_cell, 23);
+    if borrow_sum_refcell_box_pair(first_cell, second_cell) != 42 {
+        panic(22);
+    };
+}
+
+@test "nested indexed borrow call arguments release left and right owners"() {
+    let items: Vec<Rc<RefCell<Box<BorrowPayload>>>> = Vec::new();
+    items.push(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 29 }))));
+    items.push(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 31 }))));
+    let holder = BorrowVecRcRefCellBoxSlot { items: items };
+    if borrow_sum_refcell_box_pair(&*holder.items[0], &*holder.items[1]) != 60 {
+        panic(23);
+    };
+    borrow_refcell_box_write(&*holder.items[borrow_pick_index(false)], 37);
+    borrow_refcell_box_write(&*holder.items[borrow_pick_index(true)], 41);
+    if borrow_sum_refcell_box_pair(&*holder.items[0], &*holder.items[1]) != 78 {
+        panic(24);
+    };
+}
+
+@test "deep smart pointer branch borrows restore release state"() {
+    let left = BorrowBoxRcRefCellBoxSlot { item: Box::new(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 43 })))) };
+    let right = BorrowBoxRcRefCellBoxSlot { item: Box::new(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 47 })))) };
+    let total: int = 0;
+    let i: int = 0;
+    while i < 4 {
+        if i < 2 {
+            let rc_value: &Rc<RefCell<Box<BorrowPayload>>> = &*left.item;
+            let cell: &RefCell<Box<BorrowPayload>> = &*rc_value;
+            total = total + borrow_refcell_box_read(cell);
+        } else {
+            let rc_value: &Rc<RefCell<Box<BorrowPayload>>> = &*right.item;
+            let cell: &RefCell<Box<BorrowPayload>> = &*rc_value;
+            total = total + borrow_refcell_box_read(cell);
+        };
+        i = i + 1;
+    }
+    if total != 180 {
+        panic(25);
+    };
+    if borrow_refcell_box_read(&**left.item) + borrow_refcell_box_read(&**right.item) != 90 {
+        panic(26);
+    };
+}
+
+@test "deep repeated mutable borrows in loop release before next iteration"() {
+    let holder = BorrowBoxRcRefCellBoxSlot { item: Box::new(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 0 })))) };
+    let i: int = 0;
+    while i < 6 {
+        borrow_refcell_box_write(&**holder.item, i + 1);
+        if borrow_refcell_box_read(&**holder.item) != i + 1 {
+            panic(27);
+        };
+        i = i + 1;
+    }
+    if borrow_refcell_box_read(&**holder.item) != 6 {
+        panic(28);
+    };
+}
+
+@test "mixed vec arc and rc nested borrows survive interleaved writes"() {
+    let rc_items: Vec<Rc<RefCell<Box<BorrowPayload>>>> = Vec::new();
+    rc_items.push(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 1 }))));
+    rc_items.push(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 2 }))));
+    let arc_items: Vec<Arc<RefCell<BorrowPayload>>> = Vec::new();
+    arc_items.push(Arc::new(RefCell::new(BorrowPayload { value: 3 })));
+    arc_items.push(Arc::new(RefCell::new(BorrowPayload { value: 4 })));
+    let rc_holder = BorrowVecRcRefCellBoxSlot { items: rc_items };
+    let arc_holder = BorrowVecArcRefCellSlot { items: arc_items };
+    let rc_cell: &RefCell<Box<BorrowPayload>> = &*rc_holder.items[1];
+    let arc_cell: &RefCell<BorrowPayload> = &*arc_holder.items[0];
+    borrow_refcell_box_write(rc_cell, 53);
+    borrow_refcell_write(arc_cell, 59);
+    if borrow_refcell_box_read(rc_cell) + borrow_refcell_read(arc_cell) != 112 {
+        panic(29);
+    };
+    if borrow_refcell_box_read(&*rc_holder.items[0]) + borrow_refcell_read(&*arc_holder.items[1]) != 5 {
+        panic(30);
+    };
+}
+
+@test "void call with two deep borrow args releases both owners"() {
+    let items: Vec<Rc<RefCell<Box<BorrowPayload>>>> = Vec::new();
+    items.push(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 71 }))));
+    items.push(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 73 }))));
+    let holder = BorrowVecRcRefCellBoxSlot { items: items };
+    borrow_refcell_box_copy_increment(&*holder.items[0], &*holder.items[1]);
+    if borrow_sum_refcell_box_pair(&*holder.items[0], &*holder.items[1]) != 147 {
+        panic(31);
+    };
+    borrow_refcell_box_copy_increment(&*holder.items[1], &*holder.items[0]);
+    if borrow_sum_refcell_box_pair(&*holder.items[0], &*holder.items[1]) != 149 {
+        panic(32);
+    };
+}
+
+@test "deep borrow releases before early return cleanup"() {
+    if borrow_deep_return_value(true) != 61 {
+        panic(33);
+    };
+    if borrow_deep_return_value(false) != 67 {
+        panic(34);
+    };
+}
+
+@test "deep owner remains reusable after void call arg cleanup"() {
+    let holder = BorrowBoxRcRefCellBoxSlot { item: Box::new(Rc::new(RefCell::new(Box::new(BorrowPayload { value: 79 })))) };
+    borrow_refcell_box_write(&**holder.item, 83);
+    borrow_refcell_box_write(&**holder.item, borrow_refcell_box_read(&**holder.item) + 2);
+    if borrow_refcell_box_read(&**holder.item) != 85 {
+        panic(35);
+    };
+}

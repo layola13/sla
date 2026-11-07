@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 351_math_small：符号函数 + 整数乘（5,7,-1,0,1,42）。
+// `abs` 见 100，此处主覆盖 `sign`（分支表达）与 `imul`（即普通乘法）；
+
+fn sign(x: i32) -> i32 {
+    if x < 0 { return -1; };
+    if x > 0 { return 1; };
+    return 0;
+}
+
+fn main() -> i32 {
+    let a = 0 - 5;
+    if a < 0 { a = 0 - a; };
+    println("{},{},{},{},{},{}", a, 7, sign(0 - 9), sign(0), sign(4), 6 * 7);
+    return 0;
+}
+
+@test "basic 118 sign imul"() {
+    if sign(0 - 9) != -1 { panic(11801); };
+    if sign(0) != 0 { panic(11802); };
+    if sign(4) != 1 { panic(11803); };
+    if 6 * 7 != 42 { panic(11804); };
+}

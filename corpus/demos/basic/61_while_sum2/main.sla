@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 198_while_sum2：while 倒数累加（10+…+1=55）。
+// 与 04/05（正序累加）互补，此处用递减 while（SLA 风格见 40_do_sum）。
+
+fn main() -> i32 {
+    let i = 10;
+    let t = 0;
+    while i > 0 {
+        t = t + i;
+        i = i - 1;
+    }
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 61 while sum2"() {
+    let i = 10;
+    let t = 0;
+    while i > 0 {
+        t = t + i;
+        i = i - 1;
+    }
+    if t != 55 { panic(6101); };
+}

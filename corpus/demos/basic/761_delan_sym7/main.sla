@@ -1,0 +1,48 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Delannoy 续对称性：D(7,2)=D(2,7)=113，D(7,5)=D(5,7)=7183（镜像双算一致）。
+// 意对标 756_delan7（单格版互补；行列镜像互锁，619 体例续高位）。
+
+fn delan(m: int, n: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= m * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= m {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let b = 0;
+    while b <= n {
+        t[b] = 1;
+        b = b + 1;
+    }
+    let mm = 1;
+    while mm <= m {
+        let nn = 1;
+        while nn <= n {
+            t[mm * w + nn] = t[(mm - 1) * w + nn] + t[(mm - 1) * w + nn - 1] + t[mm * w + nn - 1];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[m * w + n];
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", delan(7, 2), delan(2, 7), delan(7, 5), delan(5, 7));
+    return 0;
+}
+
+@test "basic 761 delan sym7"() {
+    if delan(7, 2) != 113 { panic(76101); };
+    if delan(2, 7) != 113 { panic(76102); };
+    if delan(7, 5) != 7183 { panic(76103); };
+    if delan(5, 7) != 7183 { panic(76104); };
+}

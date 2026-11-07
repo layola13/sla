@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+
+fn parse_num(value: i32) -> Result<i32, i32> {
+    Ok(value)
+}
+
+fn compute() -> Result<i32, i32> {
+    let a = parse_num(10)?;
+    let b = parse_num(20)?;
+    Ok(a + b)
+}
+
+fn main() -> i32 {
+    let result = compute().unwrap_or(-1);
+    println("{}", result);
+    if result == 30 { return 0; } else { return 1; };
+}
+
+@test "rosetta 309 try block macro"() {
+    let result = compute().unwrap_or(-1);
+    if result != 30 { panic(309); };
+}

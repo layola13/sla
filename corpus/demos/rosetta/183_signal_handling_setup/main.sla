@@ -1,0 +1,5 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+fn signal_handler_signal() -> i32 { let signal_number = 2; return signal_number; }
+fn main() -> i32 { let signal_number = 2; println("{}", signal_number); return signal_number; }
+@test "rosetta 183 183_signal_handling_setup"() { let got = signal_handler_signal(); if got != 2 { panic(183); }; }

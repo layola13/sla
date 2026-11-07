@@ -1,0 +1,4 @@
+// expect: InlineMacroNotAllowed
+// neg: inline prefix on a macro declaration
+inline macro m(x: i64) { x }
+fn main() -> i32 { return 0; }

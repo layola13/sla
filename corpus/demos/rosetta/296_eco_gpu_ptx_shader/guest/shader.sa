@@ -1,0 +1,21 @@
+@import "guest/shader.sal"
+
+@ffi_wrapper gpu_shader_gate(*uniform: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow uniform
+    lane = load view+ShaderUniform_lane as i32
+    seed = load view+ShaderUniform_seed as i32
+    sum = add lane, seed
+    !seed
+    !lane
+    !view
+    return sum
+
+@export gpu_shader_entry() -> i32:
+L_ENTRY:
+    uniform = alloc ShaderUniform_SIZE
+    store uniform+ShaderUniform_lane, 296 as i32
+    store uniform+ShaderUniform_seed, 0 as i32
+    value = call @gpu_shader_gate(*uniform)
+    !uniform
+    return value

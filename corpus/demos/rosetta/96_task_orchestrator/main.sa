@@ -1,0 +1,107 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_ready_score = vtable { call = @sla__ready_score }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__ready_score(task: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load task+0 as u8
+    tmp_1 = 1
+    tmp_2 = eq tmp_0, tmp_1
+    !tmp_0
+    !tmp_1
+    br tmp_2 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_2
+    tmp_3 = load task+9 as u8
+    tmp_4 = 1
+    tmp_5 = eq tmp_3, tmp_4
+    !tmp_3
+    !tmp_4
+    br tmp_5 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_5
+    tmp_6 = 0
+    !task
+    return tmp_6
+
+L_ELSE_4:
+    !tmp_5
+    tmp_7 = load task+1 as i32
+    tmp_8 = load task+5 as i32
+    tmp_9 = sub tmp_7, tmp_8
+    !tmp_7
+    !tmp_8
+    !task
+    return tmp_9
+
+
+L_ELSE_1:
+    !tmp_2
+    tmp_11 = 0
+    !task
+    return tmp_11
+
+
+@main() -> i32:
+L_ENTRY:
+    task = alloc 10
+    tmp_13 = 1
+    store task+0, tmp_13 as u8
+    tmp_14 = 7
+    store task+1, tmp_14 as i32
+    tmp_15 = 2
+    store task+5, tmp_15 as i32
+    tmp_16 = 0
+    store task+9, tmp_16 as u8
+    tmp_17 = call @sla__ready_score(task)
+    result = tmp_17
+    tmp_18 = call @sa_fmt_u64(result, 10)
+    tmp_19 = call @sa_fmt_buffer_data(tmp_18)
+    tmp_20 = call @sa_fmt_buffer_len(tmp_18)
+    tmp_21 = tmp_19
+    call @sa_print_bytes(&tmp_21, tmp_20)
+    call @sa_fmt_buffer_free(^tmp_18)
+    !tmp_21
+    !tmp_20
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    !task
+    return result
+
+@test "rosetta 096 96_task_orchestrator"():
+L_TEST_ENTRY_6:
+    task = alloc 10
+    tmp_22 = 1
+    store task+0, tmp_22 as u8
+    tmp_23 = 7
+    store task+1, tmp_23 as i32
+    tmp_24 = 2
+    store task+5, tmp_24 as i32
+    tmp_25 = 0
+    store task+9, tmp_25 as u8
+    tmp_26 = call @sla__ready_score(task)
+    got = tmp_26
+    tmp_27 = 5
+    tmp_28 = ne got, tmp_27
+    !tmp_27
+    br tmp_28 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_28
+    panic(96)
+
+L_ELSE_8:
+    !tmp_28
+    jmp L_MERGE_9
+
+L_MERGE_9:
+    !task
+    !got
+    return
+

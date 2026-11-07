@@ -1,0 +1,9 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: RwLock is a synchronization primitive; it can
+// never be an arena root (design 2.2).
+fn neg_rwlock() -> i32 {
+    arena {
+        let m = RwLock::new(0);
+    }
+    return 0;
+}

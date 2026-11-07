@@ -1,0 +1,14 @@
+// expect: Redeclaration
+// Negative: overloads may not differ by return type only. Two
+// declarations with identical parameters and different returns are a
+// redeclaration, reported with the return-type note. Judge with a
+// standalone `sla check` (exit 1, Redeclaration mentioning that
+// overloads may not differ by return type only); never via the test
+// runner.
+
+fn pick(x: i32) -> i32 { return 1; }
+fn pick(x: i32) -> f64 { return 2.0; }
+
+fn main() -> i32 {
+    return pick(7);
+}

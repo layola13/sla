@@ -1,0 +1,190 @@
+// Regression (C1, test path): the syntactic reachability scan folds an
+// `if` condition with facts recorded for a local's fields. `seg` starts
+// as a struct literal with len 0 and is then mutated through a call
+// (sb_append(&seg, ...)); the scan used to keep the stale len == 0 fact,
+// fold the nested `if seg.len > 0` inside the while loop to false, and
+// never mark sb_lower_ip reachable — its declaration was pruned before
+// type checking and the surviving call failed with
+// "Undefined call: sb_lower_ip" (in large closures the same loss
+// surfaced at SAB verification as UnknownRegister: callee is not
+// declared). The functions below are the verbatim saVmTool
+// blocked-name closure that exhibited the failure. `sa check` on this
+// file always passed; only the test path lost the callee.
+@import "sa_std/string.sa";
+@import "sa_std/ptr.sa";
+
+struct StrBuf {
+    bytes: [u8; 65536], len: u64,
+};
+
+fn sb_append(b: &StrBuf, p: ptr, n: u64) {
+    let i: u64 = 0;
+    while i < n {
+        if b.len >= 65536 { break; };
+        let c: u8 = 0;
+        PTR_BYTE_AT(c, p, i);
+        b.bytes[b.len] = c;
+        b.len = b.len + 1;
+        i = i + 1;
+    }
+}
+
+fn isSaVmBlockedToolName(value: &StrBuf) -> bool {
+    if blocked_us_word(value, STR_PTR("apply_patch"), STR_LEN("apply_patch")) { return true; };
+    if blocked_us_word(value, STR_PTR("write_file"), STR_LEN("write_file")) { return true; };
+    if blocked_us_word(value, STR_PTR("edit_file"), STR_LEN("edit_file")) { return true; };
+    let seg = StrBuf { bytes: [0u8; 65536], len: 0 };
+    let i: u64 = 0;
+    while i <= value.len {
+        let at_end: bool = i == value.len;
+        let is_sep: bool = false;
+        if !at_end {
+            let b: u8 = value.bytes[i];
+            if b == 46 || b == 58 || b == 47 || b == 45 || b == 95 { is_sep = true; };
+        };
+        if at_end || is_sep {
+            if seg.len > 0 {
+                sb_lower_ip(&seg);
+                if blocked_segment(&seg) { return true; };
+                seg.len = 0;
+            };
+        } else {
+            let b2: u8 = value.bytes[i];
+            if seg.len < 65535 { seg.bytes[seg.len] = b2; seg.len = seg.len + 1; };
+        };
+        i = i + 1;
+    }
+    return false;
+}
+
+fn blocked_segment(seg: &StrBuf) -> bool {
+    if sb_eq(seg, STR_PTR("bash"), STR_LEN("bash")) { return true; };
+    if sb_eq(seg, STR_PTR("shell"), STR_LEN("shell")) { return true; };
+    if sb_eq(seg, STR_PTR("exec"), STR_LEN("exec")) { return true; };
+    if sb_eq(seg, STR_PTR("py"), STR_LEN("py")) { return true; };
+    if sb_eq(seg, STR_PTR("node"), STR_LEN("node")) { return true; };
+    if sb_eq(seg, STR_PTR("nodejs"), STR_LEN("nodejs")) { return true; };
+    if sb_eq(seg, STR_PTR("bun"), STR_LEN("bun")) { return true; };
+    if sb_eq(seg, STR_PTR("bunx"), STR_LEN("bunx")) { return true; };
+    if sb_eq(seg, STR_PTR("deno"), STR_LEN("deno")) { return true; };
+    if sb_eq(seg, STR_PTR("tsx"), STR_LEN("tsx")) { return true; };
+    if sb_eq(seg, STR_PTR("npx"), STR_LEN("npx")) { return true; };
+    if sb_eq(seg, STR_PTR("javascript"), STR_LEN("javascript")) { return true; };
+    if sb_eq(seg, STR_PTR("typescript"), STR_LEN("typescript")) { return true; };
+    if sb_eq(seg, STR_PTR("js"), STR_LEN("js")) { return true; };
+    if sb_eq(seg, STR_PTR("powershell"), STR_LEN("powershell")) { return true; };
+    if sb_eq(seg, STR_PTR("pwsh"), STR_LEN("pwsh")) { return true; };
+    if sb_eq(seg, STR_PTR("cmd"), STR_LEN("cmd")) { return true; };
+    if sb_eq(seg, STR_PTR("apply_patch"), STR_LEN("apply_patch")) { return true; };
+    if sb_eq(seg, STR_PTR("write_file"), STR_LEN("write_file")) { return true; };
+    if sb_eq(seg, STR_PTR("edit_file"), STR_LEN("edit_file")) { return true; };
+    if sb_starts(seg, STR_PTR("python"), STR_LEN("python")) {
+        let rest_ok: bool = true;
+        let i: u64 = 6;
+        while i < seg.len {
+            let b: u8 = seg.bytes[i];
+            if b < 48 || b > 57 { rest_ok = false; };
+            i = i + 1;
+        }
+        if rest_ok { return true; };
+    };
+    return false;
+}
+
+fn sb_starts(s: &StrBuf, p: ptr, n: u64) -> bool {
+    if s.len < n { return false; };
+    let i: u64 = 0;
+    while i < n {
+        let x: u8 = 0;
+        let y: u8 = 0;
+        PTR_BYTE_AT(x, sb_ptr(s), i);
+        PTR_BYTE_AT(y, p, i);
+        if x != y { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn sb_ptr(s: &StrBuf) -> ptr { let p: ptr = PTR_NULL(); PTR_BYTE_ADD(p, &s.bytes, 0); return p; }
+
+fn sb_eq(s: &StrBuf, p: ptr, n: u64) -> bool { return tool_bytes_eq(sb_ptr(s), s.len, p, n); }
+
+fn tool_bytes_eq(a: ptr, alen: u64, b: ptr, blen: u64) -> bool {
+    if alen != blen { return false; };
+    let i: u64 = 0;
+    while i < alen {
+        let x: u8 = 0;
+        let y: u8 = 0;
+        PTR_BYTE_AT(x, a, i);
+        PTR_BYTE_AT(y, b, i);
+        if x != y { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn sb_lower_ip(s: &StrBuf) -> void {
+    let t = StrBuf { bytes: [0u8; 65536], len: 0 };
+    sb_to_lower(s, &t);
+    s.len = 0;
+    sb_append(s, sb_ptr(&t), t.len);
+}
+
+fn sb_to_lower(src: &StrBuf, out: &StrBuf) -> void {
+    out.len = 0;
+    let i: u64 = 0;
+    while i < src.len {
+        let b: u8 = byte_at(sb_ptr(src), i);
+        if b >= 65 && b <= 90 { b = b + 32; };
+        out.bytes[out.len] = b;
+        out.len = out.len + 1;
+        i = i + 1;
+    }
+}
+
+fn byte_at(p: ptr, i: u64) -> u8 { let b: u8 = 0; PTR_BYTE_AT(b, p, i); return b; }
+
+fn blocked_us_word(value: &StrBuf, wp: ptr, wl: u64) -> bool {
+    if value.len < wl { return false; };
+    let last: u64 = value.len - wl;
+    let s: u64 = 0;
+    while s <= last {
+        let ok: bool = true;
+        let i: u64 = 0;
+        while i < wl {
+            let b: u8 = value.bytes[s + i];
+            if b >= 65 && b <= 90 { b = b + 32; };
+            if b != byte_at(wp, i) { ok = false; };
+            i = i + 1;
+        }
+        if ok {
+            let bidx: u64 = 0;
+            if s > 0 { bidx = s - 1; };
+            let before_ok: bool = s == 0 || blocked_sep_byte(value.bytes[bidx]);
+            let after: u64 = s + wl;
+            let aidx: u64 = after;
+            if aidx >= value.len { aidx = 0; };
+            let after_ok: bool = after == value.len || blocked_sep_byte(value.bytes[aidx]);
+            if before_ok && after_ok { return true; };
+        };
+        s = s + 1;
+    }
+    return false;
+}
+
+fn blocked_sep_byte(b: u8) -> bool {
+    return b == 46 || b == 58 || b == 47 || b == 45 || b == 95;
+}
+
+@test "reachability keeps callee behind call mutated field guard"() {
+    let name = StrBuf { bytes: [0u8; 65536], len: 0 };
+    sb_append(&name, STR_PTR("bash"), STR_LEN("bash"));
+    if isSaVmBlockedToolName(&name) != true {
+        panic(43801);
+    };
+    let ok = StrBuf { bytes: [0u8; 65536], len: 0 };
+    sb_append(&ok, STR_PTR("read_file"), STR_LEN("read_file"));
+    if isSaVmBlockedToolName(&ok) != false {
+        panic(43802);
+    };
+}

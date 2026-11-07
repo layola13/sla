@@ -1,0 +1,50 @@
+@import "sa_std/time.sla"
+@import "sa_std/core/result.sa"
+
+// reg-shard1 coverage: SAB registry declared entries from
+// sa_std/time.sla — Duration::from_millis / Duration::as_millis /
+// Instant::from_raw_ns / Instant::elapsed /
+// SystemTime::duration_since (registry stores them as flat names
+// from_millis / as_millis / from_raw_ns / elapsed / duration_since).
+// All assertions are exact round-trips or tight magnitude bounds.
+
+@test "reg1 time from_millis as_millis roundtrip"() {
+    if Duration::from_millis(0).as_millis() != 0 { panic(61201); };
+    if Duration::from_millis(1).as_millis() != 1 { panic(61202); };
+    if Duration::from_millis(1500).as_millis() != 1500 { panic(61203); };
+    if Duration::from_millis(2500000).as_millis() != 2500000 { panic(61204); };
+    if Duration::from_millis(86400000).as_millis() != 86400000 { panic(61205); };
+}
+
+@test "reg1 time from_raw_ns raw_ns roundtrip"() {
+    if Instant::from_raw_ns(0).raw_ns() != 0 { panic(61211); };
+    if Instant::from_raw_ns(123456789).raw_ns() != 123456789 { panic(61212); };
+    if Instant::from_raw_ns(999999999999).raw_ns() != 999999999999 { panic(61213); };
+}
+
+@test "reg1 time elapsed grows with sleep"() {
+    let start = Instant::now();
+    let e0 = start.elapsed().as_millis();
+    if e0 > 1000 { panic(61221); };
+    thread_sleep(Duration::from_millis(30));
+    let e1 = start.elapsed().as_millis();
+    if e1 < 20 { panic(61222); };
+    if e1 > 10000 { panic(61223); };
+    if e1 < e0 { panic(61224); };
+}
+
+@test "reg1 time duration_since exact and magnitude"() {
+    let epoch = SystemTime::unix_epoch();
+    let same = epoch.duration_since(epoch);
+    if !same.is_ok() { panic(61231); };
+    if same.unwrap().as_millis() != 0 { panic(61232); };
+    let now = SystemTime::now();
+    let since = now.duration_since(epoch);
+    if !since.is_ok() { panic(61233); };
+    let ms = since.unwrap().as_millis();
+    if ms < 1600000000000 { panic(61234); };
+    let back = epoch.duration_since(now);
+    if back.is_ok() {
+        if back.unwrap().as_millis() == 0 { panic(61235); };
+    };
+}

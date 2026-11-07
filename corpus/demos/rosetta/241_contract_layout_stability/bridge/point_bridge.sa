@@ -1,0 +1,12 @@
+#def BridgePoint_x = +0
+#def BridgePoint_y = +8
+
+@point_bridge_value(&point: ptr) -> i32:
+L_ENTRY:
+    x = load point+BridgePoint_x as i32
+    y = load point+BridgePoint_y as i32
+    value = add x, y
+    !x
+    !y
+    !point
+    return value

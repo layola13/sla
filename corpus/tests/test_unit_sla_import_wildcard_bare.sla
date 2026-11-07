@@ -1,0 +1,7 @@
+@import import_fixtures/wildcard/*.sla
+
+@test "bare wildcard sla import parses"() {
+    let p = WildPoint { x: 4, y: 6 };
+    if wild_point_sum(p) != 10 { panic(7210); };
+    if wild_value() != 7 { panic(7211); };
+}

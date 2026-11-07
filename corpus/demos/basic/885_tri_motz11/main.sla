@@ -1,0 +1,90 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Motzkin 续三向二：迭代 × 直和 × 桥序和（n=11：5798 三锁）。
+// 意对标 876_motz11（单格源互补；755 三向体例收束 Motzkin 续三行族）。
+
+fn moz(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k <= ii - 2 {
+            s = s + t[k] * t[ii - 2 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn cmot(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while 2 * k <= n {
+        s = s + binom_mul(n, 2 * k) * binom_mul(2 * k, k) / (k + 1);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn rio(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 0; };
+    let ii = 2;
+    while ii <= n {
+        t[ii] = (ii - 1) * (2 * t[ii - 1] + 3 * t[ii - 2]) / (ii + 1);
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn rbr(n: int) -> int {
+    if n == 0 { return 1; };
+    if n == 1 { return 0; };
+    return moz(n - 1) - rbr(n - 1);
+}
+
+fn mbri(n: int) -> int {
+    return rbr(n) + rbr(n + 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", moz(11), cmot(11), mbri(11));
+    return 0;
+}
+
+@test "basic 885 tri motz11"() {
+    if moz(11) != 5798 { panic(88501); };
+    if cmot(11) != 5798 { panic(88502); };
+    if mbri(11) != 5798 { panic(88503); };
+    if moz(10) != 2188 { panic(88504); };
+}

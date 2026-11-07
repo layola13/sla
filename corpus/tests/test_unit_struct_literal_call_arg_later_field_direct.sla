@@ -1,0 +1,88 @@
+@import "sa_std/vec.sa"
+
+struct ResourceWorld {
+    values: Vec<i32>,
+    tick: i32,
+    last: i32,
+}
+
+struct ResourceRef {
+    value: Vec<i32>,
+    tick: i32,
+    last: i32,
+}
+
+struct ResourceHolder {
+    resource: ResourceRef,
+}
+
+fn resource_world_get_values(world: ResourceWorld) -> Vec<i32> {
+    return world.values;
+}
+
+fn resource_world_ref(world: ResourceWorld) -> ResourceRef {
+    return ResourceRef {
+        value: resource_world_get_values(world),
+        tick: world.tick,
+        last: world.last,
+    };
+}
+
+fn resource_world_merge(world: ResourceWorld, values: Vec<i32>) -> ResourceRef {
+    return ResourceRef { value: values, tick: world.tick, last: world.last };
+}
+
+fn resource_world_ref_via_sibling_call(world: ResourceWorld) -> ResourceRef {
+    return resource_world_merge(world, resource_world_get_values(world));
+}
+
+fn resource_holder_len(holder: ResourceHolder) -> i32 {
+    return len(holder.resource.value) as i32 + holder.resource.tick + holder.resource.last;
+}
+
+fn branch_maybe_moves_outer_local(flag: bool, world: ResourceWorld) -> i32 {
+    let reference = resource_world_ref(world);
+    let total: i32 = 0;
+    if flag {
+        let holder = ResourceHolder { resource: reference };
+        total = resource_holder_len(holder);
+    };
+    return total;
+}
+
+@test "direct sab keeps struct literal call arg live for later fields"() {
+    let values: Vec<i32> = Vec::new();
+    values.push(11);
+    values.push(31);
+    let reference = resource_world_ref(ResourceWorld { values: values, tick: 7, last: 9 });
+    if len(reference.value) as i64 != 2 { panic(51510); };
+    if reference.value[0] != 11 { panic(51511); };
+    if reference.value[1] != 31 { panic(51512); };
+    if reference.tick != 7 { panic(51513); };
+    if reference.last != 9 { panic(51514); };
+}
+
+@test "direct sab keeps outer call sibling arg live while materializing nested call"() {
+    let values: Vec<i32> = Vec::new();
+    values.push(5);
+    values.push(8);
+    let reference = resource_world_ref_via_sibling_call(ResourceWorld { values: values, tick: 13, last: 21 });
+    if len(reference.value) as i64 != 2 { panic(51520); };
+    if reference.value[0] != 5 { panic(51521); };
+    if reference.value[1] != 8 { panic(51522); };
+    if reference.tick != 13 { panic(51523); };
+    if reference.last != 21 { panic(51524); };
+}
+
+@test "direct sab balances branch move of outer local before merge"() {
+    let true_values: Vec<i32> = Vec::new();
+    true_values.push(1);
+    true_values.push(2);
+    let moved = branch_maybe_moves_outer_local(true, ResourceWorld { values: true_values, tick: 3, last: 4 });
+    if moved != 9 { panic(51530); };
+
+    let false_values: Vec<i32> = Vec::new();
+    false_values.push(10);
+    let kept = branch_maybe_moves_outer_local(false, ResourceWorld { values: false_values, tick: 30, last: 40 });
+    if kept != 0 { panic(51531); };
+}

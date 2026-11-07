@@ -1,0 +1,102 @@
+// DEF-deep-copy follow-up (param field write): field writes through
+// a by-value struct parameter must take effect in the returned value.
+// Before the fix, the caller's materialized copy of a @derive(copy)
+// struct argument was RELEASED after the call, freeing the very
+// record the callee returned - the +8 field read back corrupted
+// (tcache stomp), scalar writes read as silently lost, and
+// heap-carrying registries corrupted (signal 6 in the slaengine
+// type-registry isolated tests). The copy is now retired with a
+// move (consume) instead of a release on both backends.
+// Forms covered: unconditional write + return, multi-field slot
+// write, branch with early return, branch with late return, and the
+// local-copy control idiom.
+
+@derive(copy)
+struct PwDesc {
+    ident: i64,
+    label: i64,
+    has_flag: i32, flag_data: i64,
+}
+
+@derive(copy)
+struct PwReg {
+    count: i32,
+    t0_ident: i64, t0_label: i64, t0_has_flag: i32, t0_flag_data: i64,
+    t1_ident: i64, t1_label: i64, t1_has_flag: i32, t1_flag_data: i64,
+}
+
+fn pw_reg_new() -> PwReg {
+    return PwReg {
+        count: 0,
+        t0_ident: 0, t0_label: 0, t0_has_flag: 0, t0_flag_data: 0,
+        t1_ident: 0, t1_label: 0, t1_has_flag: 0, t1_flag_data: 0,
+    };
+}
+
+fn pw_bump(r: PwReg, v: i64) -> PwReg {
+    r.t0_ident = v;
+    return r;
+}
+
+fn pw_set0(r: PwReg, d: PwDesc) -> PwReg {
+    r.t0_ident = d.ident; r.t0_label = d.label; r.t0_has_flag = d.has_flag; r.t0_flag_data = d.flag_data;
+    return r;
+}
+
+fn pw_set_slot_early(r: PwReg, idx: i32, d: PwDesc) -> PwReg {
+    if idx == 0 { r.t0_ident = d.ident; r.t0_label = d.label; r.t0_has_flag = d.has_flag; r.t0_flag_data = d.flag_data; return r; };
+    r.t1_ident = d.ident; r.t1_label = d.label; r.t1_has_flag = d.has_flag; r.t1_flag_data = d.flag_data;
+    return r;
+}
+
+fn pw_set_slot_late(r: PwReg, idx: i32, d: PwDesc) -> PwReg {
+    if idx == 0 { r.t0_ident = d.ident; r.t0_label = d.label; r.t0_has_flag = d.has_flag; r.t0_flag_data = d.flag_data; };
+    if idx == 1 { r.t1_ident = d.ident; r.t1_label = d.label; r.t1_has_flag = d.has_flag; r.t1_flag_data = d.flag_data; };
+    return r;
+}
+
+fn pw_bump_via_local(r0: PwReg, v: i64) -> PwReg {
+    let r = r0;
+    r.t0_ident = v;
+    return r;
+}
+
+@test "param field write unconditional"() {
+    let r = pw_reg_new();
+    r.t0_ident = 7;
+    if r.t0_ident != 7 { panic(29801); };
+    let r2 = pw_bump(r, 9);
+    if r2.t0_ident != 9 { panic(29802); };
+}
+
+@test "param field write multi-field"() {
+    let r0 = pw_reg_new();
+    let d = PwDesc { ident: 41, label: 42, has_flag: 1, flag_data: 43 };
+    let r1 = pw_set0(r0, d);
+    if r1.t0_ident != 41 { panic(29803); };
+    if r1.t0_flag_data != 43 { panic(29804); };
+}
+
+@test "param field write branch early return"() {
+    let r0 = pw_reg_new();
+    let d = PwDesc { ident: 41, label: 42, has_flag: 1, flag_data: 43 };
+    let r1 = pw_set_slot_early(r0, 0, d);
+    if r1.t0_ident != 41 { panic(29805); };
+    if r1.t0_flag_data != 43 { panic(29806); };
+    let r2 = pw_set_slot_early(r0, 1, d);
+    if r2.t1_ident != 41 { panic(29807); };
+}
+
+@test "param field write branch late return"() {
+    let r0 = pw_reg_new();
+    let d = PwDesc { ident: 41, label: 42, has_flag: 1, flag_data: 43 };
+    let r1 = pw_set_slot_late(r0, 0, d);
+    if r1.t0_ident != 41 { panic(29808); };
+    if r1.t0_flag_data != 43 { panic(29809); };
+}
+
+@test "param field write via local copy control"() {
+    let r = pw_reg_new();
+    let r2 = pw_bump_via_local(r, 9);
+    if r2.t0_ident != 9 { panic(29810); };
+}

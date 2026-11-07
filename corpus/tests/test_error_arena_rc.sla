@@ -1,0 +1,9 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: Rc is reference-counted; the count lives
+// outside any arena and outlives the block (design 2.2).
+fn neg_rc() -> i32 {
+    arena {
+        let r = Rc::new(5);
+    }
+    return 0;
+}

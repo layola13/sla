@@ -1,0 +1,17 @@
+// expect: BorrowEscape
+// A view may only be returned from a function whose return carries
+// the matching origin annotation.
+@import "sa_std/fs.sai"
+
+struct FsReadBuffer {
+    raw: u64,
+}
+
+fn sla_fs_read_buffer_data(buffer: &FsReadBuffer) -> &[u8][buffer] {
+    return __slice_view(sa_fs_read_buffer_data(buffer.raw), sa_fs_read_buffer_len(buffer.raw));
+}
+
+fn bad(owner: &FsReadBuffer) -> &[u8] {
+    let view = sla_fs_read_buffer_data(owner);
+    return view;
+}

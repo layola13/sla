@@ -1,0 +1,35 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct QueryPlan {
+    table_scan_rows: i32,
+    index_rows: i32,
+    filter_cost: i32,
+}
+
+fn chosen_cost(plan: QueryPlan) -> i32 {
+    let table_cost = plan.table_scan_rows;
+    let index_rows = plan.index_rows;
+    let filter_cost = plan.filter_cost;
+    let index_cost = index_rows + filter_cost;
+    if index_cost < table_cost {
+        return index_cost;
+    } else {
+        return table_cost;
+    };
+}
+
+fn main() -> i32 {
+    let plan = QueryPlan { table_scan_rows: 120, index_rows: 18, filter_cost: 7 };
+    let result = chosen_cost(plan);
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 092 92_query_plan"() {
+    let plan = QueryPlan { table_scan_rows: 120, index_rows: 18, filter_cost: 7 };
+    let got = chosen_cost(plan);
+    if got != 25 {
+        panic(92);
+    };
+};

@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 模幂三向对峙（连乘 vs 平方乘 vs 累乘变体：3^5 mod 7=5）。
+// 意对标 328 powmod 的三向版（258 明文版互补）。
+
+fn pow_loop(base: int, exp: int, m: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < exp {
+        r = r * base % m;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn pow_sqmul(base: int, exp: int, m: int) -> int {
+    let r = 1;
+    let b = base % m;
+    let e = exp;
+    while e > 0 {
+        if e % 2 == 1 { r = r * b % m; };
+        b = b * b % m;
+        e = e / 2;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", pow_loop(3, 5, 7), pow_sqmul(3, 5, 7), pow_loop(2, 10, 100));
+    return 0;
+}
+
+@test "basic 355 tri powmod"() {
+    if pow_loop(3, 5, 7) != 5 { panic(35501); };
+    if pow_sqmul(3, 5, 7) != 5 { panic(35502); };
+    if pow_loop(2, 10, 100) != 24 { panic(35503); };
+    if pow_sqmul(2, 10, 100) != 24 { panic(35504); };
+    if pow_loop(3, 5, 7) != pow_sqmul(3, 5, 7) { panic(35505); };
+}

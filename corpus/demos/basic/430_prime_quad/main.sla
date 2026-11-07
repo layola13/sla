@@ -1,0 +1,46 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 素数四元组（p,p+2,p+6,p+8 全素；<=50 有 2 组）。
+// 意对标 366 孪生计数的四元版（431 三元组版互补；434 做对峙）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn is_quad(p: int) -> int {
+    if is_prime(p) != 1 { return 0; };
+    if is_prime(p + 2) != 1 { return 0; };
+    if is_prime(p + 6) != 1 { return 0; };
+    if is_prime(p + 8) != 1 { return 0; };
+    return 1;
+}
+
+fn quad_count(limit: int) -> int {
+    let c = 0;
+    let k = 2;
+    while k + 8 <= limit {
+        if is_quad(k) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{}", is_quad(5), quad_count(50));
+    return 0;
+}
+
+@test "basic 430 prime quad"() {
+    if is_quad(5) != 1 { panic(43001); };
+    if is_quad(11) != 1 { panic(43002); };
+    if quad_count(50) != 2 { panic(43003); };
+}

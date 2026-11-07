@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_resolved_patch_version() -> i32 {
+    let selected_patch = 3;
+    return selected_patch;
+}
+
+fn main() -> i32 { let selected_patch = 3; println("{}", selected_patch); return selected_patch; }
+@test "rosetta 206 pkg version resolution"() { let got = pkg_resolved_patch_version(); if got != 3 { panic(206); }; }

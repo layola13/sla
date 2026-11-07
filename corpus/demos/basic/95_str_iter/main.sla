@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 11_string_array_iter：字符串数组求长（累计 6，映射和 6）。
+// `forEach/map` 用直列 `len()` 改写（`for in` 迭代器协议见 Phase 6，暂不碰；
+// 变量 `len` 路径见 #10，写法见 68/69）。
+
+fn main() -> i32 {
+    let w0 = "a";
+    let w1 = "bb";
+    let w2 = "ccc";
+    let total = len(w0) + len(w1) + len(w2);
+    println("{}", total);
+    let n0 = len(w0);
+    let n1 = len(w1);
+    let n2 = len(w2);
+    println("{}", n0 + n1 + n2);
+    return 0;
+}
+
+@test "basic 95 str iter"() {
+    let w0 = "a";
+    let w1 = "bb";
+    let w2 = "ccc";
+    if len(w0) + len(w1) + len(w2) != 6 { panic(9501); };
+    let n0 = len(w0);
+    let n1 = len(w1);
+    let n2 = len(w2);
+    if n0 + n1 + n2 != 6 { panic(9502); };
+}

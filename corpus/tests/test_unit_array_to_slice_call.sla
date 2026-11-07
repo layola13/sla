@@ -1,0 +1,35 @@
+@import "sa_std/core/slice.sa"
+
+fn slice_second(values: &[i32]) -> i32 {
+    values[1]
+}
+
+fn slice_sum_edges(values: &[i32]) -> i32 {
+    values[0] + values[2]
+}
+
+macro slice_second_macro(out, values) {
+    out = slice_second(&values);
+}
+
+macro slice_sum_edges_macro(out, values) {
+    out = slice_sum_edges(&values);
+}
+
+@test "array borrow materializes slice call arg"() {
+    let values = [4i32, 5i32, 6i32];
+    if slice_second(&values) != 5 { panic(50801); };
+    if slice_sum_edges(&values) != 10 { panic(50802); };
+    if slice_second(&[7i32, 8i32, 9i32]) != 8 { panic(50803); };
+    if slice_sum_edges(&[1i32, 2i32, 3i32]) != 4 { panic(50804); };
+}
+
+@test "macro array borrow materializes slice call arg"() {
+    let values = [10i32, 11i32, 12i32];
+    let second = 0;
+    slice_second_macro(second, values);
+    if second != 11 { panic(50805); };
+    let edges = 0;
+    slice_sum_edges_macro(edges, values);
+    if edges != 22 { panic(50806); };
+}

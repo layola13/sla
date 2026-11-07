@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+// 对标 tsgosa 105_nested_tpl：双插值模板（`sum=7 prod=12`）。
+// 模板断言用 `str_eq`；缺口 #4b 已修复，`println(format(...))` 直打与赋值后
+// 打印均正常（check 侧多插值已修复，见 #4）。
+
+fn main() -> i32 {
+    let x = 3;
+    let y = 4;
+    let s = `sum=${x + y} prod=${x * y}`;
+    println("{}", s);
+    println(format("sum={}, prod={}", x + y, x * y));
+    return 0;
+}
+
+@test "basic 94 nested tpl"() {
+    let x = 3;
+    let y = 4;
+    let s = `sum=${x + y} prod=${x * y}`;
+    if !str_eq(s, "sum=7 prod=12") { panic(9401); };
+    if !str_eq(format("sum={}, prod={}", x + y, x * y), "sum=7, prod=12") { panic(9402); };
+}

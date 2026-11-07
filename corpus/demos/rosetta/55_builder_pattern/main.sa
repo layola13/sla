@@ -1,0 +1,158 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__Builder_new() -> ptr:
+L_ENTRY:
+    tmp_0 = alloc 16
+    @const SLA_STR_0 = utf8:"GET"
+    tmp_2 = 3
+    tmp_1 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_1, &SLA_STR_0, tmp_2
+    !tmp_2
+    store tmp_0+0, tmp_1 as ptr
+    @const SLA_STR_1 = utf8:"/"
+    tmp_4 = 1
+    tmp_3 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_3, &SLA_STR_1, tmp_4
+    !tmp_4
+    store tmp_0+8, tmp_3 as ptr
+    return tmp_0
+
+@sla__Builder_method(self: ptr, method: ptr) -> ptr:
+L_ENTRY:
+    store self+0, method as ptr
+    !method
+    return self
+
+@sla__Builder_path(self: ptr, path: ptr) -> ptr:
+L_ENTRY:
+    store self+8, path as ptr
+    !path
+    return self
+
+@sla__Builder_build(self: ptr) -> ptr:
+L_ENTRY:
+    tmp_5 = alloc 16
+    tmp_6 = load self+0 as ptr
+    store tmp_5+0, tmp_6 as ptr
+    tmp_7 = load self+8 as ptr
+    store tmp_5+8, tmp_7 as ptr
+    !self
+    return tmp_5
+
+@main() -> i32:
+L_ENTRY:
+    tmp_8 = call @sla__Builder_new()
+    @const SLA_STR_2 = utf8:"POST"
+    tmp_10 = 4
+    tmp_9 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_9, &SLA_STR_2, tmp_10
+    !tmp_10
+    tmp_11 = call @sla__Builder_method(tmp_8, tmp_9)
+    !tmp_8
+    @const SLA_STR_3 = utf8:"/api"
+    tmp_13 = 4
+    tmp_12 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_12, &SLA_STR_3, tmp_13
+    !tmp_13
+    tmp_14 = call @sla__Builder_path(tmp_11, tmp_12)
+    !tmp_11
+    tmp_15 = call @sla__Builder_build(tmp_14)
+    !tmp_14
+    req = tmp_15
+    tmp_16 = load req+0 as ptr
+    EXPAND STRING_PTR tmp_17, tmp_16
+    EXPAND STRING_LEN tmp_18, tmp_16
+    call @sa_print_bytes(&tmp_17, tmp_18)
+    !tmp_17
+    !tmp_18
+    !tmp_16
+    @const SLA_STR_4 = utf8:" "
+    call @sa_print_bytes(&SLA_STR_4, 1)
+    tmp_19 = load req+8 as ptr
+    EXPAND STRING_PTR tmp_20, tmp_19
+    EXPAND STRING_LEN tmp_21, tmp_19
+    call @sa_print_bytes(&tmp_20, tmp_21)
+    !tmp_20
+    !tmp_21
+    !tmp_19
+    @const SLA_STR_5 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_5, 1)
+    tmp_22 = 0
+    !req
+    return tmp_22
+
+@test "rosetta 055 builder pattern"():
+L_TEST_ENTRY_0:
+    tmp_23 = call @sla__Builder_new()
+    @const SLA_STR_6 = utf8:"POST"
+    tmp_25 = 4
+    tmp_24 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_24, &SLA_STR_6, tmp_25
+    !tmp_25
+    tmp_26 = call @sla__Builder_method(tmp_23, tmp_24)
+    !tmp_23
+    @const SLA_STR_7 = utf8:"/api"
+    tmp_28 = 4
+    tmp_27 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_27, &SLA_STR_7, tmp_28
+    !tmp_28
+    tmp_29 = call @sla__Builder_path(tmp_26, tmp_27)
+    !tmp_26
+    tmp_30 = call @sla__Builder_build(tmp_29)
+    !tmp_29
+    req = tmp_30
+    tmp_31 = load req+0 as ptr
+    @const SLA_STR_8 = utf8:"POST"
+    tmp_33 = 4
+    tmp_32 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_32, &SLA_STR_8, tmp_33
+    !tmp_33
+    EXPAND STR_EQ tmp_34, tmp_31, tmp_32
+    !tmp_31
+    tmp_35 = 0
+    tmp_36 = eq tmp_34, tmp_35
+    !tmp_34
+    !tmp_35
+    br tmp_36 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_36
+    panic(55)
+
+L_ELSE_2:
+    !tmp_36
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    tmp_39 = load req+8 as ptr
+    @const SLA_STR_9 = utf8:"/api"
+    tmp_41 = 4
+    tmp_40 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_40, &SLA_STR_9, tmp_41
+    !tmp_41
+    EXPAND STR_EQ tmp_42, tmp_39, tmp_40
+    !tmp_39
+    tmp_43 = 0
+    tmp_44 = eq tmp_42, tmp_43
+    !tmp_42
+    !tmp_43
+    br tmp_44 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_44
+    panic(155)
+
+L_ELSE_5:
+    !tmp_44
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !req
+    return
+

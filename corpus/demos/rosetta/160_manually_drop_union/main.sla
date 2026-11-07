@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/mem.sa"
+
+union Slot { a: ManuallyDrop<i32>, b: ManuallyDrop<i32> }
+
+fn manually_drop_union_value() -> i32 {
+    let slot = Slot { a: ManuallyDrop::new(11) };
+    let value = unsafe { ManuallyDrop::into_inner(slot.a) };
+    return value;
+}
+
+fn main() -> i32 {
+    let slot = Slot { a: ManuallyDrop::new(11) };
+    let result = unsafe { ManuallyDrop::into_inner(slot.a) };
+    println("{}", result);
+    return result;
+}
+@test "rosetta 160 160_manually_drop_union"() { let got = manually_drop_union_value(); if got != 11 { panic(160); }; }

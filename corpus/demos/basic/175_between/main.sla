@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1267_between：区间判定（1,0,0）。
+// 与 123 的下标合法性同构：`&&` 连接双边比较（急求值语义见 #21，
+// 此处两侧皆纯比较，无副作用可观察）。
+
+fn between(v: i32, lo: i32, hi: i32) -> bool {
+    return v >= lo && v <= hi;
+}
+
+fn main() -> i32 {
+    let r1 = 0;
+    if between(5, 0, 10) { r1 = 1; };
+    let r2 = 0;
+    if between(-1, 0, 10) { r2 = 1; };
+    let r3 = 0;
+    if between(11, 0, 10) { r3 = 1; };
+    println("{},{},{}", r1, r2, r3);
+    return 0;
+}
+
+@test "basic 175 between"() {
+    if between(5, 0, 10) != true { panic(17501); };
+    if between(-1, 0, 10) != false { panic(17502); };
+    if between(11, 0, 10) != false { panic(17503); };
+    if between(0, 0, 10) != true { panic(17504); };
+}

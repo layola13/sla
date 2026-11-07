@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1055_sw_loop：循环内 switch（22）。
+// switch（33/107 口径）与循环的组合：偶数臂 +10，奇数臂 +1。
+
+fn main() -> i32 {
+    let t = 0;
+    let i = 0;
+    while i < 4 {
+        let r: i32 = 1;
+        switch i % 2 {
+            0 => { r = 10; },
+            default => {},
+        };
+        t = t + r;
+        i = i + 1;
+    }
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 162 switch in loop"() {
+    let t = 0;
+    let i = 0;
+    while i < 4 {
+        let r: i32 = 1;
+        switch i % 2 {
+            0 => { r = 10; },
+            default => {},
+        };
+        t = t + r;
+        i = i + 1;
+    }
+    if t != 22 { panic(16201); };
+}

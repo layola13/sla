@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 有序 Bell 二项递推 F(n)=sum C(n,k)F(k)（F(6)=4683，F(7)=47293；593 体例续高位）。
+// 意对标 588_fubini（低位版互补；739 做递推/加权对峙）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn fub(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let k = 0;
+    while k <= n - 1 {
+        s = s + binom_mul(n, k) * fub(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", fub(6), fub(7));
+    return 0;
+}
+
+@test "basic 736 fub7"() {
+    if fub(6) != 4683 { panic(73601); };
+    if fub(7) != 47293 { panic(73602); };
+    if fub(5) != 541 { panic(73603); };
+}

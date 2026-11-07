@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 181_gcd_all：多组辗转相除（4, 25, 1）。
+// 与 17/21（递归）/51（累加）互补，此处为循环版多组打印（写法见 51）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", gcd(12, 8), gcd(100, 75), gcd(17, 5));
+    return 0;
+}
+
+@test "basic 80 gcd all"() {
+    if gcd(12, 8) != 4 { panic(8001); };
+    if gcd(100, 75) != 25 { panic(8002); };
+    if gcd(17, 5) != 1 { panic(8003); };
+}

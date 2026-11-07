@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/hashmap.sa"
+@import "sa_std/core/option.sa"
+
+// 对标 tsgosa 35_map_getset 的 int 键版（101 为 string 键版）：
+// 存取（15）+ 缺键取零（2）+ 表长（2）+ 覆写（102 的取-加-存口径）。
+// BTree 的 int 键见缺口 #30（已转 loud 门，此处只用 HashMap）。
+
+fn main() -> i32 {
+    let m = HashMap::new();
+    m.insert(1, 10);
+    m.insert(2, 20);
+    let cur = m.get(1).copied().unwrap_or_default();
+    m.insert(1, cur + 5);
+    let a = m.get(1).copied().unwrap_or_default();
+    let z = m.get(9).copied().unwrap_or_default();
+    println("{},{},{}", a, len(m), z);
+    return 0;
+}
+
+@test "basic 217 intmap"() {
+    let m = HashMap::new();
+    m.insert(1, 10);
+    m.insert(2, 20);
+    if m.get(2).copied().unwrap_or_default() != 20 { panic(21701); };
+    let cur = m.get(1).copied().unwrap_or_default();
+    m.insert(1, cur + 5);
+    if m.get(1).copied().unwrap_or_default() != 15 { panic(21702); };
+    if len(m) != 2 { panic(21703); };
+    if m.get(9).copied().unwrap_or_default() != 0 { panic(21704); };
+}

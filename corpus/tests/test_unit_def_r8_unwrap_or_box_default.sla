@@ -1,0 +1,92 @@
+// DEF-R8-FIX regression: Option::unwrap_or / Result::unwrap_or with an
+// owned (Box) default value. The default is MOVED INTO the result on
+// the None/Err branch and dropped on the Some/Ok branch. The pre-fix
+// codegen released the default register on the merged path after the
+// unwrap_or macro fragment, freeing the box that had just become the
+// result (live use-after-free once the native backend really frees);
+// the clobber allocations below make the corruption observable.
+//
+// Receivers are call-result temporaries on purpose: a local receiver
+// leaves its enum register Active at function exit in the SAB
+// verifier (genUnwrapOrCall skips the release for locals and no other
+// mechanism retires it) — a separate pre-existing bookkeeping gap,
+// recorded in the DEF-R8-FIX report.
+@import "sa_std/core/box.sa"
+
+struct Pair {
+    a: u64,
+    b: u64,
+}
+
+fn mk_pair(x: u64) -> Pair {
+    return Pair { a: x, b: x + 1 };
+}
+
+fn mk_none() -> Option<Box<Pair>> {
+    return None;
+}
+
+fn mk_some(x: u64) -> Option<Box<Pair>> {
+    return Some(Box::new(mk_pair(x)));
+}
+
+fn mk_err() -> Result<Box<Pair>, u64> {
+    return Err(5);
+}
+
+fn mk_ok(x: u64) -> Result<Box<Pair>, u64> {
+    return Ok(Box::new(mk_pair(x)));
+}
+
+fn clobber() {
+    let c1 = Box::new(mk_pair(9001));
+    let c2 = Box::new(mk_pair(9002));
+    let c3 = Box::new(mk_pair(9003));
+    if (*c1).a + (*c2).a + (*c3).a != 27006 {
+        panic(2699);
+    };
+}
+
+@test "def_r8 unwrap_or none moves box default"() {
+    let b = mk_none().unwrap_or(Box::new(mk_pair(41)));
+    clobber();
+    if (*b).a != 41 {
+        panic(2601);
+    };
+    if (*b).b != 42 {
+        panic(2602);
+    }
+}
+
+@test "def_r8 unwrap_or some drops box default"() {
+    let b = mk_some(7).unwrap_or(Box::new(mk_pair(99)));
+    clobber();
+    if (*b).a != 7 {
+        panic(2603);
+    };
+    if (*b).b != 8 {
+        panic(2604);
+    }
+}
+
+@test "def_r8 result unwrap_or err moves box default"() {
+    let b = mk_err().unwrap_or(Box::new(mk_pair(51)));
+    clobber();
+    if (*b).a != 51 {
+        panic(2605);
+    };
+    if (*b).b != 52 {
+        panic(2606);
+    }
+}
+
+@test "def_r8 result unwrap_or ok drops box default"() {
+    let b = mk_ok(11).unwrap_or(Box::new(mk_pair(77)));
+    clobber();
+    if (*b).a != 11 {
+        panic(2607);
+    };
+    if (*b).b != 12 {
+        panic(2608);
+    }
+}

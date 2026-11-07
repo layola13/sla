@@ -1,0 +1,36 @@
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/result.sa"
+
+// Regression (DEF-4): clones of one Arc passed by value into two or
+// more callees double-freed the shared ArcBox on the SA-text backend.
+// The by-value parameter's scope-exit release went through the raw
+// argument register, which the SA backend treats as a plain owned
+// pointer, so each callee freed the box unconditionally with no
+// strong-count decrement (first free observed at strong=3). One
+// callee, caller-only drops, and moving the Arc itself were all fine,
+// which is why narrower Arc tests stayed green. By-value Arc/Rc
+// parameters are now adopted into a body-local register at function
+// entry (the shape a source-level `let local = param;` produces).
+// Pre-fix (with the thread-join defect also present): signal 11;
+// with only the join fixed: signal 6 (double free).
+
+struct Counter { n: i32 }
+
+fn worker(c: Arc<Counter>) -> i32 {
+    return (*c).n;
+}
+
+fn run_two_callees() -> i32 {
+    let base = Arc::new(Counter { n: 7 });
+    let left = base.clone();
+    let middle = base.clone();
+    let av = worker(left);
+    let bv = worker(middle);
+    return av + bv;
+}
+
+@test "arc clones into two callees"() {
+    if run_two_callees() != 14 {
+        panic(9602);
+    };
+}

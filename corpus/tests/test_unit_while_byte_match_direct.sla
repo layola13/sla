@@ -1,0 +1,29 @@
+@import "tests/import_fixtures/pkgjson/ptr_helpers.sa"
+@import "sa_std/string.sa"
+
+fn direct_while_byte_match(data: ptr, data_len: int) -> int {
+    let matched = 0;
+    if data_len >= 8 {
+        let expected = "https:/";
+        let expected_ptr = STR_PTR(expected);
+        let mismatch = 0;
+        let i = 0;
+        while i < 7 {
+            if SLA_BYTE_AT(data, i) != SLA_BYTE_AT(expected_ptr, i) {
+                mismatch = mismatch + 1;
+            };
+            i = i + 1;
+        }
+        if mismatch == 0 {
+            matched = 1;
+        };
+    };
+    return matched;
+}
+
+@test "direct sab while byte match keeps scalar loop temps reusable"() {
+    let got = direct_while_byte_match("https://example.test", 20);
+    if got != 1 {
+        panic(61041);
+    };
+}

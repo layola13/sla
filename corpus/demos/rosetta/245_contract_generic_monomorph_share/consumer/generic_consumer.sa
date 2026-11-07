@@ -1,0 +1,14 @@
+@import "consumer/../impl/generic_impl.sa"
+
+@generic_consumer_value() -> i32:
+L_ENTRY:
+    value = call @shared_value(245)
+    ok = eq value, 245
+    !value
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 245
+
+L_ERR:
+    return 0

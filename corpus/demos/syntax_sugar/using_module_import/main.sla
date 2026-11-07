@@ -1,0 +1,9 @@
+@import "score_math.sla"
+
+using score_math;
+
+@test "using imported module turns functions into chainable calls"() {
+    let base: i32 = 10;
+    let score = base.add_bonus(5).double();
+    if score != 30 { panic(34400); };
+}

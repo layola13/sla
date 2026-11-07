@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 282_switch_stacked：多分支同体（1/2->10 else->20，和 40）。
+// SLA switch 用 `=>` 胖箭头，不支持 C 式堆叠 `case 1: case 2:`（parser 要求
+// fat_arrow），此处以两臂同体表达（与 33/88 的单臂口径一致）。
+
+fn f(x: i32) -> i32 {
+    let r: i32 = 20;
+    switch x {
+        1 => { r = 10; },
+        2 => { r = 10; },
+        default => {},
+    };
+    return r;
+}
+
+fn main() -> i32 {
+    println("{}", f(1) + f(2) + f(9));
+    return 0;
+}
+
+@test "basic 107 switch stacked"() {
+    if f(1) != 10 { panic(10701); };
+    if f(2) != 10 { panic(10702); };
+    if f(9) != 20 { panic(10703); };
+    if f(1) + f(2) + f(9) != 40 { panic(10704); };
+}

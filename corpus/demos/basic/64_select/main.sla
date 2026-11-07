@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 188_select：变量索引取值（a[1]=20，a[2]=30）。
+// 定长 `[int; 3]` 字面量（类型口径见 #1：统一用 `int` 避免宽度错配）。
+
+fn main() -> i32 {
+    let a = [10, 20, 30];
+    let i = 1;
+    println("{},{}", a[i], a[i + 1]);
+    return 0;
+}
+
+@test "basic 64 index select"() {
+    let a = [10, 20, 30];
+    let i = 1;
+    if a[i] != 20 { panic(6401); };
+    if a[i + 1] != 30 { panic(6402); };
+}

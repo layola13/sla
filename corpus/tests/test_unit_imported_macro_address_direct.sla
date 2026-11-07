@@ -1,0 +1,200 @@
+@import "import_fixtures/imported_borrow_helpers.sa"
+@import "sa_std/core/box.sa"
+
+struct ImportedMacroAddressPoint { left: i64, right: i64 }
+struct ImportedMacroAddressPair { left: i64, right: i64 }
+struct ImportedMacroAddressPairHolder { pair: ImportedMacroAddressPair }
+
+macro nested_imported_pair_inner(out, holder) {
+    out = SLA_IMPORTED_READ_PAIR_SUM(holder.pair);
+}
+
+macro nested_imported_pair_outer(out, holder) {
+    nested_imported_pair_inner(out, holder);
+}
+
+macro nested_imported_pair_write_inner(holder) {
+    SLA_IMPORTED_WRITE_PAIR_LEFT(holder.pair);
+}
+
+macro nested_imported_pair_write_outer(holder) {
+    nested_imported_pair_write_inner(holder);
+}
+
+macro nested_imported_index_inner(out, values) {
+    out = SLA_IMPORTED_READ_I64(values[1]);
+}
+
+macro nested_imported_index_outer(out, values) {
+    nested_imported_index_inner(out, values);
+}
+
+macro nested_imported_index_write_inner(values) {
+    SLA_IMPORTED_WRITE_29_I64(values[1]);
+}
+
+macro nested_imported_index_write_outer(values) {
+    nested_imported_index_write_inner(values);
+}
+
+macro nested_imported_deref_inner(out, ptr) {
+    out = SLA_IMPORTED_READ_I64(*ptr) + 1;
+}
+
+macro nested_imported_deref_outer(out, ptr) {
+    nested_imported_deref_inner(out, ptr);
+}
+
+fn imported_macro_read_i64(value: &i64) -> i64 {
+    *value
+}
+
+fn imported_macro_read_i64_keepalive() -> i64 {
+    let value = 0;
+    imported_macro_read_i64(&value)
+}
+
+fn imported_macro_field_address() -> i64 {
+    let point = ImportedMacroAddressPoint { left: 11, right: 17 };
+    SLA_IMPORTED_READ_I64(point.left)
+}
+
+fn imported_macro_index_address() -> i64 {
+    let values: [i64; 3] = [3, 5, 7];
+    SLA_IMPORTED_READ_I64(values[1])
+}
+
+fn imported_macro_deref_address() -> i64 {
+    let tail = 19;
+    let ptr = &tail;
+    SLA_IMPORTED_READ_I64(*ptr)
+}
+
+fn imported_macro_smart_deref_address() -> i64 {
+    let boxed: Box<i64> = Box::new(19i64);
+    let nested_box: Box<Box<i64>> = Box::new(Box::new(23i64));
+    SLA_IMPORTED_READ_I64(*boxed) + SLA_IMPORTED_READ_I64(**nested_box)
+}
+
+fn imported_macro_field_write_address() -> i64 {
+    let point = ImportedMacroAddressPoint { left: 11, right: 17 };
+    SLA_IMPORTED_WRITE_29_I64(point.left);
+    point.left
+}
+
+fn imported_macro_read_pair_sum(value: &ImportedMacroAddressPair) -> i64 {
+    value.left + value.right
+}
+
+fn imported_macro_write_pair_left(value: &ImportedMacroAddressPair) -> i64 {
+    value.left = 37;
+    value.left
+}
+
+fn imported_macro_whole_pair_identifier_address() -> i64 {
+    let pair = ImportedMacroAddressPair { left: 31, right: 11 };
+    SLA_IMPORTED_READ_PAIR_SUM(pair)
+}
+
+fn imported_macro_whole_pair_moved_alias_address() -> i64 {
+    let pair = ImportedMacroAddressPair { left: 29, right: 13 };
+    let alias = pair;
+    SLA_IMPORTED_READ_PAIR_SUM(alias)
+}
+
+fn imported_macro_whole_pair_borrowed_alias_address() -> i64 {
+    let pair = ImportedMacroAddressPair { left: 23, right: 19 };
+    let alias: &ImportedMacroAddressPair = &pair;
+    SLA_IMPORTED_READ_PAIR_SUM(*alias)
+}
+
+fn imported_macro_pair_field_alias_write() -> i64 {
+    let holder = ImportedMacroAddressPairHolder {
+        pair: ImportedMacroAddressPair { left: 5, right: 7 },
+    };
+    SLA_IMPORTED_WRITE_PAIR_LEFT(holder.pair);
+    holder.pair.left + holder.pair.right
+}
+
+fn nested_imported_macro_pair_field_read() -> i64 {
+    let holder = ImportedMacroAddressPairHolder {
+        pair: ImportedMacroAddressPair { left: 17, right: 25 },
+    };
+    let total = 0i64;
+    nested_imported_pair_outer(total, holder);
+    total
+}
+
+fn nested_imported_macro_pair_field_write() -> i64 {
+    let holder = ImportedMacroAddressPairHolder {
+        pair: ImportedMacroAddressPair { left: 3, right: 5 },
+    };
+    nested_imported_pair_write_outer(holder);
+    holder.pair.left + holder.pair.right
+}
+
+fn nested_imported_macro_index_read_write() -> i64 {
+    let values: [i64; 3] = [3, 5, 7];
+    let before = 0i64;
+    nested_imported_index_outer(before, values);
+    nested_imported_index_write_outer(values);
+    before + values[1]
+}
+
+fn nested_imported_macro_deref_output() -> i64 {
+    let tail = 41i64;
+    let ptr = &tail;
+    let total = 0i64;
+    nested_imported_deref_outer(total, ptr);
+    total
+}
+
+@test "imported macro borrowed field address"() {
+    if imported_macro_read_i64_keepalive() != 0 { panic(31900); };
+    if imported_macro_field_address() != 11 { panic(31901); };
+}
+
+@test "imported macro borrowed index address"() {
+    if imported_macro_read_i64_keepalive() != 0 { panic(31900); };
+    if imported_macro_index_address() != 5 { panic(31902); };
+}
+
+@test "imported macro borrowed deref address"() {
+    if imported_macro_read_i64_keepalive() != 0 { panic(31900); };
+    if imported_macro_deref_address() != 19 { panic(31903); };
+}
+
+@test "imported macro borrowed smart-pointer deref address"() {
+    if imported_macro_read_i64_keepalive() != 0 { panic(31900); };
+    if imported_macro_smart_deref_address() != 42 { panic(31904); };
+}
+
+@test "imported macro borrowed field write address"() {
+    if imported_macro_field_write_address() != 29 { panic(31905); };
+}
+
+@test "imported macro borrowed whole aggregate address"() {
+    if imported_macro_whole_pair_identifier_address() != 42 { panic(31906); };
+}
+
+@test "imported macro borrowed moved aggregate alias address"() {
+    if imported_macro_whole_pair_moved_alias_address() != 42 { panic(31907); };
+}
+
+@test "imported macro borrowed aggregate alias deref address"() {
+    if imported_macro_whole_pair_borrowed_alias_address() != 42 { panic(31908); };
+}
+
+@test "imported macro aggregate field preserves write alias"() {
+    if imported_macro_pair_field_alias_write() != 44 { panic(31909); };
+}
+
+@test "nested user macro preserves imported macro field context"() {
+    if nested_imported_macro_pair_field_read() != 42 { panic(31910); };
+    if nested_imported_macro_pair_field_write() != 42 { panic(31911); };
+}
+
+@test "nested user macro preserves imported macro index and deref context"() {
+    if nested_imported_macro_index_read_write() != 34 { panic(31912); };
+    if nested_imported_macro_deref_output() != 42 { panic(31913); };
+}

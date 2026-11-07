@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_benchmark_group_count() -> i32 { let throughput_group = 1; return throughput_group; }
+fn main() -> i32 { let throughput_group = 1; println("{}", throughput_group); return throughput_group; }
+@test "rosetta 274 build benchmark runner"() { let got = build_benchmark_group_count(); if got != 1 { panic(274); }; }

@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn rewrite_value_surrogate(rewrite_input: i32) -> i32 {
+    return rewrite_input;
+}
+
+fn attribute_macro_rewrite_value() -> i32 {
+    let value = 2;
+    let rewritten_value = rewrite_value_surrogate(value);
+    return rewritten_value;
+}
+
+fn main() -> i32 {
+    let result = attribute_macro_rewrite_value();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 193 193_attribute_macro_rewrite"() {
+    let got = attribute_macro_rewrite_value();
+    if got != 2 { panic(193); };
+}

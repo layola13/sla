@@ -1,0 +1,99 @@
+@import "sa_std/io/print.sai"
+
+// DEF-R8PIN: let-binding slot materialisation in the SA-text backend.
+// When a non-Copy binding is assigned after creation, the text codegen
+// stores the initialiser's value into a stack slot
+// (bindingNeedsAssignedValueSlot / bindingNeedsAddressableStorage).
+// The store transfers ownership of the value to the slot, but both
+// branches retired the source temp with emitRelease. For a fresh
+// heap-materialised struct temp that release is a real drop of the
+// value the slot now holds: invisible while the native backend never
+// freed (pre-DEF-R8), a live use-after-free once release frees
+// (DEF-R8 face 1). slanginx's serve_generation died on the first
+// free_stack write this way (the freed GenBook block's first word --
+// the array pointer field -- is overwritten by the allocator's
+// freelist bookkeeping). The SAB backend keeps the value in the
+// binding register and drops it once at scope exit; it was never
+// affected. These tests pin the SA-text backend (--test-backend sa)
+// under a face-1 host: unfixed, the first test segfaults; fixed, all
+// pass. The SAB backend passes on both trees.
+
+struct Book {
+    free_stack: [u64; 64],
+    free_top: u64,
+    in_flight: u64,
+    events: u64,
+}
+
+fn mk_book() -> Book {
+    return Book { free_stack: [0; 64], free_top: 0, in_flight: 0, events: 0 };
+}
+
+fn fill_book(book: &Book) {
+    let i: u64 = 0;
+    while i < 64 {
+        book.free_stack[book.free_top] = 63 - i;
+        book.free_top = book.free_top + 1;
+        i = i + 1;
+    }
+}
+
+@test "def_r8pin assigned slot struct literal survives field writes"() {
+    let book = Book { free_stack: [0; 64], free_top: 0, in_flight: 0, events: 0 };
+    let i: u64 = 0;
+    while i < 64 {
+        book.free_stack[book.free_top] = 63 - i;
+        book.free_top = book.free_top + 1;
+        i = i + 1;
+    }
+    if book.free_top != 64 {
+        panic(2601);
+    };
+    if book.free_stack[0] != 63 {
+        panic(2602);
+    };
+    if book.free_stack[63] != 0 {
+        panic(2603);
+    };
+    let sum: u64 = 0;
+    let j: u64 = 0;
+    while j < 64 {
+        sum = sum + book.free_stack[j];
+        j = j + 1;
+    }
+    if sum != 2016 {
+        panic(2604);
+    };
+}
+
+@test "def_r8pin assigned slot call result struct survives field writes"() {
+    let book = mk_book();
+    fill_book(&book);
+    if book.free_top != 64 {
+        panic(2605);
+    };
+    if book.free_stack[17] != 46 {
+        panic(2606);
+    };
+    book.events = book.events + 5;
+    if book.events != 5 {
+        panic(2607);
+    };
+}
+
+@test "def_r8pin two assigned slots do not cross-contaminate"() {
+    let a = mk_book();
+    let b = mk_book();
+    fill_book(&a);
+    if b.free_top != 0 {
+        panic(2608);
+    };
+    b.free_stack[b.free_top] = 777;
+    b.free_top = b.free_top + 1;
+    if a.free_stack[0] != 63 {
+        panic(2609);
+    };
+    if b.free_stack[0] != 777 {
+        panic(2610);
+    };
+}

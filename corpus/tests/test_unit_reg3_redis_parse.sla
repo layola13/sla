@@ -1,0 +1,295 @@
+@import "sa_std/redis.sla"
+
+// REG-SHARD3 coverage: SAB registry `declared` entries for the
+// redis.sla RESP parser surface (redis_parse_reply, redis_parse_value,
+// redis_parse_done, redis_parse_fail, redis_parse_incomplete,
+// redis_parse_i64, redis_scan_line, redis_read_value). All
+// class=declared, zero corpus references at registry stamp ee7b41c3.
+// The parser is a pure function over a byte buffer, so every shape
+// is pinned byte-exactly without a server; redis_read_value is
+// exercised through the client's preloaded pending buffer, the
+// same path a live reply takes after its bytes arrive.
+
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+fn reg3_crlf(v: Vec<u8>) -> Vec<u8> {
+    v.push(13);
+    v.push(10);
+    return v;
+}
+
+fn reg3_wire1(a: ptr, an: u64) -> Vec<u8> {
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, a, an);
+    w = reg3_crlf(w);
+    return w;
+}
+
+@test "reg3 redis parse constructors"() {
+    let buf = reg3_bytes(STR_PTR("ab"), STR_LEN("ab"));
+    let d = redis_parse_done(buf, redis_int_value(1), 9);
+    if d.ready == false { panic(4601); };
+    if d.status != SA_STD_OK { panic(4602); };
+    if d.next_pos != 9 { panic(4603); };
+    if redis_value_int(&d.value) != 1 { panic(4604); };
+    if (len(d.buf) as u64) != 2 { panic(4605); };
+
+    let buf2 = reg3_bytes(STR_PTR("ab"), STR_LEN("ab"));
+    let f = redis_parse_fail(buf2, 3);
+    if f.ready { panic(4606); };
+    if f.status != SA_STD_ERR_NET { panic(4607); };
+    if f.next_pos != 3 { panic(4608); };
+    if redis_value_kind(&f.value) != SA_REDIS_KIND_INVALID { panic(4609); };
+
+    let buf3 = reg3_bytes(STR_PTR("ab"), STR_LEN("ab"));
+    let i = redis_parse_incomplete(buf3, 4);
+    if i.ready { panic(4610); };
+    if i.status != SA_STD_OK { panic(4611); };
+    if i.next_pos != 4 { panic(4612); };
+}
+
+@test "reg3 redis parse reply line shapes"() {
+    let r1 = redis_parse_reply(reg3_wire1(STR_PTR("+OK"), STR_LEN("+OK")));
+    if r1.ready == false { panic(4621); };
+    if r1.status != SA_STD_OK { panic(4622); };
+    if redis_value_kind(&r1.value) != SA_REDIS_KIND_SIMPLE { panic(4623); };
+    if redis_bytes_eq(redis_value_bulk(&r1.value), reg3_bytes(STR_PTR("OK"), STR_LEN("OK"))) == false { panic(4624); };
+    if r1.next_pos != 5 { panic(4625); };
+
+    let r2 = redis_parse_reply(reg3_wire1(STR_PTR("-WRONGTYPE nope"), STR_LEN("-WRONGTYPE nope")));
+    if r2.ready == false { panic(4626); };
+    if redis_value_kind(&r2.value) != SA_REDIS_KIND_ERROR { panic(4627); };
+    if redis_bytes_eq(redis_value_bulk(&r2.value), reg3_bytes(STR_PTR("WRONGTYPE nope"), STR_LEN("WRONGTYPE nope"))) == false { panic(4628); };
+
+    let r3 = redis_parse_reply(reg3_wire1(STR_PTR(":-99"), STR_LEN(":-99")));
+    if r3.ready == false { panic(4629); };
+    if redis_value_kind(&r3.value) != SA_REDIS_KIND_INTEGER { panic(4630); };
+    if redis_value_int(&r3.value) != 0 - 99 { panic(4631); };
+
+    let r4 = redis_parse_reply(reg3_wire1(STR_PTR("_"), STR_LEN("_")));
+    if r4.ready == false { panic(4632); };
+    if redis_value_is_null(&r4.value) == false { panic(4633); };
+
+    let r5 = redis_parse_reply(reg3_wire1(STR_PTR("#t"), STR_LEN("#t")));
+    if redis_value_kind(&r5.value) != SA_REDIS_KIND_BOOL { panic(4634); };
+    if redis_value_int(&r5.value) != 1 { panic(4635); };
+    let r6 = redis_parse_reply(reg3_wire1(STR_PTR("#f"), STR_LEN("#f")));
+    if redis_value_kind(&r6.value) != SA_REDIS_KIND_BOOL { panic(4636); };
+    if redis_value_int(&r6.value) != 0 { panic(4637); };
+
+    let r7 = redis_parse_reply(reg3_wire1(STR_PTR(",3.5"), STR_LEN(",3.5")));
+    if redis_value_kind(&r7.value) != SA_REDIS_KIND_DOUBLE { panic(4638); };
+    if redis_bytes_eq(redis_value_bulk(&r7.value), reg3_bytes(STR_PTR("3.5"), STR_LEN("3.5"))) == false { panic(4639); };
+
+    let r8 = redis_parse_reply(reg3_wire1(STR_PTR("(3492890328409238593085"), STR_LEN("(3492890328409238593085")));
+    if redis_value_kind(&r8.value) != SA_REDIS_KIND_BIGINT { panic(4640); };
+    if redis_bytes_eq(redis_value_bulk(&r8.value), reg3_bytes(STR_PTR("3492890328409238593085"), STR_LEN("3492890328409238593085"))) == false { panic(4641); };
+}
+
+@test "reg3 redis parse reply bulk and verbatim"() {
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, STR_PTR("$5"), STR_LEN("$5"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR("hello"), STR_LEN("hello"));
+    w = reg3_crlf(w);
+    let r = redis_parse_reply(w);
+    if r.ready == false { panic(4651); };
+    if redis_value_kind(&r.value) != SA_REDIS_KIND_BULK { panic(4652); };
+    if redis_bytes_eq(redis_value_bulk(&r.value), reg3_bytes(STR_PTR("hello"), STR_LEN("hello"))) == false { panic(4653); };
+    if r.next_pos != 11 { panic(4654); };
+
+    let rn = redis_parse_reply(reg3_wire1(STR_PTR("$-1"), STR_LEN("$-1")));
+    if rn.ready == false { panic(4655); };
+    if redis_value_is_null(&rn.value) == false { panic(4656); };
+
+    // Verbatim string: 4-byte "txt:" prefix is stripped.
+    let wv: Vec<u8> = Vec::new();
+    wv = redis_push_lit(wv, STR_PTR("=15"), STR_LEN("=15"));
+    wv = reg3_crlf(wv);
+    wv = redis_push_lit(wv, STR_PTR("txt:hello world"), STR_LEN("txt:hello world"));
+    wv = reg3_crlf(wv);
+    let rv = redis_parse_reply(wv);
+    if rv.ready == false { panic(4657); };
+    if redis_value_kind(&rv.value) != SA_REDIS_KIND_VERBATIM { panic(4658); };
+    if redis_bytes_eq(redis_value_bulk(&rv.value), reg3_bytes(STR_PTR("hello world"), STR_LEN("hello world"))) == false { panic(4659); };
+}
+
+@test "reg3 redis parse value offset and trailing"() {
+    // Two values in one buffer: parse_value at the second offset.
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, STR_PTR("+OK"), STR_LEN("+OK"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR(":7"), STR_LEN(":7"));
+    w = reg3_crlf(w);
+    let r1 = redis_parse_reply(w);
+    if r1.ready == false { panic(4661); };
+    if r1.next_pos != 5 { panic(4662); };
+    let r2 = redis_parse_value(r1.buf, 5, 0);
+    if r2.ready == false { panic(4663); };
+    if redis_value_int(&r2.value) != 7 { panic(4664); };
+    if r2.next_pos != 9 { panic(4665); };
+    // parse_value at 0 agrees with parse_reply.
+    let w2 = reg3_wire1(STR_PTR(":9"), STR_LEN(":9"));
+    let r3 = redis_parse_value(w2, 0, 0);
+    if r3.ready == false { panic(4666); };
+    if redis_value_int(&r3.value) != 9 { panic(4667); };
+}
+
+@test "reg3 redis parse incomplete"() {
+    let empty: Vec<u8> = Vec::new();
+    let r0 = redis_parse_reply(empty);
+    if r0.ready { panic(4671); };
+    if r0.status != SA_STD_OK { panic(4672); };
+
+    let w1: Vec<u8> = Vec::new();
+    w1 = redis_push_lit(w1, STR_PTR("$5"), STR_LEN("$5"));
+    w1 = reg3_crlf(w1);
+    w1 = redis_push_lit(w1, STR_PTR("hel"), STR_LEN("hel"));
+    let r1 = redis_parse_reply(w1);
+    if r1.ready { panic(4673); };
+    if r1.status != SA_STD_OK { panic(4674); };
+
+    let w2 = reg3_bytes(STR_PTR("+OK"), STR_LEN("+OK"));
+    let r2 = redis_parse_reply(w2);
+    if r2.ready { panic(4675); };
+    if r2.status != SA_STD_OK { panic(4676); };
+}
+
+@test "reg3 redis parse malformed"() {
+    let r1 = redis_parse_reply(reg3_wire1(STR_PTR("?x"), STR_LEN("?x")));
+    if r1.ready { panic(4681); };
+    if r1.status != SA_STD_ERR_NET { panic(4682); };
+    let r2 = redis_parse_reply(reg3_wire1(STR_PTR(":12a"), STR_LEN(":12a")));
+    if r2.ready { panic(4683); };
+    if r2.status != SA_STD_ERR_NET { panic(4684); };
+    let r3 = redis_parse_reply(reg3_wire1(STR_PTR("$-2"), STR_LEN("$-2")));
+    if r3.ready { panic(4685); };
+    if r3.status != SA_STD_ERR_NET { panic(4686); };
+    let r4 = redis_parse_reply(reg3_wire1(STR_PTR("#x"), STR_LEN("#x")));
+    if r4.ready { panic(4687); };
+    if r4.status != SA_STD_ERR_NET { panic(4688); };
+    // Bulk payload not followed by CRLF.
+    let w5: Vec<u8> = Vec::new();
+    w5 = redis_push_lit(w5, STR_PTR("$3"), STR_LEN("$3"));
+    w5 = reg3_crlf(w5);
+    w5 = redis_push_lit(w5, STR_PTR("abcXX"), STR_LEN("abcXX"));
+    let r5 = redis_parse_reply(w5);
+    if r5.ready { panic(4689); };
+    if r5.status != SA_STD_ERR_NET { panic(4690); };
+}
+
+@test "reg3 redis parse i64 forms"() {
+    let t1 = reg3_bytes(STR_PTR("123"), STR_LEN("123"));
+    let s1: Slice<u8> = VEC_AS_SLICE(t1);
+    let p1 = redis_parse_i64(&s1, 0, 3);
+    if p1.ok == false { panic(4701); };
+    if p1.value != 123 { panic(4702); };
+    let t2 = reg3_bytes(STR_PTR("+7"), STR_LEN("+7"));
+    let s2: Slice<u8> = VEC_AS_SLICE(t2);
+    let p2 = redis_parse_i64(&s2, 0, 2);
+    if p2.ok == false { panic(4703); };
+    if p2.value != 7 { panic(4704); };
+    let t3 = reg3_bytes(STR_PTR("-9223372036854775808"), STR_LEN("-9223372036854775808"));
+    let s3: Slice<u8> = VEC_AS_SLICE(t3);
+    let p3 = redis_parse_i64(&s3, 0, 20);
+    if p3.ok == false { panic(4705); };
+    if p3.value != 0 - 9223372036854775807 - 1 { panic(4706); };
+    // Overflow past i64 max is rejected.
+    let t4 = reg3_bytes(STR_PTR("9223372036854775808"), STR_LEN("9223372036854775808"));
+    let s4: Slice<u8> = VEC_AS_SLICE(t4);
+    let p4 = redis_parse_i64(&s4, 0, 19);
+    if p4.ok { panic(4707); };
+    // Junk and empty ranges are rejected.
+    let t5 = reg3_bytes(STR_PTR("12a"), STR_LEN("12a"));
+    let s5: Slice<u8> = VEC_AS_SLICE(t5);
+    let p5 = redis_parse_i64(&s5, 0, 3);
+    if p5.ok { panic(4708); };
+    let p6 = redis_parse_i64(&s5, 1, 1);
+    if p6.ok { panic(4709); };
+    let t7 = reg3_bytes(STR_PTR("+"), STR_LEN("+"));
+    let s7: Slice<u8> = VEC_AS_SLICE(t7);
+    let p7 = redis_parse_i64(&s7, 0, 1);
+    if p7.ok { panic(4710); };
+    // Sub-range parse inside a larger buffer.
+    let t8 = reg3_bytes(STR_PTR("xx42yy"), STR_LEN("xx42yy"));
+    let s8: Slice<u8> = VEC_AS_SLICE(t8);
+    let p8 = redis_parse_i64(&s8, 2, 4);
+    if p8.ok == false { panic(4711); };
+    if p8.value != 42 { panic(4712); };
+}
+
+@test "reg3 redis scan line states"() {
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, STR_PTR("abc"), STR_LEN("abc"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR("def"), STR_LEN("def"));
+    let sl: Slice<u8> = VEC_AS_SLICE(w);
+    let s1 = redis_scan_line(&sl, 0, 8);
+    if s1.state != 1 { panic(4721); };
+    if s1.content_end != 3 { panic(4722); };
+    if s1.next != 5 { panic(4723); };
+    // No LF in range: incomplete prefix.
+    let s2 = redis_scan_line(&sl, 5, 8);
+    if s2.state != 0 { panic(4724); };
+    if s2.content_end != 5 { panic(4725); };
+    if s2.next != 5 { panic(4726); };
+    // Bare LF (no preceding CR) is malformed.
+    let w2: Vec<u8> = Vec::new();
+    w2 = redis_push_lit(w2, STR_PTR("abc"), STR_LEN("abc"));
+    w2.push(10);
+    let sl2: Slice<u8> = VEC_AS_SLICE(w2);
+    let s3 = redis_scan_line(&sl2, 0, 4);
+    if s3.state != 2 { panic(4727); };
+    if s3.content_end != 0 { panic(4728); };
+    // Empty range is an incomplete prefix.
+    let s4 = redis_scan_line(&sl2, 0, 0);
+    if s4.state != 0 { panic(4729); };
+}
+
+@test "reg3 redis read_value from pending"() {
+    let cl = redis_empty_client();
+    cl.pending = reg3_wire1(STR_PTR("+OK"), STR_LEN("+OK"));
+    let st = redis_read_value(cl);
+    if st.status != SA_STD_OK { panic(4731); };
+    if redis_value_kind(&st.reply) != SA_REDIS_KIND_SIMPLE { panic(4732); };
+    if redis_bytes_eq(redis_value_bulk(&st.reply), reg3_bytes(STR_PTR("OK"), STR_LEN("OK"))) == false { panic(4733); };
+    if (len(st.client.pending) as u64) != 0 { panic(4734); };
+
+    // Two buffered values drain one per call, in order.
+    let cl2 = redis_empty_client();
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, STR_PTR(":5"), STR_LEN(":5"));
+    w = reg3_crlf(w);
+    w = redis_push_lit(w, STR_PTR(":6"), STR_LEN(":6"));
+    w = reg3_crlf(w);
+    cl2.pending = w;
+    let s1 = redis_read_value(cl2);
+    if s1.status != SA_STD_OK { panic(4735); };
+    if redis_value_int(&s1.reply) != 5 { panic(4736); };
+    if (len(s1.client.pending) as u64) != 4 { panic(4737); };
+    let s2 = redis_read_value(s1.client);
+    if s2.status != SA_STD_OK { panic(4738); };
+    if redis_value_int(&s2.reply) != 6 { panic(4739); };
+    if (len(s2.client.pending) as u64) != 0 { panic(4740); };
+}
+
+@test "reg3 redis read_value protocol failure"() {
+    // Garbage already buffered: parse error marks the client failed.
+    let cl = redis_empty_client();
+    cl.pending = reg3_wire1(STR_PTR("?x"), STR_LEN("?x"));
+    let st = redis_read_value(cl);
+    if st.status != SA_STD_ERR_NET { panic(4751); };
+    if st.client.failed == false { panic(4752); };
+    if redis_value_kind(&st.reply) != SA_REDIS_KIND_INVALID { panic(4753); };
+}
+
+@test "reg3 redis read_value empty pending dead handle"() {
+    // Nothing buffered and handle 0: must surface an error status
+    // (chunk error or NET), never a fabricated value.
+    let st = redis_read_value(redis_empty_client());
+    if st.status == SA_STD_OK { panic(4761); };
+    if redis_value_kind(&st.reply) != SA_REDIS_KIND_INVALID { panic(4762); };
+}

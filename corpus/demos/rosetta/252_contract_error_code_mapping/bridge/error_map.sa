@@ -1,0 +1,14 @@
+@export map_error(code: i32) -> i32:
+L_ENTRY:
+    ok = eq code, 252
+    value = add 252, 0
+    !code
+    br ok -> L_MATCH, L_MISS
+
+L_MATCH:
+    !value
+    return 252
+
+L_MISS:
+    !value
+    return 0

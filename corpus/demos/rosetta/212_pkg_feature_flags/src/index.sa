@@ -1,0 +1,8 @@
+@import "src/flags/index.sa"
+
+@src_package_value() -> i32:
+L_ENTRY:
+    flags = call @flags_package_value()
+    value = add 200, flags
+    !flags
+    return value

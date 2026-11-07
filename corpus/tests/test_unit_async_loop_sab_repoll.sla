@@ -1,0 +1,56 @@
+// Regression: LOOP-SAB (sab_codegen loop-await poll helper, BODY stage).
+//
+// The SAB emitter stored this iteration's sub-future object into the
+// state block's sub-object slot and then released the owning register:
+// the SAB lowerer turns that release into a free() of the wrapper, so
+// the AWAIT stage of the very first poll dereferenced freed memory
+// (signal 11; the text emitter's identical-looking release does not
+// free under the SA-text lowering). The register must be forgotten
+// (move-consumed) instead: ownership now lives in the state block.
+//
+// The second test also pins the re-poll path of the same helper under
+// SAB (stage dispatch re-enters AWAIT directly, bypassing the loop
+// head), which rides on the host-side DEF-4 entry-save discipline.
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn spin_count(n: i32) -> i32 {
+    let i: i32 = 0;
+    while i < n {
+        let tick: i32 = future::defer_ready(0).await;
+        i = i + 1 + tick;
+    }
+    return i;
+}
+
+@test "loop await sab first poll pending then completes exactly"() {
+    let t = task::new(spin_count(3));
+    let first = task::poll(t);
+    if first {
+        panic(9101);
+    };
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 100 {
+            panic(9102);
+        };
+    }
+    if task::result(t) != 3 {
+        panic(9103);
+    };
+}
+
+@test "loop await sab repoll across many iterations stays exact"() {
+    let t = task::new(spin_count(500));
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 10000 {
+            panic(9111);
+        };
+    }
+    if task::result(t) != 500 {
+        panic(9112);
+    };
+}

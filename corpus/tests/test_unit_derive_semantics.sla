@@ -1,0 +1,33 @@
+@derive(copy, eq, ord, hash, debug)
+struct DeriveEntity {
+    id: i32,
+    gen: i32,
+}
+
+fn derive_take_entity(entity: DeriveEntity) -> i32 {
+    return entity.id + entity.gen;
+}
+
+@test "derive copy keeps source usable"() {
+    let a = DeriveEntity { id: 7, gen: 3 };
+    let b = a;
+    if b.id != 7 { panic(9301); };
+    if a.gen != 3 { panic(9302); };
+    if derive_take_entity(a) != 10 { panic(9303); };
+    if a.id != 7 { panic(9304); };
+}
+
+@test "derive eq ord hash debug"() {
+    let a = DeriveEntity { id: 7, gen: 3 };
+    let same = DeriveEntity { id: 7, gen: 3 };
+    let later = DeriveEntity { id: 7, gen: 4 };
+    if (a == same) != true { panic(9311); };
+    if (a != later) != true { panic(9312); };
+    if (a < later) != true { panic(9313); };
+    if (later > a) != true { panic(9314); };
+    if hash(a) != hash(same) { panic(9315); };
+    if hash(a) == hash(later) { panic(9316); };
+    let text = debug(a);
+    if len(text) == 0 { panic(9317); };
+}
+

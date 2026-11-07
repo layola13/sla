@@ -1,0 +1,93 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_create_point = vtable { call = @sla__create_point }
+@const SLA_FNPTR_VT_point_coordinate_sum = vtable { call = @sla__point_coordinate_sum }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__create_point(x: i32, y: i32) -> ptr:
+L_ENTRY:
+    tmp_0 = alloc 8
+    store tmp_0+0, x as i32
+    store tmp_0+4, y as i32
+    return tmp_0
+
+@sla__point_coordinate_sum() -> i32:
+L_ENTRY:
+    tmp_1 = 10
+    tmp_2 = 20
+    tmp_3 = call @sla__create_point(tmp_1, tmp_2)
+    !tmp_1
+    !tmp_2
+    point = tmp_3
+    tmp_4 = load point+0 as i32
+    tmp_5 = load point+4 as i32
+    tmp_6 = add tmp_4, tmp_5
+    !tmp_4
+    !tmp_5
+    !point
+    return tmp_6
+
+@main() -> i32:
+L_ENTRY:
+    tmp_7 = 10
+    tmp_8 = 20
+    tmp_9 = call @sla__create_point(tmp_7, tmp_8)
+    !tmp_7
+    !tmp_8
+    point = tmp_9
+    @const SLA_STR_0 = utf8:"("
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_10 = load point+0 as i32
+    tmp_11 = call @sa_fmt_u64(tmp_10, 10)
+    tmp_12 = call @sa_fmt_buffer_data(tmp_11)
+    tmp_13 = call @sa_fmt_buffer_len(tmp_11)
+    tmp_14 = tmp_12
+    call @sa_print_bytes(&tmp_14, tmp_13)
+    call @sa_fmt_buffer_free(^tmp_11)
+    !tmp_14
+    !tmp_13
+    !tmp_10
+    @const SLA_STR_1 = utf8:","
+    call @sa_print_bytes(&SLA_STR_1, 1)
+    tmp_15 = load point+4 as i32
+    tmp_16 = call @sa_fmt_u64(tmp_15, 10)
+    tmp_17 = call @sa_fmt_buffer_data(tmp_16)
+    tmp_18 = call @sa_fmt_buffer_len(tmp_16)
+    tmp_19 = tmp_17
+    call @sa_print_bytes(&tmp_19, tmp_18)
+    call @sa_fmt_buffer_free(^tmp_16)
+    !tmp_19
+    !tmp_18
+    !tmp_15
+    @const SLA_STR_2 = utf8:")"
+    call @sa_print_bytes(&SLA_STR_2, 1)
+    @const SLA_STR_3 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_3, 1)
+    tmp_20 = 0
+    !point
+    return tmp_20
+
+@test "rosetta 005 05_struct"():
+L_TEST_ENTRY_0:
+    tmp_21 = call @sla__point_coordinate_sum()
+    got = tmp_21
+    tmp_22 = 30
+    tmp_23 = ne got, tmp_22
+    !tmp_22
+    br tmp_23 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_23
+    panic(5)
+
+L_ELSE_2:
+    !tmp_23
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

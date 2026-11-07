@@ -1,0 +1,139 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Regression (DEF-UNARY-MINUS): unary minus parsed its operand at
+// precedence 6, looser than binary +/- (7) and */% (8), so the whole
+// following additive chain was swallowed into the negation:
+// `-2.0 + (px as f32) * scale_x` evaluated as `-(2.0 + ...)` (px=1 gave
+// -2.65 instead of -1.35 in the mandelbrot shape). Unary minus must
+// bind tighter than */% and +/- while `as` and postfix call/index
+// still fold into the operand. The mul/div/shift/cmp/paren cases are
+// controls: they agreed under both parses and must keep passing.
+
+fn five() -> i32 {
+    return 5;
+}
+
+fn main() -> i32 {
+    let scale_x: f32 = 2.6 / 4.0;
+    let x0: f32 = -2.0 + (1 as f32) * scale_x;
+    println("sum={}, x0_scaled={}", -2 + 3 * 4, (x0 * 100.0) as i32);
+    return 0;
+}
+
+@test "unary minus literal add mul"() {
+    if -2 + 3 * 4 != 10 {
+        panic(12401);
+    };
+}
+
+@test "unary minus literal add"() {
+    if -2 + 3 != 1 {
+        panic(12402);
+    };
+}
+
+@test "unary minus literal sub"() {
+    if -2 - 3 != -5 {
+        panic(12403);
+    };
+}
+
+@test "unary minus literal mul control"() {
+    if -2 * 3 != -6 {
+        panic(12404);
+    };
+}
+
+@test "unary minus var add"() {
+    let a: i32 = 5;
+    if -a + 3 != -2 {
+        panic(12405);
+    };
+}
+
+@test "unary minus var sub"() {
+    let a: i32 = 5;
+    if -a - 3 != -8 {
+        panic(12406);
+    };
+}
+
+@test "unary minus mid expr"() {
+    if 2 * -3 + 1 != -5 {
+        panic(12407);
+    };
+}
+
+@test "unary minus after plus"() {
+    if 10 + -5 + 3 != 8 {
+        panic(12408);
+    };
+}
+
+@test "unary minus index add"() {
+    let arr: [i32; 3] = [3, 10, 20];
+    if -arr[0] + 10 != 7 {
+        panic(12409);
+    };
+}
+
+@test "unary minus call add"() {
+    if -five() + 1 != -4 {
+        panic(12410);
+    };
+}
+
+@test "unary minus paren control"() {
+    if -(2 + 3) != -5 {
+        panic(12411);
+    };
+}
+
+@test "unary minus float mandel shape"() {
+    let scale_x: f32 = 2.6 / 4.0;
+    let x0: f32 = -2.0 + (1 as f32) * scale_x;
+    if (x0 * 100.0) as i32 != -135 {
+        panic(12412);
+    };
+}
+
+@test "unary minus f64 add"() {
+    if -1.5 + 0.25 != -1.25 {
+        panic(12413);
+    };
+}
+
+@test "unary minus i64 var add"() {
+    let v: i64 = 10;
+    if -v + 3 != -7 {
+        panic(12414);
+    };
+}
+
+@test "unary minus shift control"() {
+    if -1 << 2 != -4 {
+        panic(12415);
+    };
+}
+
+@test "unary minus cmp control"() {
+    let b: bool = -2 < 3;
+    if b != true {
+        panic(12416);
+    };
+}
+
+@test "unary minus float var add"() {
+    let s: f32 = 0.65;
+    let x0: f32 = -2.0 + s;
+    if (x0 * 100.0) as i32 != -135 {
+        panic(12417);
+    };
+}
+
+@test "unary minus div control"() {
+    if -6 / 2 != -3 {
+        panic(12418);
+    };
+}

@@ -1,0 +1,11 @@
+@import "workspace/members/alpha/index.sa"
+@import "workspace/members/beta/index.sa"
+
+@workspace_total() -> i32:
+L_ENTRY:
+    alpha = call @alpha_package_value()
+    beta = call @beta_package_value()
+    value = add alpha, beta
+    !alpha
+    !beta
+    return value

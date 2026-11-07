@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct UnsafeData {}
+
+fn negative_impl_observable_surrogate() -> i32 {
+    let _value = UnsafeData {};
+    return 0;
+}
+
+fn main() -> i32 {
+    let _value = UnsafeData {};
+    let result = 0;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 169 169_negative_impls"() {
+    let got = negative_impl_observable_surrogate();
+    if got != 0 { panic(169); };
+}

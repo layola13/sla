@@ -1,0 +1,1 @@
+@extern map_error(code: i32) -> i32

@@ -1,0 +1,11 @@
+// expect: ArenaEscape
+// F2-A C1 corpus: escape route 1 through a literal - the root
+// is reachable from the returned value's fields (design 3 R2).
+struct Holder { items: Vec<String> }
+
+fn neg_return_literal() -> Holder {
+    arena {
+        let v: Vec<String> = Vec::new();
+        return Holder { items: v };
+    }
+}

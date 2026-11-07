@@ -1,0 +1,74 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_hot = vtable { call = @sla__hot }
+@const SLA_FNPTR_VT_cold = vtable { call = @sla__cold }
+@const SLA_FNPTR_VT_pgo_hot_cold_total = vtable { call = @sla__pgo_hot_cold_total }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__hot() -> i32:
+L_ENTRY:
+    tmp_0 = 3
+    return tmp_0
+
+@sla__cold() -> i32:
+L_ENTRY:
+    tmp_1 = 1
+    return tmp_1
+
+@sla__pgo_hot_cold_total() -> i32:
+L_ENTRY:
+    tmp_2 = call @sla__hot()
+    tmp_3 = call @sla__hot()
+    tmp_4 = add tmp_2, tmp_3
+    !tmp_2
+    !tmp_3
+    tmp_5 = call @sla__hot()
+    tmp_6 = add tmp_4, tmp_5
+    !tmp_4
+    !tmp_5
+    tmp_7 = call @sla__cold()
+    tmp_8 = add tmp_6, tmp_7
+    !tmp_6
+    !tmp_7
+    return tmp_8
+
+@main() -> i32:
+L_ENTRY:
+    tmp_9 = call @sla__pgo_hot_cold_total()
+    result = tmp_9
+    tmp_10 = call @sa_fmt_u64(result, 10)
+    tmp_11 = call @sa_fmt_buffer_data(tmp_10)
+    tmp_12 = call @sa_fmt_buffer_len(tmp_10)
+    tmp_13 = tmp_11
+    call @sa_print_bytes(&tmp_13, tmp_12)
+    call @sa_fmt_buffer_free(^tmp_10)
+    !tmp_13
+    !tmp_12
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 197 197_profile_guided_opt"():
+L_TEST_ENTRY_0:
+    tmp_14 = call @sla__pgo_hot_cold_total()
+    got = tmp_14
+    tmp_15 = 10
+    tmp_16 = ne got, tmp_15
+    !tmp_15
+    br tmp_16 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_16
+    panic(197)
+
+L_ELSE_2:
+    !tmp_16
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

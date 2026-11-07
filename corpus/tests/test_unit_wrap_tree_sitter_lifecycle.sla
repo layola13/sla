@@ -1,0 +1,39 @@
+// HAND-WRITTEN companion smoke (not generated): the tree_sitter wrappers
+// that need live handles cannot be smoke-called from literals one by
+// one, so this test walks one real lifecycle through the wrappers:
+// parser_new -> set_language -> parse -> tree_root -> node_type /
+// node_child_count -> tree_sexp -> node_free / tree_free / parser_free.
+// If the tree-sitter core library is absent on this machine
+// (sla_ts_available() != 1) the chain cannot run and the test returns
+// without exercising it -- see PILOT.md registry notes.
+@import "sla_std/wrap/tree_sitter.sla"
+@import "sa_std/string.sa"
+
+@test "wrap ts lifecycle parser-tree-node"() {
+    if sla_ts_available() != 1 {
+        return;
+    };
+    let parser: u64 = 0;
+    if sla_ts_parser_new(&parser) != 0 { panic(92001); };
+    if parser == 0 { panic(92002); };
+    if sla_ts_parser_set_language(parser, STR_PTR("typescript"), STR_LEN("typescript")) != 0 { panic(92003); };
+    let tree: u64 = 0;
+    if sla_ts_parse(parser, STR_PTR("fn main() { let x = 1; }"), STR_LEN("fn main() { let x = 1; }"), &tree) != 0 { panic(92004); };
+    if tree == 0 { panic(92005); };
+    let root: u64 = 0;
+    if sla_ts_tree_root(tree, &root) != 0 { panic(92006); };
+    if root == 0 { panic(92007); };
+    let buf = [0u8; 64];
+    let tlen: u64 = 0;
+    if sla_ts_node_type(root, &buf[0], 64, &tlen) != 0 { panic(92008); };
+    if tlen == 0 { panic(92009); };
+    let count: u64 = 0;
+    if sla_ts_node_child_count(root, &count) != 0 { panic(92010); };
+    let sbuf = [0u8; 256];
+    let slen: u64 = 0;
+    if sla_ts_tree_sexp(tree, &sbuf[0], 256, &slen) != 0 { panic(92011); };
+    if slen == 0 { panic(92012); };
+    sla_ts_node_free(^root);
+    sla_ts_tree_free(^tree);
+    sla_ts_parser_free(^parser);
+}

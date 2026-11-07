@@ -1,0 +1,18 @@
+fn bump_value(value: int, amount: int) -> int {
+    let current = value;
+    current = current + amount;
+    return current;
+}
+
+fn stack_slot_scalar_call_arg() -> int {
+    let off = 0;
+    off = bump_value(off, 4);
+    return off;
+}
+
+@test "direct sab stack-slot scalar call arg is not released after consumption"() {
+    let got = stack_slot_scalar_call_arg();
+    if got != 4 {
+        panic(61061);
+    };
+}

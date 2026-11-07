@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 交错和（1-2+3-4+...+10=-5）。
+// 意对标 359 平方和的符号版（330 等差系互补；375 做三向）。
+
+fn alt_sum(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        if i % 2 == 1 { s = s + i; };
+        if i % 2 == 0 { s = s - i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", alt_sum(10), alt_sum(5), alt_sum(1));
+    return 0;
+}
+
+@test "basic 369 alt sum"() {
+    if alt_sum(10) != -5 { panic(36901); };
+    if alt_sum(5) != 3 { panic(36902); };
+    if alt_sum(1) != 1 { panic(36903); };
+}

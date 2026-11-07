@@ -1,0 +1,135 @@
+@import "sa_std/ip.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Coverage shard 2: ipv4 value/parse/format entries from sa_std/ip.sla
+// (registry "declared, never probed"). Expected values are pinned
+// bit-for-bit: parse is strict (leading zeros rejected, Go/Python
+// modern semantics per the file header), format is dotted decimal.
+// Round 2 note: expected strings go through (ptr, len) because the
+// round-1 form (string literal passed by move to a by-value String
+// helper parameter) traps StackEscape 1025 on the text backend;
+// round-1 file preserved as repro in ../repro/.
+
+fn expect_str(got: String, want: ptr, want_len: u64, code: i32) {
+    if len(got) != want_len { panic(code); };
+    let gp: ptr = STR_PTR(got);
+    let i: u64 = 0;
+    while i < want_len {
+        if PTR_BYTE_AT(gp, i) != PTR_BYTE_AT(want, i) { panic(code); };
+        i = i + 1;
+    }
+}
+
+@test "reg2 ip_u64_max"() {
+    // u64 max assembled from halves (oversize literals do not lex).
+    let hi: u64 = 4294967295;
+    let lo: u64 = 4294967295;
+    let want: u64 = hi * 4294967296 + lo;
+    if ip_u64_max() != want { panic(24201); };
+    if (ip_u64_max() >> 32) != 4294967295 { panic(24202); };
+    if (ip_u64_max() & 4294967295) != 4294967295 { panic(24203); };
+}
+
+@test "reg2 ipv4_from_octets"() {
+    if ipv4_from_octets(192, 168, 0, 1) != 3232235521 { panic(24204); };
+    if ipv4_from_octets(0, 0, 0, 0) != 0 { panic(24205); };
+    if ipv4_from_octets(255, 255, 255, 255) != 4294967295 { panic(24206); };
+    if ipv4_from_octets(1, 2, 3, 4) != 16909060 { panic(24207); };
+}
+
+@test "reg2 ipv4_octet"() {
+    if ipv4_octet(3232235521, 0) != 192 { panic(24208); };
+    if ipv4_octet(3232235521, 1) != 168 { panic(24209); };
+    if ipv4_octet(3232235521, 2) != 0 { panic(24210); };
+    if ipv4_octet(3232235521, 3) != 1 { panic(24211); };
+    if ipv4_octet(4294967295, 2) != 255 { panic(24212); };
+}
+
+@test "reg2 ipv4_parse valid"() {
+    match ipv4_parse("192.168.0.1") {
+        Some(v) => { if v != 3232235521 { panic(24213); }; },
+        None => { panic(24214); },
+    };
+    match ipv4_parse("0.0.0.0") {
+        Some(v) => { if v != 0 { panic(24215); }; },
+        None => { panic(24216); },
+    };
+    match ipv4_parse("255.255.255.255") {
+        Some(v) => { if v != 4294967295 { panic(24217); }; },
+        None => { panic(24218); },
+    };
+    match ipv4_parse("8.8.8.8") {
+        Some(v) => { if v != 134744072 { panic(24219); }; },
+        None => { panic(24220); },
+    };
+}
+
+@test "reg2 ipv4_parse invalid"() {
+    match ipv4_parse("256.1.1.1") {
+        Some(v) => { panic(24221); },
+        None => {},
+    };
+    match ipv4_parse("01.2.3.4") {
+        Some(v) => { panic(24222); },
+        None => {},
+    };
+    match ipv4_parse("1.2.3") {
+        Some(v) => { panic(24223); },
+        None => {},
+    };
+    match ipv4_parse("1.2.3.4.5") {
+        Some(v) => { panic(24224); },
+        None => {},
+    };
+    match ipv4_parse("1.2.3.4x") {
+        Some(v) => { panic(24225); },
+        None => {},
+    };
+    match ipv4_parse("") {
+        Some(v) => { panic(24226); },
+        None => {},
+    };
+    match ipv4_parse("1..2.3") {
+        Some(v) => { panic(24227); },
+        None => {},
+    };
+}
+
+@test "reg2 ipv4_to_string"() {
+    let w1 = "192.168.0.1";
+    expect_str(ipv4_to_string(3232235521), STR_PTR(w1), STR_LEN(w1) as u64, 24228);
+    let w2 = "0.0.0.0";
+    expect_str(ipv4_to_string(0), STR_PTR(w2), STR_LEN(w2) as u64, 24229);
+    let w3 = "255.255.255.255";
+    expect_str(ipv4_to_string(4294967295), STR_PTR(w3), STR_LEN(w3) as u64, 24230);
+    let w4 = "8.8.8.8";
+    expect_str(ipv4_to_string(134744072), STR_PTR(w4), STR_LEN(w4) as u64, 24231);
+    let w5 = "10.0.0.5";
+    expect_str(ipv4_to_string(167772165), STR_PTR(w5), STR_LEN(w5) as u64, 24232);
+}
+
+@test "reg2 ipv4_parse to_string roundtrip"() {
+    let bits: u32 = 0;
+    match ipv4_parse("172.16.5.4") {
+        Some(v) => { bits = v; },
+        None => { panic(24233); },
+    };
+    if bits != 2886731012 { panic(24234); };
+    let w = "172.16.5.4";
+    expect_str(ipv4_to_string(bits), STR_PTR(w), STR_LEN(w) as u64, 24235);
+}
+
+@test "reg2 ipv4_default_mask"() {
+    if ipv4_default_mask(167772161) != 4278190080 { panic(24236); }; // 10.0.0.1 -> /8
+    if ipv4_default_mask(2886729729) != 4294901760 { panic(24237); }; // 172.16.0.1 -> /16
+    if ipv4_default_mask(3232235521) != 4294934528 { panic(24238); }; // 192.168.0.1 -> /24
+    if ipv4_default_mask(3758096385) != 0 { panic(24239); }; // 224.0.0.1 multicast -> 0
+    if ipv4_default_mask(0) != 4278190080 { panic(24240); }; // 0.0.0.0 class A by first octet
+}
+
+@test "reg2 ipv4_mask"() {
+    if ipv4_mask(3232235813, 4294967040) != 3232235776 { panic(24241); }; // 192.168.1.37 & /24
+    if ipv4_mask(3232235813, 0) != 0 { panic(24242); };
+    if ipv4_mask(3232235813, 4294967295) != 3232235813 { panic(24243); };
+}

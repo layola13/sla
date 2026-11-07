@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 位计数 popcount（255 → 8；n&(n-1) 消最低位）。
+// 意对标 406 数位和的二进制版（406 互补；510 做对峙，512 做三向）。
+
+fn bitcount(n: int) -> int {
+    let c = 0;
+    let m = n;
+    while m != 0 {
+        m = m & (m - 1);
+        c = c + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", bitcount(255), bitcount(13), bitcount(0));
+    return 0;
+}
+
+@test "basic 508 bitcount"() {
+    if bitcount(255) != 8 { panic(50801); };
+    if bitcount(13) != 3 { panic(50802); };
+    if bitcount(0) != 0 { panic(50803); };
+}

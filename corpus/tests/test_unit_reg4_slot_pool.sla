@@ -1,0 +1,97 @@
+@import "sa_std/slot_pool.sla"
+
+// Registry shard 4 coverage: slot_pool_* free functions from
+// sa_std/slot_pool.sla (SAB registry class=declared, never probed,
+// zero corpus references at census 2026-11-06).
+// Entries: slot_pool_new, slot_pool_alloc, slot_pool_arena_ptr,
+// slot_pool_free, slot_pool_get.
+// True contract (source-verified): alloc(p, elem_size) returns
+// (pool, idx) with LIFO freelist reuse and zeroed arena growth;
+// free(p, idx, elem_size) returns (pool, freelist_len) and panics
+// on double free (1322, not exercisable in this harness); get
+// returns base + idx*elem_size and panics out of range (1323).
+// (v3: rewritten against the real signatures -- v1/v2 coded
+// against a fabricated 3-tuple alloc and len/used accessors that
+// do not exist; the checker masked those behind a Redeclaration.)
+
+@test "reg4 slot pool new is empty"() {
+    let p0 = slot_pool_new();
+    if p0.len != 0 { panic(41201); };
+    if len(p0.freelist) != 0 { panic(41202); };
+    if len(p0.data) != 0 { panic(41203); };
+}
+
+@test "reg4 slot pool alloc carves sequential slots"() {
+    let p0 = slot_pool_new();
+    let (p1, i0) = slot_pool_alloc(p0, 8);
+    if i0 != 0 { panic(41211); };
+    if p1.len != 1 { panic(41212); };
+    if len(p1.data) != 1 { panic(41213); };
+    let (p2, i1) = slot_pool_alloc(p1, 8);
+    if i1 != 1 { panic(41214); };
+    if p2.len != 2 { panic(41215); };
+    if len(p2.data) != 2 { panic(41216); };
+    // Fresh arena words are zeroed.
+    if p2.data[0] != 0 { panic(41217); };
+    if p2.data[1] != 0 { panic(41218); };
+}
+
+@test "reg4 slot pool get addresses slot memory"() {
+    let p0 = slot_pool_new();
+    let (p1, i0) = slot_pool_alloc(p0, 8);
+    let (p2, i1) = slot_pool_alloc(p1, 8);
+    let base: ptr = slot_pool_arena_ptr(&p2.data);
+    let g0: ptr = slot_pool_get(&p2, 0, 8);
+    let g1: ptr = slot_pool_get(&p2, 1, 8);
+    if g0 != base { panic(41221); };
+    // Stride form instead of a bare ptr == ptr comparison and
+    // bind-then-compare instead of a macro call inside the
+    // comparison: one of those two shapes is the binary_expr
+    // TypeMismatch the checker reported for the v3 test (see
+    // min_sp6/min_sp7 in RESULT.md for the attribution).
+    let expect1: ptr = PTR_BYTE_ADD(g0, 8);
+    if g1 != expect1 { panic(41222); };
+    PTR_WRITE_U64(g0, 111);
+    PTR_WRITE_U64(g1, 222);
+    if p2.data[0] != 111 { panic(41223); };
+    if p2.data[1] != 222 { panic(41224); };
+    let r0 = PTR_READ_U64(g0);
+    let r1 = PTR_READ_U64(g1);
+    if r0 != 111 { panic(41225); };
+    if r1 != 222 { panic(41226); };
+}
+
+@test "reg4 slot pool wider elements stride by elem size"() {
+    let p0 = slot_pool_new();
+    let (p1, i0) = slot_pool_alloc(p0, 16);
+    let (p2, i1) = slot_pool_alloc(p1, 16);
+    if len(p2.data) != 4 { panic(41231); };
+    let base: ptr = slot_pool_arena_ptr(&p2.data);
+    let g1: ptr = slot_pool_get(&p2, 1, 16);
+    PTR_WRITE_U64(g1, 777);
+    if p2.data[2] != 777 { panic(41232); };
+    if p2.data[0] != 0 { panic(41233); };
+    if slot_pool_get(&p2, 0, 16) != base { panic(41234); };
+}
+
+@test "reg4 slot pool free then alloc reuses lifo"() {
+    let p0 = slot_pool_new();
+    let (p1, i0) = slot_pool_alloc(p0, 8);
+    let (p2, i1) = slot_pool_alloc(p1, 8);
+    let (p3, fl1) = slot_pool_free(p2, 0, 8);
+    if fl1 != 1 { panic(41241); };
+    if p3.len != 2 { panic(41242); };
+    let (p4, fl2) = slot_pool_free(p3, 1, 8);
+    if fl2 != 2 { panic(41243); };
+    // LIFO: the most recently freed slot (1) comes back first.
+    let (p5, r1) = slot_pool_alloc(p4, 8);
+    if r1 != 1 { panic(41244); };
+    let (p6, r0) = slot_pool_alloc(p5, 8);
+    if r0 != 0 { panic(41245); };
+    if p6.len != 2 { panic(41246); };
+    if len(p6.freelist) != 0 { panic(41247); };
+    // The next alloc after the freelist drains carves a fresh slot.
+    let (p7, i2) = slot_pool_alloc(p6, 8);
+    if i2 != 2 { panic(41248); };
+    if p7.len != 3 { panic(41249); };
+}

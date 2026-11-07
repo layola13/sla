@@ -1,0 +1,18 @@
+// Goroutine syntax batch closing line: chan A-form send stages the
+// payload through a slot view borrow. In the text backend the view
+// let's address temp (a ptr_add of the slot) was stored into the
+// binding's stack cell and never retired, trapping MemoryLeak at
+// function exit; the SAB backend was unaffected. Regression: fails
+// on the text backend pre-fix, passes on both backends post-fix.
+
+@import "sa_std/task.sai"
+
+@test "chan string payload view staging"() {
+    let ch: Chan<String> = Chan::new(1);
+    let s: String = format("hello");
+    ch.send(s);
+    let (got, closed) = ch.recv();
+    if closed { panic(9522); };
+    if got.len() != 5 { panic(9523); };
+    ch.destroy();
+}

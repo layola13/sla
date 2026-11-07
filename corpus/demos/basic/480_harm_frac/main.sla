@@ -1,0 +1,58 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 调和和既约分数（H(4)=25/12；H(3)=11/6）。
+// 意对标 362 缩放版的既约版（362 互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn harm_num(n: int) -> int {
+    let num = 0;
+    let den = 1;
+    let i = 1;
+    while i <= n {
+        num = num * i + den;
+        den = den * i;
+        let g = gcd(num, den);
+        num = num / g;
+        den = den / g;
+        i = i + 1;
+    }
+    return num;
+}
+
+fn harm_den(n: int) -> int {
+    let num = 0;
+    let den = 1;
+    let i = 1;
+    while i <= n {
+        num = num * i + den;
+        den = den * i;
+        let g = gcd(num, den);
+        num = num / g;
+        den = den / g;
+        i = i + 1;
+    }
+    return den;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", harm_num(4) * 100 + harm_den(4), harm_num(3) * 100 + harm_den(3), harm_num(1));
+    return 0;
+}
+
+@test "basic 480 harm frac"() {
+    if harm_num(4) != 25 { panic(48001); };
+    if harm_den(4) != 12 { panic(48002); };
+    if harm_num(3) != 11 { panic(48003); };
+    if harm_den(3) != 6 { panic(48004); };
+}

@@ -1,0 +1,89 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/future.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_job_a = vtable { call = @sla__job_a }
+@const SLA_FNPTR_VT_job_b = vtable { call = @sla__job_b }
+@const SLA_FNPTR_VT_job_c = vtable { call = @sla__job_c }
+@const SLA_FNPTR_VT_join_all_futures_sum = vtable { call = @sla__join_all_futures_sum }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__job_a() -> ptr:
+L_ENTRY:
+    tmp_0 = 1
+    EXPAND FUTURE_READY_STATE_NEW tmp_1, tmp_0
+    return tmp_1
+
+@sla__job_b() -> ptr:
+L_ENTRY:
+    tmp_2 = 2
+    EXPAND FUTURE_READY_STATE_NEW tmp_3, tmp_2
+    return tmp_3
+
+@sla__job_c() -> ptr:
+L_ENTRY:
+    tmp_4 = 3
+    EXPAND FUTURE_READY_STATE_NEW tmp_5, tmp_4
+    return tmp_5
+
+@sla__join_all_futures_sum() -> i32:
+L_ENTRY:
+    tmp_6 = call @sla__job_a()
+    EXPAND FUTURE_READY_STATE_INTO_INNER tmp_7, tmp_6
+    !tmp_6
+    a = tmp_7
+    tmp_8 = call @sla__job_b()
+    EXPAND FUTURE_READY_STATE_INTO_INNER tmp_9, tmp_8
+    !tmp_8
+    b = tmp_9
+    tmp_10 = call @sla__job_c()
+    EXPAND FUTURE_READY_STATE_INTO_INNER tmp_11, tmp_10
+    !tmp_10
+    c = tmp_11
+    tmp_12 = add a, b
+    tmp_13 = add tmp_12, c
+    !tmp_12
+    !b
+    !a
+    !c
+    return tmp_13
+
+@main() -> i32:
+L_ENTRY:
+    tmp_14 = call @sla__join_all_futures_sum()
+    result = tmp_14
+    tmp_15 = call @sa_fmt_u64(result, 10)
+    tmp_16 = call @sa_fmt_buffer_data(tmp_15)
+    tmp_17 = call @sa_fmt_buffer_len(tmp_15)
+    tmp_18 = tmp_16
+    call @sa_print_bytes(&tmp_18, tmp_17)
+    call @sa_fmt_buffer_free(^tmp_15)
+    !tmp_18
+    !tmp_17
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 134 134_join_all_futures"():
+L_TEST_ENTRY_0:
+    tmp_19 = call @sla__join_all_futures_sum()
+    got = tmp_19
+    tmp_20 = 6
+    tmp_21 = ne got, tmp_20
+    !tmp_20
+    br tmp_21 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_21
+    panic(134)
+
+L_ELSE_2:
+    !tmp_21
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_injected_env_var_count() -> i32 { let profile_var = 1; return profile_var; }
+fn main() -> i32 { let profile_var = 1; println("{}", profile_var); return profile_var; }
+@test "rosetta 264 build env var injection"() { let got = build_injected_env_var_count(); if got != 1 { panic(264); }; }

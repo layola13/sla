@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Catalan 数（C(2n,n)/(n+1)：5→42）。
+// 意对标 350 binom 的商式版（350 互补）。
+
+fn binom(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn catalan(n: int) -> int {
+    return binom(2 * n, n) / (n + 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", catalan(3), catalan(4), catalan(5));
+    return 0;
+}
+
+@test "basic 351 catalan"() {
+    if catalan(3) != 5 { panic(35101); };
+    if catalan(4) != 14 { panic(35102); };
+    if catalan(5) != 42 { panic(35103); };
+}

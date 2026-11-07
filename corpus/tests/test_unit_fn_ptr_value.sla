@@ -1,0 +1,149 @@
+@import "sa_std/thread.sa"
+@import "sa_std/core/result.sa"
+
+fn fn_ptr_inc(x: i32) -> i32 {
+    return x + 1;
+}
+
+fn fn_ptr_apply(f: fn(i32) -> i32, value: i32) -> i32 {
+    return f(value);
+}
+
+fn fn_ptr_generic_identity<T>(value: T) -> T {
+    return value;
+}
+
+fn fn_ptr_false(x: i32) -> bool {
+    return false;
+}
+
+fn fn_ptr_true(x: i32) -> bool {
+    return true;
+}
+
+struct FnPtrHolder {
+    f: fn(i32) -> bool,
+}
+
+fn fn_ptr_holder_new(f: fn(i32) -> bool) -> FnPtrHolder {
+    return FnPtrHolder { f: f };
+}
+
+fn fn_ptr_vec_push(values: Vec<fn(i32) -> bool>, f: fn(i32) -> bool) -> Vec<fn(i32) -> bool> {
+    values.push(f);
+    return values;
+}
+
+fn fn_ptr_is_even(x: i32) -> bool {
+    return x % 2 == 0;
+}
+
+fn fn_ptr_count_matches(f: fn(i32) -> bool) -> i64 {
+    let count: i64 = 0;
+    let i: i32 = 1;
+    while i <= 4 {
+        if f(i) { count = count + 1; };
+        i = i + 1;
+    }
+    return count;
+}
+
+fn fn_ptr_thread_apply(f: fn(i32) -> i32, value: i32) -> i32 {
+    let handle = thread::spawn(^|| f(value));
+    return handle.join().unwrap();
+}
+
+fn fn_ptr_thread_bool_apply(f: fn(i32) -> bool, value: i32) -> bool {
+    let handle = thread::spawn(^|| f(value));
+    return handle.join().unwrap();
+}
+
+fn fn_ptr_thread_bool_pair(f: fn(i32) -> bool) -> i32 {
+    let first = thread::spawn(^|| f(3));
+    let second = thread::spawn(^|| f(4));
+    let a = first.join().unwrap();
+    let b = second.join().unwrap();
+    if a { return 10; };
+    if b { return 1; };
+    return 0;
+}
+
+fn fn_ptr_thread_bool_loop_pair(f: fn(i32) -> bool) -> i32 {
+    let handles: Vec<JoinHandle<bool>> = Vec::new();
+    let i: i32 = 3;
+    while i <= 4 {
+        let value = i;
+        handles.push(thread::spawn(^|| f(value)));
+        i = i + 1;
+    }
+    let first = handles[0].join().unwrap();
+    let second = handles[1].join().unwrap();
+    if first { return 10; };
+    if second { return 1; };
+    return 0;
+}
+
+@test "function pointer can be stored and called"() {
+    let f: fn(i32) -> i32 = fn_ptr_inc;
+    let got = f(4);
+    if got != 5 { panic(1401); };
+}
+
+@test "function pointer can be passed as argument"() {
+    let got = fn_ptr_apply(fn_ptr_inc, 9);
+    if got != 10 { panic(1402); };
+}
+
+@test "local function pointer value can be passed as argument"() {
+    let f: fn(i32) -> i32 = fn_ptr_inc;
+    let got = fn_ptr_apply(f, 15);
+    if got != 16 { panic(1413); };
+}
+
+@test "generic function can be specialized as function pointer value"() {
+    let f: fn(i32) -> i32 = fn_ptr_generic_identity<i32>;
+    let got = f(12);
+    if got != 12 { panic(1403); };
+}
+
+@test "generic function specialization can be passed as argument"() {
+    let got = fn_ptr_apply(fn_ptr_generic_identity<i32>, 14);
+    if got != 14 { panic(1404); };
+}
+
+@test "function pointer survives struct return"() {
+    let holder = fn_ptr_holder_new(fn_ptr_true);
+    let f = holder.f;
+    if f(1) != true { panic(1405); };
+}
+
+@test "function pointer survives vec push through function"() {
+    let values: Vec<fn(i32) -> bool> = Vec::new();
+    let values1 = fn_ptr_vec_push(values, fn_ptr_false);
+    let values2 = fn_ptr_vec_push(values1, fn_ptr_true);
+    let f0 = values2[0];
+    let f1 = values2[1];
+    if f0(2) { panic(1406); };
+    if f1(2) != true { panic(1407); };
+}
+
+@test "bool function pointer parameter can drive repeated branches"() {
+    if fn_ptr_count_matches(fn_ptr_is_even) != 2 { panic(1409); };
+}
+
+@test "thread closure captures function pointer callee"() {
+    let got = fn_ptr_thread_apply(fn_ptr_inc, 20);
+    if got != 21 { panic(1408); };
+}
+
+@test "thread closure captures bool function pointer callee"() {
+    if fn_ptr_thread_bool_apply(fn_ptr_is_even, 4) != true { panic(1410); };
+}
+
+@test "paired thread closures capture bool function pointer callee"() {
+    if fn_ptr_thread_bool_pair(fn_ptr_is_even) != 1 { panic(1411); };
+}
+
+@test "loop thread closures capture bool function pointer callee"() {
+    if fn_ptr_thread_bool_loop_pair(fn_ptr_is_even) != 1 { panic(1412); };
+}

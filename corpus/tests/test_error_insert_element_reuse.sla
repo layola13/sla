@@ -1,0 +1,27 @@
+// expect: UseAfterMove
+@import "sa_std/hashmap.sa"
+@import "sa_std/string.sa"
+
+// DEF insert-consume (sibling of the Vec push consumption fix): a
+// map/set insert MOVES an owned key/value into the container — both
+// emitters store the argument handle in the slot as-is, with no copy
+// materialization on the insert path. This form inserted the same
+// String key binding twice: before the fix the checker accepted it,
+// leaving the map slot aliasing a handle the source binding also
+// owned (the source is dropped at scope exit while the slot still
+// points at it; the value-side form segfaults). The checker must
+// reject the second insert with a language-level UseAfterMove
+// naming the variable and `insert` (mirrors
+// tests/test_error_push_element_reuse.sla for Vec push).
+
+fn bad_insert_reuse(k: String) -> HashMap<String, i32> {
+    let m: HashMap<String, i32> = HashMap::new();
+    m.insert(k, 1);
+    m.insert(k, 2);
+    return m;
+}
+
+fn main() -> i32 {
+    let r = bad_insert_reuse(format("ab"));
+    return len(r) as i32;
+}

@@ -1,0 +1,73 @@
+@import "sa_std/string.sa"
+@import "tests/import_fixtures/pkgjson/ptr_helpers.sa"
+
+struct PtrBox {
+    data: ptr,
+}
+
+fn accept_ptr_value(data: ptr, value: int) -> int {
+    return value;
+}
+
+fn accept_ptr_value_void(data: ptr) {
+    if SLA_BYTE_AT(data, 0) != 107 {
+        panic(44003);
+    };
+}
+
+fn ptr_param_reused(data: ptr) -> int {
+    let left = accept_ptr_value(data, 1);
+    let right = accept_ptr_value(data, 2);
+    return left + right;
+}
+
+fn ptr_stack_slot_param_reused(box: PtrBox) -> int {
+    var data: ptr;
+    data = box.data;
+    let left = accept_ptr_value(data, 1);
+    let right = accept_ptr_value(data, 2);
+    return left + right;
+}
+
+fn ptr_stack_slot_param_passed_to_void(box: PtrBox) {
+    var data: ptr;
+    data = box.data;
+    accept_ptr_value_void(data);
+}
+
+fn ptr_text_check(actual: ptr, actual_len: int, want: ptr, want_len: int, code: int) {
+    if actual_len != want_len { panic(code); };
+    let i = 0;
+    while i < actual_len {
+        let a = SLA_BYTE_AT(actual, i);
+        let b = SLA_BYTE_AT(want, i);
+        if a != b { panic(code); };
+        i = i + 1;
+    }
+}
+
+@test "by value ptr params can be reused after calls"() {
+    let got = ptr_param_reused(STR_PTR("keyword"));
+    if got != 3 {
+        panic(44001);
+    };
+}
+
+@test "by value ptr stack slot params can be reused after calls"() {
+    let box = PtrBox { data: STR_PTR("keyword") };
+    let got = ptr_stack_slot_param_reused(box);
+    if got != 3 {
+        panic(44002);
+    };
+}
+
+@test "by value ptr stack slot temp is consumed after void call"() {
+    let box = PtrBox { data: STR_PTR("keyword") };
+    ptr_stack_slot_param_passed_to_void(box);
+}
+
+@test "by value ptr text check void call consumes stack slot temps"() {
+    let actual = "keyword";
+    let want = "keyword";
+    ptr_text_check(STR_PTR(actual), STR_LEN(actual), STR_PTR(want), STR_LEN(want), 44004);
+}

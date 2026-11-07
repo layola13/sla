@@ -1,0 +1,1 @@
+@extern objc_framework_probe(tag: i32) -> i32

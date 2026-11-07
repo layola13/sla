@@ -1,0 +1,5 @@
+@src_helper_value() -> i32:
+L_ENTRY:
+    value = add 200, 0
+    !value
+    return 200

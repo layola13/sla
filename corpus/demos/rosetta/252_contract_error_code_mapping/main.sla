@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_error_code_mappings() -> i32 {
+    let not_found_mapping = 1;
+    let denied_mapping = 1;
+    return not_found_mapping + denied_mapping;
+}
+
+fn main() -> i32 {
+    let not_found_mapping = 1;
+    let denied_mapping = 1;
+    let result = not_found_mapping + denied_mapping;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 252 contract error code mapping"() {
+    let got = contract_error_code_mappings();
+    if got != 2 { panic(252); };
+}

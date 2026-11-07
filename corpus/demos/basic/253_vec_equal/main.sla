@@ -1,0 +1,69 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Vec 逐元相等（167 为引用恒等版：等 1、不等 0、长异 0）。
+// 注意值语义：Vec 值参跨语句复用即搬移 trap（见 #32），此处比较以内联写。
+
+fn main() -> i32 {
+    let e1: Vec<i32> = Vec::new();
+    e1.push(1);
+    e1.push(2);
+    let e2: Vec<i32> = Vec::new();
+    e2.push(1);
+    e2.push(2);
+    let e3: Vec<i32> = Vec::new();
+    e3.push(1);
+    e3.push(3);
+    let r1 = 1;
+    if len(e1) != len(e2) {
+        r1 = 0;
+    } else {
+        for i in 0..len(e1) {
+            if e1[i] != e2[i] { r1 = 0; };
+        }
+    };
+    let r2 = 1;
+    if len(e1) != len(e3) {
+        r2 = 0;
+    } else {
+        for i in 0..len(e1) {
+            if e1[i] != e3[i] { r2 = 0; };
+        }
+    };
+    println("{},{}", r1, r2);
+    return 0;
+}
+
+@test "basic 253 vec equal"() {
+    let e1: Vec<i32> = Vec::new();
+    e1.push(1);
+    e1.push(2);
+    let e2: Vec<i32> = Vec::new();
+    e2.push(1);
+    e2.push(2);
+    let r1 = 1;
+    if len(e1) != len(e2) {
+        r1 = 0;
+    } else {
+        for i in 0..len(e1) {
+            if e1[i] != e2[i] { r1 = 0; };
+        }
+    };
+    if r1 != 1 { panic(25301); };
+    let e3: Vec<i32> = Vec::new();
+    e3.push(1);
+    e3.push(3);
+    let r2 = 1;
+    if len(e1) != len(e3) {
+        r2 = 0;
+    } else {
+        for i in 0..len(e1) {
+            if e1[i] != e3[i] { r2 = 0; };
+        }
+    };
+    if r2 != 0 { panic(25302); };
+    let e4: Vec<i32> = Vec::new();
+    e4.push(1);
+    if len(e1) == len(e4) { panic(25303); };
+}

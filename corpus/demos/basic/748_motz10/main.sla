@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Motzkin 续高位二 M(10)=2188（M(9)=835 对 835；卷积和 1353）。
+// 意对标 746_motz9（n=9 版互补；750 做高位对峙）。
+
+fn moz(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k <= ii - 2 {
+            s = s + t[k] * t[ii - 2 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn main() -> i32 {
+    println("{},{}", moz(9), moz(10));
+    return 0;
+}
+
+@test "basic 748 motz10"() {
+    if moz(10) != 2188 { panic(74801); };
+    if moz(9) != 835 { panic(74802); };
+    if moz(8) != 323 { panic(74803); };
+}

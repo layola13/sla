@@ -1,0 +1,74 @@
+@import "sa_std/ptr.sa"
+
+// C3 regression: statement-form imported-macro output (PTR_BYTE_ADD) bound to
+// a stack-slot ptr local inside a loop. The SA-text backend lowered the
+// output arg to a load temp and dropped the store back into the slot, so the
+// following PTR_WRITE_U8 stored through the stale NULL and segfaulted. The
+// SAB backend handled the same shape via output_store_slot.
+
+fn write_bytes_stmt(out_p: ptr, n: u64, v: u8) -> void {
+    let pos: u64 = 0;
+    while pos < n {
+        let dp: ptr = PTR_NULL();
+        PTR_BYTE_ADD(dp, out_p, pos);
+        PTR_WRITE_U8(dp, v);
+        pos = pos + 1;
+    }
+}
+
+fn write_bytes_nested(out_p: ptr) -> void {
+    let pos: u64 = 0;
+    for hi in 0..5 {
+        for lo in 0..8 {
+            let ch: u8 = 97;
+            let dp: ptr = PTR_NULL();
+            PTR_BYTE_ADD(dp, out_p, pos);
+            PTR_WRITE_U8(dp, ch);
+            pos = pos + 1;
+        }
+    }
+}
+
+@test "ptr byte add stmt output writes through slot in while loop"() {
+    let buf: [u8; 64] = [0u8; 64];
+    let bp = PTR_BYTE_ADD(&buf, 0);
+    write_bytes_stmt(bp, 10, 55);
+    if buf[0] != 55 {
+        panic(43201);
+    };
+    if buf[9] != 55 {
+        panic(43202);
+    };
+    if buf[10] != 0 {
+        panic(43203);
+    };
+}
+
+@test "ptr byte add stmt output writes through slot in nested loops"() {
+    let buf: [u8; 64] = [0u8; 64];
+    let bp = PTR_BYTE_ADD(&buf, 0);
+    write_bytes_nested(bp);
+    if buf[0] != 97 {
+        panic(43204);
+    };
+    if buf[39] != 97 {
+        panic(43205);
+    };
+    if buf[40] != 0 {
+        panic(43206);
+    };
+}
+
+@test "ptr byte add stmt output local array while loop"() {
+    let buf: [u8; 64] = [0u8; 64];
+    let pos: u64 = 0;
+    while pos < 8 {
+        let dp: ptr = PTR_NULL();
+        PTR_BYTE_ADD(dp, &buf, pos);
+        PTR_WRITE_U8(dp, 120);
+        pos = pos + 1;
+    }
+    if buf[7] != 120 {
+        panic(43207);
+    };
+}

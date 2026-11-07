@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 回文素数判定（11→1，13→0，15→0）。
+// 回文（234 口径）×素数（46 口径）对峙合取。
+
+fn is_numpal(n: int) -> int {
+    let rev = 0;
+    let m = n;
+    while m > 0 {
+        rev = rev * 10 + m % 10;
+        m = m / 10;
+    }
+    return if rev == n { 1 } else { 0 };
+}
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    for i in 2..n {
+        if i * i > n { break; };
+        if n % i == 0 { return 0; };
+    }
+    return 1;
+}
+
+fn is_palprime(n: int) -> int {
+    return if is_numpal(n) == 1 && is_prime(n) == 1 { 1 } else { 0 };
+}
+
+fn main() -> i32 {
+    println("{},{},{}", is_palprime(11), is_palprime(13), is_palprime(15));
+    return 0;
+}
+
+@test "basic 332 palprime"() {
+    if is_palprime(11) != 1 { panic(33201); };
+    if is_palprime(13) != 0 { panic(33202); };
+    if is_palprime(15) != 0 { panic(33203); };
+    if is_palprime(101) != 1 { panic(33204); };
+}

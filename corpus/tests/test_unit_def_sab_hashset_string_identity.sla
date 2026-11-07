@@ -1,0 +1,22 @@
+@import "sa_std/hashset.sa"
+@import "sa_std/string.sa"
+
+// DEF-SAB-AUDIT item 3 (74622): HashSet<String> membership must key on
+// string CONTENT on both backends. The SAB std-surface dispatch emitted
+// the pointer-identity SET_INSERT / SET_CONTAINS macros unconditionally,
+// so a fresh equal-content string never matched (the SA-text backend
+// routes String elements to the *_str std variants; SAB did not).
+// Depends on the sa_std *_str variants (DEF-INSERT-GETMISS, sci side).
+
+@test "hashset string content identity"() {
+    let s: HashSet<String> = HashSet::new();
+    let a: String = format("elem-one");
+    s.insert(a);
+    let b: String = format("elem-two");
+    s.insert(b);
+    if len(s) != 2 { panic(74621); };
+    let p: String = format("elem-one");
+    if !s.contains(p) { panic(74622); };
+    let q: String = format("elem-three");
+    if s.contains(q) { panic(74623); };
+}

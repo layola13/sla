@@ -1,0 +1,125 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn await_join2_defer_ready_value() -> i32 {
+    let pair = future::join2(future::defer_ready(20), future::ready(22)).await;
+    return future::pair_left(pair) + future::pair_right(pair);
+}
+
+async fn await_local_join2_defer_ready_value() -> i32 {
+    let joined = future::join2(future::ready(20), future::defer_ready(22));
+    let pair = joined.await;
+    return future::pair_left(pair) + future::pair_right(pair);
+}
+
+fn direct_join2_first_poll_pending() -> bool {
+    let fut = await_join2_defer_ready_value();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        return false;
+    };
+    return task::is_ready(task) == false;
+}
+
+fn direct_join2_second_poll_returns_ready() -> bool {
+    let fut = await_join2_defer_ready_value();
+    let task = task::new(fut);
+    task::poll(task);
+    return task::poll(task) == true;
+}
+
+fn direct_join2_ready_state_after_second_poll() -> bool {
+    let fut = await_join2_defer_ready_value();
+    let task = task::new(fut);
+    task::poll(task);
+    task::poll(task);
+    return task::is_ready(task) == true;
+}
+
+fn direct_join2_result_after_second_poll() -> i32 {
+    let fut = await_join2_defer_ready_value();
+    let task = task::new(fut);
+    task::poll(task);
+    task::poll(task);
+    return task::result(task);
+}
+
+fn local_join2_first_poll_pending() -> bool {
+    let fut = await_local_join2_defer_ready_value();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        return false;
+    };
+    return task::is_ready(task) == false;
+}
+
+fn local_join2_second_poll_returns_ready() -> bool {
+    let fut = await_local_join2_defer_ready_value();
+    let task = task::new(fut);
+    task::poll(task);
+    return task::poll(task) == true;
+}
+
+fn local_join2_ready_state_after_second_poll() -> bool {
+    let fut = await_local_join2_defer_ready_value();
+    let task = task::new(fut);
+    task::poll(task);
+    task::poll(task);
+    return task::is_ready(task) == true;
+}
+
+fn local_join2_result_after_second_poll() -> i32 {
+    let fut = await_local_join2_defer_ready_value();
+    let task = task::new(fut);
+    task::poll(task);
+    task::poll(task);
+    return task::result(task);
+}
+
+@test "async join2 defer ready first poll pending direct"() {
+    if direct_join2_first_poll_pending() != true {
+        panic(9986);
+    };
+}
+
+@test "async join2 defer ready second poll returns ready direct"() {
+    if direct_join2_second_poll_returns_ready() != true {
+        panic(9988);
+    };
+}
+
+@test "async join2 defer ready state ready after second direct"() {
+    if direct_join2_ready_state_after_second_poll() != true {
+        panic(9989);
+    };
+}
+
+@test "async join2 defer ready result after second direct"() {
+    if direct_join2_result_after_second_poll() != 42 {
+        panic(9990);
+    };
+}
+
+@test "async join2 defer ready first poll pending local"() {
+    if local_join2_first_poll_pending() != true {
+        panic(9995);
+    };
+}
+
+@test "async join2 defer ready second poll returns ready local"() {
+    if local_join2_second_poll_returns_ready() != true {
+        panic(9996);
+    };
+}
+
+@test "async join2 defer ready state ready after second local"() {
+    if local_join2_ready_state_after_second_poll() != true {
+        panic(9997);
+    };
+}
+
+@test "async join2 defer ready result after second local"() {
+    if local_join2_result_after_second_poll() != 42 {
+        panic(9998);
+    };
+}

@@ -1,0 +1,85 @@
+@import "sa_std/vec.sa"
+@import "sa_std/core/slice.sa"
+
+// Regression (dns_records_of_type shape): iterating a slice of an
+// aggregate element type and reading each element through the imported
+// SLICE_GET macro into a pre-initialized local. On the text backend the
+// macro's assigned output used to be the aggregate binding's own storage
+// register, so the expansion's plain assignment redefined a live
+// register: RegisterRedefinition (1006). Element slots in a Vec buffer
+// are pointer-sized, so reads at index >= 1 also pin the slot stride:
+// pushes and slice reads must agree on it or the second element reads
+// back as garbage. SAB was unaffected on both counts.
+
+struct SliceIterRec {
+    tag: u64,
+    val: u64,
+}
+
+fn slice_iter_empty_rec() -> SliceIterRec {
+    return SliceIterRec { tag: 0, val: 0 };
+}
+
+fn slice_iter_filter_by_tag(src: Vec<SliceIterRec>, tag: u64) -> Vec<SliceIterRec> {
+    let out: Vec<SliceIterRec> = Vec::new();
+    let sl: Slice<SliceIterRec> = VEC_AS_SLICE(src);
+    let n: u64 = 0;
+    SLICE_GET_LEN(n, sl);
+    let i: u64 = 0;
+    while i < n {
+        let rec = slice_iter_empty_rec();
+        SLICE_GET(rec, sl, i);
+        if rec.tag == tag {
+            out.push(rec);
+        };
+        i = i + 1;
+    }
+    return out;
+}
+
+fn slice_iter_sample() -> Vec<SliceIterRec> {
+    let v: Vec<SliceIterRec> = Vec::new();
+    v.push(SliceIterRec { tag: 1, val: 10 });
+    v.push(SliceIterRec { tag: 2, val: 20 });
+    v.push(SliceIterRec { tag: 1, val: 30 });
+    return v;
+}
+
+@test "slice iter aggregate filter keeps matching records in order"() {
+    let ones = slice_iter_filter_by_tag(slice_iter_sample(), 1);
+    if len(ones) != 2 {
+        panic(44101);
+    };
+    let osl: Slice<SliceIterRec> = VEC_AS_SLICE(ones);
+    let r0 = slice_iter_empty_rec();
+    SLICE_GET(r0, osl, 0);
+    if r0.val != 10 {
+        panic(44102);
+    };
+    let r1 = slice_iter_empty_rec();
+    let one: u64 = 1;
+    SLICE_GET(r1, osl, one);
+    if r1.val != 30 {
+        panic(44103);
+    };
+    if r1.tag != 1 {
+        panic(44104);
+    };
+}
+
+@test "slice iter aggregate filter single and empty results"() {
+    let twos = slice_iter_filter_by_tag(slice_iter_sample(), 2);
+    if len(twos) != 1 {
+        panic(44105);
+    };
+    let tsl: Slice<SliceIterRec> = VEC_AS_SLICE(twos);
+    let r0 = slice_iter_empty_rec();
+    SLICE_GET(r0, tsl, 0);
+    if r0.val != 20 {
+        panic(44106);
+    };
+    let none = slice_iter_filter_by_tag(slice_iter_sample(), 9);
+    if len(none) != 0 {
+        panic(44107);
+    };
+}

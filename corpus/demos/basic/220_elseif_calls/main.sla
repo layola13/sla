@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1066_elseif_calls：调用结果作 else-if 判别（k()=2→2）。
+// TS 用 `===`（SLA 无该 token），此处用 `==`；与 50（变量判别）互补。
+
+fn k() -> int {
+    return 2;
+}
+
+fn main() -> i32 {
+    println("{}", if k() == 1 { 1 } else if k() == 2 { 2 } else { 3 });
+    return 0;
+}
+
+@test "basic 220 elseif calls"() {
+    if k() != 2 { panic(22001); };
+    let r = if k() == 1 { 1 } else if k() == 2 { 2 } else { 3 };
+    if r != 2 { panic(22002); };
+}

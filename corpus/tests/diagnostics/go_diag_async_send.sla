@@ -1,0 +1,4 @@
+async fn go_diag_async_send(ch: Chan<u64>) -> i32 {
+    ch.send(1);
+    return 0;
+}

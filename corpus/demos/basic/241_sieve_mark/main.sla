@@ -1,0 +1,63 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 128_sieve 的真筛版（18 为试除计数版：30 以内 10 个）。
+// 标记数组（124 的 bool 面思想，此处以 int 标志表达）+ 倍数清零组合。
+
+fn main() -> i32 {
+    let marks: Vec<i32> = Vec::new();
+    let m = 0;
+    while m <= 30 {
+        marks.push(1);
+        m = m + 1;
+    }
+    let p = 2;
+    while p * p <= 30 {
+        if marks[p] == 1 {
+            let q = p * p;
+            while q <= 30 {
+                marks[q] = 0;
+                q = q + p;
+            }
+        };
+        p = p + 1;
+    }
+    let cnt = 0;
+    let j = 2;
+    while j <= 30 {
+        if marks[j] == 1 { cnt = cnt + 1; };
+        j = j + 1;
+    }
+    println("{}", cnt);
+    return 0;
+}
+
+@test "basic 241 sieve mark"() {
+    let marks: Vec<i32> = Vec::new();
+    let m = 0;
+    while m <= 30 {
+        marks.push(1);
+        m = m + 1;
+    }
+    let p = 2;
+    while p * p <= 30 {
+        if marks[p] == 1 {
+            let q = p * p;
+            while q <= 30 {
+                marks[q] = 0;
+                q = q + p;
+            }
+        };
+        p = p + 1;
+    }
+    let cnt = 0;
+    let j = 2;
+    while j <= 30 {
+        if marks[j] == 1 { cnt = cnt + 1; };
+        j = j + 1;
+    }
+    if cnt != 10 { panic(24101); };
+    if marks[29] != 1 { panic(24102); };
+    if marks[30] != 0 { panic(24103); };
+}

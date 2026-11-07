@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 122_rotate 的循环版（23 为字面量展开版：k=2 左旋首 3 末 2）。
+// 取模索引（23 口径）+ 动态界循环（215 口径）组合。
+
+fn main() -> i32 {
+    let b: Vec<i32> = Vec::new();
+    b.push(1);
+    b.push(2);
+    b.push(3);
+    b.push(4);
+    b.push(5);
+    let k = 2;
+    let t: Vec<i32> = Vec::new();
+    for i in 0..len(b) {
+        t.push(b[(i + k) % len(b)]);
+    }
+    println("{},{}", t[0], t[4]);
+    return 0;
+}
+
+@test "basic 247 vec rotate"() {
+    let b: Vec<i32> = Vec::new();
+    b.push(1);
+    b.push(2);
+    b.push(3);
+    b.push(4);
+    b.push(5);
+    let k = 2;
+    let t: Vec<i32> = Vec::new();
+    for i in 0..len(b) {
+        t.push(b[(i + k) % len(b)]);
+    }
+    if t[0] != 3 { panic(24701); };
+    if t[4] != 2 { panic(24702); };
+    if len(t) != 5 { panic(24703); };
+}

@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/core/slice.sa"
+
+fn serializer_json() -> String {
+    let json = format("{{\"id\":{}}}", 7);
+    return json;
+}
+
+fn main() -> i32 {
+    let json = serializer_json();
+    println("{}", json);
+    return 0;
+}
+
+@test "rosetta 069 69_serializer"() {
+    let json = serializer_json();
+    if str_eq(json, "{\"id\":7}") != true {
+        panic(69);
+    };
+}

@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 第 n 个素数（第 10 个是 29）。
+// 意对标 356 判定的计数版（46/261 互补）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn nth_prime(n: int) -> int {
+    let c = 0;
+    let k = 2;
+    while k < 1000 {
+        if is_prime(k) == 1 {
+            c = c + 1;
+            if c == n { return k; };
+        };
+        k = k + 1;
+    }
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{}", nth_prime(10), nth_prime(6));
+    return 0;
+}
+
+@test "basic 357 nth prime"() {
+    if nth_prime(10) != 29 { panic(35701); };
+    if nth_prime(6) != 13 { panic(35702); };
+    if nth_prime(1) != 2 { panic(35703); };
+}

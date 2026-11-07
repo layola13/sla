@@ -1,0 +1,73 @@
+// D3 regression: PROCESS_ARGV_SET_PTR expanded inside a helper function
+// whose argv slots arrive through a &Struct parameter used to segfault
+// at the macro's first slot store. The address-slot scan of the macro
+// body matched the substring `%index+` inside the synthetic register
+// name `__process_argv_slot_%argv_%index+SaProcessArgv_data` in the
+// macro's own store lines, misclassifying the pure value parameter
+// %index as an address-slot parameter; callers then passed the stack
+// slot's address as the index and the expansion computed a wild offset.
+// All three helper shapes (index as parameter, index as local, index
+// via a temp) crashed on both backends; expanding the same macro in
+// the function that owns the array worked. Expected after the fix:
+// the pair {pointer, length} lands in slots 0/1 exactly as the direct
+// form writes it.
+@import "sa_std/process.sai";
+@import "sa_std/process.sa";
+@import "sa_std/string.sa";
+
+struct ArrWrap {
+    slots: [u64; 40],
+}
+
+fn set_via_ref(a: &ArrWrap, idx: u64, p: ptr, n: u64) -> void {
+    PROCESS_ARGV_SET_PTR(&a.slots, idx, p, n);
+}
+
+fn set_local_idx(a: &ArrWrap, p: ptr, n: u64) -> void {
+    let idx: u64 = 0;
+    PROCESS_ARGV_SET_PTR(&a.slots, idx, p, n);
+}
+
+fn set_via_temp(a: &ArrWrap, idx: u64, p: ptr, n: u64) -> void {
+    let j = idx;
+    PROCESS_ARGV_SET_PTR(&a.slots, j, p, n);
+}
+
+@test "process argv set via ref param idx"() {
+    let a = ArrWrap { slots: [0u64; 40] };
+    a.slots[0] = 111;
+    a.slots[1] = 222;
+    set_via_ref(&a, 0, STR_PTR("git"), STR_LEN("git"));
+    if a.slots[1] != 3 {
+        panic(43701);
+    };
+    if a.slots[0] == 0 || a.slots[0] == 111 {
+        panic(43702);
+    };
+}
+
+@test "process argv set local idx"() {
+    let a = ArrWrap { slots: [0u64; 40] };
+    a.slots[0] = 111;
+    a.slots[1] = 222;
+    set_local_idx(&a, STR_PTR("git"), STR_LEN("git"));
+    if a.slots[1] != 3 {
+        panic(43703);
+    };
+    if a.slots[0] == 0 || a.slots[0] == 111 {
+        panic(43704);
+    };
+}
+
+@test "process argv set via temp idx"() {
+    let a = ArrWrap { slots: [0u64; 40] };
+    a.slots[0] = 111;
+    a.slots[1] = 222;
+    set_via_temp(&a, 0, STR_PTR("git"), STR_LEN("git"));
+    if a.slots[1] != 3 {
+        panic(43705);
+    };
+    if a.slots[0] == 0 || a.slots[0] == 111 {
+        panic(43706);
+    };
+}

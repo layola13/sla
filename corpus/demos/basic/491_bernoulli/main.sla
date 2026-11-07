@@ -1,0 +1,68 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Bernoulli 数（B(2)=1/6，B(4)=-1/30，B(6)=1/42）。
+// 意对标 480 调和分数的递推版（480 互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    if x < 0 { x = 0 - x; };
+    if y < 0 { y = 0 - y; };
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn binom(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn bern_frac(m: int, want_den: int) -> int {
+    if m == 0 { return 1; };
+    let num = 0;
+    let den = 1;
+    let k = 0;
+    while k < m {
+        let bn = bern_frac(k, 0);
+        let bd = bern_frac(k, 1);
+        let tnum = binom(m + 1, k) * bn;
+        let tden = bd;
+        let s_num = num * tden + tnum * den;
+        let s_den = den * tden;
+        let g = gcd(s_num, s_den);
+        num = s_num / g;
+        den = s_den / g;
+        k = k + 1;
+    }
+    let fnum = 0 - num;
+    let fden = den * (m + 1);
+    let g = gcd(fnum, fden);
+    if want_den == 1 { return fden / g; };
+    return fnum / g;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", bern_frac(2, 0), bern_frac(2, 1), bern_frac(4, 0), bern_frac(4, 1));
+    return 0;
+}
+
+@test "basic 491 bernoulli"() {
+    if bern_frac(2, 0) != 1 { panic(49101); };
+    if bern_frac(2, 1) != 6 { panic(49102); };
+    if bern_frac(4, 0) != 0 - 1 { panic(49103); };
+    if bern_frac(4, 1) != 30 { panic(49104); };
+    if bern_frac(6, 0) != 1 { panic(49105); };
+    if bern_frac(6, 1) != 42 { panic(49106); };
+}

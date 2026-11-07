@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 04_while_sum / 110_while_break：while 累加 0..10 = 45。
+
+fn while_sum(limit: i32) -> i32 {
+    let t: i32 = 0;
+    let i: i32 = 0;
+    while i < limit {
+        t = t + i;
+        i = i + 1;
+    }
+    return t;
+}
+
+fn main() -> i32 {
+    println("{}", while_sum(10));
+    return 0;
+}
+
+@test "basic 04 while sum"() {
+    if while_sum(10) != 45 { panic(401); };
+    if while_sum(0) != 0 { panic(402); };
+    if while_sum(1) != 0 { panic(403); };
+}

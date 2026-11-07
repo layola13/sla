@@ -1,0 +1,3 @@
+#def RustStaticProbe_SIZE = 8
+#def RustStaticProbe_tag = +0
+#def RustStaticProbe_minor = +4

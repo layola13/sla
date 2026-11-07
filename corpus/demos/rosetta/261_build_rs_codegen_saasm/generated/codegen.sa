@@ -1,0 +1,6 @@
+// Generated from build/codegen.toml and build/codegen-plan.txt.
+@codegen_value() -> i32:
+L_ENTRY:
+    value = add 260, 1
+    !value
+    return 261

@@ -1,0 +1,4 @@
+# Future metadata only. Not compiler input.
+[package]
+name = "demo-206-dep"
+version = "1.4.0"

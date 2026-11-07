@@ -1,0 +1,9 @@
+fn fill(var x: i32) -> void {
+    x = 1;
+}
+
+fn main() -> i32 {
+    var x: i32;
+    fill(var x);
+    return x;
+}

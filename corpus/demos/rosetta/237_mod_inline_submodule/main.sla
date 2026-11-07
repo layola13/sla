@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn inline_submodule_layer_count() -> i32 {
+    let inline_child = 1;
+    return inline_child;
+}
+
+fn main() -> i32 {
+    let result = inline_submodule_layer_count();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 237 mod inline submodule"() {
+    let got = inline_submodule_layer_count();
+    if got != 1 {
+        panic(237);
+    };
+}

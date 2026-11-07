@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian 第 9 行右部 E(9,5)=88234，E(9,6)=14608，E(9,7)=502（左部 916 互补，全行覆盖）。
+// 意对标 916_eul9（左部版互补；925 做三向）。
+
+fn eul(n: int, m: int) -> int {
+    let w = m + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + m {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= m {
+            t[mm * w + nn] = (mm - nn) * t[(mm - 1) * w + nn - 1] + (nn + 1) * t[(mm - 1) * w + nn];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + m];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", eul(9, 5), eul(9, 6), eul(9, 7));
+    return 0;
+}
+
+@test "basic 924 eul9 right"() {
+    if eul(9, 5) != 88234 { panic(92401); };
+    if eul(9, 6) != 14608 { panic(92402); };
+    if eul(9, 7) != 502 { panic(92403); };
+    if eul(8, 6) != 247 { panic(92404); };
+}

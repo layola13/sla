@@ -1,0 +1,349 @@
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_sum_active = vtable { call = @sla__sum_active }
+@const SLA_FNPTR_VT_nested_join = vtable { call = @sla__nested_join }
+@sla__sum_active(^data: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = 0
+    total = add tmp_0, 0
+    !tmp_0
+    tmp_1 = 0
+    i = add tmp_1, 0
+    !tmp_1
+    jmp L_WHILE_HEAD_0
+
+L_WHILE_HEAD_0:
+    tmp_2 = 4
+    tmp_3 = slt i, tmp_2
+    !tmp_2
+    br tmp_3 -> L_WHILE_BODY_1, L_WHILE_COND_FALSE_2
+
+L_WHILE_BODY_1:
+    !tmp_3
+    tmp_4 = load data+0 as ptr
+    tmp_5 = mul i, 1
+    tmp_6 = ptr_add tmp_4, tmp_5
+    !tmp_5
+    tmp_7 = load tmp_6+0 as u8
+    !tmp_6
+    !tmp_4
+    is_active = or tmp_7, 0
+    !tmp_7
+    tmp_8 = 1
+    tmp_9 = eq is_active, tmp_8
+    !tmp_8
+    br tmp_9 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_9
+    tmp_10 = load data+8 as ptr
+    tmp_11 = mul i, 4
+    tmp_12 = ptr_add tmp_10, tmp_11
+    !tmp_11
+    tmp_13 = load tmp_12+0 as i32
+    !tmp_12
+    !tmp_10
+    v = add tmp_13, 0
+    !tmp_13
+    tmp_14 = add total, v
+    !total
+    total = tmp_14
+    !v
+    jmp L_MERGE_6
+
+L_ELSE_5:
+    !tmp_9
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    tmp_16 = 1
+    tmp_17 = add i, tmp_16
+    !tmp_16
+    !i
+    i = tmp_17
+    !is_active
+    jmp L_WHILE_HEAD_0
+
+L_WHILE_COND_FALSE_2:
+    !tmp_3
+    jmp L_WHILE_EXIT_3
+
+L_WHILE_EXIT_3:
+    !i
+    !data
+    return total
+
+@sla__nested_join(^world: ptr) -> i32:
+L_ENTRY:
+    tmp_18 = 0
+    total = add tmp_18, 0
+    !tmp_18
+    tmp_19 = 0
+    i = add tmp_19, 0
+    !tmp_19
+    jmp L_WHILE_HEAD_7
+
+L_WHILE_HEAD_7:
+    tmp_20 = 4
+    tmp_21 = slt i, tmp_20
+    !tmp_20
+    br tmp_21 -> L_WHILE_BODY_8, L_WHILE_COND_FALSE_9
+
+L_WHILE_BODY_8:
+    !tmp_21
+    tmp_22 = load world+0 as ptr
+    tmp_23 = mul i, 1
+    tmp_24 = ptr_add tmp_22, tmp_23
+    !tmp_23
+    tmp_25 = load tmp_24+0 as u8
+    !tmp_24
+    !tmp_22
+    tmp_26 = 1
+    tmp_27 = eq tmp_25, tmp_26
+    !tmp_25
+    !tmp_26
+    br tmp_27 -> L_THEN_11, L_ELSE_12
+
+L_THEN_11:
+    !tmp_27
+    tmp_28 = 0
+    j = add tmp_28, 0
+    !tmp_28
+    jmp L_WHILE_HEAD_14
+
+L_WHILE_HEAD_14:
+    tmp_29 = 4
+    tmp_30 = slt j, tmp_29
+    !tmp_29
+    br tmp_30 -> L_WHILE_BODY_15, L_WHILE_COND_FALSE_16
+
+L_WHILE_BODY_15:
+    !tmp_30
+    tmp_31 = load world+24 as ptr
+    tmp_32 = mul j, 1
+    tmp_33 = ptr_add tmp_31, tmp_32
+    !tmp_32
+    tmp_34 = load tmp_33+0 as u8
+    !tmp_33
+    !tmp_31
+    tmp_35 = 1
+    tmp_36 = eq tmp_34, tmp_35
+    !tmp_34
+    !tmp_35
+    br tmp_36 -> L_THEN_18, L_ELSE_19
+
+L_THEN_18:
+    !tmp_36
+    tmp_37 = load world+32 as ptr
+    tmp_38 = mul j, 4
+    tmp_39 = ptr_add tmp_37, tmp_38
+    !tmp_38
+    tmp_40 = load tmp_39+0 as i32
+    !tmp_39
+    !tmp_37
+    tmp_41 = add total, tmp_40
+    !tmp_40
+    !total
+    total = tmp_41
+    jmp L_MERGE_20
+
+L_ELSE_19:
+    !tmp_36
+    jmp L_MERGE_20
+
+L_MERGE_20:
+    tmp_43 = 1
+    tmp_44 = add j, tmp_43
+    !tmp_43
+    !j
+    j = tmp_44
+    jmp L_WHILE_HEAD_14
+
+L_WHILE_COND_FALSE_16:
+    !tmp_30
+    jmp L_WHILE_EXIT_17
+
+L_WHILE_EXIT_17:
+    !j
+    jmp L_MERGE_13
+
+L_ELSE_12:
+    !tmp_27
+    jmp L_MERGE_13
+
+L_MERGE_13:
+    tmp_46 = 1
+    tmp_47 = add i, tmp_46
+    !tmp_46
+    !i
+    i = tmp_47
+    jmp L_WHILE_HEAD_7
+
+L_WHILE_COND_FALSE_9:
+    !tmp_21
+    jmp L_WHILE_EXIT_10
+
+L_WHILE_EXIT_10:
+    !i
+    !world
+    return total
+
+@test "single loop struct field array"():
+L_TEST_ENTRY_21:
+    d = alloc 24
+    tmp_48 = alloc 4
+    tmp_49 = 1
+    store tmp_48+0, tmp_49 as u8
+    !tmp_49
+    tmp_50 = 1
+    store tmp_48+1, tmp_50 as u8
+    !tmp_50
+    tmp_51 = 0
+    store tmp_48+2, tmp_51 as u8
+    !tmp_51
+    tmp_52 = 0
+    store tmp_48+3, tmp_52 as u8
+    !tmp_52
+    store d+0, ^tmp_48 as ptr
+    tmp_53 = alloc 16
+    tmp_54 = 10
+    tmp_55 = tmp_54 as i32
+    store tmp_53+0, tmp_55 as i32
+    tmp_56 = 20
+    tmp_57 = tmp_56 as i32
+    store tmp_53+4, tmp_57 as i32
+    tmp_58 = 0
+    tmp_59 = tmp_58 as i32
+    store tmp_53+8, tmp_59 as i32
+    tmp_60 = 0
+    tmp_61 = tmp_60 as i32
+    store tmp_53+12, tmp_61 as i32
+    store d+8, ^tmp_53 as ptr
+    tmp_62 = alloc 24
+    tmp_63 = load d+0 as ptr
+    store tmp_62+0, tmp_63 as ptr
+    !tmp_63
+    tmp_64 = load d+8 as ptr
+    store tmp_62+8, tmp_64 as ptr
+    !tmp_64
+    tmp_65 = call @sla__sum_active(^tmp_62)
+    got = add tmp_65, 0
+    !tmp_65
+    tmp_66 = 30
+    tmp_67 = ne got, tmp_66
+    !tmp_66
+    br tmp_67 -> L_THEN_22, L_ELSE_23
+
+L_THEN_22:
+    !tmp_67
+    panic(1)
+
+L_ELSE_23:
+    !tmp_67
+    jmp L_MERGE_24
+
+L_MERGE_24:
+    !got
+    !d
+    return
+
+@test "nested loop struct field arrays"():
+L_TEST_ENTRY_25:
+    w = alloc 48
+    tmp_70 = alloc 4
+    tmp_71 = 1
+    store tmp_70+0, tmp_71 as u8
+    !tmp_71
+    tmp_72 = 0
+    store tmp_70+1, tmp_72 as u8
+    !tmp_72
+    tmp_73 = 0
+    store tmp_70+2, tmp_73 as u8
+    !tmp_73
+    tmp_74 = 0
+    store tmp_70+3, tmp_74 as u8
+    !tmp_74
+    store w+0, ^tmp_70 as ptr
+    tmp_75 = alloc 16
+    tmp_76 = 0
+    tmp_77 = tmp_76 as i32
+    store tmp_75+0, tmp_77 as i32
+    tmp_78 = 0
+    tmp_79 = tmp_78 as i32
+    store tmp_75+4, tmp_79 as i32
+    tmp_80 = 0
+    tmp_81 = tmp_80 as i32
+    store tmp_75+8, tmp_81 as i32
+    tmp_82 = 0
+    tmp_83 = tmp_82 as i32
+    store tmp_75+12, tmp_83 as i32
+    store w+8, ^tmp_75 as ptr
+    tmp_84 = alloc 4
+    tmp_85 = 1
+    store tmp_84+0, tmp_85 as u8
+    !tmp_85
+    tmp_86 = 1
+    store tmp_84+1, tmp_86 as u8
+    !tmp_86
+    tmp_87 = 0
+    store tmp_84+2, tmp_87 as u8
+    !tmp_87
+    tmp_88 = 0
+    store tmp_84+3, tmp_88 as u8
+    !tmp_88
+    store w+24, ^tmp_84 as ptr
+    tmp_89 = alloc 16
+    tmp_90 = 5
+    tmp_91 = tmp_90 as i32
+    store tmp_89+0, tmp_91 as i32
+    tmp_92 = 7
+    tmp_93 = tmp_92 as i32
+    store tmp_89+4, tmp_93 as i32
+    tmp_94 = 0
+    tmp_95 = tmp_94 as i32
+    store tmp_89+8, tmp_95 as i32
+    tmp_96 = 0
+    tmp_97 = tmp_96 as i32
+    store tmp_89+12, tmp_97 as i32
+    store w+32, ^tmp_89 as ptr
+    tmp_98 = alloc 48
+    tmp_99 = load w+0 as ptr
+    store tmp_98+0, tmp_99 as ptr
+    !tmp_99
+    tmp_100 = load w+8 as ptr
+    store tmp_98+8, tmp_100 as ptr
+    !tmp_100
+    tmp_101 = load w+24 as ptr
+    store tmp_98+24, tmp_101 as ptr
+    !tmp_101
+    tmp_102 = load w+32 as ptr
+    store tmp_98+32, tmp_102 as ptr
+    !tmp_102
+    tmp_103 = call @sla__nested_join(^tmp_98)
+    got = add tmp_103, 0
+    !tmp_103
+    tmp_104 = 12
+    tmp_105 = ne got, tmp_104
+    !tmp_104
+    br tmp_105 -> L_THEN_26, L_ELSE_27
+
+L_THEN_26:
+    !tmp_105
+    panic(2)
+
+L_ELSE_27:
+    !tmp_105
+    jmp L_MERGE_28
+
+L_MERGE_28:
+    !got
+    !w
+    return
+

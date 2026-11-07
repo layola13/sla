@@ -1,0 +1,22 @@
+// expect: BorrowConflict
+// View-types stage 1: a field borrow and a borrow of the whole
+// struct live in the same call, and the callee writes through both.
+// The places overlap (the field path is a prefix of the whole-root
+// place), so the checker must reject the call with a BorrowConflict
+// diagnostic. Before stage 1 no layer rejected it.
+struct Pair { a: i64, b: i64 }
+
+fn mix(x: &i64, w: &Pair) {
+    *x = 10;
+    w.b = 20;
+}
+
+fn bad_field_and_whole() {
+    let s = Pair { a: 0, b: 0 };
+    mix(&s.a, &s);
+}
+
+fn main() -> i32 {
+    bad_field_and_whole();
+    return 0;
+}

@@ -1,0 +1,4 @@
+[hooks]
+post_compile = "hooks/post-compile.sh"
+artifact_manifest = "artifacts/post-build/manifest.json"
+output = "generated/postcompile.sa"

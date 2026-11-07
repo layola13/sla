@@ -1,0 +1,21 @@
+@import "sa_std/redis.sla"
+
+// BISECT S1: step_value + expect_ok paths only.
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+@test "bisect s1 step value expect ok"() {
+    let ok_step = redis_step_value(redis_empty_client(), redis_int_value(5));
+    if ok_step.status != SA_STD_OK { panic(221); };
+    let err_step = redis_step_value(redis_empty_client(), redis_error_value(reg3_bytes(STR_PTR("ERR boom"), STR_LEN("ERR boom"))));
+    if err_step.status != SA_REDIS_STATUS_REPLY_ERROR { panic(222); };
+    if redis_bytes_eq(err_step.error_text, reg3_bytes(STR_PTR("ERR boom"), STR_LEN("ERR boom"))) == false { panic(223); };
+    let ok = redis_step(redis_empty_client(), SA_STD_OK, redis_simple_value(reg3_bytes(STR_PTR("OK"), STR_LEN("OK"))));
+    let out = redis_expect_ok(ok);
+    if out.status != SA_STD_OK { panic(224); };
+    let queued = redis_step(redis_empty_client(), SA_STD_OK, redis_simple_value(reg3_bytes(STR_PTR("QUEUED"), STR_LEN("QUEUED"))));
+    let out2 = redis_expect_ok(queued);
+    if out2.status != SA_STD_ERR_NET { panic(225); };
+}

@@ -1,0 +1,61 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+@import "sa_std/vec.sa"
+
+fn executor_vec_ready_count_all() -> u64 {
+    let first_future = future::ready(1);
+    let second_future = future::ready(2);
+    let third_future = future::ready(3);
+    let first = task::new(first_future);
+    let second = task::new(second_future);
+    let third = task::new(third_future);
+    let tasks: Vec<Task<i32>> = Vec::new();
+    tasks.push(first);
+    tasks.push(second);
+    tasks.push(third);
+    let executor = executor::new(tasks);
+    let count = executor::poll_ready_count(executor);
+    return count;
+}
+
+fn executor_vec_poll_one_ready() -> bool {
+    let future = future::ready(7);
+    let task = task::new(future);
+    let tasks: Vec<Task<i32>> = Vec::new();
+    tasks.push(task);
+    let executor = executor::new(tasks);
+    let ready = executor::poll_one(executor, 0);
+    return ready;
+}
+
+fn executor_vec_pending_count_zero() -> bool {
+    let future = future::pending::<i32>();
+    let task = task::new(future);
+    let tasks: Vec<Task<i32>> = Vec::new();
+    tasks.push(task);
+    let executor = executor::new(tasks);
+    let ready = executor::poll_one(executor, 0);
+    if ready == true {
+        return false;
+    };
+    let count = executor::poll_ready_count(executor);
+    return count == 0;
+}
+
+@test "executor vec ready count runtime"() {
+    if executor_vec_ready_count_all() != 3 {
+        panic(9411);
+    };
+}
+
+@test "executor vec poll one runtime"() {
+    if executor_vec_poll_one_ready() != true {
+        panic(9412);
+    };
+}
+
+@test "executor vec pending count runtime"() {
+    if executor_vec_pending_count_zero() != true {
+        panic(9413);
+    };
+}

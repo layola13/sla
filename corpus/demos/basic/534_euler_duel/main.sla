@@ -1,0 +1,61 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Euler 定理对峙：互异分拆 q(n) == 奇部数分拆 p_odd(n)
+//（n=6：4 对 4；n=7：5 对 5；双实现一致性锁定）。
+// 意对标 526 distinct × 527 oddpart（两源单实现见各源）。
+
+fn distinct_part(n: int) -> int {
+    let dp: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        dp.push(0);
+        i = i + 1;
+    }
+    dp[0] = 1;
+    let k = 1;
+    while k <= n {
+        let s = n;
+        while s >= k {
+            dp[s] = dp[s] + dp[s - k];
+            s = s - 1;
+        }
+        k = k + 1;
+    }
+    return dp[n];
+}
+
+fn odd_part(n: int) -> int {
+    let dp: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        dp.push(0);
+        i = i + 1;
+    }
+    dp[0] = 1;
+    let k = 1;
+    while k <= n {
+        let s = k;
+        while s <= n {
+            dp[s] = dp[s] + dp[s - k];
+            s = s + 1;
+        }
+        k = k + 2;
+    }
+    return dp[n];
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", distinct_part(6), odd_part(6), distinct_part(7), odd_part(7));
+    return 0;
+}
+
+@test "basic 534 euler duel"() {
+    if distinct_part(6) != 4 { panic(53401); };
+    if odd_part(6) != 4 { panic(53402); };
+    if distinct_part(7) != 5 { panic(53403); };
+    if odd_part(7) != 5 { panic(53404); };
+    if distinct_part(6) != odd_part(6) { panic(53405); };
+    if distinct_part(7) != odd_part(7) { panic(53406); };
+}

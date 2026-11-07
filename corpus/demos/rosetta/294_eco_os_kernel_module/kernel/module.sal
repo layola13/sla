@@ -1,0 +1,3 @@
+#def KernelRecord_SIZE = 8
+#def KernelRecord_major = +0
+#def KernelRecord_minor = +4

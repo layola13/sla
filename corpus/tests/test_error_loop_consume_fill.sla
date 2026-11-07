@@ -1,0 +1,31 @@
+@import "sa_std/vec.sa"
+
+// REG-LOOP-CONSUME true-positive control: a struct literal field fill
+// that consumes a pre-loop binding on a NON-return path inside the
+// loop body is a genuine loop-carried consumption (the second
+// iteration would fill from an already-consumed binding) and must
+// keep reporting LoopConditionalConsume. Companion to
+// test_error_push_loop_consume.sla and
+// test_error_insert_loop_consume.sla, which cover the push/insert
+// forms of the same guard.
+
+struct LoopHolder {
+    buf: Vec<u8>,
+    tag: i32,
+}
+
+fn bad_fill_loop(seed: Vec<u8>) -> i32 {
+    let keep: Vec<LoopHolder> = Vec::new();
+    let i = 0;
+    while i < 2 {
+        let h = LoopHolder { buf: seed, tag: i };
+        keep.push(h);
+        i = i + 1;
+    }
+    return len(keep) as i32;
+}
+
+fn main() -> i32 {
+    let seed: Vec<u8> = Vec::new();
+    return bad_fill_loop(seed);
+}

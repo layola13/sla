@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Row { id: i32, count: i32, pad: i32 }
+
+extern "C" {
+    fn sqlite_insert(row: *Row) -> i32;
+}
+
+@no_mangle pub extern "C" fn sqlite_insert(row: *Row) -> i32 {
+    return row.count;
+}
+
+fn sqlite_insert_result_code() -> i32 {
+    let row = Row { id: 7, count: 1, pad: 0 };
+    let code = unsafe { sqlite_insert(&row) };
+    return code;
+}
+
+fn main() -> i32 {
+    let result = sqlite_insert_result_code();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 186 186_sqlite_c_api_binding"() {
+    let got = sqlite_insert_result_code();
+    if got != 1 {
+        panic(186);
+    };
+}

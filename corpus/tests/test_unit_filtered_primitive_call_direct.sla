@@ -1,0 +1,43 @@
+fn filtered_bool_value(flag: bool) -> i64 {
+    if flag {
+        return 1;
+    };
+    0
+}
+
+struct FilteredTryResult {
+    is_err: bool,
+    value: i64,
+    error: i64,
+}
+
+fn filtered_try_value(result: FilteredTryResult) -> FilteredTryResult {
+    let value = result?;
+    return FilteredTryResult { is_err: false, value: value + 1, error: 0 };
+}
+
+@test "filtered primitive bool call"() {
+    if filtered_bool_value(true) != 1 {
+        panic(44001);
+    };
+    if filtered_bool_value(false) != 0 {
+        panic(44002);
+    };
+}
+
+@test "filtered primitive unrelated test"() {
+    if filtered_bool_value(true) != 1 {
+        panic(44003);
+    };
+}
+
+@test "direct custom result try propagation"() {
+    let success = filtered_try_value(FilteredTryResult { is_err: false, value: 41, error: 0 });
+    if success.is_err || success.value != 42 {
+        panic(44004);
+    };
+    let failure = filtered_try_value(FilteredTryResult { is_err: true, value: 0, error: 7 });
+    if !failure.is_err || failure.error != 7 {
+        panic(44005);
+    };
+}

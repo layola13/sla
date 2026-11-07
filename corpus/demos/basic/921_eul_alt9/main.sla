@@ -1,0 +1,61 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian 交错续高位 ealt(9,2)=14608，ealt(9,3)=88234，ealt(9,4)=156190（交错纵深）。
+// 意对标 802_eul_alt78（低位交错版互补；925 做三向收束）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn pwr(b: int, e: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < e {
+        r = r * b;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn ealt(n: int, m: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= m + 1 {
+        let term = binom_mul(n + 1, k) * pwr(m + 1 - k, n);
+        if k % 2 == 0 { s = s + term; } else { s = s - term; };
+        k = k + 1;
+    }
+    return s;
+}
+
+fn easum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + ealt(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", ealt(9, 2), ealt(9, 3), ealt(9, 4));
+    return 0;
+}
+
+@test "basic 921 eul alt9"() {
+    if ealt(9, 2) != 14608 { panic(92101); };
+    if ealt(9, 3) != 88234 { panic(92102); };
+    if ealt(9, 4) != 156190 { panic(92103); };
+    if ealt(8, 3) != 15619 { panic(92104); };
+}

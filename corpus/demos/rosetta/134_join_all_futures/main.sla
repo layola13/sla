@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/future.sa"
+
+async fn job_a() -> i32 {
+    1
+}
+
+async fn job_b() -> i32 {
+    2
+}
+
+async fn job_c() -> i32 {
+    3
+}
+
+fn join_all_futures_sum() -> i32 {
+    let a = job_a().await;
+    let b = job_b().await;
+    let c = job_c().await;
+    return a + b + c;
+}
+
+fn main() -> i32 {
+    let a = job_a().await;
+    let b = job_b().await;
+    let c = job_c().await;
+    let result = a + b + c;
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 134 134_join_all_futures"() {
+    let got = join_all_futures_sum();
+    if got != 6 {
+        panic(134);
+    };
+};

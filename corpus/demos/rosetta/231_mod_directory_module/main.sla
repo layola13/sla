@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn directory_module_endpoint_count() -> i32 {
+    let index_route = 1;
+    let health_route = 1;
+    return index_route + health_route;
+}
+
+fn main() -> i32 {
+    let index_route = 1;
+    let health_route = 1;
+    let result = index_route + health_route;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 231 mod directory module"() {
+    let got = directory_module_endpoint_count();
+    if got != 2 {
+        panic(231);
+    };
+}

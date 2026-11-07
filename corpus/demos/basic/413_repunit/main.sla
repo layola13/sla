@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// repunit 数（R(5)=11111；R(2)=11 素，R(3)=111=3×37 合）。
+// 意对标 352 等比和的 10 进制 1 串版（352 互补）。
+
+fn repunit(n: int) -> int {
+    let r = 0;
+    let i = 0;
+    while i < n {
+        r = r * 10 + 1;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", repunit(5), is_prime(repunit(2)), is_prime(repunit(3)));
+    return 0;
+}
+
+@test "basic 413 repunit"() {
+    if repunit(5) != 11111 { panic(41301); };
+    if is_prime(repunit(2)) != 1 { panic(41302); };
+    if is_prime(repunit(3)) != 0 { panic(41303); };
+}

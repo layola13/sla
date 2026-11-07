@@ -1,0 +1,93 @@
+// Regression: compiler defects #3 (loop-shaped awaits were compiled
+// eagerly, with no polling state machine at all).
+//
+// An async fn whose only await sits inside a while loop must be lazy:
+// the first poll of its task reports Pending, each poll advances the
+// loop, and the final result is exact. Before the fix, such fns ran
+// their whole body during construction/first poll and returned an
+// already-Ready future, so the first-poll-Pending assertions below
+// failed; at high iteration counts the eager loop also faulted under
+// the test runtime.
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn spin_tag(n: i32, tag: i32) -> i32 {
+    let i: i32 = 0;
+    while i < n {
+        let tick: i32 = future::defer_ready(0).await;
+        i = i + 1 + tick;
+    }
+    return tag;
+}
+
+async fn spin_pre(n: i32, tag: i32) -> i32 {
+    let i: i32 = 0;
+    while i < n {
+        i = i + 1;
+        let tick: i32 = future::defer_ready(0).await;
+    }
+    return tag;
+}
+
+async fn spin_count(n: i32) -> i32 {
+    let i: i32 = 0;
+    while i < n {
+        let tick: i32 = future::defer_ready(0).await;
+        i = i + 1 + tick;
+    }
+    return i;
+}
+
+@test "loop await first poll is pending"() {
+    let t = task::new(spin_tag(3, 7));
+    let first = task::poll(t);
+    if first {
+        panic(7401);
+    };
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 100 {
+            panic(7402);
+        };
+    }
+    if task::result(t) != 7 {
+        panic(7403);
+    };
+}
+
+@test "loop await pre segment advances across polls"() {
+    let t = task::new(spin_pre(3, 9));
+    let first = task::poll(t);
+    if first {
+        panic(7411);
+    };
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 100 {
+            panic(7412);
+        };
+    }
+    if task::result(t) != 9 {
+        panic(7413);
+    };
+}
+
+@test "loop await high iteration count completes exactly"() {
+    let t = task::new(spin_count(5000));
+    let first = task::poll(t);
+    if first {
+        panic(7421);
+    };
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 100000 {
+            panic(7422);
+        };
+    }
+    if task::result(t) != 5000 {
+        panic(7423);
+    };
+}

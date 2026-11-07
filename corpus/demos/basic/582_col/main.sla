@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 第一类首列 c(n,1)=(n-1)!（c(4,1)=6，c(5,1)=24，c(6,1)=120；583 做阶乘对峙）。
+// 意对标 576 stirling1（全表版互补；此处首列单序列，544 精确版体例）。
+
+fn stirling1(n: int, k: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let nn = 1;
+    while nn <= n {
+        let kk = 1;
+        while kk <= nn {
+            t[nn * w + kk] = t[(nn - 1) * w + kk - 1] + (nn - 1) * t[(nn - 1) * w + kk];
+            kk = kk + 1;
+        }
+        nn = nn + 1;
+    }
+    return t[n * w + k];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", stirling1(4, 1), stirling1(5, 1), stirling1(6, 1));
+    return 0;
+}
+
+@test "basic 582 col"() {
+    if stirling1(4, 1) != 6 { panic(58201); };
+    if stirling1(5, 1) != 24 { panic(58202); };
+    if stirling1(6, 1) != 120 { panic(58203); };
+}

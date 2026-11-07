@@ -1,0 +1,79 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_component_store_len = vtable { call = @sla__component_store_len }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__component_store_len() -> u64:
+L_ENTRY:
+    positions = alloc 16
+    tmp_0 = alloc 8
+    tmp_1 = 1
+    store tmp_0+0, tmp_1 as i32
+    tmp_2 = 2
+    store tmp_0+4, tmp_2 as i32
+    store positions+0, tmp_0 as ptr
+    tmp_3 = alloc 8
+    tmp_4 = 3
+    store tmp_3+0, tmp_4 as i32
+    tmp_5 = 4
+    store tmp_3+4, tmp_5 as i32
+    store positions+8, tmp_3 as ptr
+    tmp_6 = 2
+    !positions
+    return tmp_6
+
+@main() -> i32:
+L_ENTRY:
+    positions = alloc 16
+    tmp_7 = alloc 8
+    tmp_8 = 1
+    store tmp_7+0, tmp_8 as i32
+    tmp_9 = 2
+    store tmp_7+4, tmp_9 as i32
+    store positions+0, tmp_7 as ptr
+    tmp_10 = alloc 8
+    tmp_11 = 3
+    store tmp_10+0, tmp_11 as i32
+    tmp_12 = 4
+    store tmp_10+4, tmp_12 as i32
+    store positions+8, tmp_10 as ptr
+    tmp_13 = 2
+    tmp_14 = call @sa_fmt_u64(tmp_13, 10)
+    tmp_15 = call @sa_fmt_buffer_data(tmp_14)
+    tmp_16 = call @sa_fmt_buffer_len(tmp_14)
+    tmp_17 = tmp_15
+    call @sa_print_bytes(&tmp_17, tmp_16)
+    call @sa_fmt_buffer_free(^tmp_14)
+    !tmp_17
+    !tmp_16
+    !tmp_13
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_18 = 0
+    !positions
+    return tmp_18
+
+@test "rosetta 074 74_component_store"():
+L_TEST_ENTRY_0:
+    tmp_19 = call @sla__component_store_len()
+    got = tmp_19
+    tmp_20 = 2
+    tmp_21 = ne got, tmp_20
+    !tmp_20
+    br tmp_21 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_21
+    panic(74)
+
+L_ELSE_2:
+    !tmp_21
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

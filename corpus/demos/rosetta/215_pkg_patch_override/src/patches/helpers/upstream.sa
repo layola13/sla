@@ -1,0 +1,5 @@
+@upstream_patch_value() -> i32:
+L_ENTRY:
+    value = add 10, 0
+    !value
+    return 10

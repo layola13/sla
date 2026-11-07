@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 偶斐波那契和（<=50 偶项 2+8+34=44）。
+// 意对标 237 斐表版的偶项版（282 求和版互补）。
+
+fn fib_even_sum(limit: int) -> int {
+    let s = 0;
+    let a = 1;
+    let b = 2;
+    while b <= limit {
+        if b % 2 == 0 { s = s + b; };
+        let t = a + b;
+        a = b;
+        b = t;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", fib_even_sum(20), fib_even_sum(50));
+    return 0;
+}
+
+@test "basic 361 fib even sum"() {
+    if fib_even_sum(20) != 10 { panic(36101); };
+    if fib_even_sum(50) != 44 { panic(36102); };
+    if fib_even_sum(2) != 2 { panic(36103); };
+}

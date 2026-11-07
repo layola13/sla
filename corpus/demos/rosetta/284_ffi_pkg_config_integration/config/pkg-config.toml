@@ -1,0 +1,4 @@
+[package]
+name = "demo-284-pkg-config"
+version = "0.1.0"
+libdir = "host/pkgconfig"

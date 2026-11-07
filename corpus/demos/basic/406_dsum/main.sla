@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 数位和（dsum(12345)=15）。
+// 意对标 342 数位根的求和版（342 互补；411 做对峙，414 做三向）。
+
+fn dsum(n: int) -> int {
+    let s = 0;
+    let m = n;
+    while m > 0 {
+        s = s + m % 10;
+        m = m / 10;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", dsum(12345), dsum(999), dsum(7));
+    return 0;
+}
+
+@test "basic 406 dsum"() {
+    if dsum(12345) != 15 { panic(40601); };
+    if dsum(999) != 27 { panic(40602); };
+    if dsum(7) != 7 { panic(40603); };
+}

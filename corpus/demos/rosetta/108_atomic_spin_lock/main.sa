@@ -1,0 +1,95 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/sync/atomic.sal"
+@import "sa_std/sync/atomic.sa"
+@import "sa_std/core/result.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_spin_lock_roundtrip = vtable { call = @sla__spin_lock_roundtrip }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__spin_lock_roundtrip() -> i32:
+L_ENTRY:
+    tmp_0 = 0
+    lock = stack_alloc AtomicI32_SIZE
+    EXPAND ATOMIC_I32_INIT lock, tmp_0
+    !tmp_0
+    jmp L_WHILE_HEAD_0
+
+L_WHILE_HEAD_0:
+    tmp_1 = 0
+    tmp_2 = 1
+    EXPAND ATOMIC_I32_COMPARE_EXCHANGE tmp_3, tmp_4, lock, tmp_1, tmp_2, acquire, relaxed
+    br tmp_4 -> L_ATOMIC_CMPXCHG_OK_4, L_ATOMIC_CMPXCHG_ERR_5
+
+L_ATOMIC_CMPXCHG_OK_4:
+    !tmp_4
+    EXPAND RESULT_NEW_OK tmp_5, tmp_3
+    jmp L_ATOMIC_CMPXCHG_END_6
+
+L_ATOMIC_CMPXCHG_ERR_5:
+    !tmp_4
+    EXPAND RESULT_NEW_ERR tmp_5, tmp_3
+    jmp L_ATOMIC_CMPXCHG_END_6
+
+L_ATOMIC_CMPXCHG_END_6:
+    !tmp_1
+    !tmp_2
+    !tmp_3
+    EXPAND RESULT_IS_ERR tmp_6, tmp_5
+    !tmp_5
+    br tmp_6 -> L_WHILE_BODY_1, L_WHILE_COND_FALSE_2
+
+L_WHILE_BODY_1:
+    !tmp_6
+    jmp L_WHILE_HEAD_0
+
+L_WHILE_COND_FALSE_2:
+    !tmp_6
+    jmp L_WHILE_EXIT_3
+
+L_WHILE_EXIT_3:
+    tmp_7 = 0
+    EXPAND ATOMIC_I32_STORE lock, tmp_7, release
+    !tmp_7
+    tmp_8 = 1
+    return tmp_8
+
+@main() -> i32:
+L_ENTRY:
+    tmp_9 = call @sla__spin_lock_roundtrip()
+    value = tmp_9
+    tmp_10 = call @sa_fmt_u64(value, 10)
+    tmp_11 = call @sa_fmt_buffer_data(tmp_10)
+    tmp_12 = call @sa_fmt_buffer_len(tmp_10)
+    tmp_13 = tmp_11
+    call @sa_print_bytes(&tmp_13, tmp_12)
+    call @sa_fmt_buffer_free(^tmp_10)
+    !tmp_13
+    !tmp_12
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return value
+
+@test "rosetta 108 108_atomic_spin_lock"():
+L_TEST_ENTRY_7:
+    tmp_14 = call @sla__spin_lock_roundtrip()
+    got = tmp_14
+    tmp_15 = 1
+    tmp_16 = ne got, tmp_15
+    !tmp_15
+    br tmp_16 -> L_THEN_8, L_ELSE_9
+
+L_THEN_8:
+    !tmp_16
+    panic(108)
+
+L_ELSE_9:
+    !tmp_16
+    jmp L_MERGE_10
+
+L_MERGE_10:
+    !got
+    return
+

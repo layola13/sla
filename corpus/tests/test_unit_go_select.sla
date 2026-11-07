@@ -1,0 +1,94 @@
+// Goroutine syntax batch P2: select statement forms. Every case
+// here is deterministic: exactly one arm is ready unless the arm
+// under test is default/timeout.
+
+@import "sa_std/task.sai"
+
+@test "select picks the ready recv arm"() {
+    let a: Chan<u64> = Chan::new(1);
+    let b: Chan<u64> = Chan::new(1);
+    a.send(7);
+    let hit: u64 = 0;
+    select {
+        case let v = a.recv() {
+            if v != 7 { panic(9531); };
+            hit = 1;
+        }
+        case let v = b.recv() {
+            hit = 2;
+        }
+        default {
+            hit = 3;
+        }
+    }
+    if hit != 1 { panic(9532); };
+    a.destroy();
+    b.destroy();
+}
+
+@test "select default fires when nothing is ready"() {
+    let a: Chan<u64> = Chan::new(1);
+    let hit: u64 = 0;
+    select {
+        case let v = a.recv() {
+            hit = 1;
+        }
+        default {
+            hit = 2;
+        }
+    }
+    if hit != 2 { panic(9533); };
+    a.destroy();
+}
+
+@test "select timeout fires when nothing is ready"() {
+    let a: Chan<u64> = Chan::new(1);
+    let hit: u64 = 0;
+    select {
+        case let v = a.recv() {
+            hit = 1;
+        }
+        timeout(1000000) {
+            hit = 2;
+        }
+    }
+    if hit != 2 { panic(9534); };
+    a.destroy();
+}
+
+@test "select send arm fires when it is the only ready arm"() {
+    let a: Chan<u64> = Chan::new(1);
+    let b: Chan<u64> = Chan::new(1);
+    let hit: u64 = 0;
+    select {
+        case let v = b.recv() {
+            hit = 1;
+        }
+        case a.send(55) {
+            hit = 2;
+        }
+    }
+    if hit != 2 { panic(9535); };
+    let (v, closed) = a.recv();
+    if closed { panic(9536); };
+    if v != 55 { panic(9537); };
+    a.destroy();
+    b.destroy();
+}
+
+@test "select recv arm reports closed channel"() {
+    let a: Chan<u64> = Chan::new(1);
+    a.close();
+    let hit: u64 = 0;
+    select {
+        case let (v, closed) = a.recv() {
+            if !closed { panic(9538); };
+            hit = 1;
+        }
+        default {
+            hit = 2;
+        }
+    }
+    if hit != 1 { panic(9539); };
+    a.destroy();
+}

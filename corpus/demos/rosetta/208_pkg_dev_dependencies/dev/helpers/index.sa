@@ -1,0 +1,7 @@
+@import "dev/helpers/../../src/helpers/flags.sal"
+
+@dev_helper_value() -> i32:
+L_ENTRY:
+    value = add SRC_HELPER_OFFSET, 0
+    !value
+    return SRC_HELPER_OFFSET

@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 142_dot 的 Vec 版（27 为定长数组版：同值 32）。
+// 动态界（215 口径）+ 逐元乘加组合。
+
+fn vec_dot(a: Vec<i32>, b: Vec<i32>) -> int {
+    let t = 0;
+    for i in 0..len(a) {
+        t = t + a[i] * b[i];
+    }
+    return t;
+}
+
+fn main() -> i32 {
+    let x: Vec<i32> = Vec::new();
+    x.push(1);
+    x.push(2);
+    x.push(3);
+    let y: Vec<i32> = Vec::new();
+    y.push(4);
+    y.push(5);
+    y.push(6);
+    println("{}", vec_dot(x, y));
+    return 0;
+}
+
+@test "basic 240 vec dot"() {
+    let x: Vec<i32> = Vec::new();
+    x.push(1);
+    x.push(2);
+    x.push(3);
+    let y: Vec<i32> = Vec::new();
+    y.push(4);
+    y.push(5);
+    y.push(6);
+    if vec_dot(x, y) != 32 { panic(24001); };
+}

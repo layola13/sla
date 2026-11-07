@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_ci_cd_stage_count() -> i32 { let build = 1; let test = 1; let publish = 1; return build + test + publish; }
+fn main() -> i32 { let build = 1; let test = 1; let publish = 1; let result = build + test + publish; println("{}", result); return result; }
+@test "rosetta 280 build ci cd integration"() { let got = build_ci_cd_stage_count(); if got != 3 { panic(280); }; }

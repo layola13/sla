@@ -1,0 +1,75 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 插入×选择×冒泡三向排序对峙（16×262×306：中 3=3=3）。
+// 双向已见 289，此处加冒泡版收束三向。
+
+fn sort_insert(a: [int; 5]) -> [int; 5] {
+    let s = a;
+    for i in 1..5 {
+        let k = s[i];
+        let j = i - 1;
+        while j >= 0 && s[j] > k {
+            s[j + 1] = s[j];
+            j = j - 1;
+        }
+        s[j + 1] = k;
+    }
+    return s;
+}
+
+fn sort_select(a: [int; 5]) -> [int; 5] {
+    let s = a;
+    let i = 0;
+    while i < 5 {
+        let m = i;
+        let j = i + 1;
+        while j < 5 {
+            if s[j] < s[m] { m = j; };
+            j = j + 1;
+        }
+        let t = s[i];
+        s[i] = s[m];
+        s[m] = t;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn sort_bubble(a: [int; 5]) -> [int; 5] {
+    let s = a;
+    let i = 0;
+    while i < 4 {
+        let j = 0;
+        while j < 4 - i {
+            if s[j] > s[j + 1] {
+                let t = s[j];
+                s[j] = s[j + 1];
+                s[j + 1] = t;
+            };
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    let a = [3, 1, 4, 1, 5];
+    let si = sort_insert(a);
+    let ss = sort_select(a);
+    let sb = sort_bubble(a);
+    println("{},{},{}", si[2], ss[2], sb[2]);
+    return 0;
+}
+
+@test "basic 316 tri sort"() {
+    let a = [3, 1, 4, 1, 5];
+    let si = sort_insert(a);
+    let ss = sort_select(a);
+    let sb = sort_bubble(a);
+    if si[2] != ss[2] { panic(31601); };
+    if ss[2] != sb[2] { panic(31602); };
+    if sb[2] != 3 { panic(31603); };
+    if si[0] + ss[0] + sb[0] != 3 { panic(31604); };
+}

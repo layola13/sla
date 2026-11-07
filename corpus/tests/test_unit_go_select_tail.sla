@@ -1,0 +1,41 @@
+// Select tail regression (closing line, select-tail defect 3):
+// a synchronous fn whose body ends in a select statement (all arms
+// returning) used to make both codegens emit the fn's return of a
+// result temp the select never produced (UnknownRegister in the
+// host verifier / text flattener). The select dispatch chain is
+// exhaustive by construction, so the lowering now terminates it
+// with a trap instead of an empty fallthrough.
+
+@import "sa_std/task.sai"
+@import "sa_std/ctx.sla"
+
+fn poll_once(ch: Chan<u64>) -> bool {
+    select {
+        case let (v, closed) = ch.recv() {
+            return true;
+        }
+        default {
+            return false;
+        }
+    }
+}
+
+@test "select as fn return tail with bound result"() {
+    let ch: Chan<u64> = Chan::new(1);
+    let first = poll_once(ch);
+    if first { panic(9711); };
+    ch.send(5);
+    let second = poll_once(ch);
+    if second != true { panic(9712); };
+    ch.destroy();
+}
+
+@test "ctx is_done (select poll) with bound result"() {
+    let done: Chan<u64> = done_new();
+    let d0 = is_done(done);
+    if d0 { panic(9713); };
+    done_signal(done);
+    let d1 = is_done(done);
+    if d1 != true { panic(9714); };
+    done.destroy();
+}

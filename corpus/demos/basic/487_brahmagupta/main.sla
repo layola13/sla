@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Brahmagupta 圆内接四边形面积（(2,2,3,3)→6）。
+// 意对标 486 Heron 的四边版（486 互补）。
+
+fn isqrt(n: int) -> int {
+    if n <= 0 { return 0; };
+    let x = n;
+    let y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    return x;
+}
+
+fn brahma(a: int, b: int, c: int, d: int) -> int {
+    let s = (a + b + c + d) / 2;
+    return isqrt((s - a) * (s - b) * (s - c) * (s - d));
+}
+
+fn main() -> i32 {
+    println("{},{}", brahma(2, 2, 3, 3), brahma(4, 4, 4, 4));
+    return 0;
+}
+
+@test "basic 487 brahmagupta"() {
+    if brahma(2, 2, 3, 3) != 6 { panic(48701); };
+    if brahma(4, 4, 4, 4) != 16 { panic(48702); };
+}

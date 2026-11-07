@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 383_div_guard 的负数延伸（-1,1,-2）。
+// 383 只覆盖正数除余；此处锁定负数语义：向零截断（C 式），
+// 余数符号随被除数（与 TS 一致，双后端 + exe 核对）。
+
+fn main() -> i32 {
+    println("{},{},{}", -7 % 3, 7 % -3, -7 / 3);
+    return 0;
+}
+
+@test "basic 155 neg divmod"() {
+    if -7 % 3 != -1 { panic(15501); };
+    if 7 % -3 != 1 { panic(15502); };
+    if -7 / 3 != -2 { panic(15503); };
+    if 7 / 3 != 2 { panic(15504); };
+}

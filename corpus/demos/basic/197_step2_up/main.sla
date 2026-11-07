@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1279_while_even：步长 +2 上行累加（2+4+6+8=20）。
+// 与 159（步长 -2 下行）、61（步长 -1 下行）互补，覆盖上行方向。
+
+fn main() -> i32 {
+    let s = 0;
+    let i = 0;
+    while i < 8 {
+        i = i + 2;
+        s = s + i;
+    }
+    println("{}", s);
+    return 0;
+}
+
+@test "basic 197 step2 up"() {
+    let s = 0;
+    let i = 0;
+    while i < 8 {
+        i = i + 2;
+        s = s + i;
+    }
+    if s != 20 { panic(19701); };
+    if i != 8 { panic(19702); };
+}

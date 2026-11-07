@@ -1,0 +1,14 @@
+@import "sa_std/redis.sla"
+
+// BISECT S2: step client-field passthrough + clear_multi only.
+@test "bisect s2 step fields clear multi"() {
+    let cl = redis_empty_client();
+    cl.in_multi = true;
+    cl.handle = 7;
+    let st = redis_step(cl, 0 - 3, redis_int_value(1));
+    if st.client.handle != 7 { panic(226); };
+    if st.client.in_multi == false { panic(229); };
+    let cleared = redis_clear_multi(st);
+    if cleared.client.in_multi { panic(227); };
+    if cleared.status != 0 - 3 { panic(228); };
+}

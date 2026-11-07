@@ -1,0 +1,19 @@
+@import "consumer/../layout/point.sal"
+@import "consumer/../bridge/point_bridge.sa"
+
+@point_consumer_value() -> i32:
+L_ENTRY:
+    point = alloc Point_SIZE
+    store point+Point_x, 24 as i32
+    store point+Point_y, 217 as i32
+    value = call @point_bridge_value(&point)
+    ok = eq value, 241
+    !value
+    !point
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 241
+
+L_ERR:
+    return 0

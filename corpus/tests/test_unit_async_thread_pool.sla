@@ -1,0 +1,151 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/future.sa"
+@import "sa_std/core/waker.sa"
+@import "sa_std/pin.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/sync/mutex.sa"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/result.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/time.sla"
+
+// Cross-thread async task pool: async fn futures (with real Pending
+// suspensions via future::defer_ready) are moved onto OS threads, driven to
+// completion by a loop-block_on, and collected through Arc<Mutex<i32>>.
+// Complements test_unit_async_executor_runtime.sla (single-threaded
+// task/executor macros) with the threaded spawn+join shape.
+//
+// Verification note (2026-08-25): run with the SA text backend, e.g.
+//   sla build <file> && sa test <file>.sa
+// The default SAB test path currently mis-lowers the stack_alloc +
+// PIN_MUT_NEW pipeline this file shares with demos/rosetta/09 (pre-existing:
+// copying that CI-green demo into tests/ fails the same way).
+
+fn pool_now_ns() -> u64 {
+    let started = Instant::now();
+    return started.raw_ns();
+}
+
+async fn pool_job(x: i32) -> i32 {
+    let v = future::defer_ready(x).await;
+    let w = future::defer_ready(v * 10).await;
+    return w;
+}
+
+// Looping block_on: poll until Ready; on Pending sleep ~1ms and re-poll.
+fn pool_block_on(future: future<i32>) -> i32 {
+    let data: ptr = PTR_NULL();
+    let raw = RAW_WAKER_NEW(data, data);
+    let waker = WAKER_FROM_RAW(raw);
+    let context = CONTEXT_FROM_WAKER(waker);
+    let boxed = Box::new(future);
+    let future_ref = *boxed;
+    let pinned = stack_alloc();
+    PIN_MUT_NEW(pinned, future_ref);
+
+    let deadline = pool_now_ns() + 2000000000;
+    while pool_now_ns() < deadline {
+        let poll = FUTURE_READY_POLL_STATE(PIN_MUT_GET_MUT(pinned));
+        let ready = POLL_IS_READY(poll);
+        if ready == true {
+            let value: i32 = POLL_VALUE(poll);
+            return value;
+        };
+        THREAD_SLEEP_MS(1);
+    }
+    panic(9600);
+}
+
+fn pool_get(c: Arc<Mutex<i32> >) -> i32 {
+    let g = (*c).lock().unwrap();
+    return *g;
+}
+
+fn pool_worker(f: future<i32>, out: Arc<Mutex<i32> >) {
+    let r = pool_block_on(f);
+    let g = (*out).lock().unwrap();
+    *g = r;
+}
+
+// One async future driven on a separate thread; result via Arc<Mutex<i32>>.
+fn pool_single_thread_result() -> i32 {
+    let f = pool_job(3);
+    let cell: Arc<Mutex<i32> > = Arc::new(Mutex::new(0));
+    let w_cell = cell.clone();
+    let h = thread::spawn(^|| pool_worker(f, w_cell));
+    h.join().unwrap();
+    return pool_get(cell);
+}
+
+// Two async tasks on two threads concurrently; main drives its own too.
+fn pool_two_threads_total() -> i32 {
+    let c1: Arc<Mutex<i32> > = Arc::new(Mutex::new(0));
+    let c2: Arc<Mutex<i32> > = Arc::new(Mutex::new(0));
+
+    let fa = pool_job(1);
+    let fb = pool_job(2);
+
+    let w_c1 = c1.clone();
+    let h1 = thread::spawn(^|| pool_worker(fa, w_c1));
+    let w_c2 = c2.clone();
+    let h2 = thread::spawn(^|| pool_worker(fb, w_c2));
+
+    // main participates: drive an inline future on this thread
+    let local = pool_block_on(pool_job(3));
+
+    h1.join().unwrap();
+    h2.join().unwrap();
+
+    return pool_get(c1) + pool_get(c2) + local;
+}
+
+// Four async tasks on four threads concurrently; main drives its own too.
+fn pool_four_threads_total() -> i32 {
+    let c1: Arc<Mutex<i32> > = Arc::new(Mutex::new(0));
+    let c2: Arc<Mutex<i32> > = Arc::new(Mutex::new(0));
+    let c3: Arc<Mutex<i32> > = Arc::new(Mutex::new(0));
+    let c4: Arc<Mutex<i32> > = Arc::new(Mutex::new(0));
+
+    let fa = pool_job(1);
+    let fb = pool_job(2);
+    let fc = pool_job(4);
+    let fd = pool_job(5);
+
+    let w_c1 = c1.clone();
+    let h1 = thread::spawn(^|| pool_worker(fa, w_c1));
+    let w_c2 = c2.clone();
+    let h2 = thread::spawn(^|| pool_worker(fb, w_c2));
+    let w_c3 = c3.clone();
+    let h3 = thread::spawn(^|| pool_worker(fc, w_c3));
+    let w_c4 = c4.clone();
+    let h4 = thread::spawn(^|| pool_worker(fd, w_c4));
+
+    // main participates: drive an inline future on this thread
+    let local = pool_block_on(pool_job(3));
+
+    h1.join().unwrap();
+    h2.join().unwrap();
+    h3.join().unwrap();
+    h4.join().unwrap();
+
+    return pool_get(c1) + pool_get(c2) + pool_get(c3) + pool_get(c4) + local;
+}
+
+@test "async future moves across thread and resumes"() {
+    if pool_single_thread_result() != 30 {
+        panic(9610);
+    };
+}
+
+@test "async task pool two threads plus main"() {
+    if pool_two_threads_total() != 10 + 20 + 30 {
+        panic(9611);
+    };
+}
+
+@test "async task pool four threads plus main"() {
+    if pool_four_threads_total() != 10 + 20 + 40 + 50 + 30 {
+        panic(9612);
+    };
+}

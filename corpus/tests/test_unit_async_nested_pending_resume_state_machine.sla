@@ -1,0 +1,24 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn nested_pending_step(x: i32) -> i32 {
+    let value = future::defer_ready(x).await;
+    return value * 2;
+}
+
+async fn nested_pending_run() -> i32 {
+    let first = nested_pending_step(10).await;
+    let second = nested_pending_step(first + 1).await;
+    return second;
+}
+
+@test "nested async future preserves pending and ready transitions"() {
+    let task = task::new(nested_pending_run());
+    if task::poll(task) != false { panic(99401); };
+    if task::is_ready(task) != false { panic(99402); };
+    if task::poll(task) != false { panic(99403); };
+    if task::is_ready(task) != false { panic(99404); };
+    if task::poll(task) != true { panic(99405); };
+    if task::is_ready(task) != true { panic(99406); };
+    if task::result(task) != 42 { panic(99407); };
+}

@@ -1,0 +1,63 @@
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+
+struct NestedTextSlice {
+    ptr: ptr,
+    len: int,
+}
+
+struct NestedResponseBody {
+    body: NestedTextSlice,
+}
+
+fn nested_text_from_parts(data: ptr, len: int) -> NestedTextSlice {
+    return NestedTextSlice { ptr: data, len: len };
+}
+
+fn nested_text_byte_at(value: NestedTextSlice, index: int) -> u8 {
+    let p = PTR_BYTE_ADD(value.ptr, index);
+    return PTR_READ_U8(p);
+}
+
+fn nested_text_contains(value: NestedTextSlice, needle: NestedTextSlice) -> bool {
+    if needle.len == 0 {
+        return true;
+    };
+    if value.len < needle.len {
+        return false;
+    };
+
+    let start = 0;
+    while start <= value.len - needle.len {
+        let i = 0;
+        let matched = true;
+        while i < needle.len {
+            if nested_text_byte_at(value, start + i) != nested_text_byte_at(needle, i) {
+                matched = false;
+                break;
+            };
+            i = i + 1;
+        }
+        if matched {
+            return true;
+        };
+        start = start + 1;
+    }
+    return false;
+}
+
+fn nested_response_body() -> NestedResponseBody {
+    return NestedResponseBody {
+        body: nested_text_from_parts(STR_PTR("{\"result\":\"ok\"}"), STR_LEN("{\"result\":\"ok\"}")),
+    };
+}
+
+@test "nested value field call arg can be reused after function call"() {
+    let response = nested_response_body();
+    if nested_text_contains(response.body, nested_text_from_parts(STR_PTR("\"result\""), STR_LEN("\"result\""))) == false {
+        panic(1);
+    };
+    if nested_text_contains(response.body, nested_text_from_parts(STR_PTR("\"ok\""), STR_LEN("\"ok\""))) == false {
+        panic(2);
+    };
+}

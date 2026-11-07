@@ -1,0 +1,45 @@
+@expand_tuple(2, 4, T) {
+struct TupleCarrier$N<@join(T, ", ") { $T }> {
+@each(T) {
+    value_$I: $T,
+}
+}
+
+fn tuple_sum$N(@join(T, ", ") { value_$I: i64 }) -> i64 {
+    let sum = 0;
+@each(T) {
+    sum = sum + value_$I;
+}
+    return sum;
+}
+
+fn tuple_first$N<@join(T, ", ") { $T }>(item: TupleCarrier$N<@join(T, ", ") { $T }>) -> T0 {
+    return item.value_0;
+}
+}
+
+@expand_tuple(2, 3, T) {
+struct OrdinalCarrier$N<@join(T, ", ") { $T }> {
+@each(T) {
+    $ORD: $T,
+}
+}
+}
+
+@test "expand tuple generates fixed arity functions"() {
+    if tuple_sum2(10, 20) != 30 { panic(18001); };
+    if tuple_sum3(1, 2, 3) != 6 { panic(18002); };
+    if tuple_sum4(1, 2, 3, 4) != 10 { panic(18003); };
+}
+
+@test "expand tuple generates generic carrier declarations"() {
+    let item = TupleCarrier3<i64, i64, i64> { value_0: 7, value_1: 8, value_2: 9 };
+    if tuple_first3<i64, i64, i64>(item) != 7 { panic(18004); };
+}
+
+@test "expand tuple ordinal placeholder keeps named fields"() {
+    let item = OrdinalCarrier3<i64, i64, i64> { first: 11, second: 22, third: 33 };
+    if item.first != 11 { panic(18005); };
+    if item.second != 22 { panic(18006); };
+    if item.third != 33 { panic(18007); };
+}

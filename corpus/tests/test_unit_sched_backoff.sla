@@ -1,0 +1,35 @@
+@import "sa_std/async.sla"
+
+// Regression: sched_backoff_ms from sa_std/async.sla was unusable --
+// its own body declared `let mut step: u64`, and SLA permanently
+// rejects `let mut` (bindings are mutable by default; sala
+// 09_rust_compare/03_ownership.html, mutability decision v0.2).
+// Any call site failed import expansion with error.UnexpectedToken.
+// It was the only `let mut` in all of sa_std. Fixed on the sci side
+// (async.sla: drop the `mut`); this corpus file is the regression:
+// pre-fix both backends fail with Import Error, post-fix all pass.
+// Assertions are relative to sched_now_ns() and hold whether or not
+// the host clock source is live.
+
+@test "sched backoff past deadline is zero"() {
+    if sched_backoff_ms(0) != 0 { panic(41011); };
+    let past: u64 = sched_now_ns();
+    if sched_backoff_ms(past) != 0 { panic(41012); };
+}
+
+@test "sched backoff few-ms floors to one"() {
+    // Deadline 4ms out: remaining_ms is 3 or 4, step = max(rem/4, 1) = 1.
+    // (A 1ms deadline is not used here: with a first-read-zero clock
+    // source the 1ms window can elapse between the two now-reads,
+    // which is the separately-tracked clock defect, not this one.)
+    let d: u64 = sched_now_ns() + 4000000;
+    if sched_backoff_ms(d) != 1 { panic(41013); };
+}
+
+@test "sched backoff quarter of remaining"() {
+    // Deadline 40ms out: remaining_ms is 39 or 40, step is 9 or 10.
+    let d: u64 = sched_now_ns() + 40000000;
+    let step: u64 = sched_backoff_ms(d);
+    if step < 9 { panic(41014); };
+    if step > 10 { panic(41015); };
+}

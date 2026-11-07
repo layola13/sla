@@ -1,0 +1,48 @@
+@import "import_fixtures/imported_assigned_output_macros.sa"
+@import "sa_std/ptr.sa"
+
+// Regression: imported-macro leading outputs that are ASSIGNED in
+// the macro body must reach addressable (slot-backed) consumer
+// locals. Pre-fix signatures: RegisterRedefinition on the ptr local
+// (SAB path) / segfault on first deref (text path) for the ptr
+// shape; RegisterRedefinition for the u64 shape.
+
+fn helper_new(v: u64) -> u64 {
+    let p: ptr = PTR_NULL();
+    SLA_IMPORTED_ASSIGNED_PTR_NEW(p, v);
+    let got: u64 = 0;
+    SLA_IMPORTED_ASSIGNED_PTR_GET(got, p);
+    return got;
+}
+
+@test "imported macro assigned ptr output survives"() {
+    let p: ptr = PTR_NULL();
+    SLA_IMPORTED_ASSIGNED_PTR_NEW(p, 4242);
+    let got: u64 = 0;
+    SLA_IMPORTED_ASSIGNED_PTR_GET(got, p);
+    if got != 4242 {
+        panic(43211);
+    };
+}
+
+@test "imported macro assigned ptr output survives in helper fn"() {
+    if helper_new(777) != 777 {
+        panic(43212);
+    };
+}
+
+@test "imported macro assigned u64 outputs survive"() {
+    let st: u64 = 0;
+    let db: u64 = 0;
+    SLA_IMPORTED_ASSIGNED_U64_PAIR(st, db, 35);
+    if st != 0 {
+        panic(43213);
+    };
+    if db != 42 {
+        panic(43214);
+    };
+    SLA_IMPORTED_ASSIGNED_U64_PAIR(st, db, 100);
+    if db != 107 {
+        panic(43215);
+    };
+}

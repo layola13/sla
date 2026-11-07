@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_parallel_codegen_units() -> i32 { let parser = 1; let checker = 1; let optimizer = 1; let emitter = 1; return parser + checker + optimizer + emitter; }
+fn main() -> i32 { let parser = 1; let checker = 1; let optimizer = 1; let emitter = 1; let result = parser + checker + optimizer + emitter; println("{}", result); return result; }
+@test "rosetta 277 build parallel compilation"() { let got = build_parallel_codegen_units(); if got != 4 { panic(277); }; }

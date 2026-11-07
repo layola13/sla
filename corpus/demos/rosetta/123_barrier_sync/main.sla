@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/arc.sa"
+@import "sa_std/sync/atomic.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/core/result.sa"
+
+fn barrier_worker(barrier: Arc<AtomicI32>) -> i32 {
+    let _old = (*barrier).fetch_add(1, Ordering::SeqCst);
+    while (*barrier).load(Ordering::SeqCst) < 3 {
+    }
+    return 1;
+}
+
+fn barrier_release_count() -> i32 {
+    let barrier = Arc::new(AtomicI32::new(0));
+
+    let left = barrier.clone();
+    let middle = barrier.clone();
+    let right = barrier.clone();
+
+    let a = thread::spawn(^|| barrier_worker(left));
+    let b = thread::spawn(^|| barrier_worker(middle));
+    let c = thread::spawn(^|| barrier_worker(right));
+
+    let av = a.join().unwrap();
+    let bv = b.join().unwrap();
+    let cv = c.join().unwrap();
+    return av + bv + cv;
+}
+
+fn main() -> i32 {
+    let result = barrier_release_count();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 123 123_barrier_sync"() {
+    let got = barrier_release_count();
+    if got != 3 {
+        panic(123);
+    };
+};

@@ -1,0 +1,18 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/vec_packed.sla"
+
+// MINIM V5 (SAB isolation): sa_vec_u8_extend_from_vec.
+@test "minim vec u8 extend from vec"() {
+    let srcv: Vec<u8> = Vec::new();
+    srcv.push(1);
+    srcv.push(2);
+    srcv.push(3);
+    srcv.push(4);
+    let v: Vec<u8> = Vec::new();
+    v = sa_vec_u8_extend_from_vec(v, &srcv, 1, 2);
+    if (len(v) as u64) != 2 { panic(161); };
+    if v[0] != 2 { panic(162); };
+    if v[1] != 3 { panic(163); };
+}

@@ -1,0 +1,37 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 全分拆数 p(n)：硬币 {1..n} 完全背包 DP（p(8..10)=22,30,42）。
+// 意对标 528 pent（递推版互补；543 做双实现对峙）。
+
+fn part_all(n: int) -> int {
+    let dp: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        dp.push(0);
+        i = i + 1;
+    }
+    dp[0] = 1;
+    let k = 1;
+    while k <= n {
+        let s = k;
+        while s <= n {
+            dp[s] = dp[s] + dp[s - k];
+            s = s + 1;
+        }
+        k = k + 1;
+    }
+    return dp[n];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", part_all(8), part_all(9), part_all(10));
+    return 0;
+}
+
+@test "basic 536 pall"() {
+    if part_all(8) != 22 { panic(53601); };
+    if part_all(9) != 30 { panic(53602); };
+    if part_all(10) != 42 { panic(53603); };
+}

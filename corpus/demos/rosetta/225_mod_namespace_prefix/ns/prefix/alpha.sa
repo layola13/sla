@@ -1,0 +1,5 @@
+@export ns_prefix_alpha() -> i32:
+L_ENTRY:
+    value = add 200, 0
+    !value
+    return 200

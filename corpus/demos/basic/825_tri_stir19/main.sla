@@ -1,0 +1,81 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Stirling 一类续三向：建表行和 × 递归行和 × 阶乘（n=9：362880 三锁）。
+// 意对标 817_stir1_row9（行源互补；695 三向体例收束一类续三行族）。
+
+fn cst(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn rcs(n: int, k: int) -> int {
+    if k == 0 {
+        if n == 0 { return 1; };
+        return 0;
+    };
+    if k > n { return 0; };
+    if k == n { return 1; };
+    return rcs(n - 1, k - 1) + (n - 1) * rcs(n - 1, k);
+}
+
+fn csum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + cst(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn rsum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + rcs(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn fact(n: int) -> int {
+    let r = 1;
+    let i = 1;
+    while i <= n {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", csum(9), rsum(9), fact(9));
+    return 0;
+}
+
+@test "basic 825 tri stir19"() {
+    if csum(9) != 362880 { panic(82501); };
+    if rsum(9) != 362880 { panic(82502); };
+    if fact(9) != 362880 { panic(82503); };
+    if csum(8) != 40320 { panic(82504); };
+}

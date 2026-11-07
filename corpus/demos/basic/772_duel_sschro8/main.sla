@@ -1,0 +1,62 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 大小 Schröder 高位二对峙：短递推 vs 半大数（n=7：4279 对 4279；n=8：20793 对 20793）。
+// 意对标 771_sschro8 × 769_duel_sschro（高位源与对峙体例合流）。
+
+fn sch(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 2; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k < ii {
+            s = s + t[k] * t[ii - 1 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn ssho(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        t[ii] = ((6 * ii - 3) * t[ii - 1] - (ii - 2) * t[ii - 2]) / (ii + 1);
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn shalf(n: int) -> int {
+    return sch(n) / 2;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", ssho(7), shalf(7), ssho(8), shalf(8));
+    return 0;
+}
+
+@test "basic 772 duel sschro8"() {
+    if ssho(7) != 4279 { panic(77201); };
+    if shalf(7) != 4279 { panic(77202); };
+    if ssho(8) != 20793 { panic(77203); };
+    if shalf(8) != 20793 { panic(77204); };
+}

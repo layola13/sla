@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Legendre 双实现对峙（欧拉准则 vs 平方搜索：(2|7)=1 双边）。
+// 意对标 434 四元组对峙的剩余版（499 互补）。
+
+fn powmod(base: int, exp: int, m: int) -> int {
+    let r = 1;
+    let b = base % m;
+    let e = exp;
+    while e > 0 {
+        if e % 2 == 1 { r = r * b % m; };
+        b = b * b % m;
+        e = e / 2;
+    }
+    return r;
+}
+
+fn leg_euler(a: int, p: int) -> int {
+    return powmod(a % p, (p - 1) / 2, p);
+}
+
+fn leg_brute(a: int, p: int) -> int {
+    if a % p == 0 { return 0; };
+    let x = 1;
+    while x < p {
+        if x * x % p == a % p { return 1; };
+        x = x + 1;
+    }
+    return p - 1;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", leg_euler(2, 7), leg_brute(2, 7), leg_brute(3, 7));
+    return 0;
+}
+
+@test "basic 504 duel legendre"() {
+    if leg_euler(2, 7) != 1 { panic(50401); };
+    if leg_brute(2, 7) != 1 { panic(50402); };
+    if leg_euler(2, 7) != leg_brute(2, 7) { panic(50403); };
+    if leg_brute(3, 7) != 6 { panic(50404); };
+}

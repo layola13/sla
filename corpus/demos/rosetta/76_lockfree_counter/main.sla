@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/sync/atomic.sa"
+
+fn lockfree_counter_value() -> i32 {
+    let counter = AtomicI32::new(1);
+    counter.fetch_add(2, Ordering::SeqCst);
+    return counter.load(Ordering::SeqCst);
+}
+
+fn main() -> i32 {
+    let value = lockfree_counter_value();
+    println("{}", value);
+    return value;
+}
+
+@test "rosetta 076 76_lockfree_counter"() {
+    let got = lockfree_counter_value();
+    if got != 3 {
+        panic(76);
+    }
+}

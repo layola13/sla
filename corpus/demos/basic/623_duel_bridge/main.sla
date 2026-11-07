@@ -1,0 +1,75 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 桥对峙：Schroder 递推 vs Delannoy 差式（n=4：90 对 90；n=5：394 对 394）。
+// 意对标 622_schro_delan × 608_schro_high（桥源与高位源合流）。
+
+fn sch(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 2; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k < ii {
+            s = s + t[k] * t[ii - 1 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn delan(m: int, n: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= m * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= m {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let b = 0;
+    while b <= n {
+        t[b] = 1;
+        b = b + 1;
+    }
+    let mm = 1;
+    while mm <= m {
+        let nn = 1;
+        while nn <= n {
+            t[mm * w + nn] = t[(mm - 1) * w + nn] + t[(mm - 1) * w + nn - 1] + t[mm * w + nn - 1];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[m * w + n];
+}
+
+fn sminus(n: int) -> int {
+    return delan(n, n) - delan(n + 1, n - 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", sch(4), sminus(4), sch(5), sminus(5));
+    return 0;
+}
+
+@test "basic 623 duel bridge"() {
+    if sch(4) != 90 { panic(62301); };
+    if sminus(4) != 90 { panic(62302); };
+    if sch(5) != 394 { panic(62303); };
+    if sminus(5) != 394 { panic(62304); };
+}

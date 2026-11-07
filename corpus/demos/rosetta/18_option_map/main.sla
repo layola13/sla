@@ -1,0 +1,16 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+
+fn main() -> i32 {
+    let value = Some(3).map(|x| x + 5).unwrap_or(0);
+    println("{}", value);
+    return 0;
+}
+
+@test "rosetta 018 option map"() {
+    let value = Some(3).map(|x| x + 5).unwrap_or(0);
+    if value != 8 {
+        panic(18);
+    };
+}

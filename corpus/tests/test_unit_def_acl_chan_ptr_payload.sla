@@ -1,0 +1,177 @@
+// DEF-ACL regression corpus (part 2): channel payloads of raw
+// pointer type. payloadIsWord missed the .pointer variant, so
+// receives bound the variable to the 16-byte staging slot's
+// ADDRESS instead of loading the pointer word out of the slot.
+// In a select-in-loop the slot is released at every iteration,
+// so the carried-out pointer dangled (slaredis goroutine model
+// segfaulted on its first request). Every test verifies ALL
+// fields of the received message (word 0 included).
+@import "sa_std/ptr.sa"
+@import "sa_std/task.sai"
+@import "sa_std/core/box.sa"
+@import "sa_std/vec.sa"
+
+struct AclMsg {
+    fd: u64,
+    kind: u8,
+    bytes: Vec<u8>,
+}
+
+struct AclConn {
+    outbuf: Vec<u8>,
+    stream: u64,
+}
+
+fn acl_msg_new(fd: u64, kind: u8, b0: u8, b1: u8, b2: u8) -> *AclMsg {
+    let bytes: Vec<u8> = Vec::new();
+    bytes.push(b0);
+    bytes.push(b1);
+    bytes.push(b2);
+    return Box::into_raw(Box::new(AclMsg { fd: fd, kind: kind, bytes: bytes }));
+}
+
+fn acl_check_msg(m: *AclMsg, fd: u64, kind: u8, b0: u8, b1: u8, b2: u8, base: i32) {
+    if (*m).fd != fd { panic(base + 1); };
+    if (*m).kind != kind { panic(base + 2); };
+    if len((*m).bytes) != 3 { panic(base + 3); };
+    if (*m).bytes[0] != b0 { panic(base + 4); };
+    if (*m).bytes[1] != b1 { panic(base + 5); };
+    if (*m).bytes[2] != b2 { panic(base + 6); };
+}
+
+@test "def_acl chan ptr payload plain recv"() {
+    let ch: Chan<*AclMsg> = Chan::new(2);
+    let m0 = acl_msg_new(9, 1, 43, 80, 71);
+    ch.send(m0);
+    // Borrow-send: the sender's pointer stays valid afterwards.
+    acl_check_msg(m0, 9, 1, 43, 80, 71, 44110);
+    let (m, cl) = ch.recv();
+    if cl { panic(44100); };
+    acl_check_msg(m, 9, 1, 43, 80, 71, 44100);
+}
+
+@test "def_acl chan ptr payload recv expr form"() {
+    let ch: Chan<*AclMsg> = Chan::new(2);
+    let m0 = acl_msg_new(7, 2, 10, 20, 30);
+    ch.send(m0);
+    acl_check_msg(m0, 7, 2, 10, 20, 30, 44210);
+    let pair = ch.recv();
+    acl_check_msg(pair.0, 7, 2, 10, 20, 30, 44200);
+}
+
+@test "def_acl chan ptr payload select drain loop"() {
+    let ch: Chan<*AclMsg> = Chan::new(4);
+    let m1 = acl_msg_new(11, 3, 1, 2, 3);
+    let m2 = acl_msg_new(12, 4, 4, 5, 6);
+    ch.send(m1);
+    ch.send(m2);
+    let pending: Vec<*AclMsg> = Vec::new();
+    let spins: u64 = 0;
+    while len(pending) < 2 && spins < 1000 {
+        let draining: bool = true;
+        while draining {
+            select {
+                case let m = ch.recv() {
+                    pending.push(m);
+                }
+                default {
+                    draining = false;
+                }
+            }
+        }
+        spins = spins + 1;
+    }
+    if len(pending) != 2 { panic(44300); };
+    acl_check_msg(pending[0], 11, 3, 1, 2, 3, 44300);
+    acl_check_msg(pending[1], 12, 4, 4, 5, 6, 44400);
+    acl_check_msg(m1, 11, 3, 1, 2, 3, 44310);
+    acl_check_msg(m2, 12, 4, 4, 5, 6, 44410);
+}
+
+@test "def_acl chan ptr payload send then use"() {
+    // A pointer is a Copy word: sending it must not consume the
+    // sender's binding (slaredis g_aof_append sends `op` over a
+    // chan and then waits on the same pointer).
+    let ch: Chan<*AclMsg> = Chan::new(2);
+    let m0 = acl_msg_new(31, 6, 5, 6, 7);
+    ch.send(m0);
+    acl_check_msg(m0, 31, 6, 5, 6, 7, 44800);
+    let (m, cl) = ch.recv();
+    if cl { panic(44901); };
+    acl_check_msg(m, 31, 6, 5, 6, 7, 44900);
+}
+
+struct AclReq {
+    kind: u8,
+    batch: Vec<Vec<u8>>,
+    done: Chan<u64>,
+}
+
+struct AclCtx {
+    cmd_chan: Chan<*AclReq>,
+}
+
+fn acl_exec(ctx: *AclCtx) {
+    let (req, cl) = (*ctx).cmd_chan.recv();
+    let total: u64 = 0;
+    let i: u64 = 0;
+    while i < len((*req).batch) {
+        total = total + len((*req).batch[i]);
+        i = i + 1;
+    }
+    (*req).done.send(total + (*req).kind as u64);
+}
+
+@test "def_acl chan ptr payload goroutine req"() {
+    let cmd_chan: Chan<*AclReq> = Chan::new(4);
+    let ctx = Box::into_raw(Box::new(AclCtx { cmd_chan: cmd_chan }));
+    let h = go acl_exec(ctx);
+    let done: Chan<u64> = Chan::new(1);
+    let b1: Vec<u8> = Vec::new();
+    b1.push(80);
+    b1.push(73);
+    b1.push(78);
+    b1.push(71);
+    let batch: Vec<Vec<u8>> = Vec::new();
+    batch.push(b1);
+    let req = Box::into_raw(Box::new(AclReq { kind: 1, batch: batch, done: done }));
+    cmd_chan.send(req);
+    let (r, cl2) = done.recv();
+    if cl2 { panic(44601); };
+    if r != 5 { panic(44602); };
+    let st = sa_task_join(h);
+    if st != 0 { panic(44603); };
+}
+
+@test "def_acl chan ptr payload emit drain apply"() {
+    // The slaredis IO shape end to end: a conn goroutine moves
+    // its outbuf field into a boxed message and sends it over a
+    // chan; the driver drains with select/default and appends
+    // the bytes into a slot's out queue.
+    let io_out: Chan<*AclMsg> = Chan::new(4);
+    let ob: Vec<u8> = Vec::new();
+    ob.push(43);
+    ob.push(80);
+    ob.push(79);
+    let c = Box::into_raw(Box::new(AclConn { outbuf: ob, stream: 9 }));
+    let bytes = (*c).outbuf;
+    (*c).outbuf = Vec::new();
+    let msg = Box::into_raw(Box::new(AclMsg { fd: (*c).stream, kind: 1, bytes: bytes }));
+    io_out.send(msg);
+    let pending: Vec<*AclMsg> = Vec::new();
+    let draining: bool = true;
+    while draining {
+        select {
+            case let m = io_out.recv() {
+                pending.push(m);
+            }
+            default {
+                draining = false;
+            }
+        }
+    }
+    if len(pending) != 1 { panic(44701); };
+    let m = pending[0];
+    acl_check_msg(m, 9, 1, 43, 80, 79, 44700);
+    acl_check_msg(msg, 9, 1, 43, 80, 79, 44710);
+}

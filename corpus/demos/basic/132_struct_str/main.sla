@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 552_strobj：结构体字符串字段（2,3）。
+// 字符串字段须注解 `: ptr`（NUL 结尾 C 字符串，无注解绑定保持 Slice，
+// 见 #3/#5），`len()` 读 Slice 长度字段（见 #10）；
+
+struct O { s: ptr, v: i32 }
+
+fn main() -> i32 {
+    let o = O { s: "hi", v: 3 };
+    println("{},{}", len(o.s), o.v);
+    return 0;
+}
+
+@test "basic 132 struct str"() {
+    let o = O { s: "hi", v: 3 };
+    if len(o.s) != 2 { panic(13201); };
+    if o.v != 3 { panic(13202); };
+    if !str_eq(o.s, "hi") { panic(13203); };
+}

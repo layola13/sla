@@ -1,0 +1,29 @@
+@import "sa_std/thread.sa"
+@import "sa_std/vec.sa"
+@import "sa_std/core/result.sa"
+
+fn join_handle_vec_worker_a() -> i32 {
+    return 2;
+}
+
+fn join_handle_vec_worker_b() -> i32 {
+    return 3;
+}
+
+@test "join handle vec index join"() {
+    let handles: Vec<JoinHandle<i32>> = Vec::new();
+    let first = thread::spawn(^|| join_handle_vec_worker_a());
+    let second = thread::spawn(^|| join_handle_vec_worker_b());
+    handles.push(first);
+    handles.push(second);
+
+    let total: i32 = 0;
+    let i: i64 = 0;
+    while i < len(handles) as i64 {
+        let handle = handles[i];
+        total = total + handle.join().unwrap();
+        i = i + 1;
+    }
+
+    if total != 5 { panic(24200); };
+}

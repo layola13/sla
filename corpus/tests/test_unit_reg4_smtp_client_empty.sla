@@ -1,0 +1,126 @@
+@import "sa_std/smtp.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Registry shard 4 coverage: the SmtpClient command surface from
+// sa_std/smtp.sla, exercised on the closed empty client (SAB
+// registry class=declared, never probed, zero corpus references
+// at census 2026-11-06).
+// Entries: smtp_empty_client, smtp_step, smtp_checked,
+// smtp_send_line, smtp_read_reply, smtp_command, smtp_greet,
+// smtp_client_ehlo, smtp_client_noop, smtp_client_rset,
+// smtp_client_mail_from, smtp_client_rcpt_to, smtp_client_data,
+// smtp_client_quit, smtp_client_close, smtp_client_auth_login,
+// smtp_client_auth_plain, smtp_client_starttls.
+// A closed client has handle 0 and open=false: every command
+// must fail with a non-OK status instead of reporting success,
+// and starttls must refuse up front with
+// SA_STD_ERR_INVALID_ARGUMENT (1).
+
+fn v4_of(s: String) -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    let p: ptr = STR_PTR(s);
+    let i: u64 = 0;
+    while i < len(s) {
+        out.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn client_with_code(code: u32) -> SmtpClient {
+    // Built from smtp_empty_client + field assignment: struct
+    // literals of imported types are rejected by the parser in
+    // any position (SyntaxError at the '{', see min_ce1/min_ce2
+    // in RESULT.md), so no literal is used here.
+    let c = smtp_empty_client();
+    c.last_reply_code = code;
+    return c;
+}
+
+@test "reg4 smtp empty client shape"() {
+    let c = smtp_empty_client();
+    if c.open != false { panic(42201); };
+    if c.handle != 0 { panic(42202); };
+    if c.tls != false { panic(42203); };
+    if c.last_reply_code != 0 { panic(42204); };
+    if len(c.extensions) != 0 { panic(42205); };
+    if len(c.last_reply_text) != 0 { panic(42206); };
+}
+
+@test "reg4 smtp step carries client and status"() {
+    let s = smtp_step(smtp_empty_client(), -5);
+    if s.status != -5 { panic(42211); };
+    if s.client.open != false { panic(42212); };
+    let s2 = smtp_step(smtp_empty_client(), 0);
+    if s2.status != 0 { panic(42213); };
+}
+
+@test "reg4 smtp checked maps reply code to status"() {
+    let ok = smtp_checked(client_with_code(250), 250);
+    if ok.status != 0 { panic(42221); };
+    let wrong = smtp_checked(client_with_code(250), 251);
+    if wrong.status != -1250 { panic(42222); };
+    let fail = smtp_checked(client_with_code(550), 250);
+    if fail.status != -1550 { panic(42223); };
+}
+
+@test "reg4 smtp close on closed client is ok"() {
+    if smtp_client_close(smtp_empty_client()) != 0 { panic(42231); };
+}
+
+@test "reg4 smtp starttls on closed client is invalid argument"() {
+    let s = smtp_client_starttls(smtp_empty_client(), v4_of(format("mx.example")), 0, v4_of(format("me")));
+    if s.status != 1 { panic(42241); };
+    if s.client.open != false { panic(42242); };
+}
+
+@test "reg4 smtp send line on closed client fails"() {
+    let s = smtp_send_line(smtp_empty_client(), v4_of(format("NOOP")));
+    if s.status == 0 { panic(42251); };
+    if s.client.open != false { panic(42252); };
+}
+
+@test "reg4 smtp read reply on closed client fails"() {
+    let s = smtp_read_reply(smtp_empty_client());
+    if s.status == 0 { panic(42261); };
+}
+
+@test "reg4 smtp command on closed client fails"() {
+    let s = smtp_command(smtp_empty_client(), v4_of(format("NOOP")), 250);
+    if s.status == 0 { panic(42271); };
+}
+
+@test "reg4 smtp greet on closed client fails"() {
+    let s = smtp_greet(smtp_empty_client(), v4_of(format("me")));
+    if s.status == 0 { panic(42281); };
+    if s.client.open != false { panic(42282); };
+}
+
+@test "reg4 smtp simple commands on closed client fail"() {
+    let s1 = smtp_client_ehlo(smtp_empty_client(), v4_of(format("me")));
+    if s1.status == 0 { panic(42291); };
+    let s2 = smtp_client_noop(smtp_empty_client());
+    if s2.status == 0 { panic(42292); };
+    let s3 = smtp_client_rset(smtp_empty_client());
+    if s3.status == 0 { panic(42293); };
+    let s4 = smtp_client_quit(smtp_empty_client());
+    if s4.status == 0 { panic(42294); };
+    if s4.client.open != false { panic(42295); };
+}
+
+@test "reg4 smtp envelope commands on closed client fail"() {
+    let s1 = smtp_client_mail_from(smtp_empty_client(), v4_of(format("a@b")));
+    if s1.status == 0 { panic(42351); };
+    let s2 = smtp_client_rcpt_to(smtp_empty_client(), v4_of(format("c@d")));
+    if s2.status == 0 { panic(42352); };
+    let s3 = smtp_client_data(smtp_empty_client(), v4_of(format("hello")));
+    if s3.status == 0 { panic(42353); };
+}
+
+@test "reg4 smtp auth commands on closed client fail"() {
+    let s1 = smtp_client_auth_login(smtp_empty_client(), v4_of(format("u")), v4_of(format("p")));
+    if s1.status == 0 { panic(42361); };
+    let s2 = smtp_client_auth_plain(smtp_empty_client(), v4_of(format("u")), v4_of(format("p")));
+    if s2.status == 0 { panic(42362); };
+}

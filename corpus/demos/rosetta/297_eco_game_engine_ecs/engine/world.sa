@@ -1,0 +1,32 @@
+@import "engine/world.sal"
+
+@step_entity(&entity: ptr) -> i32:
+L_ENTRY:
+    x = load entity+Entity_X as i32
+    y = load entity+Entity_Y as i32
+    vx = load entity+Entity_VX as i32
+    vy = load entity+Entity_VY as i32
+    next_x = add x, vx
+    next_y = add y, vy
+    store entity+Entity_X, next_x as i32
+    store entity+Entity_Y, next_y as i32
+    sum = add next_x, next_y
+    !x
+    !y
+    !vx
+    !vy
+    !next_x
+    !next_y
+    !entity
+    return sum
+
+@export engine_scene_step() -> i32:
+L_ENTRY:
+    entity = alloc Entity_SIZE
+    store entity+Entity_X, 147 as i32
+    store entity+Entity_Y, 148 as i32
+    store entity+Entity_VX, 1 as i32
+    store entity+Entity_VY, 1 as i32
+    sum = call @step_entity(&entity)
+    !entity
+    return sum

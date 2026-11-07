@@ -1,0 +1,12 @@
+const ISSUE010_ALIAS_BASE: int = 42;
+const ISSUE010_ALIAS_VALUE: int = ISSUE010_ALIAS_BASE;
+
+fn issue010_const_alias_value() -> int {
+    return ISSUE010_ALIAS_VALUE;
+}
+
+@test "top-level const alias folds for codegen"() {
+    if issue010_const_alias_value() != 42 {
+        panic(10010);
+    };
+}

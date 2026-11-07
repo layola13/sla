@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 有序分拆（composition）：c(n) = 2^(n-1)（c(1..5)=1,2,4,8,16）。
+// 意对标 526 distinct（无序版互补；有序每刀切分二选一，故为 2 幂）。
+
+fn compose(n: int) -> int {
+    let r = 1;
+    let i = 1;
+    while i < n {
+        r = r * 2;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", compose(1), compose(4), compose(5));
+    return 0;
+}
+
+@test "basic 530 compose"() {
+    if compose(1) != 1 { panic(53001); };
+    if compose(2) != 2 { panic(53002); };
+    if compose(3) != 4 { panic(53003); };
+    if compose(4) != 8 { panic(53004); };
+    if compose(5) != 16 { panic(53005); };
+}

@@ -1,0 +1,92 @@
+// DEF-VECDEQUE-STRUCT-ELEM (demos/rosetta/89_job_queue): the
+// VEC_DEQUE_* slot contract is a raw u64 value, but a struct
+// element's register denotes its record cell. The emitters used to
+// store the record address of a temporary they then released, so
+// pop_front handed back a dangling address and field loads read
+// recycled memory (the demo printed garbage and its @test panicked
+// with code 89). Struct elements are now materialized as owned heap
+// records whose address is the slot value.
+struct One {
+    a: i32,
+}
+
+struct One64 {
+    a: i64,
+}
+
+struct Job {
+    id: i32,
+    cost: i32,
+}
+
+fn demo_form() -> i32 {
+    let q: VecDeque<Job> = VecDeque::new();
+    q.push_back(Job { id: 7, cost: 3 });
+    q.push_back(Job { id: 9, cost: 5 });
+    let first = q.pop_front().unwrap();
+    return first.id + first.cost;
+}
+
+fn one_field() -> i32 {
+    let q: VecDeque<One> = VecDeque::new();
+    q.push_back(One { a: 7 });
+    q.push_back(One { a: 9 });
+    let first = q.pop_front().unwrap();
+    return first.a;
+}
+
+fn wide_field() -> i64 {
+    let q: VecDeque<One64> = VecDeque::new();
+    q.push_back(One64 { a: 5000000000 });
+    let first = q.pop_front().unwrap();
+    return first.a;
+}
+
+fn two_pops() -> i32 {
+    let q: VecDeque<Job> = VecDeque::new();
+    q.push_back(Job { id: 1000, cost: 10 });
+    q.push_back(Job { id: 2, cost: 2 });
+    let a = q.pop_front().unwrap();
+    let b = q.pop_front().unwrap();
+    return a.id + a.cost + b.id + b.cost;
+}
+
+fn from_array() -> i32 {
+    let q: VecDeque<Job> = VecDeque::from([Job { id: 7, cost: 3 }, Job { id: 9, cost: 5 }]);
+    let first = q.pop_front().unwrap();
+    return first.id + first.cost;
+}
+
+fn ident_arg() -> i32 {
+    let q: VecDeque<Job> = VecDeque::new();
+    let j1 = Job { id: 7, cost: 3 };
+    let j2 = Job { id: 9, cost: 5 };
+    q.push_back(j1);
+    q.push_back(j2);
+    let first = q.pop_front().unwrap();
+    return first.id + first.cost;
+}
+
+@test "vecdeque struct element demo form"() {
+    if demo_form() != 10 { panic(101); };
+}
+
+@test "vecdeque one field struct element"() {
+    if one_field() != 7 { panic(102); };
+}
+
+@test "vecdeque wide field struct element"() {
+    if wide_field() != 5000000000 { panic(103); };
+}
+
+@test "vecdeque struct elements two pops"() {
+    if two_pops() != 1014 { panic(104); };
+}
+
+@test "vecdeque from array of structs"() {
+    if from_array() != 10 { panic(105); };
+}
+
+@test "vecdeque struct element identifier arg"() {
+    if ident_arg() != 10 { panic(106); };
+}

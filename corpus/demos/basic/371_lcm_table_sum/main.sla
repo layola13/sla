@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// lcm 表和（sum_{i=1..4} lcm(i,4)=24）。
+// 意对标 348 链式版的表版（363-gcd 表互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn lcm(a: int, b: int) -> int {
+    return a / gcd(a, b) * b;
+}
+
+fn lcm_table_sum(m: int, n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        s = s + lcm(i, m);
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", lcm_table_sum(4, 4), lcm_table_sum(3, 3));
+    return 0;
+}
+
+@test "basic 371 lcm table sum"() {
+    if lcm_table_sum(4, 4) != 24 { panic(37101); };
+    if lcm_table_sum(3, 3) != 12 { panic(37102); };
+}

@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Ballot 高位 B(5,3)=28（B(5,5)=42 对 42；同式高位复算）。
+// 意对标 646_ballot（低位版互补；650 做高位对峙）。
+
+fn btab(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn] + t[mm * w + nn - 1];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn main() -> i32 {
+    println("{},{}", btab(5, 3), btab(5, 5));
+    return 0;
+}
+
+@test "basic 648 ballot high"() {
+    if btab(5, 3) != 28 { panic(64801); };
+    if btab(5, 5) != 42 { panic(64802); };
+    if btab(5, 2) != 14 { panic(64803); };
+}

@@ -1,0 +1,11 @@
+@import "sa_std/redis.sla"
+
+// BISECT S3: empty_client + client_close + empty_text only.
+@test "bisect s3 empty client close text"() {
+    let ec = redis_empty_client();
+    if ec.open { panic(230); };
+    if ec.handle != 0 { panic(231); };
+    if redis_client_close(ec) != SA_STD_OK { panic(232); };
+    let et = redis_empty_text();
+    if (len(et) as u64) != 0 { panic(233); };
+}

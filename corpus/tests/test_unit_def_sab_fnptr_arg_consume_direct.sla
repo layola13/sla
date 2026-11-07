@@ -1,0 +1,77 @@
+@import "sa_std/vec.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/core/result.sa"
+
+// DEF-SAB-VALUE-ACCOUNTING regression (#33/#34): a by-value owned argument
+// passed through a fn-pointer (call_indirect) is consumed by the callee,
+// exactly like a direct call. The SAB fn-pointer call path recorded no
+// consumption, so the caller's cleanup disposed the argument a second
+// time. Pristine SAB: signal 6 / signal 11. SA text passes.
+struct FnPtrConsumeWorld {
+    values: Vec<i32>,
+}
+
+struct FnPtrConsumeParam {
+    world: FnPtrConsumeWorld,
+    allow: i32,
+}
+
+fn fnptr_consume_query(world: FnPtrConsumeWorld, allow: i32) -> FnPtrConsumeParam {
+    return FnPtrConsumeParam { world: world, allow: allow };
+}
+
+fn fnptr_consume_identity(param: FnPtrConsumeParam) -> FnPtrConsumeParam {
+    return param;
+}
+
+fn fnptr_consume_wrapper(
+    world: FnPtrConsumeWorld,
+    allow: i32,
+    run: fn(FnPtrConsumeParam) -> FnPtrConsumeParam,
+) -> FnPtrConsumeWorld {
+    let param0 = fnptr_consume_query(world, allow);
+    let param1 = run(param0);
+    return param1.world;
+}
+
+@test "def sab fnptr pass through arg consumed once"() {
+    let world = FnPtrConsumeWorld { values: Vec::new() };
+    world.values.push(41);
+    let out = fnptr_consume_wrapper(world, 7, fnptr_consume_identity);
+    if len(out.values) != 1 {
+        panic(53101);
+    };
+    if out.values[0] != 41 {
+        panic(53102);
+    };
+}
+
+fn fnptr_merge_chunk() -> Vec<i32> {
+    let chunk: Vec<i32> = Vec::new();
+    chunk.push(7);
+    chunk.push(11);
+    return chunk;
+}
+
+fn fnptr_merge_batch(chunk: Vec<i32>) -> i32 {
+    return len(chunk) as i32;
+}
+
+fn fnptr_merge_spawn_or_call(use_threads: bool, batch: fn(Vec<i32>) -> i32) -> i32 {
+    let chunk = fnptr_merge_chunk();
+    if use_threads {
+        let handle = thread::spawn(^|| batch(chunk));
+        return handle.join().unwrap();
+    } else {
+        return batch(chunk);
+    };
+}
+
+@test "def sab fnptr branch arms consume chunk once"() {
+    if fnptr_merge_spawn_or_call(false, fnptr_merge_batch) != 2 {
+        panic(53110);
+    };
+    if fnptr_merge_spawn_or_call(true, fnptr_merge_batch) != 2 {
+        panic(53111);
+    };
+}

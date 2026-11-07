@@ -1,0 +1,10 @@
+// F2-A C1 corpus (positive): generic substitution with a safe
+// argument - Pair<String> is arena-safe (contrast Pair<File>).
+struct Pair<T> { a: T, b: T }
+
+fn ok_generic_pair() -> i32 {
+    arena {
+        let p: Pair<String> = Pair<String> { a: format("x"), b: format("y") };
+    }
+    return 0;
+}

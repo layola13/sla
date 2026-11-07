@@ -1,0 +1,17 @@
+#def Codec_SIZE = 16
+#def Codec_magic = +0
+#def Codec_major = +4
+#def Codec_minor = +8
+
+@codec_seed() -> i32:
+L_ENTRY:
+    value = add 200, 4
+    !value
+    return 4
+
+@codec_value() -> i32:
+L_ENTRY:
+    seed = call @codec_seed()
+    value = add 200, seed
+    !seed
+    return value

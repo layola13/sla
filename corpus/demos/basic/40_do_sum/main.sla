@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 158_do_sum 语义（do-while 至少执行一次，0+1+2+3+4=10）：
+// SLA 无 do-while 语法，用 while(true)+break 表达同一语义。
+
+fn do_sum_while(limit: i32) -> i32 {
+    let i: i32 = 0;
+    let t: i32 = 0;
+    while true {
+        t = t + i;
+        i = i + 1;
+        if i >= limit {
+            break;
+        };
+    }
+    return t;
+}
+
+fn main() -> i32 {
+    println("{}", do_sum_while(5));
+    return 0;
+}
+
+@test "basic 40 do sum via break"() {
+    if do_sum_while(5) != 10 { panic(4001); };
+    if do_sum_while(1) != 0 { panic(4002); };
+}

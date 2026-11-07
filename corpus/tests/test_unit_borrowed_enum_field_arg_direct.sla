@@ -1,0 +1,30 @@
+enum BorrowedFieldKind {
+    Table,
+    SparseSet,
+}
+
+struct BorrowedFieldInfo {
+    id: i32,
+    storage: BorrowedFieldKind,
+}
+
+fn borrowed_field_is_table(^kind: BorrowedFieldKind) -> bool {
+    match kind {
+        BorrowedFieldKind::Table => { return true; },
+        BorrowedFieldKind::SparseSet => { return false; },
+    };
+}
+
+fn borrowed_field_is_sparse_set(^kind: BorrowedFieldKind) -> bool {
+    match kind {
+        BorrowedFieldKind::Table => { return false; },
+        BorrowedFieldKind::SparseSet => { return true; },
+    };
+}
+
+@test "borrowed enum field call arg uses generated address"() {
+    let table_info = BorrowedFieldInfo { id: 1, storage: BorrowedFieldKind::Table };
+    let sparse_info = BorrowedFieldInfo { id: 2, storage: BorrowedFieldKind::SparseSet };
+    if borrowed_field_is_table(^table_info.storage) != true { panic(1); };
+    if borrowed_field_is_sparse_set(^sparse_info.storage) != true { panic(2); };
+}

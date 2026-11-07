@@ -1,0 +1,8 @@
+@import "dep/leaf.sa"
+
+@export dep_mid_value() -> i32:
+L_ENTRY:
+    leaf = call @dep_leaf_value()
+    value = add leaf, 200
+    !leaf
+    return value

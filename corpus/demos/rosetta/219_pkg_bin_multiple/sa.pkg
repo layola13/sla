@@ -1,0 +1,5 @@
+# Future metadata only. Not compiler input.
+[package]
+name = "demo-219"
+version = "0.1.0"
+bins = ["bin/alpha", "bin/beta"]

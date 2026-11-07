@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/slice.sa"
+@import "sa_std/string.sa"
+
+fn token_value(token: ptr) -> i32 {
+    if str_eq(token, "let") {
+        return 10;
+    };
+    if str_eq(token, "=") {
+        return 3;
+    };
+    if str_eq(token, "x") {
+        return 1;
+    };
+    return 1;
+}
+
+fn token_score(tokens: [ptr; 4]) -> i32 {
+    let score = 0;
+    for token in tokens {
+        let value = token_value(token);
+        score = score + value;
+    }
+    return score;
+}
+
+fn main() -> i32 {
+    let tokens = ["let", "x", "=", "1"];
+    let score = token_score(tokens);
+    println("{}", score);
+    return score;
+}
+
+@test "rosetta 068 68_parser_tokens"() {
+    let tokens = ["let", "x", "=", "1"];
+    let got = token_score(tokens);
+    if got != 15 {
+        panic(68);
+    };
+}

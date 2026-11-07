@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/ptr.sa"
+
+struct Opaque;
+
+extern "C" {
+    fn opaque_value(ptr: *Opaque) -> i32;
+}
+
+@no_mangle pub extern "C" fn opaque_value(ptr: *Opaque) -> i32 {
+    return 0;
+}
+
+fn opaque_pointer_result() -> i32 {
+    let ptr = ptr::null::<Opaque>();
+    let _ignored = unsafe { opaque_value(ptr) };
+    return 0;
+}
+
+fn main() -> i32 {
+    let result = opaque_pointer_result();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 115 115_opaque_pointers"() {
+    let got = opaque_pointer_result();
+    if got != 0 {
+        panic(115);
+    };
+}

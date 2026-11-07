@@ -1,0 +1,123 @@
+// View-types stage 1 regression corpus: field-granularity borrow
+// accounting in the SLA type checker (Jev ruling: staged_checker_first
+// 0.94). Disjoint fields of one struct may be borrowed simultaneously —
+// as call arguments and as locals, at any field offset, rooted at an
+// owned binding or at a borrow parameter, across control-flow joins —
+// while overlapping field borrows are rejected (see the companion
+// test_error_view_* files).
+//
+// Before stage 1 the granularity depended on which register a borrow
+// happened to land in: a field at offset 0 borrowed the whole root
+// allocation on the SAB backend (BorrowConflict 1008 against a second
+// disjoint field borrow, a direct read, or a direct write of a sibling
+// field), while a nonzero-offset field borrow escaped accounting
+// entirely. The checker now tracks places (root + field path) and the
+// SAB codegen gives every field borrow a distinct place register, so
+// legality no longer depends on field layout.
+//
+// Backend status: all tests pass on BOTH backends. On the baseline
+// (pre-stage-1) plugin this file is rejected outright on the SAB
+// backend with BorrowConflict 1008 — the per-shape survey attributes
+// that to the local double borrow, borrow+read-other,
+// borrow+write-other, and borrow-across-join shapes (the offset-0
+// whole-root lock) — while the text backend passed it 10/10.
+
+struct Pair { a: i64, b: i64 }
+struct Inner { x: i64, y: i64 }
+struct Outer { inner: Inner, z: i64 }
+
+fn vt_set_both(x: &i64, y: &i64) {
+    *x = 10;
+    *y = 20;
+}
+
+fn vt_sum2(x: &i64, y: &i64) -> i64 {
+    let xv = *x;
+    let yv = *y;
+    return xv + yv;
+}
+
+fn vt_via_borrow(s: &Pair) {
+    vt_set_both(&s.a, &s.b);
+}
+
+@test "view types: disjoint fields as two write args in one call"() {
+    let s = Pair { a: 0, b: 0 };
+    vt_set_both(&s.a, &s.b);
+    if s.a != 10 { panic(201); };
+    if s.b != 20 { panic(202); };
+}
+
+@test "view types: local double borrow of disjoint fields interleaved"() {
+    let s = Pair { a: 1, b: 2 };
+    let x = &s.a;
+    let y = &s.b;
+    let xv = *x;
+    *x = xv + 10;
+    let yv = *y;
+    *y = yv + 20;
+    let xw = *x;
+    *x = xw + 100;
+    if s.a != 111 { panic(301); };
+    if s.b != 22 { panic(302); };
+}
+
+@test "view types: borrow one field while reading another directly"() {
+    let s = Pair { a: 1, b: 5 };
+    let x = &s.a;
+    let v = s.b;
+    *x = v + 1;
+    if s.a != 6 { panic(401); };
+}
+
+@test "view types: borrow one field while writing another directly"() {
+    let s = Pair { a: 1, b: 2 };
+    let x = &s.a;
+    s.b = 30;
+    *x = 10;
+    if s.a != 10 { panic(501); };
+    if s.b != 30 { panic(502); };
+}
+
+@test "view types: borrow created before join used in both branches and after"() {
+    let s = Pair { a: 1, b: 2 };
+    let x = &s.a;
+    let c = s.b > 0;
+    if c { *x = 10; } else { *x = 20; };
+    let xv = *x;
+    *x = xv + 1;
+    if s.a != 11 { panic(801); };
+}
+
+@test "view types: branch-local borrows of different fields, struct used after join"() {
+    let s = Pair { a: 1, b: 2 };
+    let c = s.a > 0;
+    if c { let x = &s.a; *x = 10; } else { let y = &s.b; *y = 20; };
+    if s.a + s.b != 12 { panic(802); };
+}
+
+@test "view types: disjoint field borrows rooted at a borrow parameter"() {
+    let s = Pair { a: 0, b: 0 };
+    vt_via_borrow(&s);
+    if s.a != 10 { panic(901); };
+    if s.b != 20 { panic(902); };
+}
+
+@test "view types: sibling fields under the same nested parent path as args"() {
+    let o = Outer { inner: Inner { x: 0, y: 0 }, z: 0 };
+    vt_set_both(&o.inner.x, &o.inner.y);
+    if o.inner.x != 10 { panic(1001); };
+    if o.inner.y != 20 { panic(1002); };
+}
+
+@test "view types: nested field vs top-level sibling field as args"() {
+    let o = Outer { inner: Inner { x: 0, y: 0 }, z: 0 };
+    vt_set_both(&o.inner.x, &o.z);
+    if o.inner.x != 10 { panic(1003); };
+    if o.z != 20 { panic(1004); };
+}
+
+@test "view types: same field twice as read-only args in one call"() {
+    let s = Pair { a: 3, b: 4 };
+    if vt_sum2(&s.a, &s.a) != 6 { panic(1301); };
+}

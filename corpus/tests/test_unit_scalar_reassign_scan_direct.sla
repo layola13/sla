@@ -1,0 +1,17 @@
+fn scalar_scan_branch_reassign(k: i64) -> i64 {
+    let scan = k - 1;
+    let found: i64 = -1;
+    while scan >= 0 {
+        if scan == 1 {
+            found = scan;
+            scan = -1;
+        } else {
+            scan = scan - 1;
+        };
+    }
+    return found;
+}
+
+@test "scalar scan branch reassign stays copy"() {
+    if scalar_scan_branch_reassign(3) != 1 { panic(51011); };
+}

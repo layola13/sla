@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Goldbach 分拆计数（偶数写成两素数之和：10 有 (3,7)/(5,5) 共 2 种）。
+// 意对标 366 孪生计数 的和版（366 互补）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn goldbach_count(n: int) -> int {
+    let c = 0;
+    let p = 2;
+    while p <= n / 2 {
+        if is_prime(p) == 1 {
+            if is_prime(n - p) == 1 { c = c + 1; };
+        };
+        p = p + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", goldbach_count(10), goldbach_count(12), goldbach_count(20));
+    return 0;
+}
+
+@test "basic 380 goldbach"() {
+    if goldbach_count(10) != 2 { panic(38001); };
+    if goldbach_count(12) != 1 { panic(38002); };
+    if goldbach_count(20) != 2 { panic(38003); };
+}

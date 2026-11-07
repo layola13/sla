@@ -1,0 +1,13 @@
+// expect: ArenaGoroutine
+// F2-A C1 corpus: escape route 6 - passing an arena-owned
+// value to a spawned function crosses the goroutine boundary;
+// the diagnostic uses the ArenaGoroutine category (design 4).
+fn worker(x: Vec<String>) -> i32 { return 0; }
+
+fn neg_go_spawn() -> i32 {
+    arena {
+        let v: Vec<String> = Vec::new();
+        let h = go worker(v);
+    }
+    return 0;
+}

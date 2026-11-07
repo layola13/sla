@@ -1,0 +1,55 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/string.sa"
+
+// DEF-deep-copy follow-up (push consume, preserved side): copy-like
+// elements are copy-consumed by push — the source binding stays live
+// and the emitters materialize the copy. These forms must keep
+// compiling and running on both backends (the consume fix must not
+// over-consume): a shallow-copy struct element pushed twice with the
+// source used afterwards, a POD element replicated in a loop, and a
+// String element pushed exactly once (owned temporaries and single
+// moves stay legal).
+
+struct PushDeep { xs: Vec<u8>, n: i32 }
+
+fn px_struct(x: PushDeep) -> Vec<PushDeep> {
+    let out: Vec<PushDeep> = Vec::new();
+    out.push(x);
+    out.push(x);
+    x.xs.push(7 as u8);
+    return out;
+}
+
+fn px_replicate_pod(n: i64, x: i64) -> Vec<i64> {
+    let out: Vec<i64> = Vec::new();
+    let i = 0;
+    while i < n {
+        out.push(x);
+        i = i + 1;
+    }
+    return out;
+}
+
+@test "push preserved struct element twice"() {
+    let xs: Vec<u8> = Vec::new();
+    xs.push(1 as u8);
+    let d = PushDeep { xs: xs, n: 5 };
+    let r = px_struct(d);
+    if len(r) != 2 { panic(29701); };
+    if len(r[0].xs) != 1 { panic(29702); };
+}
+
+@test "push pod element in a loop"() {
+    let r = px_replicate_pod(3, 8);
+    if len(r) != 3 { panic(29703); };
+    if r[2] != 8 { panic(29704); };
+}
+
+@test "push string element once"() {
+    let out: Vec<String> = Vec::new();
+    out.push(format("ab"));
+    if len(out) != 1 { panic(29705); };
+    if len(out[0]) != 2 { panic(29706); };
+}

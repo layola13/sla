@@ -1,0 +1,8 @@
+fn go_diag_ret_worker() -> i32 {
+    return 1;
+}
+
+fn go_diag_ret_main() -> i32 {
+    let h = go go_diag_ret_worker();
+    return 0;
+}

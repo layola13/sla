@@ -1,0 +1,104 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@main() -> i32:
+L_ENTRY:
+    values = alloc 16
+    tmp_0 = 1
+    store values+0, tmp_0 as i32
+    tmp_1 = 2
+    store values+4, tmp_1 as i32
+    tmp_2 = 3
+    store values+8, tmp_2 as i32
+    tmp_3 = 4
+    store values+12, tmp_3 as i32
+    tmp_4 = 4
+    tmp_5 = ptr_add values, tmp_4
+    tmp_6 = 0
+    tmp_7 = 0
+    tmp_8 = ptr_add tmp_5, tmp_7
+    tmp_9 = load tmp_8+0 as i32
+    tmp_10 = add tmp_6, tmp_9
+    !tmp_7
+    !tmp_8
+    !tmp_9
+    !tmp_6
+    tmp_11 = 4
+    tmp_12 = ptr_add tmp_5, tmp_11
+    tmp_13 = load tmp_12+0 as i32
+    tmp_14 = add tmp_10, tmp_13
+    !tmp_11
+    !tmp_12
+    !tmp_13
+    !tmp_10
+    !tmp_5
+    window_sum = tmp_14
+    tmp_15 = call @sa_fmt_u64(window_sum, 10)
+    tmp_16 = call @sa_fmt_buffer_data(tmp_15)
+    tmp_17 = call @sa_fmt_buffer_len(tmp_15)
+    tmp_18 = tmp_16
+    call @sa_print_bytes(&tmp_18, tmp_17)
+    call @sa_fmt_buffer_free(^tmp_15)
+    !tmp_18
+    !tmp_17
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_19 = 0
+    !values
+    !window_sum
+    return tmp_19
+
+@test "rosetta 014 slice window"():
+L_TEST_ENTRY_0:
+    values = alloc 16
+    tmp_20 = 1
+    store values+0, tmp_20 as i32
+    tmp_21 = 2
+    store values+4, tmp_21 as i32
+    tmp_22 = 3
+    store values+8, tmp_22 as i32
+    tmp_23 = 4
+    store values+12, tmp_23 as i32
+    tmp_24 = 4
+    tmp_25 = ptr_add values, tmp_24
+    tmp_26 = 0
+    tmp_27 = 0
+    tmp_28 = ptr_add tmp_25, tmp_27
+    tmp_29 = load tmp_28+0 as i32
+    tmp_30 = add tmp_26, tmp_29
+    !tmp_27
+    !tmp_28
+    !tmp_29
+    !tmp_26
+    tmp_31 = 4
+    tmp_32 = ptr_add tmp_25, tmp_31
+    tmp_33 = load tmp_32+0 as i32
+    tmp_34 = add tmp_30, tmp_33
+    !tmp_31
+    !tmp_32
+    !tmp_33
+    !tmp_30
+    !tmp_25
+    window_sum = tmp_34
+    tmp_35 = 5
+    tmp_36 = ne window_sum, tmp_35
+    !tmp_35
+    br tmp_36 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_36
+    panic(14)
+
+L_ELSE_2:
+    !tmp_36
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !values
+    !window_sum
+    return
+

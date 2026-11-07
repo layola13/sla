@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Wrapper<T> {
+    value: T,
+}
+
+fn main() -> i32 {
+    let wrapped = Wrapper<i32> { value: 31 };
+    println("{}", wrapped.value);
+    return 0;
+}
+
+@test "rosetta 038 generic struct i32"() {
+    let wrapped = Wrapper<i32> { value: 31 };
+    if wrapped.value != 31 {
+        panic(38);
+    };
+}

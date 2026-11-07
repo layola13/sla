@@ -1,0 +1,51 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/core/option.sa"
+
+// P0 coverage (census 2026-11-06): Option.copied and
+// Option.unwrap_or_default. Both were probe-verified
+// (tools/sab_audit/probes/option_unwrap_or_default.sla exercises the
+// get().copied().unwrap_or_default() chain) but had no unit test.
+
+@test "option copied from map get"() {
+    let m = HashMap::new();
+    m.insert("a", 41);
+    m.insert("b", 2);
+
+    let hit: Option<i32> = m.get("a").copied();
+    if !hit.is_some() { panic(88101); };
+    if hit.unwrap() != 41 { panic(88102); };
+
+    let miss: Option<i32> = m.get("zzz").copied();
+    if miss.is_some() { panic(88103); };
+    if !miss.is_none() { panic(88104); };
+}
+
+@test "option copied is a snapshot"() {
+    let m = HashMap::new();
+    m.insert("k", 10);
+    let snap: Option<i32> = m.get("k").copied();
+    m.insert("k", 99);
+    if snap.unwrap() != 10 { panic(88111); };
+    if m.get("k").copied().unwrap_or(0) != 99 { panic(88112); };
+}
+
+@test "option unwrap_or_default direct"() {
+    let some: Option<i32> = Some(7);
+    let none: Option<i32> = None;
+    if some.unwrap_or_default() != 7 { panic(88121); };
+    if none.unwrap_or_default() != 0 { panic(88122); };
+
+    let some64: Option<i64> = Some(5000000000);
+    let none64: Option<i64> = None;
+    if some64.unwrap_or_default() != 5000000000 { panic(88123); };
+    if none64.unwrap_or_default() != 0 { panic(88124); };
+}
+
+@test "option copied unwrap_or_default chain"() {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+    if m.get("zzz").copied().unwrap_or_default() != 0 { panic(88131); };
+    if m.get("a").copied().unwrap_or_default() != 1 { panic(88132); };
+    if m.get("b").copied().unwrap_or_default() != 2 { panic(88133); };
+}

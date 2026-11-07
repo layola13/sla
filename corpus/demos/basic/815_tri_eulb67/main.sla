@@ -1,0 +1,112 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian-B 续三向：建表行和 × 交错和行和 × 公式（n=7：645120 三锁）。
+// 意对标 808_eulb7（高位源互补；685 三向体例收束 B 型续族）。
+
+fn eub(n: int, m: int) -> int {
+    let w = m + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + m {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= m {
+            t[mm * w + nn] = (2 * nn + 1) * t[(mm - 1) * w + nn] + (2 * mm - 2 * nn + 1) * t[(mm - 1) * w + nn - 1];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + m];
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn pwr(b: int, e: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < e {
+        r = r * b;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn eba(n: int, m: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= m {
+        let term = binom_mul(n + 1, k) * pwr(2 * (m - k) + 1, n);
+        if k % 2 == 0 { s = s + term; } else { s = s - term; };
+        k = k + 1;
+    }
+    return s;
+}
+
+fn ebsum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + eub(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn easum(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + eba(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn p2f(n: int) -> int {
+    let p = 1;
+    let i = 0;
+    while i < n {
+        p = p * 2;
+        i = i + 1;
+    }
+    let f = 1;
+    let j = 1;
+    while j <= n {
+        f = f * j;
+        j = j + 1;
+    }
+    return p * f;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", ebsum(7), easum(7), p2f(7));
+    return 0;
+}
+
+@test "basic 815 tri eulb67"() {
+    if ebsum(7) != 645120 { panic(81501); };
+    if easum(7) != 645120 { panic(81502); };
+    if p2f(7) != 645120 { panic(81503); };
+    if ebsum(6) != 46080 { panic(81504); };
+}

@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 首列即阶乘：L(6,1)=720，L(7,1)=5040，L(8,1)=40320（首列恒等单锁）。
+// 意对标 706_lah7（内格版互补；712 做首列对峙）。
+
+fn ltb(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", ltb(6, 1), ltb(7, 1), ltb(8, 1));
+    return 0;
+}
+
+@test "basic 711 lah col1"() {
+    if ltb(6, 1) != 720 { panic(71101); };
+    if ltb(7, 1) != 5040 { panic(71102); };
+    if ltb(8, 1) != 40320 { panic(71103); };
+    if ltb(5, 1) != 120 { panic(71104); };
+}

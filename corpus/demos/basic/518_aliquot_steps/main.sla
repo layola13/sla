@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 真因子链步数（12→16→15→9→4→3→1→0 共 7 步；6 自守返 0）。
+// 意对标 378 丰数版的链版（378/389 互补）。
+
+fn aliquot(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i < n {
+        if n % i == 0 { s = s + i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn aliquot_steps(n: int) -> int {
+    let c = 0;
+    let m = n;
+    let prev = 0 - 1;
+    while m != 0 {
+        let next = aliquot(m);
+        if next == m { return c; };
+        if next == prev { return c; };
+        prev = m;
+        m = next;
+        c = c + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", aliquot_steps(12), aliquot_steps(6), aliquot_steps(220));
+    return 0;
+}
+
+@test "basic 518 aliquot steps"() {
+    if aliquot_steps(12) != 7 { panic(51801); };
+    if aliquot_steps(6) != 0 { panic(51802); };
+    if aliquot_steps(220) != 1 { panic(51803); };
+}

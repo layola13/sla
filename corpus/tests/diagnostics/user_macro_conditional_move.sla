@@ -1,0 +1,18 @@
+@import "sa_std/core/box.sa"
+
+macro conditional_move(out, value, cond) {
+    if cond {
+        out = ^value;
+    }
+}
+
+macro forwarding_conditional_move(out, value, cond) {
+    conditional_move(out, value, cond);
+}
+
+fn reject_conditional_macro_move(cond: bool) -> i64 {
+    let source = Box::new(42i64);
+    let destination = Box::new(1i64);
+    forwarding_conditional_move(destination, source, cond);
+    *destination
+}

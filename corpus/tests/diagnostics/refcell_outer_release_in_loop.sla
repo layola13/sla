@@ -1,0 +1,12 @@
+@import "sa_std/core/refcell.sa"
+
+struct LoopReleasePayload { value: i64 }
+
+fn reject_outer_refcell_release_in_loop(cell: &RefCell<LoopReleasePayload>) -> void {
+    let borrowed: &LoopReleasePayload = cell.borrow();
+    for n in 0..1 {
+        if n == 0 {
+            !borrowed;
+        };
+    }
+}

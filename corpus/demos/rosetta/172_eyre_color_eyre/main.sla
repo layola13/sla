@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn eyre_context_len() -> usize {
+    let context = "context: boom";
+    return context.len();
+}
+
+fn main() -> i32 {
+    let context = "context: boom";
+    let result = context.len();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 172 172_eyre_color_eyre"() {
+    let got = eyre_context_len();
+    if got != 13 {
+        panic(172);
+    };
+}

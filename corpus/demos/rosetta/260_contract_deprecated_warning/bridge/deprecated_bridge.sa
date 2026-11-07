@@ -1,0 +1,7 @@
+@const DEPRECATED_NOTE = utf8:"legacy"
+
+@export legacy_value() -> i32:
+L_ENTRY:
+    value = add 260, 0
+    !value
+    return 260

@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 122_rotate：左旋 k=2（[1,2,3,4,5] -> [3,4,5,1,2]）。
+// SLA 無 slice/concat，用取模索引手写。
+
+fn main() -> i32 {
+    let a = [1, 2, 3, 4, 5];
+    let k = 2;
+    let b = [a[(0 + k) % 5], a[(1 + k) % 5], a[(2 + k) % 5], a[(3 + k) % 5], a[(4 + k) % 5]];
+    println("{},{},{}", b[0], b[1], b[4]);
+    return 0;
+}
+
+@test "basic 23 rotate"() {
+    let a = [1, 2, 3, 4, 5];
+    let k = 2;
+    let b = [a[(0 + k) % 5], a[(1 + k) % 5], a[(2 + k) % 5], a[(3 + k) % 5], a[(4 + k) % 5]];
+    if b[0] != 3 { panic(2301); };
+    if b[1] != 4 { panic(2302); };
+    if b[4] != 2 { panic(2303); };
+}

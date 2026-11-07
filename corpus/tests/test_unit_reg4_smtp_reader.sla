@@ -1,0 +1,129 @@
+@import "sa_std/smtp.sla"
+
+// Registry shard 4 coverage: SmtpReplyReader pipeline from
+// sa_std/smtp.sla (SAB registry class=declared, never probed, zero
+// corpus references at census 2026-11-06).
+// Entries: smtp_reply_reader_new, smtp_reply_reader_feed,
+// smtp_reply_reader_next.
+// True contract (source-verified): next() returns a SmtpReplyRead
+// { reader, ready, reply_code, reply_text, status } -- not an
+// Option. ready=true once the final "250 " line lands; accumulated
+// continuation text is joined with '\n'; malformed input flips the
+// reader's failed flag and reports SA_STD_ERR_NET (7); a completed
+// reply resets the reader and keeps any tail bytes pending.
+// (v3: rewritten against the real SmtpReplyRead shape; v1/v2 coded
+// against a wrong Option-shaped paraphrase the checker masked.)
+
+fn v4_of(lit: String) -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    let p: ptr = STR_PTR(lit);
+    let i: u64 = 0;
+    while i < lit.len() {
+        out.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn v4_eq(v: Vec<u8>, lit: String) -> bool {
+    // Byte compare through the std slice accessor: Slice is not
+    // a struct in SLA (no .len/.ptr field access -- the checker
+    // reports NotAStruct), and variable-indexing a Vec with a
+    // cast subscript is rejected by the parser.
+    if (v.len() as u64) != lit.len() { return false; };
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let lp: ptr = STR_PTR(lit);
+    let i: u64 = 0;
+    while i < lit.len() {
+        if smtp_slice_byte(&sl, i) != PTR_BYTE_AT(lp, i) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+@test "reg4 smtp reader new state and empty next"() {
+    let r0 = smtp_reply_reader_new();
+    if r0.cur_code != 0 { panic(42101); };
+    if r0.cur_lines != 0 { panic(42102); };
+    if r0.failed != false { panic(42103); };
+    if r0.pending.len() != 0 { panic(42104); };
+    let read = smtp_reply_reader_next(r0);
+    if read.ready != false { panic(42105); };
+    if read.status != 0 { panic(42106); };
+    if read.reply_code != 0 { panic(42107); };
+}
+
+@test "reg4 smtp reader completes a single line reply"() {
+    let r0 = smtp_reply_reader_new();
+    let r1 = smtp_reply_reader_feed(r0, v4_of(format("250 OK\r\n")));
+    let read = smtp_reply_reader_next(r1);
+    if read.ready != true { panic(42111); };
+    if read.status != 0 { panic(42112); };
+    if read.reply_code != 250 { panic(42113); };
+    if !v4_eq(read.reply_text, format("OK")) { panic(42114); };
+    if read.reader.cur_code != 0 { panic(42115); };
+    if read.reader.pending.len() != 0 { panic(42116); };
+    let read2 = smtp_reply_reader_next(read.reader);
+    if read2.ready != false { panic(42117); };
+    if read2.status != 0 { panic(42118); };
+}
+
+@test "reg4 smtp reader assembles a multiline reply"() {
+    let r0 = smtp_reply_reader_new();
+    let r1 = smtp_reply_reader_feed(r0, v4_of(format("250-Hello\r\n")));
+    let read1 = smtp_reply_reader_next(r1);
+    if read1.ready != false { panic(42121); };
+    if read1.status != 0 { panic(42122); };
+    if read1.reader.cur_code != 250 { panic(42123); };
+    if read1.reader.cur_lines != 1 { panic(42124); };
+    let r2 = smtp_reply_reader_feed(read1.reader, v4_of(format("250 Done\r\n")));
+    let read2 = smtp_reply_reader_next(r2);
+    if read2.ready != true { panic(42125); };
+    if read2.reply_code != 250 { panic(42126); };
+    if !v4_eq(read2.reply_text, format("Hello\nDone")) { panic(42127); };
+}
+
+@test "reg4 smtp reader handles a byte split feed"() {
+    let r0 = smtp_reply_reader_new();
+    let r1 = smtp_reply_reader_feed(r0, v4_of(format("25")));
+    let read1 = smtp_reply_reader_next(r1);
+    if read1.ready != false { panic(42131); };
+    let r2 = smtp_reply_reader_feed(read1.reader, v4_of(format("0 OK\r\n")));
+    let read2 = smtp_reply_reader_next(r2);
+    if read2.ready != true { panic(42132); };
+    if read2.reply_code != 250 { panic(42133); };
+    if !v4_eq(read2.reply_text, format("OK")) { panic(42134); };
+}
+
+@test "reg4 smtp reader keeps trailing bytes for the next reply"() {
+    let r0 = smtp_reply_reader_new();
+    let r1 = smtp_reply_reader_feed(r0, v4_of(format("250 One\r\n250 Two\r\n")));
+    let read1 = smtp_reply_reader_next(r1);
+    if read1.ready != true { panic(42141); };
+    if !v4_eq(read1.reply_text, format("One")) { panic(42142); };
+    let read2 = smtp_reply_reader_next(read1.reader);
+    if read2.ready != true { panic(42143); };
+    if read2.reply_code != 250 { panic(42144); };
+    if !v4_eq(read2.reply_text, format("Two")) { panic(42145); };
+}
+
+@test "reg4 smtp reader flags a malformed line"() {
+    let r0 = smtp_reply_reader_new();
+    let r1 = smtp_reply_reader_feed(r0, v4_of(format("XYZ hi\r\n")));
+    let read = smtp_reply_reader_next(r1);
+    if read.ready != false { panic(42151); };
+    if read.status != 7 { panic(42152); };
+    if read.reader.failed != true { panic(42153); };
+    let read2 = smtp_reply_reader_next(read.reader);
+    if read2.status != 7 { panic(42154); };
+    if read2.ready != false { panic(42155); };
+}
+
+@test "reg4 smtp reader flags a code change mid reply"() {
+    let r0 = smtp_reply_reader_new();
+    let r1 = smtp_reply_reader_feed(r0, v4_of(format("250-a\r\n251 b\r\n")));
+    let read = smtp_reply_reader_next(r1);
+    if read.ready != false { panic(42161); };
+    if read.status != 7 { panic(42162); };
+    if read.reader.failed != true { panic(42163); };
+}

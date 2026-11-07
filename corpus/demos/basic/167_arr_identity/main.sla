@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1202_arr_identity + 1203_self_identity：数组恒等（0,1）。
+// 数组 `==` 为引用恒等（同绑定才真），内容相同但绑定不同则假
+//（与 TS 语义一致，双后端 + exe 核对）；
+
+fn main() -> i32 {
+    let a: [i32; 1] = [1];
+    let b: [i32; 1] = [1];
+    let r1 = 0;
+    if a == b { r1 = 1; };
+    let r2 = 0;
+    if a == a { r2 = 1; };
+    println("{},{}", r1, r2);
+    return 0;
+}
+
+@test "basic 167 arr identity"() {
+    let a: [i32; 1] = [1];
+    let b: [i32; 1] = [1];
+    if a == b { panic(16701); };
+    if a == a { } else { panic(16702); };
+}

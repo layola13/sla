@@ -1,0 +1,24 @@
+@import "sa_std/redis.sla"
+
+// MINIM R3 (isolation): every redis_value / session / client entry
+// whose call graph does NOT reach redis_parse_value, in one file
+// with no parser call anywhere. Green here proves the shard's red
+// files fail only through parser reachability, and clears these
+// entries individually.
+
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+@test "minim noparse pipeline and poll constructors"() {
+    let pipe = redis_pipeline_new();
+    if pipe.count != 0 { panic(241); };
+    pipe = redis_pipeline_add(pipe, redis_args_verb(STR_PTR("PING"), STR_LEN("PING")));
+    if pipe.count != 1 { panic(242); };
+    if (len(pipe.frame) as u64) != 14 { panic(243); };
+    let p1 = redis_poll(redis_empty_client(), 0 - 3, false, redis_int_value(5));
+    if p1.status != 0 - 3 { panic(244); };
+    if p1.has_message { panic(245); };
+    if redis_value_int(&p1.message) != 5 { panic(246); };
+}

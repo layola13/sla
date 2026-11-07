@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn max_i32(left: i32, right: i32) -> i32 {
+    if left > right {
+        return left;
+    } else {
+        return right;
+    };
+}
+
+fn critical_path(root: i32, left: i32, right: i32) -> i32 {
+    let branch = max_i32(left, right);
+    return root + branch;
+}
+
+fn main() -> i32 {
+    let result = critical_path(4, 7, 3);
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 085 85_scheduler_tree"() {
+    let got = critical_path(4, 7, 3);
+    if got != 11 {
+        panic(85);
+    };
+};

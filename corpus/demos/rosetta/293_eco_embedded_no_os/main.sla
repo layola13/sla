@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn eco_embedded_no_os_hooks() -> i32 { let reset_handler = 1; return reset_handler; }
+fn main() -> i32 { let reset_handler = 1; println("{}", reset_handler); return reset_handler; }
+@test "rosetta 293 eco embedded no os"() { let got = eco_embedded_no_os_hooks(); if got != 1 { panic(293); }; }

@@ -1,0 +1,4 @@
+// expect: FileNotFound
+// neg: @import of a missing relative file
+@import "./missing_local_zzz.sla";
+fn main() -> i32 { return 0; }

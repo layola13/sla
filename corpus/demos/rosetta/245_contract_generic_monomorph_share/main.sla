@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_shared_monomorph_paths() -> i32 {
+    let int_path = 1;
+    let bool_path = 1;
+    return int_path + bool_path;
+}
+
+fn main() -> i32 {
+    let int_path = 1;
+    let bool_path = 1;
+    let result = int_path + bool_path;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 245 contract generic monomorph share"() {
+    let got = contract_shared_monomorph_paths();
+    if got != 2 { panic(245); };
+}

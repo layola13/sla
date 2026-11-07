@@ -1,0 +1,37 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 位计数双实现对峙（消位法 vs 移位法：255 皆得 8）。
+// 意对标 411 数位和对峙的位版（508 互补）。
+
+fn bc_clear(n: int) -> int {
+    let c = 0;
+    let m = n;
+    while m != 0 {
+        m = m & (m - 1);
+        c = c + 1;
+    }
+    return c;
+}
+
+fn bc_shift(n: int) -> int {
+    let c = 0;
+    let m = n;
+    while m != 0 {
+        c = c + m % 2;
+        m = m / 2;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{}", bc_clear(255), bc_shift(255));
+    return 0;
+}
+
+@test "basic 510 duel bitcount"() {
+    if bc_clear(255) != 8 { panic(51001); };
+    if bc_shift(255) != 8 { panic(51002); };
+    if bc_clear(255) != bc_shift(255) { panic(51003); };
+    if bc_shift(13) != 3 { panic(51004); };
+}

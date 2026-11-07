@@ -1,0 +1,59 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Catalan 反射差式高位 C(9)=4862，C(10)=16796（C(2n,n)-C(2n,n+1)，正数差）。
+// 意对标 731_cat_diff（低位差式版互补；865 做三向收束）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn catd(n: int) -> int {
+    return binom_mul(2 * n, n) / (n + 1);
+}
+
+fn catf(n: int) -> int {
+    return binom_mul(2 * n, n) - binom_mul(2 * n, n + 1);
+}
+
+fn rat(n: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < n {
+        r = r * 2 * (2 * i + 1) / (i + 2);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn catc(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let i = 0;
+    while i < n {
+        s = s + catc(i) * catc(n - 1 - i);
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", catf(9), catf(10), catf(8));
+    return 0;
+}
+
+@test "basic 861 cat diff9"() {
+    if catf(9) != 4862 { panic(86101); };
+    if catf(10) != 16796 { panic(86102); };
+    if catf(8) != 1430 { panic(86103); };
+    if binom_mul(20, 10) - binom_mul(20, 11) != 16796 { panic(86104); };
+}

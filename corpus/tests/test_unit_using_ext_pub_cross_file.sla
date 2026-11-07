@@ -1,0 +1,10 @@
+// DEF-E0 regression: the pub fn of an imported module is a valid
+// extension cross-file (control for the non-pub visibility negatives).
+@import "import_fixtures/using_ext_hidden.sla"
+
+using hidden_ext;
+
+@test "using ext: pub extension cross file control"() {
+    let base: i32 = 4;
+    if base.open() != 5 { panic(34611); };
+}

@@ -1,0 +1,44 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/pin.sa"
+
+fn pinning_stability_score() -> i32 {
+    let value = 8;
+    let pinned = stack_alloc();
+    PIN_NEW(pinned, value);
+
+    let pinned_ref = stack_alloc();
+    PIN_AS_REF(pinned_ref, pinned);
+
+    let before = PIN_GET_REF(pinned);
+    let after = PIN_GET_REF(pinned_ref);
+    let stable = before == after;
+    if stable == true {
+        return value + 1;
+    } else {
+        return value;
+    };
+}
+
+fn main() -> i32 {
+    let value = 8;
+    let pinned = stack_alloc();
+    PIN_NEW(pinned, value);
+
+    let pinned_ref = stack_alloc();
+    PIN_AS_REF(pinned_ref, pinned);
+
+    let before = PIN_GET_REF(pinned);
+    let after = PIN_GET_REF(pinned_ref);
+    let stable = before == after;
+    let result = if stable == true { value + 1 } else { value };
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 132 132_pinning_and_unpin"() {
+    let got = pinning_stability_score();
+    if got != 9 {
+        panic(132);
+    };
+};

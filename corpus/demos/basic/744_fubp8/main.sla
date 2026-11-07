@@ -1,0 +1,52 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 有序 Bell 表版高位 F(8)=545835（F(7)=47293 对 47293；同式再上一位）。
+// 意对标 742_fubp（n=7 版互补；745 做三向收束）。
+
+fn pbin(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let nn = 1;
+    while nn <= n {
+        t[nn * w] = 1;
+        let kk = 1;
+        while kk <= k {
+            if kk <= nn {
+                t[nn * w + kk] = t[(nn - 1) * w + kk - 1] + t[(nn - 1) * w + kk];
+            };
+            kk = kk + 1;
+        }
+        nn = nn + 1;
+    }
+    return t[n * w + k];
+}
+
+fn fubp(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let k = 0;
+    while k <= n - 1 {
+        s = s + pbin(n, k) * fubp(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", fubp(7), fubp(8));
+    return 0;
+}
+
+@test "basic 744 fubp8"() {
+    if fubp(8) != 545835 { panic(74401); };
+    if fubp(7) != 47293 { panic(74402); };
+    if fubp(6) != 4683 { panic(74403); };
+}

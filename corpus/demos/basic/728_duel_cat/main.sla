@@ -1,0 +1,45 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Catalan 双实现对峙：卷积 vs 商式（n=6：132 对 132；n=7：429 对 429）。
+// 意对标 726_cat_conv6 × 727_cat_div8（两源单实现见各源；561 体例续高位）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn catd(n: int) -> int {
+    return binom_mul(2 * n, n) / (n + 1);
+}
+
+fn catc(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let i = 0;
+    while i < n {
+        s = s + catc(i) * catc(n - 1 - i);
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", catc(6), catd(6), catc(7), catd(7));
+    return 0;
+}
+
+@test "basic 728 duel cat"() {
+    if catc(6) != 132 { panic(72801); };
+    if catd(6) != 132 { panic(72802); };
+    if catc(7) != 429 { panic(72803); };
+    if catd(7) != 429 { panic(72804); };
+}

@@ -1,0 +1,5 @@
+@export module_leaf_value() -> i32:
+L_ENTRY:
+    value = add 31, 0
+    !value
+    return 31

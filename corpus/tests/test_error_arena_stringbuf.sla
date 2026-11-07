@@ -1,0 +1,12 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: StringBuf is a self-managed container (the
+// growable string header machinery); Jev U2 = A bans it in v1.
+// Plain String (a flat buffer value) stays arena-safe.
+fn id_stringbuf(x: StringBuf) -> StringBuf { return x; }
+
+fn neg_stringbuf(p: StringBuf) -> i32 {
+    arena {
+        let s = id_stringbuf(p);
+    }
+    return 0;
+}

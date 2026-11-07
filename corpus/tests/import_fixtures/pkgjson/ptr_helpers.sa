@@ -1,0 +1,21 @@
+// Pointer helpers used by dynamic path fixtures.
+
+[MACRO] SLA_BYTE_AT %out_byte, %ptr, %offset
+    __sla_ba_addr = ptr_add %ptr, %offset
+    %out_byte = load __sla_ba_addr+0 as u8
+    !__sla_ba_addr
+[END_MACRO]
+
+[MACRO] SLA_PTR_ADD %out_ptr, %base, %offset
+    %out_ptr = ptr_add %base, %offset
+[END_MACRO]
+
+[MACRO] SLA_BUF_ALLOC %out_ptr, %size
+    %out_ptr = alloc %size
+[END_MACRO]
+
+[MACRO] SLA_BYTE_PUT %ptr, %offset, %value
+    __sla_bp_addr = ptr_add %ptr, %offset
+    store __sla_bp_addr+0, %value as u8
+    !__sla_bp_addr
+[END_MACRO]

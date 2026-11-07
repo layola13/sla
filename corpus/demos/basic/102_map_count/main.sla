@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/hashmap.sa"
+@import "sa_std/core/option.sa"
+
+// 对标 tsgosa 132_map_count：覆盖累加计数（11, 2, 长 2）。
+// `m.set("a", m.get("a") + 10)` 用取-加-存三步表达；`getSize()` 用 `len(m)`。
+
+fn main() -> i32 {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+    let cur = m.get("a").copied().unwrap_or_default();
+    m.insert("a", cur + 10);
+    println("{},{},{}", m.get("a").copied().unwrap_or_default(), m.get("b").copied().unwrap_or_default(), len(m));
+    return 0;
+}
+
+@test "basic 102 map count"() {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+    let cur = m.get("a").copied().unwrap_or_default();
+    m.insert("a", cur + 10);
+    if m.get("a").copied().unwrap_or_default() != 11 { panic(10201); };
+    if m.get("b").copied().unwrap_or_default() != 2 { panic(10202); };
+    if len(m) != 2 { panic(10203); };
+}

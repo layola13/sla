@@ -1,0 +1,24 @@
+@import "sa_std/vec.sa"
+
+struct VecUpdateHolder {
+    id: i32,
+    items: Vec<i32>,
+}
+
+fn replace_holder_id(base: VecUpdateHolder) -> VecUpdateHolder {
+    return VecUpdateHolder { id: 8, ..base };
+}
+
+@test "struct update moves untouched vec field"() {
+    let items: Vec<i32> = Vec::new();
+    items.push(10);
+    items.push(20);
+
+    let base = VecUpdateHolder { id: 7, items: items };
+    let next = replace_holder_id(base);
+
+    if next.id != 8 { panic(22100); };
+    if len(next.items) != 2 { panic(22101); };
+    if next.items[0] != 10 { panic(22102); };
+    if next.items[1] != 20 { panic(22103); };
+}

@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 第 9 行左部 L(9,2)=1451520，L(9,3)=1693440，L(9,4)=846720（建表递推，同式再上一位）。
+// 意对标 708_lah8（n=8 版互补；839 做建表/商式对峙）。
+
+fn lah(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", lah(9, 2), lah(9, 3), lah(9, 4));
+    return 0;
+}
+
+@test "basic 836 lah9"() {
+    if lah(9, 2) != 1451520 { panic(83601); };
+    if lah(9, 3) != 1693440 { panic(83602); };
+    if lah(9, 4) != 846720 { panic(83603); };
+    if lah(8, 3) != 141120 { panic(83604); };
+}

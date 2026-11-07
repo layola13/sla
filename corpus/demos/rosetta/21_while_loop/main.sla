@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn while_loop_sum() -> i32 {
+    let i = 1;
+    let sum = 0;
+    while i <= 5 {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
+}
+
+fn main() -> i32 {
+    let result = while_loop_sum();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 021 21_while_loop"() {
+    let got = while_loop_sum();
+    if got != 15 {
+        panic(21);
+    };
+};

@@ -1,0 +1,3 @@
+[codegen]
+input = "build/codegen-plan.txt"
+output = "generated/codegen.sa"

@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// lcm·gcd 恒等式（lcm(a,b)·gcd(a,b)=a·b：(12,18) → 216）。
+// 意对标 348 lcm 链的恒等式版（348 互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn lcm(a: int, b: int) -> int {
+    return a / gcd(a, b) * b;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", lcm(12, 18) * gcd(12, 18), 12 * 18, lcm(4, 6) * gcd(4, 6));
+    return 0;
+}
+
+@test "basic 401 lcm gcd id"() {
+    if lcm(12, 18) * gcd(12, 18) != 216 { panic(40101); };
+    if lcm(12, 18) * gcd(12, 18) != 12 * 18 { panic(40102); };
+    if lcm(4, 6) * gcd(4, 6) != 24 { panic(40103); };
+}

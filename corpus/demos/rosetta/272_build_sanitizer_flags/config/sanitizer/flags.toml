@@ -1,0 +1,3 @@
+[sanitizer]
+address = true
+undefined = true

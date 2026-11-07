@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 125_fact 的求和版（230 为单值版：1!+2!+3!=9）。
+// 迭代阶乘（230 口径）+ 调用组合。
+
+fn fact(n: int) -> int {
+    let p = 1;
+    let i = 1;
+    while i <= n {
+        p = p * i;
+        i = i + 1;
+    }
+    return p;
+}
+
+fn main() -> i32 {
+    println("{}", fact(1) + fact(2) + fact(3));
+    return 0;
+}
+
+@test "basic 285 fact sum"() {
+    if fact(1) + fact(2) + fact(3) != 9 { panic(28501); };
+    if fact(4) != 24 { panic(28502); };
+}

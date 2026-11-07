@@ -1,0 +1,19 @@
+enum Code {
+    Ok,
+    NotFound = 5,
+    Denied,
+}
+
+fn code_name(c: Code) -> i32 {
+    return match c {
+        Code::Ok => { 0 },
+        Code::NotFound => { 5 },
+        Code::Denied => { 6 },
+    };
+}
+
+@test "explicit discriminants match by value"() {
+    if code_name(Code::Ok) != 0 { panic(97101); };
+    if code_name(Code::NotFound) != 5 { panic(97102); };
+    if code_name(Code::Denied) != 6 { panic(97103); };
+};

@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 数位和三向对峙（循环 vs 递归 vs 迭代求根：12345 和 15，根 6）。
+// 意对标 411 双边版的三向版（408-持久性互补）。
+
+fn dsum_loop(n: int) -> int {
+    let s = 0;
+    let m = n;
+    while m > 0 {
+        s = s + m % 10;
+        m = m / 10;
+    }
+    return s;
+}
+
+fn dsum_rec(n: int) -> int {
+    if n < 10 { return n; };
+    return n % 10 + dsum_rec(n / 10);
+}
+
+fn droot(n: int) -> int {
+    let m = n;
+    while m >= 10 {
+        m = dsum_loop(m);
+        if m < 10 { return m; };
+    }
+    return m;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", dsum_loop(12345), dsum_rec(12345), droot(12345));
+    return 0;
+}
+
+@test "basic 414 tri dsum"() {
+    if dsum_loop(12345) != 15 { panic(41401); };
+    if dsum_rec(12345) != 15 { panic(41402); };
+    if droot(12345) != 6 { panic(41403); };
+    if dsum_loop(12345) != dsum_rec(12345) { panic(41404); };
+}

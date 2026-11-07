@@ -1,0 +1,13 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: a struct with a TcpStream field is not
+// arena-safe (net.sai opaque u64 handle, external resource class).
+struct TcpWrap { s: TcpStream }
+
+fn id_tcp_wrap(w: TcpWrap) -> TcpWrap { return w; }
+
+fn neg_tcp_field(p: TcpWrap) -> i32 {
+    arena {
+        let w = id_tcp_wrap(p);
+    }
+    return 0;
+}

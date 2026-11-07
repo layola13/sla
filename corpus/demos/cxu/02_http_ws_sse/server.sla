@@ -1,0 +1,95 @@
+@import "sa_std/http_server.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/io/print.sai"
+@import "byteseq.sa"
+
+// D2 (server) — HTTP/WS/SSE service surface, distilled from CXU's server
+// layer (hono routes + ws channels + SSE streams in apps/server).
+// Serves exactly three requests on 127.0.0.1:18082, dispatched by path:
+//   GET /hello  -> 200 JSON body
+//   GET /events -> SSE stream (text/event-stream), three tick events
+//   GET /ws     -> WebSocket upgrade, echoes one frame, closes
+// then prints "d2 server ok" and exits. Verified by run.sh + client.sla.
+//
+// Note: a successful websocket_upgrade consumes the request handle
+// (the std implementation frees it), so the /ws branch must not free req.
+
+fn path_is(p_ptr: ptr, p_len: u64, lit_ptr: ptr, lit_len: u64) -> bool {
+    let slot = [0u64; 1];
+    BYTES_EQ(&slot, p_ptr, p_len, lit_ptr, lit_len);
+    return slot[0] == 1;
+}
+
+fn main() -> i32 {
+    let srv: ptr = PTR_NULL();
+    if sa_http_server_new_v2(&srv) != 0 { return 2; };
+    if sa_http_server_start_v2(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 18082) != 0 { return 3; };
+    let handled: u64 = 0;
+    while handled < 3 {
+        let req: ptr = PTR_NULL();
+        if sa_http_server_accept_v2(srv, 30000, &req) != 0 { return 4; };
+        let p_ptr: ptr = PTR_NULL();
+        let p_len: u64 = 0;
+        if sa_http_server_req_get_path(req, &p_ptr, &p_len) != 0 { return 5; };
+        if path_is(p_ptr, p_len, STR_PTR("/hello"), STR_LEN("/hello")) {
+            let resp: ptr = PTR_NULL();
+            if sa_http_server_resp_new_v2(req, 200, &resp) != 0 { return 6; };
+            sa_http_server_resp_add_header_v2(resp, STR_PTR("content-type"), STR_LEN("content-type"), STR_PTR("application/json"), STR_LEN("application/json"));
+            let body = "{\"hello\":\"cxu\",\"surface\":\"http\"}";
+            if sa_http_server_resp_send_v2(resp, STR_PTR(body), STR_LEN(body), 5000) != 0 { return 7; };
+            sa_http_server_resp_free_v2(resp);
+            sa_http_server_req_free_v2(req);
+        } else if path_is(p_ptr, p_len, STR_PTR("/events"), STR_LEN("/events")) {
+            let sresp: ptr = PTR_NULL();
+            if sa_http_server_resp_stream_new_v2(req, 200, &sresp) != 0 { return 8; };
+            sa_http_server_resp_stream_add_header_v2(sresp, STR_PTR("content-type"), STR_LEN("content-type"), STR_PTR("text/event-stream"), STR_LEN("text/event-stream"));
+            if sa_http_server_resp_stream_write_v2(sresp, STR_PTR("data: tick-1\n\n"), STR_LEN("data: tick-1\n\n"), 5000) != 0 { return 9; };
+            sa_http_server_resp_stream_flush_v2(sresp);
+            if sa_http_server_resp_stream_write_v2(sresp, STR_PTR("data: tick-2\n\n"), STR_LEN("data: tick-2\n\n"), 5000) != 0 { return 10; };
+            sa_http_server_resp_stream_flush_v2(sresp);
+            if sa_http_server_resp_stream_write_v2(sresp, STR_PTR("data: tick-3\n\n"), STR_LEN("data: tick-3\n\n"), 5000) != 0 { return 11; };
+            if sa_http_server_resp_stream_end_v2(sresp, 5000) != 0 { return 12; };
+            sa_http_server_resp_stream_free_v2(sresp);
+            sa_http_server_req_free_v2(req);
+        } else if path_is(p_ptr, p_len, STR_PTR("/ws"), STR_LEN("/ws")) {
+            let ws: ptr = PTR_NULL();
+            if sa_http_server_websocket_upgrade_v2(req, &ws) != 0 { return 13; };
+            let opcode: u8 = 0;
+            let d_ptr: ptr = PTR_NULL();
+            let d_len: u64 = 0;
+            // v2 sockets are non-blocking: poll for readable, then read;
+            // read status 1 (would_block) means poll again.
+            let got = false;
+            let attempts: u64 = 0;
+            while got != true {
+                let events: u32 = 0;
+                if sa_http_server_websocket_poll_v2(ws, 1, 10000, &events) != 0 { return 14; };
+                let rst = sa_http_server_websocket_read_v2(ws, 4096, &opcode, &d_ptr, &d_len);
+                if rst == 0 {
+                    got = true;
+                } else if rst == 1 {
+                    attempts = attempts + 1;
+                    if attempts > 100 { return 18; };
+                } else {
+                    return 19;
+                };
+            }
+            let written: u64 = 0;
+            if sa_http_server_websocket_write_v2(ws, opcode, d_ptr, d_len, &written) != 0 { return 15; };
+            sa_http_server_websocket_close_v2(ws, 1000, STR_PTR(""), 0);
+            sa_http_server_websocket_free_v2(ws);
+        } else {
+            let resp: ptr = PTR_NULL();
+            if sa_http_server_resp_new_v2(req, 404, &resp) != 0 { return 16; };
+            let body = "not found";
+            if sa_http_server_resp_send_v2(resp, STR_PTR(body), STR_LEN(body), 5000) != 0 { return 17; };
+            sa_http_server_resp_free_v2(resp);
+            sa_http_server_req_free_v2(req);
+        };
+        handled = handled + 1;
+    }
+    sa_http_server_free_v2(srv);
+    println("d2 server ok");
+    return 0;
+}

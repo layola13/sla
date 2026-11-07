@@ -1,0 +1,38 @@
+@import "sa_std/core/option.sa"
+
+// Locks Y-SHARE sharedNodeUsesIdentifier: a use hidden in a match arm body
+// or guard must block fn-ptr body inlining in SA-text. Inlining such a body
+// splices a parameter reference into a call site where it is unbound.
+// NOTE: SAB execution of this file awaits the pre-existing match
+// value-merge discipline fix (baseline-identical PhiStateConflict on any
+// value-merging match, e.g. test_unit_option_match; verified separately).
+// SA-text runs it green; strict SAB builds it clean.
+fn fixed_opt() -> Option<i32> {
+    return Option::Some(3);
+}
+
+fn pick_arm(dflt: i32) -> i32 {
+    return match fixed_opt() {
+        Some(v) => { v + dflt },
+        None => { dflt },
+    };
+}
+
+fn pick_guard(dflt: i32) -> i32 {
+    let o: Option<i32> = Option::Some(4);
+    return match o {
+        Some(v) if v > dflt => { v },
+        Some(v) => { v + dflt },
+        None => { dflt },
+    };
+}
+
+fn apply_arm(f: fn(i32) -> i32, d: i32) -> i32 {
+    return f(d);
+}
+
+@test "fnptr devirtualized match arm param is not inlined"() {
+    if apply_arm(pick_arm, 100) != 103 { panic(90311); };
+    if apply_arm(pick_guard, 2) != 4 { panic(90312); };
+    if apply_arm(pick_guard, 10) != 14 { panic(90313); };
+}

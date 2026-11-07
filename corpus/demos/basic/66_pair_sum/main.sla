@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 194_class_pair：双字段类 + 求和方法（SLA 用 struct + impl 表达）。
+// 与 11/12（单字段 Counter）互补，此处为双字段 + 读方法。
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+impl Pair {
+    fn new(a: i32, b: i32) -> Pair {
+        return Pair { a: a, b: b };
+    }
+
+    fn sum(self) -> i32 {
+        return self.a + self.b;
+    }
+}
+
+fn main() -> i32 {
+    let p = Pair::new(11, 22);
+    println("{},{},{}", p.sum(), p.a, p.b);
+    return 0;
+}
+
+@test "basic 66 pair sum"() {
+    let p = Pair::new(11, 22);
+    if p.sum() != 33 { panic(6601); };
+    if p.a != 11 { panic(6602); };
+    if p.b != 22 { panic(6603); };
+}

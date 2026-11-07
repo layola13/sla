@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 中央二项 C(8,4)=70，C(10,5)=252，C(12,6)=924（Catalan 商式的分子源）。
+// 意对标 557_central（取顶版互补；730 做商表对峙）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", binom_mul(8, 4), binom_mul(10, 5), binom_mul(12, 6));
+    return 0;
+}
+
+@test "basic 729 central binom"() {
+    if binom_mul(8, 4) != 70 { panic(72901); };
+    if binom_mul(10, 5) != 252 { panic(72902); };
+    if binom_mul(12, 6) != 924 { panic(72903); };
+    if binom_mul(6, 3) != 20 { panic(72904); };
+}

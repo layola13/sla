@@ -1,0 +1,1 @@
+@extern contract_score_contract(&slot: ptr) -> i32

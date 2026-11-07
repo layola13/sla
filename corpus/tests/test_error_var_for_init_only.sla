@@ -1,0 +1,12 @@
+// expect: UseBeforeInit
+fn bad_var_for_init_only(limit: i32) -> i32 {
+    var x: i32;
+    for i in 0..limit {
+        x = i;
+    }
+    return x;
+}
+
+fn main() -> i32 {
+    return bad_var_for_init_only(0);
+}

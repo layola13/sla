@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/hashmap.sa"
+@import "sa_std/btree_map.sa"
+@import "sa_std/core/option.sa"
+
+// `map.clear()` for HashMap/BTreeMap (output verified via build-exe:
+// `0,3,0,8`).
+fn main() -> i32 {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+    m.clear();
+    println("{}", len(m));
+    m.insert("c", 3);
+    println("{}", m.get("c").copied().unwrap_or_default());
+    let b = BTreeMap::new();
+    b.insert("x", 7);
+    b.clear();
+    println("{}", len(b));
+    b.insert("y", 8);
+    println("{}", b.get("y").copied().unwrap_or_default());
+    return 0;
+}
+
+@test "unit map clear"() {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+    m.clear();
+    if len(m) != 0 {
+        panic(16001);
+    };
+    if m.get("a").copied().unwrap_or_default() != 0 {
+        panic(16002);
+    };
+    m.insert("c", 3);
+    if m.get("c").copied().unwrap_or_default() != 3 {
+        panic(16003);
+    };
+    let b = BTreeMap::new();
+    b.insert("x", 7);
+    b.clear();
+    if len(b) != 0 {
+        panic(16004);
+    };
+    b.insert("y", 8);
+    if b.get("y").copied().unwrap_or_default() != 8 {
+        panic(16005);
+    };
+}

@@ -1,0 +1,93 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_simd_lane_sum = vtable { call = @sla__simd_lane_sum }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__simd_lane_sum() -> i32:
+L_ENTRY:
+    lanes = alloc 16
+    tmp_0 = 1
+    store lanes+0, tmp_0 as i32
+    tmp_1 = 2
+    store lanes+4, tmp_1 as i32
+    tmp_2 = 3
+    store lanes+8, tmp_2 as i32
+    tmp_3 = 4
+    store lanes+12, tmp_3 as i32
+    tmp_4 = 0
+    tmp_5 = 0
+    tmp_6 = ptr_add lanes, tmp_5
+    tmp_7 = load tmp_6+0 as i32
+    tmp_8 = add tmp_4, tmp_7
+    !tmp_5
+    !tmp_6
+    !tmp_7
+    !tmp_4
+    tmp_9 = 4
+    tmp_10 = ptr_add lanes, tmp_9
+    tmp_11 = load tmp_10+0 as i32
+    tmp_12 = add tmp_8, tmp_11
+    !tmp_9
+    !tmp_10
+    !tmp_11
+    !tmp_8
+    tmp_13 = 8
+    tmp_14 = ptr_add lanes, tmp_13
+    tmp_15 = load tmp_14+0 as i32
+    tmp_16 = add tmp_12, tmp_15
+    !tmp_13
+    !tmp_14
+    !tmp_15
+    !tmp_12
+    tmp_17 = 12
+    tmp_18 = ptr_add lanes, tmp_17
+    tmp_19 = load tmp_18+0 as i32
+    tmp_20 = add tmp_16, tmp_19
+    !tmp_17
+    !tmp_18
+    !tmp_19
+    !tmp_16
+    total = tmp_20
+    !lanes
+    return total
+
+@main() -> i32:
+L_ENTRY:
+    tmp_21 = call @sla__simd_lane_sum()
+    result = tmp_21
+    tmp_22 = call @sa_fmt_u64(result, 10)
+    tmp_23 = call @sa_fmt_buffer_data(tmp_22)
+    tmp_24 = call @sa_fmt_buffer_len(tmp_22)
+    tmp_25 = tmp_23
+    call @sa_print_bytes(&tmp_25, tmp_24)
+    call @sa_fmt_buffer_free(^tmp_22)
+    !tmp_25
+    !tmp_24
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 119 119_simd_intrinsics"():
+L_TEST_ENTRY_0:
+    tmp_26 = call @sla__simd_lane_sum()
+    got = tmp_26
+    tmp_27 = 10
+    tmp_28 = ne got, tmp_27
+    !tmp_27
+    br tmp_28 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_28
+    panic(119)
+
+L_ELSE_2:
+    !tmp_28
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

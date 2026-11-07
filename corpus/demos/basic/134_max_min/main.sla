@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 511_math_int 的 max/min 部（7,3,7,3）。
+// SLA 尚无 `Math.max/min`，用分支表达（与 34 的 pick-max 同构，
+// 此处覆盖双函数 + 极值相等分支）。
+
+fn max2(a: i32, b: i32) -> i32 {
+    if a > b { return a; };
+    return b;
+}
+
+fn min2(a: i32, b: i32) -> i32 {
+    if a < b { return a; };
+    return b;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", max2(3, 7), min2(3, 7), max2(5, 5), min2(9, 2));
+    return 0;
+}
+
+@test "basic 134 max min"() {
+    if max2(3, 7) != 7 { panic(13401); };
+    if min2(3, 7) != 3 { panic(13402); };
+    if max2(5, 5) != 5 { panic(13403); };
+    if min2(9, 2) != 2 { panic(13404); };
+}

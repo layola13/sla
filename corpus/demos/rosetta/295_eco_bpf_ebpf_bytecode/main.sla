@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn eco_ebpf_instruction_kinds() -> i32 { let load = 1; let return_op = 1; return load + return_op; }
+fn main() -> i32 { let load = 1; let return_op = 1; let result = load + return_op; println("{}", result); return result; }
+@test "rosetta 295 eco bpf ebpf bytecode"() { let got = eco_ebpf_instruction_kinds(); if got != 2 { panic(295); }; }

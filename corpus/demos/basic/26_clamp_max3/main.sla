@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 126_clamp：clamp(5)=5, clamp(-3)=1, clamp(99)=10。
+
+fn clamp(x: i32, lo: i32, hi: i32) -> i32 {
+    return if x < lo { lo } else if x > hi { hi } else { x };
+}
+
+fn max3(a: i32, b: i32, c: i32) -> i32 {
+    let m = if a > b { a } else { b };
+    return if m > c { m } else { c };
+}
+
+fn main() -> i32 {
+    println("{},{},{}", clamp(5, 1, 10), clamp(-3, 1, 10), clamp(99, 1, 10));
+    println("{}", max3(3, 9, 7));
+    return 0;
+}
+
+@test "basic 26 clamp max3"() {
+    if clamp(5, 1, 10) != 5 { panic(2601); };
+    if clamp(-3, 1, 10) != 1 { panic(2602); };
+    if clamp(99, 1, 10) != 10 { panic(2603); };
+    if max3(3, 9, 7) != 9 { panic(2604); };
+}

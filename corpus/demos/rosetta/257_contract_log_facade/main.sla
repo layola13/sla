@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_log_facade_levels() -> i32 {
+    let info = 1;
+    let warn = 1;
+    let error = 1;
+    return info + warn + error;
+}
+
+fn main() -> i32 {
+    let info = 1;
+    let warn = 1;
+    let error = 1;
+    let result = info + warn + error;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 257 contract log facade"() {
+    let got = contract_log_facade_levels();
+    if got != 3 { panic(257); };
+}

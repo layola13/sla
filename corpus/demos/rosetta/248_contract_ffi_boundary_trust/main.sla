@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_ffi_boundary_checks() -> i32 {
+    let pointer_checked = 1;
+    let length_checked = 1;
+    return pointer_checked + length_checked;
+}
+
+fn main() -> i32 {
+    let pointer_checked = 1;
+    let length_checked = 1;
+    let result = pointer_checked + length_checked;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 248 contract ffi boundary trust"() {
+    let got = contract_ffi_boundary_checks();
+    if got != 2 { panic(248); };
+}

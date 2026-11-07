@@ -1,0 +1,5 @@
+#def Entity_SIZE = 16
+#def Entity_X = +0
+#def Entity_Y = +4
+#def Entity_VX = +8
+#def Entity_VY = +12

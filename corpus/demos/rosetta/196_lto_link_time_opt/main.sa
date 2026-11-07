@@ -1,0 +1,98 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_leaf = vtable { call = @sla__leaf }
+@const SLA_FNPTR_VT_inner = vtable { call = @sla__inner }
+@const SLA_FNPTR_VT_cold_path = vtable { call = @sla__cold_path }
+@const SLA_FNPTR_VT_lto_hot_cold_sum = vtable { call = @sla__lto_hot_cold_sum }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__leaf(a: i32, b: i32) -> i32:
+L_ENTRY:
+    tmp_0 = add a, b
+    !b
+    !a
+    return tmp_0
+
+@sla__inner(x: i32) -> i32:
+L_ENTRY:
+    tmp_1 = 1
+    tmp_2 = call @sla__leaf(x, tmp_1)
+    !tmp_1
+    tmp_3 = 2
+    tmp_4 = call @sla__leaf(x, tmp_3)
+    !tmp_3
+    tmp_5 = add tmp_2, tmp_4
+    !tmp_2
+    !tmp_4
+    !x
+    return tmp_5
+
+@sla__cold_path(x: i32) -> i32:
+L_ENTRY:
+    tmp_6 = call @sla__inner(x)
+    tmp_7 = 3
+    tmp_8 = 4
+    tmp_9 = call @sla__leaf(tmp_7, tmp_8)
+    !tmp_7
+    !tmp_8
+    tmp_10 = add tmp_6, tmp_9
+    !tmp_6
+    !tmp_9
+    !x
+    return tmp_10
+
+@sla__lto_hot_cold_sum() -> i32:
+L_ENTRY:
+    tmp_11 = 1
+    tmp_12 = call @sla__inner(tmp_11)
+    !tmp_11
+    hot_path = tmp_12
+    tmp_13 = 2
+    tmp_14 = call @sla__cold_path(tmp_13)
+    !tmp_13
+    cold_path_result = tmp_14
+    tmp_15 = add hot_path, cold_path_result
+    !cold_path_result
+    !hot_path
+    return tmp_15
+
+@main() -> i32:
+L_ENTRY:
+    tmp_16 = call @sla__lto_hot_cold_sum()
+    result = tmp_16
+    tmp_17 = call @sa_fmt_u64(result, 10)
+    tmp_18 = call @sa_fmt_buffer_data(tmp_17)
+    tmp_19 = call @sa_fmt_buffer_len(tmp_17)
+    tmp_20 = tmp_18
+    call @sa_print_bytes(&tmp_20, tmp_19)
+    call @sa_fmt_buffer_free(^tmp_17)
+    !tmp_20
+    !tmp_19
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 196 196_lto_link_time_opt"():
+L_TEST_ENTRY_0:
+    tmp_21 = call @sla__lto_hot_cold_sum()
+    got = tmp_21
+    tmp_22 = 19
+    tmp_23 = ne got, tmp_22
+    !tmp_22
+    br tmp_23 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_23
+    panic(196)
+
+L_ELSE_2:
+    !tmp_23
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

@@ -1,0 +1,261 @@
+// DEF-R6 corpus: unbuffered (cap-0) multi-arm select must not
+// wedge or lose payloads. Registered signature (slanginx
+// classification, 2026-10-30): five-arm cap-0 select under the
+// SAB backend wedged, previously masked by the DEF-4 stack
+// death; the DEF-4 corpus therefore used cap-8192 arms.
+// DEF-R6 matrix (20000 rounds, worker select-recv loop vs main
+// plain sender, plus a step-function shape): on the pre-R4
+// base (sci fcbb6858) EVERY cap-0 recv cell wedges -- 2, 3, 4
+// and 5 arms, SAB and SA-text backends alike (supervised
+// timeout), while cap-8192 passes on both; the 5-arm
+// send-direction cell fails with a wrong sum (panic 81
+// accounting). Minimal signature is therefore 2 arms, cap 0,
+// either backend: the mechanism is the DEF-R4 sa_chan_select
+// phase-2 take-before-claim payload loss -- a lost rendezvous
+// value leaves the worker's receive count permanently short
+// with no timeout arm to escape through, i.e. a wedge in this
+// shape and an accounting loss in the R4 oneshot shape. The
+// R4 claim-before-move fix (sci 5fc27a86) closes every cell;
+// this corpus pins that closure. Baseline failure mode on a
+// pre-R4 tree is a HANG for the recv tests (bounded by the
+// supervised runner's per-test timeout) and panic 81 for the
+// send test. Panic codes: 81 wrong sum, 82 done closed,
+// 83 join trap.
+@import "sa_std/ptr.sa"
+@import "sa_std/task.sai"
+@import "sa_std/core/box.sa"
+
+
+struct SelJob2 {
+    a: Chan<u64>,
+    b: Chan<u64>,
+    done: Chan<u64>,
+    rounds: u64,
+}
+
+fn sel2_worker(job: *SelJob2) {
+    let got: u64 = 0;
+    let sum: u64 = 0;
+    while got < (*job).rounds {
+        select {
+            case let v = (*job).a.recv() {
+                sum = sum + v;
+                got = got + 1;
+            }
+            case let v = (*job).b.recv() {
+                sum = sum + v;
+                got = got + 1;
+            }
+        }
+    }
+    (*job).done.send(sum);
+}
+
+@test "def-r6 unbuffered 2-arm select does not wedge"() {
+    let ca: Chan<u64> = Chan::new(0);
+    let cb: Chan<u64> = Chan::new(0);
+    let cdone: Chan<u64> = Chan::new(1);
+    let job = Box::into_raw(Box::new(SelJob2 {
+        a: ca, b: cb,
+        done: cdone, rounds: 20000,
+    }));
+    let h = go sel2_worker(job);
+    let i: u64 = 0;
+    while i < 20000 {
+        let m = i % 2;
+        if m == 0 { (*job).a.send(i + 1); };
+        if m == 1 { (*job).b.send(i + 1); };
+        i = i + 1;
+    }
+    let (sum, closed) = (*job).done.recv();
+    if closed { panic(82); };
+    if sa_task_join(h) != 0 { panic(83); };
+    if sum != 200010000 { panic(81); };
+    (*job).a.destroy();
+    (*job).b.destroy();
+    (*job).done.destroy();
+    let done_job = unsafe { Box::from_raw(job) };
+}
+
+
+struct SelJob5 {
+    a: Chan<u64>,
+    b: Chan<u64>,
+    c: Chan<u64>,
+    d: Chan<u64>,
+    e: Chan<u64>,
+    done: Chan<u64>,
+    rounds: u64,
+}
+
+fn sel5_worker(job: *SelJob5) {
+    let got: u64 = 0;
+    let sum: u64 = 0;
+    while got < (*job).rounds {
+        select {
+            case let v = (*job).a.recv() {
+                sum = sum + v;
+                got = got + 1;
+            }
+            case let v = (*job).b.recv() {
+                sum = sum + v;
+                got = got + 1;
+            }
+            case let v = (*job).c.recv() {
+                sum = sum + v;
+                got = got + 1;
+            }
+            case let v = (*job).d.recv() {
+                sum = sum + v;
+                got = got + 1;
+            }
+            case let v = (*job).e.recv() {
+                sum = sum + v;
+                got = got + 1;
+            }
+        }
+    }
+    (*job).done.send(sum);
+}
+
+@test "def-r6 unbuffered 5-arm select does not wedge"() {
+    let ca: Chan<u64> = Chan::new(0);
+    let cb: Chan<u64> = Chan::new(0);
+    let cc: Chan<u64> = Chan::new(0);
+    let cd: Chan<u64> = Chan::new(0);
+    let ce: Chan<u64> = Chan::new(0);
+    let cdone: Chan<u64> = Chan::new(1);
+    let job = Box::into_raw(Box::new(SelJob5 {
+        a: ca, b: cb, c: cc, d: cd, e: ce,
+        done: cdone, rounds: 20000,
+    }));
+    let h = go sel5_worker(job);
+    let i: u64 = 0;
+    while i < 20000 {
+        let m = i % 5;
+        if m == 0 { (*job).a.send(i + 1); };
+        if m == 1 { (*job).b.send(i + 1); };
+        if m == 2 { (*job).c.send(i + 1); };
+        if m == 3 { (*job).d.send(i + 1); };
+        if m == 4 { (*job).e.send(i + 1); };
+        i = i + 1;
+    }
+    let (sum, closed) = (*job).done.recv();
+    if closed { panic(82); };
+    if sa_task_join(h) != 0 { panic(83); };
+    if sum != 200010000 { panic(81); };
+    (*job).a.destroy();
+    (*job).b.destroy();
+    (*job).c.destroy();
+    (*job).d.destroy();
+    (*job).e.destroy();
+    (*job).done.destroy();
+    let done_job = unsafe { Box::from_raw(job) };
+}
+
+
+struct FwdJob {
+    ch: Chan<u64>,
+    out: Chan<u64>,
+}
+
+fn fwd_step(job: *FwdJob) -> i32 {
+    let (v, closed) = (*job).ch.recv();
+    if closed { return 1; };
+    (*job).out.send(v);
+    return 0;
+}
+
+fn fwd_worker(job: *FwdJob) {
+    let run: u64 = 1;
+    while run == 1 {
+        let rc = fwd_step(job);
+        if rc == 1 { run = 0; };
+    }
+}
+
+struct ColJob {
+    src: Chan<u64>,
+    done: Chan<u64>,
+    rounds: u64,
+}
+
+fn col_step(job: *ColJob, st: *ColState) {
+    let (v, closed) = (*job).src.recv();
+    (*st).sum = (*st).sum + v;
+    (*st).got = (*st).got + 1;
+}
+
+struct ColState {
+    got: u64,
+    sum: u64,
+}
+
+fn col_worker(job: *ColJob) {
+    let st = Box::into_raw(Box::new(ColState { got: 0, sum: 0 }));
+    while (*st).got < (*job).rounds {
+        col_step(job, st);
+    }
+    (*job).done.send((*st).sum);
+}
+
+fn send_step(chs: *SendChs, v: u64) {
+    let hit: u64 = 0;
+    select {
+        case (*chs).a.send(v) { hit = 1; }
+        case (*chs).b.send(v) { hit = 2; }
+        case (*chs).c.send(v) { hit = 3; }
+        case (*chs).d.send(v) { hit = 4; }
+        case (*chs).e.send(v) { hit = 5; }
+    }
+}
+
+struct SendChs {
+    a: Chan<u64>,
+    b: Chan<u64>,
+    c: Chan<u64>,
+    d: Chan<u64>,
+    e: Chan<u64>,
+}
+
+@test "def-r6 unbuffered 5-arm send select keeps every payload"() {
+    let ca: Chan<u64> = Chan::new(0);
+    let cb: Chan<u64> = Chan::new(0);
+    let cc: Chan<u64> = Chan::new(0);
+    let cd: Chan<u64> = Chan::new(0);
+    let ce: Chan<u64> = Chan::new(0);
+    let cout: Chan<u64> = Chan::new(64);
+    let cdone: Chan<u64> = Chan::new(1);
+    let ja = Box::into_raw(Box::new(FwdJob { ch: ca, out: cout }));
+    let jb = Box::into_raw(Box::new(FwdJob { ch: cb, out: cout }));
+    let jc = Box::into_raw(Box::new(FwdJob { ch: cc, out: cout }));
+    let jd = Box::into_raw(Box::new(FwdJob { ch: cd, out: cout }));
+    let je = Box::into_raw(Box::new(FwdJob { ch: ce, out: cout }));
+    let ha = go fwd_worker(ja);
+    let hb = go fwd_worker(jb);
+    let hc = go fwd_worker(jc);
+    let hd = go fwd_worker(jd);
+    let he = go fwd_worker(je);
+    let jcol = Box::into_raw(Box::new(ColJob { src: cout, done: cdone, rounds: 20000 }));
+    let hcol = go col_worker(jcol);
+    let chs = Box::into_raw(Box::new(SendChs { a: ca, b: cb, c: cc, d: cd, e: ce }));
+    let i: u64 = 0;
+    while i < 20000 {
+        send_step(chs, i + 1);
+        i = i + 1;
+    }
+    ca.close();
+    cb.close();
+    cc.close();
+    cd.close();
+    ce.close();
+    if sa_task_join(ha) != 0 { panic(83); };
+    if sa_task_join(hb) != 0 { panic(83); };
+    if sa_task_join(hc) != 0 { panic(83); };
+    if sa_task_join(hd) != 0 { panic(83); };
+    if sa_task_join(he) != 0 { panic(83); };
+    let (sum, closed) = cdone.recv();
+    if closed { panic(82); };
+    if sa_task_join(hcol) != 0 { panic(83); };
+    if sum != 200010000 { panic(81); };
+}

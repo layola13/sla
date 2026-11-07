@@ -1,0 +1,10 @@
+@import "resolver/../packages/v1_0_0/index.sa"
+@import "resolver/../packages/v2_0_0/index.sa"
+
+@resolver_value() -> i32:
+L_ENTRY:
+    first = call @v1_package_value()
+    second = call @v2_package_value()
+    !first
+    !second
+    return 207

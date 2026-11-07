@@ -1,0 +1,56 @@
+// P0 coverage (census 2026-11-06): i32.add_offset and i32.double —
+// `using` static extension methods on primitive i32. Probe-verified
+// (tools/sab_audit/probes/using_ext.sla) but had no unit test.
+
+mod math {
+    pub fn double(value: i32) -> i32 {
+        return value + value;
+    }
+
+    pub fn add_offset(value: i32, offset: i32) -> i32 {
+        return value + offset;
+    }
+}
+
+using math;
+
+struct NumberBox {
+    value: i32,
+}
+
+impl NumberBox {
+    fn double(self) -> i32 {
+        return self.value.double();
+    }
+
+    fn add_offset(self, offset: i32) -> i32 {
+        return self.value.add_offset(offset);
+    }
+}
+
+@test "i32 double extension direct"() {
+    let x: i32 = 12;
+    if x.double() != 24 { panic(88201); };
+    let zero: i32 = 0;
+    if zero.double() != 0 { panic(88202); };
+    let neg: i32 = 0 - 7;
+    if neg.double() != 0 - 14 { panic(88203); };
+}
+
+@test "i32 add_offset extension direct"() {
+    let x: i32 = 12;
+    if x.add_offset(5) != 17 { panic(88211); };
+    if x.add_offset(0) != 12 { panic(88212); };
+    if x.add_offset(0 - 12) != 0 { panic(88213); };
+    if x.add_offset(0 - 20) != 0 - 8 { panic(88214); };
+}
+
+@test "i32 extension chaining and box forwarding"() {
+    let x: i32 = 12;
+    if x.add_offset(3).double() != 30 { panic(88221); };
+    if x.double().add_offset(1) != 25 { panic(88222); };
+
+    let boxed = NumberBox { value: 12 };
+    if boxed.double() != 24 { panic(88223); };
+    if boxed.add_offset(5) != 17 { panic(88224); };
+}

@@ -1,0 +1,3 @@
+# Future metadata only. Not compiler input.
+[workspace]
+members = ["workspace/members/alpha", "workspace/members/beta"]

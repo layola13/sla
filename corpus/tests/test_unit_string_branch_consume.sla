@@ -1,0 +1,110 @@
+@import "sa_std/string.sa"
+
+// Regression (beta): a by-value String consumed on only one side of a
+// branch must be released on the other side before the merge. The SA
+// text backend previously emitted no compensating release, so the
+// generated SA reached the merge label with the register Active from
+// one predecessor and Consumed from the other (referee
+// PhiStateConflict), and url.sla's url_query_encode_pair -- whose
+// `value` param is consumed only under `if has_value` -- could not
+// compile on the SA text backend at all (SAB was unaffected).
+
+fn beta_quote(s: String) -> String {
+    return s;
+}
+
+fn beta_fallible(x: i64) -> Result<i64, i32> {
+    if x < 0 {
+        return Err(7);
+    };
+    return Ok(x + 1);
+}
+
+fn beta_encode_like(key: String, value: String, has_value: bool) -> String {
+    let out: String = format("");
+    let ek: String = beta_quote(key);
+    out = format("{}", ek);
+    if has_value {
+        let ev: String = beta_quote(value);
+        out = format("{}{}", out, ev);
+    };
+    return out;
+}
+
+fn beta_maybe_wrap(s: String, flag: bool) -> String {
+    let out: String = format("");
+    if flag {
+        let t: String = s;
+        out = format("{}", t);
+    };
+    return out;
+}
+
+fn beta_nested_consume(s: String, a: bool, b: bool) -> String {
+    let out: String = format("");
+    if a {
+        if b {
+            let t: String = beta_quote(s);
+            out = format("{}", t);
+        };
+    };
+    return out;
+}
+
+@test "branch-consumed string param (call shape)"() {
+    let a: String = beta_encode_like(format("k"), format("v"), true);
+    if !str_eq(&a, "kv") {
+        panic(5301);
+    };
+    let b: String = beta_encode_like(format("k"), format("v"), false);
+    if !str_eq(&b, "k") {
+        panic(5302);
+    };
+}
+
+@test "branch-consumed string param (move shape)"() {
+    let a: String = beta_maybe_wrap(format("hello"), true);
+    if !str_eq(&a, "hello") {
+        panic(5303);
+    };
+    let b: String = beta_maybe_wrap(format("hello"), false);
+    if len(b) != 0 {
+        panic(5304);
+    };
+}
+
+@test "branch-consumed string param (match in then)"() {
+    let s: String = format("hello");
+    if len(s) > 0 {
+        let r = beta_fallible(3);
+        match r {
+            Ok(v) => {
+                if v < 0 {
+                    panic(5308);
+                };
+            },
+            Err(e) => {
+                return;
+            },
+        };
+    };
+    let w: String = beta_maybe_wrap(s, true);
+    if !str_eq(&w, "hello") {
+        panic(5309);
+    };
+}
+
+@test "branch-consumed string param (nested if)"() {
+    let a: String = beta_nested_consume(format("deep"), true, true);
+    if !str_eq(&a, "deep") {
+        panic(5305);
+    };
+    let b: String = beta_nested_consume(format("deep"), true, false);
+    if len(b) != 0 {
+        panic(5306);
+    };
+    let c: String = beta_nested_consume(format("deep"), false, true);
+    if len(c) != 0 {
+        panic(5307);
+    };
+}

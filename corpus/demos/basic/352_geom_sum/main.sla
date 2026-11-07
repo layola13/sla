@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 等比求和（1+2+4+...+32=63）。
+// 意对标 330 等差版的等比版（330 互补）。
+
+fn geom_sum(n: int) -> int {
+    let s = 0;
+    let t = 1;
+    let i = 0;
+    while i < n {
+        s = s + t;
+        t = t * 2;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", geom_sum(6), geom_sum(4));
+    return 0;
+}
+
+@test "basic 352 geom sum"() {
+    if geom_sum(6) != 63 { panic(35201); };
+    if geom_sum(4) != 15 { panic(35202); };
+    if geom_sum(1) != 1 { panic(35203); };
+}

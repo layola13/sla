@@ -1,0 +1,106 @@
+@import "sa_std/io/print.sai"
+@iter(values: ptr) -> ptr:
+L_ENTRY:
+    return values
+
+@sum(values: ptr) -> i64:
+L_ENTRY:
+    tmp_0 = 0
+    total = tmp_0
+    i = 0
+    tmp_1 = mul i, 8
+    tmp_2 = ptr_add values, tmp_1
+    tmp_3 = load tmp_2+0 as i64
+    tmp_4 = add total, tmp_3
+    !total
+    total = tmp_4
+    !i
+    i = 1
+    tmp_5 = mul i, 8
+    tmp_6 = ptr_add values, tmp_5
+    tmp_7 = load tmp_6+0 as i64
+    tmp_8 = add total, tmp_7
+    !total
+    total = tmp_8
+    !i
+    i = 2
+    tmp_9 = mul i, 8
+    tmp_10 = ptr_add values, tmp_9
+    tmp_11 = load tmp_10+0 as i64
+    tmp_12 = add total, tmp_11
+    !total
+    total = tmp_12
+    !i
+    i = 3
+    tmp_13 = mul i, 8
+    tmp_14 = ptr_add values, tmp_13
+    tmp_15 = load tmp_14+0 as i64
+    tmp_16 = add total, tmp_15
+    !total
+    total = tmp_16
+    !i
+    !values
+    return total
+
+@rosetta_013_value() -> i64:
+L_ENTRY:
+    values = alloc 32
+    tmp_17 = 1
+    store values+0, tmp_17 as i64
+    tmp_18 = 2
+    store values+8, tmp_18 as i64
+    tmp_19 = 3
+    store values+16, tmp_19 as i64
+    tmp_20 = 4
+    store values+24, tmp_20 as i64
+    tmp_21 = call @iter(values)
+    tmp_22 = call @sum(tmp_21)
+    !tmp_21
+    sum = tmp_22
+    !values
+    return sum
+
+@main() -> i64:
+L_ENTRY:
+    tmp_23 = call @rosetta_013_value()
+    result = tmp_23
+    tmp_24 = 10
+    tmp_25 = ne result, tmp_24
+    br tmp_25 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_25
+    panic(13)
+
+L_ELSE_1:
+    !tmp_25
+    jmp L_MERGE_2
+
+L_MERGE_2:
+    @const SLA_STR_0 = utf8:"10\n"
+    tmp_29 = 3
+    call @sa_print_bytes(&SLA_STR_0, tmp_29)
+    tmp_30 = 0
+    !result
+    return tmp_30
+
+@test "rosetta 013 array sum"():
+L_TEST_ENTRY_3:
+    tmp_31 = call @rosetta_013_value()
+    got = tmp_31
+    tmp_32 = 10
+    tmp_33 = ne got, tmp_32
+    br tmp_33 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_33
+    panic(13)
+
+L_ELSE_5:
+    !tmp_33
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !got
+    return
+

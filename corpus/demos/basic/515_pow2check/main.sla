@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 二幂判定（n>0 且 n&(n-1)==0：8 是，12 否）。
+// 意对标 514 奇偶性的位技巧版（514 互补）。
+
+fn is_pow2(n: int) -> int {
+    if n <= 0 { return 0; };
+    if (n & (n - 1)) == 0 { return 1; };
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", is_pow2(8), is_pow2(12), is_pow2(1), is_pow2(0));
+    return 0;
+}
+
+@test "basic 515 pow2check"() {
+    if is_pow2(8) != 1 { panic(51501); };
+    if is_pow2(12) != 0 { panic(51502); };
+    if is_pow2(1) != 1 { panic(51503); };
+    if is_pow2(0) != 0 { panic(51504); };
+}

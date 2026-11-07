@@ -1,0 +1,45 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Riordan 序列前 7 项 1,0,1,1,3,6,15（和 27；前缀和循环求和）。
+// 意对标 636_riordan（单值版互补；同式序列复算）。
+
+fn rio(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 0; };
+    let ii = 2;
+    while ii <= n {
+        t[ii] = (ii - 1) * (2 * t[ii - 1] + 3 * t[ii - 2]) / (ii + 1);
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn rioseq(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + rio(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", rio(0), rio(1), rioseq(6));
+    return 0;
+}
+
+@test "basic 637 rio seq"() {
+    if rioseq(6) != 27 { panic(63701); };
+    if rio(0) != 1 { panic(63702); };
+    if rio(1) != 0 { panic(63703); };
+    if rioseq(4) != 6 { panic(63704); };
+}

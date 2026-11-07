@@ -1,0 +1,94 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/future.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_select_first_ready_value = vtable { call = @sla__select_first_ready_value }
+@const SLA_FNPTR_VT_branch_a = vtable { call = @sla__branch_a }
+@const SLA_FNPTR_VT_branch_b = vtable { call = @sla__branch_b }
+@const SLA_FNPTR_VT_select_first_ready = vtable { call = @sla__select_first_ready }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__select_first_ready_value() -> i32:
+L_ENTRY:
+    tmp_0 = call @sla__branch_a()
+    EXPAND FUTURE_READY_STATE_INTO_INNER tmp_1, tmp_0
+    !tmp_0
+    left = tmp_1
+    tmp_2 = call @sla__branch_b()
+    EXPAND FUTURE_READY_STATE_INTO_INNER tmp_3, tmp_2
+    !tmp_2
+    right = tmp_3
+    tmp_4 = call @sla__select_first_ready(left, right)
+    !right
+    !left
+    return tmp_4
+
+@sla__branch_a() -> ptr:
+L_ENTRY:
+    tmp_5 = 11
+    EXPAND FUTURE_READY_STATE_NEW tmp_6, tmp_5
+    return tmp_6
+
+@sla__branch_b() -> ptr:
+L_ENTRY:
+    tmp_7 = 22
+    EXPAND FUTURE_READY_STATE_NEW tmp_8, tmp_7
+    return tmp_8
+
+@sla__select_first_ready(left: i32, right: i32) -> i32:
+L_ENTRY:
+    tmp_9 = 0
+    tmp_10 = ne left, tmp_9
+    !tmp_9
+    br tmp_10 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_10
+    !right
+    return left
+
+L_ELSE_1:
+    !tmp_10
+    !left
+    return right
+
+
+@main() -> i32:
+L_ENTRY:
+    tmp_12 = call @sla__select_first_ready_value()
+    result = tmp_12
+    tmp_13 = call @sa_fmt_u64(result, 10)
+    tmp_14 = call @sa_fmt_buffer_data(tmp_13)
+    tmp_15 = call @sa_fmt_buffer_len(tmp_13)
+    tmp_16 = tmp_14
+    call @sa_print_bytes(&tmp_16, tmp_15)
+    call @sa_fmt_buffer_free(^tmp_13)
+    !tmp_16
+    !tmp_15
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 133 133_select_macro_race"():
+L_TEST_ENTRY_3:
+    tmp_17 = call @sla__select_first_ready_value()
+    got = tmp_17
+    tmp_18 = 11
+    tmp_19 = ne got, tmp_18
+    !tmp_18
+    br tmp_19 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_19
+    panic(133)
+
+L_ELSE_5:
+    !tmp_19
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !got
+    return
+

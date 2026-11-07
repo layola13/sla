@@ -1,0 +1,35 @@
+@import "sa_std/core/option.sa"
+
+@test "direct option constructors and query methods"() {
+    let some: Option<i32> = Some(7);
+    let none: Option<i32> = None;
+
+    if !some.is_some() { panic(31201); };
+    if some.is_none() { panic(31202); };
+    if none.is_some() { panic(31203); };
+    if !none.is_none() { panic(31204); };
+    if some.unwrap() != 7 { panic(31205); };
+    if some.unwrap_or(9) != 7 { panic(31206); };
+    if none.unwrap_or(9) != 9 { panic(31207); };
+};
+
+@test "associated option constructors strict sab parity"() {
+    let a: Option<i32> = Option::Some(42);
+    let b: Option<i32> = Option::None;
+    let c: Option<i32> = None;
+
+    if a.unwrap() != 42 { panic(31211); };
+    if !b.is_none() { panic(31212); };
+    if !c.is_none() { panic(31213); };
+    if b.unwrap_or(5) != 5 { panic(31214); };
+};
+
+@test "none call forms strict sab parity"() {
+    let a: Option<i32> = None();
+    let b: Option<i32> = Option::None();
+
+    if !a.is_none() { panic(31221); };
+    if !b.is_none() { panic(31222); };
+    if a.unwrap_or(3) != 3 { panic(31223); };
+    if b.unwrap_or(4) != 4 { panic(31224); };
+};

@@ -1,0 +1,6 @@
+@import "src/flags/helpers/index.sa"
+
+@flags_package_value() -> i32:
+L_ENTRY:
+    value = call @flags_helper_value()
+    return value

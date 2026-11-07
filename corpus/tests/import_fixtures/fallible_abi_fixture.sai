@@ -1,0 +1,5 @@
+# A_min ABI-gate fixture: a fallible extern whose payload type is an
+# aggregate with no primitive SA layout. The Result materialization
+# must refuse this at the call (FalliblePayloadUnsupported) rather
+# than reading the payload slot with a fallback layout.
+@extern sa_fixture_fallible_vec(x: u64) -> Vec!

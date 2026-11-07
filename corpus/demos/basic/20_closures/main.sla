@@ -1,0 +1,73 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 109_closure / 24_find_some_every：闭包捕获 + 手写 find/some/every 循环版。
+
+fn closure_capture_value() -> int {
+    let offset = 5;
+    let add_offset = |x: int| x + offset;
+    return add_offset(10);
+}
+
+fn vec_find_gt(values: Vec<i32>, target: i32) -> int {
+    let i: i32 = 0;
+    while i < len(values) as i32 {
+        if values[i] > target {
+            return values[i];
+        };
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn vec_some_gt(values: Vec<i32>, target: i32) -> bool {
+    let i: i32 = 0;
+    while i < len(values) as i32 {
+        if values[i] > target {
+            return true;
+        };
+        i = i + 1;
+    }
+    return false;
+}
+
+fn vec_every_gt(values: Vec<i32>, target: i32) -> bool {
+    let i: i32 = 0;
+    while i < len(values) as i32 {
+        if values[i] <= target {
+            return false;
+        };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn main() -> i32 {
+    println("{}", closure_capture_value());
+    let a: Vec<i32> = Vec::new();
+    a.push(3);
+    a.push(1);
+    a.push(4);
+    a.push(1);
+    a.push(5);
+    println("{}", vec_find_gt(a, 3));
+    println("{}", vec_some_gt(a, 4));
+    println("{}", vec_every_gt(a, 0));
+    return 0;
+}
+
+@test "basic 20 closures find some every"() {
+    if closure_capture_value() != 15 { panic(2001); };
+    let a: Vec<i32> = Vec::new();
+    a.push(3);
+    a.push(1);
+    a.push(4);
+    a.push(1);
+    a.push(5);
+    if vec_find_gt(a, 3) != 4 { panic(2002); };
+    if vec_some_gt(a, 4) != true { panic(2003); };
+    if vec_some_gt(a, 9) { panic(2004); };
+    if vec_every_gt(a, 0) != true { panic(2005); };
+    if vec_every_gt(a, 2) { panic(2006); };
+}

@@ -1,0 +1,8 @@
+@import "public/../internal/bridge.sa"
+
+@export public_value() -> i32:
+L_ENTRY:
+    inner = call @internal_value()
+    value = add inner, 200
+    !inner
+    return value

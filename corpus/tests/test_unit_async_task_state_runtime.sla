@@ -1,0 +1,35 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+fn ready_task_state_after_poll() -> bool {
+    let fut = future::ready(5);
+    let task = task::new(fut);
+    if task::state(task) != 0 {
+        return false;
+    };
+    if task::poll(task) != true {
+        return false;
+    };
+    return task::state(task) == 1;
+}
+
+fn pending_task_state_after_poll() -> bool {
+    let fut = future::pending::<i32>();
+    let task = task::new(fut);
+    if task::state(task) != 0 {
+        return false;
+    };
+    if task::poll(task) != false {
+        return false;
+    };
+    return task::state(task) == 0;
+}
+
+@test "task state runtime"() {
+    if ready_task_state_after_poll() != true {
+        panic(9201);
+    };
+    if pending_task_state_after_poll() != true {
+        panic(9202);
+    };
+}

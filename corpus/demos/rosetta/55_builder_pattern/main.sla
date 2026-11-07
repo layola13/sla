@@ -1,0 +1,50 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+@import "sa_std/string.sa"
+
+struct Request {
+    method: ptr,
+    path: ptr,
+}
+
+struct Builder {
+    method: ptr,
+    path: ptr,
+}
+
+impl Builder {
+    fn new() -> Self {
+        return Self { method: "GET", path: "/" };
+    }
+
+    fn method(self, method: ptr) -> Self {
+        self.method = method;
+        return self;
+    }
+
+    fn path(self, path: ptr) -> Self {
+        self.path = path;
+        return self;
+    }
+
+    fn build(self) -> Request {
+        return Request { method: self.method, path: self.path };
+    }
+}
+
+fn main() -> i32 {
+    let req = Builder::new().method("POST").path("/api").build();
+    println("{} {}", req.method, req.path);
+    return 0;
+}
+
+@test "rosetta 055 builder pattern"() {
+    let req = Builder::new().method("POST").path("/api").build();
+    if str_eq(req.method, "POST") == false {
+        panic(55);
+    };
+    if str_eq(req.path, "/api") == false {
+        panic(155);
+    };
+}

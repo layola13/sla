@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 701_top_arr_oob：动态越界读零（8,0）。
+// 动态下标越界读到 `0`（与 tsgosa 期望一致，双后端 + exe 核对）；
+// 字面量越界下标（`a[9]`）过 check 但 exe lowering 不支持，
+// 此处一律用动态下标（合法性前置判断见 123）。
+
+fn get(a: [i32; 2], i: i32) -> i32 {
+    return a[i];
+}
+
+fn main() -> i32 {
+    let a: [i32; 2] = [7, 8];
+    println("{},{}", get(a, 1), get(a, 9));
+    return 0;
+}
+
+@test "basic 137 oob zero"() {
+    let a: [i32; 2] = [7, 8];
+    if get(a, 1) != 8 { panic(13701); };
+    if get(a, 9) != 0 { panic(13702); };
+    if get(a, 0) != 7 { panic(13703); };
+}

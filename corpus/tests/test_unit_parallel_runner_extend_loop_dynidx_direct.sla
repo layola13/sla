@@ -1,0 +1,87 @@
+@import "sa_std/vec.sa"
+
+// DEF-PARALLEL regression: multi-lane EXTEND loop (while + find_order + dynamic
+// index transfer between by-value holders), WITHOUT the final fnptr calls.
+struct ExtLane {
+    runs: Vec<fn(i32) -> i32>,
+    on_scope_runs: Vec<fn(i32) -> i32>,
+    run_order_positions: Vec<i64>,
+    on_scope_order_positions: Vec<i64>,
+}
+
+fn p3_inc(value: i32) -> i32 {
+    return value + 1;
+}
+
+fn p3_double(value: i32) -> i32 {
+    return value + value;
+}
+
+fn p3_new() -> ExtLane {
+    return ExtLane {
+        runs: Vec::new(),
+        on_scope_runs: Vec::new(),
+        run_order_positions: Vec::new(),
+        on_scope_order_positions: Vec::new(),
+    };
+}
+
+fn p3_len(holder: ExtLane) -> i64 {
+    return (len(holder.runs) + len(holder.on_scope_runs)) as i64;
+}
+
+fn p3_find_order(positions: Vec<i64>, order_pos: i64) -> i64 {
+    let i: i64 = 0;
+    let n = len(positions) as i64;
+    while i < n {
+        if positions[i] == order_pos {
+            return i;
+        };
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn p3_spawn(holder: ExtLane, run: fn(i32) -> i32) -> ExtLane {
+    let order_pos = p3_len(holder);
+    holder.runs.push(run);
+    holder.run_order_positions.push(order_pos);
+    return holder;
+}
+
+fn p3_spawn_on_scope(holder: ExtLane, run: fn(i32) -> i32) -> ExtLane {
+    let order_pos = p3_len(holder);
+    holder.on_scope_runs.push(run);
+    holder.on_scope_order_positions.push(order_pos);
+    return holder;
+}
+
+fn p3_extend(parent: ExtLane, child: ExtLane) -> ExtLane {
+    let order_pos: i64 = 0;
+    let total = p3_len(child);
+    while order_pos < total {
+        let threaded_slot = p3_find_order(child.run_order_positions, order_pos);
+        if threaded_slot >= 0 {
+            parent = p3_spawn(parent, child.runs[threaded_slot]);
+        } else {
+            let local_slot = p3_find_order(child.on_scope_order_positions, order_pos);
+            if local_slot >= 0 {
+                parent = p3_spawn_on_scope(parent, child.on_scope_runs[local_slot]);
+            };
+        };
+        order_pos = order_pos + 1;
+    }
+    return parent;
+}
+
+@test "min parallel extend loop only"() {
+    let parent = p3_new();
+    let child0 = p3_new();
+    let child1 = p3_spawn(child0, p3_inc);
+    let child2 = p3_spawn_on_scope(child1, p3_double);
+    let out = p3_extend(parent, child2);
+    if len(out.runs) as i64 != 1 { panic(9331); };
+    if len(out.on_scope_runs) as i64 != 1 { panic(9332); };
+    if out.run_order_positions[0] != 0 { panic(9333); };
+    if out.on_scope_order_positions[0] != 1 { panic(9334); };
+}

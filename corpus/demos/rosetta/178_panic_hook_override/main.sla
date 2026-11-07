@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn panic_hook_observable_surrogate() -> i32 {
+    let hook_installed = true;
+    let panic_triggered = true;
+    if hook_installed == true {
+        if panic_triggered == true {
+            return 1;
+        };
+    };
+    return 0;
+}
+
+fn main() -> i32 {
+    let hook_installed = true;
+    let panic_triggered = true;
+    let result = if hook_installed == true {
+        if panic_triggered == true { 1 } else { 0 }
+    } else {
+        0
+    };
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 178 178_panic_hook_override"() {
+    let got = panic_hook_observable_surrogate();
+    if got != 1 { panic(178); };
+}

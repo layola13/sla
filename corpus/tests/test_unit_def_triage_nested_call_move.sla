@@ -1,0 +1,47 @@
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+// DEF triage batch 11 (nested-call UseAfterMove, registered in
+// fn-overload-local REPORT sec.9): checking `outer(inner(v))` used to
+// run the call-expression receiver probe over args[0] for EVERY call
+// name. The probe fully checked the inner call — consuming `v` as
+// inner's by-value argument — and the real argument check then re-ran
+// and reported a spurious UseAfterMove. The probe only ever feeds
+// chan method detection (send/recv/close/destroy/len/cap), so it is
+// now restricted to those names.
+
+fn tri_inner(s: String) -> String {
+    return s;
+}
+
+fn tri_outer(s: String) -> String {
+    return s;
+}
+
+fn tri_inner_vec(v: Vec<u8>) -> Vec<u8> {
+    return v;
+}
+
+fn tri_outer_vec(v: Vec<u8>) -> Vec<u8> {
+    return v;
+}
+
+@test "nested call moves string through both calls"() {
+    let v = format("hello");
+    let r = tri_outer(tri_inner(v));
+    if STR_LEN(r) != 5 { panic(5201); };
+}
+
+@test "nested call moves vec through both calls"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(42);
+    let r = tri_outer_vec(tri_inner_vec(v));
+    if len(r) != 1 { panic(5211); };
+    if r[0] != 42 { panic(5212); };
+}
+
+@test "triple nested call moves string"() {
+    let v = format("abc");
+    let r = tri_outer(tri_inner(tri_inner(v)));
+    if STR_LEN(r) != 3 { panic(5221); };
+}

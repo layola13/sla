@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Narayana 边值 N(9,0)=1，N(9,8)=1，N(9,1)=36=C(9,2)（首尾恒 1 + 边恒等）。
+// 意对标 722_nar_edge（低位边值互补；855 做三向收束）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn nar(n: int, k: int) -> int {
+    return binom_mul(n, k) * binom_mul(n, k + 1) / n;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", nar(9, 0), nar(9, 8), nar(9, 1));
+    return 0;
+}
+
+@test "basic 851 nar edge9"() {
+    if nar(9, 0) != 1 { panic(85101); };
+    if nar(9, 8) != 1 { panic(85102); };
+    if nar(9, 1) != 36 { panic(85103); };
+    if nar(8, 7) != 1 { panic(85104); };
+}

@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/sync/atomic.sa"
+
+fn waker_vtable_wake_count() -> usize {
+    let count = AtomicUsize::new(0);
+    // Simulate the three observable operations of a vtable-backed waker:
+    // clone, wake_by_ref, and wake each increment the shared counter.
+    let _clone = count.fetch_add(1, Ordering::Relaxed);
+    let _by_ref = count.fetch_add(1, Ordering::Relaxed);
+    let _wake = count.fetch_add(1, Ordering::Relaxed);
+    return count.load(Ordering::Relaxed);
+}
+
+fn main() -> i32 {
+    let result = waker_vtable_wake_count();
+    println("{}", result);
+    return result as i32;
+}
+
+@test "rosetta 131 131_waker_vtable_mechanics"() {
+    let got = waker_vtable_wake_count();
+    if got != 3 {
+        panic(131);
+    };
+}

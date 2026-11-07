@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 数位积（dprod(12345)=120，含零即零）。
+// 意对标 406 数位和的乘积版（406 互补）。
+
+fn dprod(n: int) -> int {
+    if n == 0 { return 0; };
+    let p = 1;
+    let m = n;
+    while m > 0 {
+        p = p * (m % 10);
+        m = m / 10;
+    }
+    return p;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", dprod(12345), dprod(101), dprod(7));
+    return 0;
+}
+
+@test "basic 407 dprod"() {
+    if dprod(12345) != 120 { panic(40701); };
+    if dprod(101) != 0 { panic(40702); };
+    if dprod(7) != 7 { panic(40703); };
+}

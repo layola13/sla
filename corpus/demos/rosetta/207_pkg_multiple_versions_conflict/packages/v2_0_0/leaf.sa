@@ -1,0 +1,7 @@
+@import "packages/v2_0_0/leaf.sal"
+
+@dep_value() -> i32:
+L_ENTRY:
+    value = add 2, 0
+    !value
+    return 2

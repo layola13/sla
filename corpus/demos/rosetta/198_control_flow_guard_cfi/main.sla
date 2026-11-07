@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+fn guarded_target(x: i32) -> i32 { return x + 1; }
+fn cfi_guarded_call_result() -> i32 { return guarded_target(1); }
+fn main() -> i32 { let result = guarded_target(1); println("{}", result); return result; }
+@test "rosetta 198 198_control_flow_guard_cfi"() { let got = cfi_guarded_call_result(); if got != 2 { panic(198); }; }

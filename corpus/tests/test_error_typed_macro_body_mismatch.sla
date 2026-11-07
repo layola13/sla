@@ -1,0 +1,18 @@
+// expect: TypeMismatch
+// J-3 negative: the declared parameter type is visible inside the
+// macro body, so assigning an f64 value to a parameter declared i64
+// is a TypeMismatch when the macro body itself is checked (with
+// untyped parameters the body was checked against `.infer`
+// placeholders and this misuse passed). Judged by standalone
+// `sla check` (see plugin_tests.zig registration).
+
+macro bad_body(out: i64, x: i64) {
+    let s: f64 = 1.5;
+    out = s;
+}
+
+fn f() -> i64 {
+    let r: i64 = 0;
+    bad_body(r, 2);
+    return r;
+}

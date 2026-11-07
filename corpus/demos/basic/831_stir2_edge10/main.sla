@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Stirling 二类边值 S(10,1)=1，S(10,10)=1，S(10,9)=45=C(10,2)（次对角三角数恒等）。
+// 意对标 827_stir2_row10（行源互补；835 做三向）。
+
+fn sst(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + nn * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", sst(10, 1), sst(10, 10), sst(10, 9));
+    return 0;
+}
+
+@test "basic 831 stir2 edge10"() {
+    if sst(10, 1) != 1 { panic(83101); };
+    if sst(10, 10) != 1 { panic(83102); };
+    if sst(10, 9) != 45 { panic(83103); };
+    if sst(9, 8) != 36 { panic(83104); };
+}

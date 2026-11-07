@@ -1,0 +1,16 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn dynamically_sized_bytes_len() -> usize {
+    let bytes = "hi";
+    return bytes.len();
+}
+
+fn main() -> i32 {
+    let bytes = "hi";
+    let result = bytes.len();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 141 141_dynamically_sized_types"() { let got = dynamically_sized_bytes_len(); if got != 2 { panic(141); }; }

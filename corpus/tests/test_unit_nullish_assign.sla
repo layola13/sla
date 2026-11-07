@@ -1,0 +1,13 @@
+@import "sa_std/core/option.sa"
+
+@test "nullish assign fills None"() {
+    let a: Option<i32> = None;
+    a ??= 9;
+    if (a ?? -1) != 9 { panic(98301); };
+};
+
+@test "nullish assign keeps Some"() {
+    let b: Option<i32> = Some(7);
+    b ??= 9;
+    if (b ?? -1) != 7 { panic(98302); };
+}

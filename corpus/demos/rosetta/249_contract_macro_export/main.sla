@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_exported_macro_count() -> i32 {
+    let exported_macro = 1;
+    return exported_macro;
+}
+
+fn main() -> i32 {
+    let result = contract_exported_macro_count();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 249 contract macro export"() {
+    let got = contract_exported_macro_count();
+    if got != 1 { panic(249); };
+}

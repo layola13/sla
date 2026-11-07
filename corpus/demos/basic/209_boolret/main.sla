@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 567_boolret：布尔返回函数（`==` 相等判定，真→1）。
+// TS 用 `===`（SLA 无该 token），此处用 `==`；与 165（布尔形参）互补。
+
+fn eq(a: int, b: int) -> bool {
+    return a == b;
+}
+
+fn main() -> i32 {
+    println("{}", if eq(1, 1) { 1 } else { 0 });
+    return 0;
+}
+
+@test "basic 209 boolret"() {
+    if !eq(1, 1) { panic(20901); };
+    if eq(1, 2) { panic(20902); };
+}

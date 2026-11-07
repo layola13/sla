@@ -1,0 +1,118 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@import "sa_std/core/option.sa"
+@const SLA_FNPTR_VT_let_else_unwrapped_value = vtable { call = @sla__let_else_unwrapped_value }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__let_else_unwrapped_value() -> i32:
+L_ENTRY:
+    tmp_0 = 5
+    EXPAND OPTION_NEW_SOME tmp_1, tmp_0
+    !tmp_0
+    value = tmp_1
+    EXPAND OPTION_IS_SOME tmp_2, value
+    br tmp_2 -> L_LET_ELSE_OK_0, L_LET_ELSE_ELSE_1
+
+L_LET_ELSE_ELSE_1:
+    !tmp_2
+    tmp_3 = 0
+    tmp_4 = call @sa_fmt_u64(tmp_3, 10)
+    tmp_5 = call @sa_fmt_buffer_data(tmp_4)
+    tmp_6 = call @sa_fmt_buffer_len(tmp_4)
+    tmp_7 = tmp_5
+    call @sa_print_bytes(&tmp_7, tmp_6)
+    call @sa_fmt_buffer_free(^tmp_4)
+    !tmp_7
+    !tmp_6
+    !tmp_3
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_8 = 0
+    !value
+    return tmp_8
+
+L_LET_ELSE_OK_0:
+    !tmp_2
+    EXPAND OPTION_GET tmp_9, value
+    jmp L_LET_ELSE_CONT_2
+
+L_LET_ELSE_CONT_2:
+    !value
+    return tmp_9
+
+@main() -> i32:
+L_ENTRY:
+    tmp_10 = 5
+    EXPAND OPTION_NEW_SOME tmp_11, tmp_10
+    !tmp_10
+    value = tmp_11
+    EXPAND OPTION_IS_SOME tmp_12, value
+    br tmp_12 -> L_LET_ELSE_OK_3, L_LET_ELSE_ELSE_4
+
+L_LET_ELSE_ELSE_4:
+    !tmp_12
+    tmp_13 = 0
+    tmp_14 = call @sa_fmt_u64(tmp_13, 10)
+    tmp_15 = call @sa_fmt_buffer_data(tmp_14)
+    tmp_16 = call @sa_fmt_buffer_len(tmp_14)
+    tmp_17 = tmp_15
+    call @sa_print_bytes(&tmp_17, tmp_16)
+    call @sa_fmt_buffer_free(^tmp_14)
+    !tmp_17
+    !tmp_16
+    !tmp_13
+    @const SLA_STR_1 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_1, 1)
+    tmp_18 = 0
+    !value
+    return tmp_18
+
+L_LET_ELSE_OK_3:
+    !tmp_12
+    EXPAND OPTION_GET tmp_19, value
+    jmp L_LET_ELSE_CONT_5
+
+L_LET_ELSE_CONT_5:
+    tmp_20 = call @sa_fmt_u64(tmp_19, 10)
+    tmp_21 = call @sa_fmt_buffer_data(tmp_20)
+    tmp_22 = call @sa_fmt_buffer_len(tmp_20)
+    tmp_23 = tmp_21
+    call @sa_print_bytes(&tmp_23, tmp_22)
+    call @sa_fmt_buffer_free(^tmp_20)
+    !tmp_23
+    !tmp_22
+    @const SLA_STR_2 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_2, 1)
+    !value
+    return tmp_19
+
+@test "rosetta 105 105_let_else"():
+L_TEST_ENTRY_6:
+    tmp_24 = call @sla__let_else_unwrapped_value()
+    got = tmp_24
+    tmp_25 = 5
+    tmp_26 = ne got, tmp_25
+    !tmp_25
+    br tmp_26 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_26
+    panic(105)
+
+L_ELSE_8:
+    !tmp_26
+    jmp L_MERGE_9
+
+L_MERGE_9:
+    !got
+    return
+

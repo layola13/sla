@@ -1,0 +1,74 @@
+// D12 (client) — stands in for the SAX page's stream consumer:
+// connects to the SLA backend, sends the prompt, accumulates token
+// frames until "done", and verifies the assembled text is "Hello!".
+@import "sa_std/ws_client.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/io/print.sai"
+@import "byteseq.sa"
+@import "append.sa"
+
+struct Acc {
+    bytes: [u8; 256],
+    len: u64,
+}
+
+fn bytes_is(p_ptr: ptr, p_len: u64, lit_ptr: ptr, lit_len: u64) -> bool {
+    let slot = [0u64; 1];
+    BYTES_EQ(&slot, p_ptr, p_len, lit_ptr, lit_len);
+    return slot[0] == 1;
+}
+
+fn acc_append(acc: &Acc, src: ptr, n: u64) -> void {
+    APPEND_BYTES(&acc.bytes, acc.len, src, n);
+    acc.len = acc.len + n;
+}
+
+fn acc_is(acc: &Acc, lit: ptr, lit_len: u64) -> bool {
+    let slot = [0u64; 1];
+    BYTES_EQ(&slot, &acc.bytes, acc.len, lit, lit_len);
+    return slot[0] == 1;
+}
+
+fn main() -> i32 {
+    let handle: u64 = 0;
+    let url = "ws://127.0.0.1:18085/stream";
+    if sa_std_ws_client_connect(STR_PTR(url), STR_LEN(url), &handle) != 0 {
+        return 2;
+    };
+    if sa_std_ws_client_send_text(handle, STR_PTR("prompt: hi"), STR_LEN("prompt: hi")) != 0 {
+        return 3;
+    };
+    let acc = Acc { bytes: [0u8; 256], len: 0 };
+    let frames: u64 = 0;
+    let done = false;
+    while done != true {
+        let opcode: u64 = 0;
+        let bufh: u64 = 0;
+        if sa_std_ws_client_recv(handle, &opcode, &bufh) != 0 {
+            return 4;
+        };
+        let d_ptr: ptr = sa_std_ws_client_buffer_data(bufh);
+        let d_len = sa_std_ws_client_buffer_len(bufh);
+        frames = frames + 1;
+        if bytes_is(d_ptr, d_len, STR_PTR("done"), STR_LEN("done")) {
+            done = true;
+        };
+        if done != true {
+            acc_append(&acc, d_ptr, d_len);
+        };
+        sa_std_ws_client_buffer_free(bufh);
+        if frames > 8 {
+            return 5;
+        };
+    }
+    sa_std_ws_client_close(handle, 1000, STR_PTR(""), 0);
+    if frames != 4 {
+        return 6;
+    };
+    if acc_is(&acc, STR_PTR("Hello!"), STR_LEN("Hello!")) == false {
+        return 7;
+    };
+    println("d12 token stream ok");
+    return 0;
+}

@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn main() -> i32 {
+    let sum: i32 = 0;
+    let y: i32 = 1;
+    while y <= 2 {
+        let x: i32 = 1;
+        while x <= 3 {
+            sum = sum + (x * y);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    println("{}", sum);
+    return 0;
+};
+
+@test "rosetta 023 nested loops"() {
+    let sum: i32 = 0;
+    let y: i32 = 1;
+    while y <= 2 {
+        let x: i32 = 1;
+        while x <= 3 {
+            sum = sum + (x * y);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    if sum != 18 {
+        panic(23);
+    };
+};

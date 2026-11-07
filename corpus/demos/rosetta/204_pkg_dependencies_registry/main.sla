@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_registry_dependency_count() -> i32 {
+    let registry_dependency = 1;
+    return registry_dependency;
+}
+
+fn main() -> i32 { let registry_dependency = 1; println("{}", registry_dependency); return registry_dependency; }
+@test "rosetta 204 pkg dependencies registry"() { let got = pkg_registry_dependency_count(); if got != 1 { panic(204); }; }

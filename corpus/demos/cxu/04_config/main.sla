@@ -1,0 +1,121 @@
+@import "sa_std/encoding/toml.sai"
+@import "sa_std/fs.sai"
+@import "sa_std/env.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/io/print.sai"
+@import "byteseq.sa"
+
+// D4 — configuration surface, distilled from CXU's config handling
+// (codex config.toml health checks in apps/server/src/index.ts, the
+// .mini-agent/config.toml MCP merge in saVmBundle.ts, readiness probes
+// in agentReadiness.ts).
+//
+// TOML parsing is built into sa_std (sa_toml_*): the whole file is
+// parsed into a document handle and values are read by dotted path.
+// Duplicate keys are a hard parse error there — CXU's health check
+// depends on duplicates being visible, never silently last-wins.
+// Environment variables override file values (CXU_MODEL here): when the
+// variable is set it wins over the file's model, which the demo asserts
+// by requiring run.sh to set it.
+// Prints "d4 config ok" when every check passes.
+
+fn bytes_is(p_ptr: ptr, p_len: u64, lit_ptr: ptr, lit_len: u64) -> bool {
+    let slot = [0u64; 1];
+    BYTES_EQ(&slot, p_ptr, p_len, lit_ptr, lit_len);
+    return slot[0] == 1;
+}
+
+fn main() -> i32 {
+    // Read config.toml fully through the fs surface.
+    let path = "config.toml";
+    let flen: u64 = 0;
+    if sa_std_fs_len(STR_PTR(path), STR_LEN(path), &flen) != 0 { return 2; };
+    if flen == 0 { return 3; };
+    if flen > 8192 { return 4; };
+    let file: u64 = 0;
+    if sa_std_fs_open_read(STR_PTR(path), STR_LEN(path), &file) != 0 { return 5; };
+    let buf = [0u8; 8192];
+    let nread: u64 = 0;
+    if sa_std_fs_file_read(file, &buf, 8192, &nread) != 0 { return 6; };
+    sa_fs_file_close(file);
+    if nread != flen { return 7; };
+
+    let doc = sa_toml_parse(&buf, nread);
+    if doc == 0 { return 8; };
+
+    // Top-level scalars.
+    let m_ptr: ptr = PTR_NULL();
+    let m_len: u64 = 0;
+    if sa_toml_get_string(doc, STR_PTR("model"), STR_LEN("model"), &m_ptr, &m_len) != 0 { return 9; };
+    if !bytes_is(m_ptr, m_len, STR_PTR("gpt-cxu"), STR_LEN("gpt-cxu")) { return 10; };
+    let temp: f64 = 0.0;
+    if sa_toml_get_f64(doc, STR_PTR("temperature"), STR_LEN("temperature"), &temp) != 0 { return 11; };
+    if temp < 0.19 { return 12; };
+    if temp > 0.21 { return 12; };
+    let turns: i64 = 0;
+    if sa_toml_get_i64(doc, STR_PTR("max_turns"), STR_LEN("max_turns"), &turns) != 0 { return 13; };
+    if turns != 42 { return 14; };
+    let dbg: u32 = 1;
+    if sa_toml_get_bool(doc, STR_PTR("debug"), STR_LEN("debug"), &dbg) != 0 { return 15; };
+    if dbg != 0 { return 16; };
+
+    // Nested provider table.
+    let u_ptr: ptr = PTR_NULL();
+    let u_len: u64 = 0;
+    let url_path = "model_providers.cxu.base_url";
+    if sa_toml_get_string(doc, STR_PTR(url_path), STR_LEN(url_path), &u_ptr, &u_len) != 0 { return 17; };
+    if !bytes_is(u_ptr, u_len, STR_PTR("https://example.invalid/v1"), STR_LEN("https://example.invalid/v1")) { return 18; };
+    let auth: u32 = 0;
+    let auth_path = "model_providers.cxu.requires_auth";
+    if sa_toml_get_bool(doc, STR_PTR(auth_path), STR_LEN(auth_path), &auth) != 0 { return 19; };
+    if auth != 1 { return 20; };
+    let kind: u32 = 0;
+    if sa_toml_kind(doc, STR_PTR("model_providers"), STR_LEN("model_providers"), &kind) != 0 { return 21; };
+    if kind != 7 { return 22; };
+
+    // MCP server: args array + nested env table.
+    let argc: u64 = 0;
+    let args_path = "mcp_servers.jex.args";
+    if sa_toml_array_len(doc, STR_PTR(args_path), STR_LEN(args_path), &argc) != 0 { return 23; };
+    if argc != 3 { return 24; };
+    let a_ptr: ptr = PTR_NULL();
+    let a_len: u64 = 0;
+    if sa_toml_array_get_string(doc, STR_PTR(args_path), STR_LEN(args_path), 1, &a_ptr, &a_len) != 0 { return 25; };
+    if !bytes_is(a_ptr, a_len, STR_PTR("--port"), STR_LEN("--port")) { return 26; };
+    let retries: i64 = 0;
+    let retries_path = "mcp_servers.jex.env.RETRIES";
+    if sa_toml_get_i64(doc, STR_PTR(retries_path), STR_LEN(retries_path), &retries) != 0 { return 27; };
+    if retries != 3 { return 28; };
+
+    // Array of tables, addressed by numeric path segment.
+    let nservers: u64 = 0;
+    if sa_toml_array_len(doc, STR_PTR("servers"), STR_LEN("servers"), &nservers) != 0 { return 29; };
+    if nservers != 2 { return 30; };
+    let port: i64 = 0;
+    if sa_toml_get_i64(doc, STR_PTR("servers.1.port"), STR_LEN("servers.1.port"), &port) != 0 { return 31; };
+    if port != 8002 { return 32; };
+    let h_ptr: ptr = PTR_NULL();
+    let h_len: u64 = 0;
+    if sa_toml_get_string(doc, STR_PTR("servers.0.host"), STR_LEN("servers.0.host"), &h_ptr, &h_len) != 0 { return 33; };
+    if !bytes_is(h_ptr, h_len, STR_PTR("a.example"), STR_LEN("a.example")) { return 34; };
+
+    // A missing key is an explicit not-found (status 3), never a
+    // silent default.
+    let x_ptr: ptr = PTR_NULL();
+    let x_len: u64 = 0;
+    let miss = sa_toml_get_string(doc, STR_PTR("nope.nope"), STR_LEN("nope.nope"), &x_ptr, &x_len);
+    if miss != 3 { return 35; };
+
+    // Env override: CXU_MODEL is set by run.sh and wins over the file.
+    let h = sa_env_get(STR_PTR("CXU_MODEL"), STR_LEN("CXU_MODEL"));
+    if h == 0 { return 36; };
+    let e_ptr: ptr = sa_env_buffer_data(h);
+    let e_len: u64 = sa_env_buffer_len(h);
+    if !bytes_is(e_ptr, e_len, STR_PTR("gpt-env-override"), STR_LEN("gpt-env-override")) { return 37; };
+    sa_env_buffer_free(h);
+
+    sa_toml_free(doc);
+    println("d4 config ok");
+    return 0;
+}

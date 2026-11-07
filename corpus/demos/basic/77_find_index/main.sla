@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 108_find_index：首个 `>10` 元素的下标（=1）。
+// 高阶 `findIndex` 用显式循环表达，谓词用先绑定再调用的闭包（写法见 20/57）。
+
+fn main() -> i32 {
+    let a = [5, 15, 25];
+    let over = |x: int| x > 10;
+    let idx = -1;
+    for i in 0..3 {
+        if over(a[i]) {
+            idx = i;
+            break;
+        };
+    }
+    println("{}", idx);
+    return 0;
+}
+
+@test "basic 77 find index"() {
+    let a = [5, 15, 25];
+    let over = |x: int| x > 10;
+    let idx = -1;
+    for i in 0..3 {
+        if over(a[i]) {
+            idx = i;
+            break;
+        };
+    }
+    if idx != 1 { panic(7701); };
+}

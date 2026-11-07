@@ -1,0 +1,27 @@
+// Sla native closure smoke tests.
+
+fn closure_capture_value() -> int {
+    let offset = 5;
+    let add_offset = |x: int| x + offset;
+    return add_offset(10);
+}
+
+fn closure_two_args() -> int {
+    let scale = 2;
+    let mix = |left: int, right: int| left * scale + right;
+    return mix(6, 3);
+}
+
+@test "closure captures outer value"() {
+    let result = closure_capture_value();
+    if result != 15 {
+        panic(1);
+    };
+}
+
+@test "closure supports multiple params"() {
+    let result = closure_two_args();
+    if result != 15 {
+        panic(2);
+    };
+}

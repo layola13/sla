@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn ffi_dynamic_library_imports() -> i32 { let runtime_symbol = 1; return runtime_symbol; }
+fn main() -> i32 { let runtime_symbol = 1; println("{}", runtime_symbol); return runtime_symbol; }
+@test "rosetta 283 ffi link dynamic c lib"() { let got = ffi_dynamic_library_imports(); if got != 1 { panic(283); }; }

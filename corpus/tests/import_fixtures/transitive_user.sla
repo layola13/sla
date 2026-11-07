@@ -1,0 +1,29 @@
+// Defect #1 regression chain, module A: imported by the root test, and
+// its function bodies build literals of types defined in module B
+// (transitive_types.sla). See transitive_types.sla for the defect notes.
+@import "transitive_types.sla"
+
+fn chain_point_sum() -> i32 {
+    let p = ChainPoint { x: 30, y: 12 };
+    return p.x + p.y;
+}
+
+fn chain_policy_checksum() -> i32 {
+    let policy = ChainPolicy {
+        entries: ChainEntryList {
+            items: [ChainEntry { tag: [0u8; 8], tag_len: 3, weight: 5 }; 4],
+            len: 2,
+        },
+        origin: ChainPoint { x: 1, y: 2 },
+        level: 9,
+        enabled: true,
+    };
+    if policy.enabled != true {
+        return -1;
+    };
+    if policy.entries.len != 2 {
+        return -2;
+    };
+    let first = policy.entries.items[0];
+    return first.weight + policy.origin.x + policy.origin.y + policy.level;
+}

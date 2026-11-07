@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 八边形数（O(n)=n(3n-2)：O(5)=65）。
+// 意对标 468 七边形的八边版（468 互补）。
+
+fn oct(n: int) -> int {
+    return n * (3 * n - 2);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", oct(5), oct(4), oct(1));
+    return 0;
+}
+
+@test "basic 469 octagonal"() {
+    if oct(5) != 65 { panic(46901); };
+    if oct(4) != 40 { panic(46902); };
+    if oct(1) != 1 { panic(46903); };
+}

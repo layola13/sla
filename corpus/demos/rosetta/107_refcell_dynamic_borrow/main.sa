@@ -1,0 +1,152 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/refcell.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_refcell_borrow_sum = vtable { call = @sla__refcell_borrow_sum }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__refcell_borrow_sum() -> i32:
+L_ENTRY:
+    tmp_0 = 7
+    EXPAND REFCELL_U64_NEW tmp_1, tmp_0
+    !tmp_0
+    value = tmp_1
+    tmp_2 = 0
+    first = tmp_2
+    EXPAND REFCELL_U64_TRY_BORROW tmp_3, tmp_4, value
+    br tmp_3 -> L_REFCELL_BORROW_END_1, L_REFCELL_BORROW_PANIC_0
+
+L_REFCELL_BORROW_PANIC_0:
+    !tmp_3
+    panic(107)
+
+L_REFCELL_BORROW_END_1:
+    !tmp_3
+    borrowed = tmp_4
+    tmp_5 = load borrowed+0 as i32
+    !first
+    first = tmp_5
+    EXPAND REFCELL_U64_RELEASE_SHARED value
+    EXPAND REFCELL_U64_TRY_BORROW_MUT tmp_6, tmp_7, value
+    br tmp_6 -> L_REFCELL_BORROW_END_3, L_REFCELL_BORROW_PANIC_2
+
+L_REFCELL_BORROW_PANIC_2:
+    !tmp_6
+    panic(107)
+
+L_REFCELL_BORROW_END_3:
+    !tmp_6
+    tmp_8 = 9
+    store tmp_7+0, tmp_8 as i32
+    EXPAND REFCELL_U64_RELEASE_MUT value
+    !tmp_8
+    EXPAND REFCELL_U64_TRY_BORROW tmp_9, tmp_10, value
+    br tmp_9 -> L_REFCELL_BORROW_END_5, L_REFCELL_BORROW_PANIC_4
+
+L_REFCELL_BORROW_PANIC_4:
+    !tmp_9
+    panic(107)
+
+L_REFCELL_BORROW_END_5:
+    !tmp_9
+    second_ref = tmp_10
+    tmp_11 = load second_ref+0 as i32
+    second = tmp_11
+    tmp_12 = add first, second
+    EXPAND REFCELL_U64_RELEASE_SHARED value
+    !value
+    !first
+    !second
+    return tmp_12
+
+@main() -> i32:
+L_ENTRY:
+    tmp_13 = 7
+    EXPAND REFCELL_U64_NEW tmp_14, tmp_13
+    !tmp_13
+    value = tmp_14
+    EXPAND REFCELL_U64_TRY_BORROW tmp_15, tmp_16, value
+    br tmp_15 -> L_REFCELL_BORROW_END_7, L_REFCELL_BORROW_PANIC_6
+
+L_REFCELL_BORROW_PANIC_6:
+    !tmp_15
+    panic(107)
+
+L_REFCELL_BORROW_END_7:
+    !tmp_15
+    borrowed = tmp_16
+    tmp_17 = load borrowed+0 as i32
+    tmp_18 = call @sa_fmt_u64(tmp_17, 10)
+    tmp_19 = call @sa_fmt_buffer_data(tmp_18)
+    tmp_20 = call @sa_fmt_buffer_len(tmp_18)
+    tmp_21 = tmp_19
+    call @sa_print_bytes(&tmp_21, tmp_20)
+    call @sa_fmt_buffer_free(^tmp_18)
+    !tmp_21
+    !tmp_20
+    !tmp_17
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    EXPAND REFCELL_U64_RELEASE_SHARED value
+    EXPAND REFCELL_U64_TRY_BORROW_MUT tmp_22, tmp_23, value
+    br tmp_22 -> L_REFCELL_BORROW_END_9, L_REFCELL_BORROW_PANIC_8
+
+L_REFCELL_BORROW_PANIC_8:
+    !tmp_22
+    panic(107)
+
+L_REFCELL_BORROW_END_9:
+    !tmp_22
+    tmp_24 = 9
+    store tmp_23+0, tmp_24 as i32
+    EXPAND REFCELL_U64_RELEASE_MUT value
+    !tmp_24
+    EXPAND REFCELL_U64_TRY_BORROW tmp_25, tmp_26, value
+    br tmp_25 -> L_REFCELL_BORROW_END_11, L_REFCELL_BORROW_PANIC_10
+
+L_REFCELL_BORROW_PANIC_10:
+    !tmp_25
+    panic(107)
+
+L_REFCELL_BORROW_END_11:
+    !tmp_25
+    tmp_27 = load tmp_26+0 as i32
+    tmp_28 = call @sa_fmt_u64(tmp_27, 10)
+    tmp_29 = call @sa_fmt_buffer_data(tmp_28)
+    tmp_30 = call @sa_fmt_buffer_len(tmp_28)
+    tmp_31 = tmp_29
+    call @sa_print_bytes(&tmp_31, tmp_30)
+    call @sa_fmt_buffer_free(^tmp_28)
+    !tmp_31
+    !tmp_30
+    !tmp_27
+    EXPAND REFCELL_U64_RELEASE_SHARED value
+    @const SLA_STR_1 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_1, 1)
+    tmp_32 = 0
+    !value
+    return tmp_32
+
+@test "rosetta 107 107_refcell_dynamic_borrow"():
+L_TEST_ENTRY_12:
+    tmp_33 = call @sla__refcell_borrow_sum()
+    got = tmp_33
+    tmp_34 = 16
+    tmp_35 = ne got, tmp_34
+    !tmp_34
+    br tmp_35 -> L_THEN_13, L_ELSE_14
+
+L_THEN_13:
+    !tmp_35
+    panic(107)
+
+L_ELSE_14:
+    !tmp_35
+    jmp L_MERGE_15
+
+L_MERGE_15:
+    !got
+    return
+

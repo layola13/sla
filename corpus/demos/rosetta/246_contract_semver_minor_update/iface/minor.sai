@@ -1,0 +1,2 @@
+@extern minor_value() -> i32
+@extern minor_extension() -> i32

@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 33_nested_struct：嵌套结构体读值（40+2=42）。
+// 原用例另含 `name` 字符串字段，SLA 结构体字符串字段未经验证，
+// 此处只取整数嵌套核（`Outer { inner }`），字符串语义见 10/68。
+
+struct Inner {
+    v: i32,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn main() -> i32 {
+    let inner = Inner { v: 40 };
+    let o = Outer { inner: inner };
+    println("{}", o.inner.v + 2);
+    return 0;
+}
+
+@test "basic 79 nested struct"() {
+    let inner = Inner { v: 40 };
+    let o = Outer { inner: inner };
+    if o.inner.v + 2 != 42 { panic(7901); };
+}

@@ -1,0 +1,9 @@
+// expect: ArenaEscape
+// F2-A C1 corpus: escape route 1 - returning an arena root
+// would move block memory into the caller's domain (design 3).
+fn neg_return_root() -> Vec<String> {
+    arena {
+        let v: Vec<String> = Vec::new();
+        return v;
+    }
+}

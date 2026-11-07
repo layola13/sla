@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 蛋糕数（n 刀最多块数：(n³+5n+6)/6；5 刀 26 块）。
+// 意对标 458 懒人厨师的三次版（458 互补；463 做对峙）。
+
+fn cake(n: int) -> int {
+    return (n * n * n + 5 * n + 6) / 6;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", cake(5), cake(3), cake(0));
+    return 0;
+}
+
+@test "basic 459 cake"() {
+    if cake(5) != 26 { panic(45901); };
+    if cake(3) != 8 { panic(45902); };
+    if cake(0) != 1 { panic(45903); };
+}

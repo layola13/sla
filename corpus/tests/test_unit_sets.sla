@@ -1,0 +1,44 @@
+// Sla unit test framework demo - set collections inside tests
+// Run with: sa sla test tests/test_unit_sets.sla
+
+fn hash_set_smoke() -> usize {
+    let set = HashSet::new();
+    let inserted_alpha = set.insert(1);
+    let inserted_beta = set.insert(2);
+    let contains_alpha = set.contains(1);
+    let contains_gamma = set.contains(3);
+    let len = set.len();
+    if inserted_alpha == false { panic(101); };
+    if inserted_beta == false { panic(102); };
+    if contains_alpha == false { panic(103); };
+    if contains_gamma == true { panic(104); };
+    return len;
+}
+
+fn btree_set_smoke() -> usize {
+    let set = BTreeSet::new();
+    let inserted_alpha = set.insert("alpha");
+    let inserted_beta = set.insert("beta");
+    let contains_beta = set.contains("beta");
+    let contains_gamma = set.contains("gamma");
+    let len = set.len();
+    if inserted_alpha == false { panic(201); };
+    if inserted_beta == false { panic(202); };
+    if contains_beta == false { panic(203); };
+    if contains_gamma == true { panic(204); };
+    return len;
+}
+
+@test "hash set smoke"() {
+    let got = hash_set_smoke();
+    if got != 2 {
+        panic(301);
+    };
+}
+
+@test "btree set smoke"() {
+    let got = btree_set_smoke();
+    if got != 2 {
+        panic(302);
+    };
+}

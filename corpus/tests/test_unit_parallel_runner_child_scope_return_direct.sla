@@ -1,0 +1,133 @@
+@import "sa_std/vec.sa"
+
+// Reduced progressive fixture for child-scope return dimension.
+// Stage this carefully: SA currently passes; strict SAB previously hit signal 11
+// when calling Vec<fn() -> Holder> entries that return nested holders.
+
+struct ParallelRunnerChildScopeHolder {
+    runs: Vec<fn(i32) -> i32>,
+    child_scope_runs: Vec<fn() -> ParallelRunnerChildScopeHolder>,
+    run_order_positions: Vec<i64>,
+    child_scope_order_positions: Vec<i64>,
+}
+
+fn parallel_runner_child_scope_inc(value: i32) -> i32 {
+    return value + 1;
+}
+
+fn parallel_runner_child_scope_double(value: i32) -> i32 {
+    return value + value;
+}
+
+fn parallel_runner_child_scope_holder_new() -> ParallelRunnerChildScopeHolder {
+    let runs: Vec<fn(i32) -> i32> = Vec::new();
+    let child_scope_runs: Vec<fn() -> ParallelRunnerChildScopeHolder> = Vec::new();
+    let run_order_positions: Vec<i64> = Vec::new();
+    let child_scope_order_positions: Vec<i64> = Vec::new();
+    return ParallelRunnerChildScopeHolder {
+        runs: runs,
+        child_scope_runs: child_scope_runs,
+        run_order_positions: run_order_positions,
+        child_scope_order_positions: child_scope_order_positions,
+    };
+}
+
+fn parallel_runner_child_scope_spawn(holder: ParallelRunnerChildScopeHolder, run: fn(i32) -> i32) -> ParallelRunnerChildScopeHolder {
+    let order_pos = len(holder.runs) as i64;
+    holder.runs.push(run);
+    holder.run_order_positions.push(order_pos);
+    return holder;
+}
+
+fn parallel_runner_child_scope_spawn_child(holder: ParallelRunnerChildScopeHolder, run: fn() -> ParallelRunnerChildScopeHolder) -> ParallelRunnerChildScopeHolder {
+    let order_pos = len(holder.child_scope_runs) as i64;
+    holder.child_scope_runs.push(run);
+    holder.child_scope_order_positions.push(order_pos);
+    return holder;
+}
+
+fn parallel_runner_child_scope_make_nested() -> ParallelRunnerChildScopeHolder {
+    let nested0 = parallel_runner_child_scope_holder_new();
+    return parallel_runner_child_scope_spawn(nested0, parallel_runner_child_scope_double);
+}
+
+fn parallel_runner_child_scope_extend_runs(parent: ParallelRunnerChildScopeHolder, child: ParallelRunnerChildScopeHolder) -> ParallelRunnerChildScopeHolder {
+    let order_pos: i64 = 0;
+    let total = len(child.runs) as i64;
+    while order_pos < total {
+        parent = parallel_runner_child_scope_spawn(parent, child.runs[order_pos]);
+        order_pos = order_pos + 1;
+    }
+    return parent;
+}
+
+@test "parallel runner child scope store only"() {
+    let holder0 = parallel_runner_child_scope_holder_new();
+    let holder1 = parallel_runner_child_scope_spawn(holder0, parallel_runner_child_scope_inc);
+    let holder2 = parallel_runner_child_scope_spawn_child(holder1, parallel_runner_child_scope_make_nested);
+    if len(holder2.runs) as i64 != 1 { panic(52511); };
+    if len(holder2.child_scope_runs) as i64 != 1 { panic(52512); };
+    if holder2.run_order_positions[0] != 0 { panic(52513); };
+    if holder2.child_scope_order_positions[0] != 0 { panic(52514); };
+}
+
+@test "parallel runner child scope call returned holder"() {
+    let holder0 = parallel_runner_child_scope_holder_new();
+    let holder1 = parallel_runner_child_scope_spawn_child(holder0, parallel_runner_child_scope_make_nested);
+    let make_child = holder1.child_scope_runs[0];
+    let generated = make_child();
+    if len(generated.runs) as i64 != 1 { panic(52521); };
+    let run = generated.runs[0];
+    if run(10) != 20 { panic(52522); };
+}
+
+@test "parallel runner child scope extend ordinary holders"() {
+    // Control: ordinary holder-to-holder run transfer without child-scope call.
+    let parent = parallel_runner_child_scope_holder_new();
+    let child0 = parallel_runner_child_scope_holder_new();
+    let child1 = parallel_runner_child_scope_spawn(child0, parallel_runner_child_scope_double);
+    let out = parallel_runner_child_scope_extend_runs(parent, child1);
+    if len(out.runs) as i64 != 1 { panic(52541); };
+    let run = out.runs[0];
+    if run(10) != 20 { panic(52542); };
+}
+
+@test "parallel runner child scope alias then call returned holder run"() {
+    // Control: same load as the failing transfer, but only call the fnptr.
+    let child0 = parallel_runner_child_scope_holder_new();
+    let child1 = parallel_runner_child_scope_spawn_child(child0, parallel_runner_child_scope_make_nested);
+    let make_child = child1.child_scope_runs[0];
+    let generated = make_child();
+    let run = generated.runs[0];
+    if run(10) != 20 { panic(52561); };
+}
+
+@test "parallel runner child scope spawn one from returned holder"() {
+    // Open SAB repro: call returned holder, alias runs[0], then push that
+    // fnptr into another holder. Call-only on the same load passes.
+    let parent = parallel_runner_child_scope_holder_new();
+    let child0 = parallel_runner_child_scope_holder_new();
+    let child1 = parallel_runner_child_scope_spawn_child(child0, parallel_runner_child_scope_make_nested);
+    let make_child = child1.child_scope_runs[0];
+    let generated = make_child();
+    let run = generated.runs[0];
+    let out = parallel_runner_child_scope_spawn(parent, run);
+    if len(out.runs) as i64 != 1 { panic(52551); };
+    let out_run = out.runs[0];
+    if out_run(10) != 20 { panic(52552); };
+}
+
+@test "parallel runner child scope extend returned holder"() {
+    // Open SAB repro: call Vec<fn() -> Holder>, then fold the returned holder
+    // into an empty parent. Store/call alone pass; this merge crashes with
+    // signal 11 under strict SAB while SA still passes.
+    let parent = parallel_runner_child_scope_holder_new();
+    let child0 = parallel_runner_child_scope_holder_new();
+    let child1 = parallel_runner_child_scope_spawn_child(child0, parallel_runner_child_scope_make_nested);
+    let make_child = child1.child_scope_runs[0];
+    let generated = make_child();
+    let out = parallel_runner_child_scope_extend_runs(parent, generated);
+    if len(out.runs) as i64 != 1 { panic(52531); };
+    let run = out.runs[0];
+    if run(10) != 20 { panic(52532); };
+}

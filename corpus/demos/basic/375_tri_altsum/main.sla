@@ -1,0 +1,45 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 交错和三向对峙（循环 vs 闭式 vs 逆序累加：10 → -5）。
+// 意对标 368 立方三向的交错版（369 互补）。
+
+fn alt_loop(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        if i % 2 == 1 { s = s + i; };
+        if i % 2 == 0 { s = s - i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn alt_form(n: int) -> int {
+    if n % 2 == 0 { return 0 - n / 2; };
+    return (n + 1) / 2;
+}
+
+fn alt_acc(n: int) -> int {
+    let s = 0;
+    let i = n;
+    while i >= 1 {
+        if i % 2 == 1 { s = s + i; };
+        if i % 2 == 0 { s = s - i; };
+        i = i - 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", alt_loop(10), alt_form(10), alt_acc(10));
+    return 0;
+}
+
+@test "basic 375 tri altsum"() {
+    if alt_loop(10) != -5 { panic(37501); };
+    if alt_form(10) != -5 { panic(37502); };
+    if alt_acc(10) != -5 { panic(37503); };
+    if alt_form(5) != 3 { panic(37504); };
+    if alt_loop(10) != alt_acc(10) { panic(37505); };
+}

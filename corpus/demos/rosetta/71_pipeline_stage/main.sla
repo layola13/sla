@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct StageInput {
+    raw: i32,
+    scale: i32,
+    offset: i32,
+}
+
+fn pipeline_stage_value(input: StageInput) -> i32 {
+    let raw = input.raw;
+    let scale = input.scale;
+    let offset = input.offset;
+    let stage1 = raw * scale;
+    let stage2 = stage1 + offset;
+    return stage2;
+}
+
+fn main() -> i32 {
+    let input = StageInput { raw: 2, scale: 3, offset: 1 };
+    let result = pipeline_stage_value(input);
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 071 71_pipeline_stage"() {
+    let input = StageInput { raw: 2, scale: 3, offset: 1 };
+    let got = pipeline_stage_value(input);
+    if got != 7 {
+        panic(71);
+    };
+}

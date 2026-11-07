@@ -1,0 +1,18 @@
+// expect: TypeMismatch
+trait ExtraMethodTrait {
+    fn required(self) -> i32;
+}
+
+struct ExtraMethodType {
+    value: i32,
+}
+
+impl ExtraMethodTrait for ExtraMethodType {
+    fn required(self) -> i32 {
+        return self.value;
+    }
+
+    fn helper(self) -> i32 {
+        return self.value + 1;
+    }
+}

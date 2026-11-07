@@ -1,0 +1,5 @@
+@export alias_seed() -> i32:
+L_ENTRY:
+    value = add 33, 0
+    !value
+    return 33

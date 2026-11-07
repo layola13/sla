@@ -1,0 +1,14 @@
+@import "consumer/../impl/const_impl.sa"
+
+@const_consumer_value() -> i32:
+L_ENTRY:
+    value = call @const_value()
+    ok = eq value, 250
+    !value
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 250
+
+L_ERR:
+    return 0

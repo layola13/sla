@@ -1,0 +1,42 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 丰数计数（σ(n)>2n；<=20 有 12/18/20 共 3 个）。
+// 意对标 377 除数和的分类版（334 完全数版互补）。
+
+fn sigma(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        if n % i == 0 { s = s + i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn is_abundant(n: int) -> int {
+    if sigma(n) > 2 * n { return 1; };
+    return 0;
+}
+
+fn abundant_count(limit: int) -> int {
+    let c = 0;
+    let k = 1;
+    while k <= limit {
+        if is_abundant(k) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", abundant_count(20), is_abundant(12), is_abundant(6));
+    return 0;
+}
+
+@test "basic 378 abundant"() {
+    if abundant_count(20) != 3 { panic(37801); };
+    if is_abundant(12) != 1 { panic(37802); };
+    if is_abundant(6) != 0 { panic(37803); };
+    if is_abundant(8) != 0 { panic(37804); };
+}

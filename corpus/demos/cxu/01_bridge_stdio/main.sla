@@ -1,0 +1,64 @@
+@import "sa_std/process.sa"
+@import "sa_std/string.sa"
+@import "sa_std/io/print.sai"
+@import "argv1.sa"
+
+// D1 — bidirectional stdio bridge kernel, distilled from CXU's CLI bridges
+// (the codex/claude/opencode bridges all speak stdio JSON-RPC to a child
+// CLI process). Spawns /bin/cat with a writable stdin, sends one JSON-RPC
+// line, reads the reply stream to EOF, verifies the round-trip shape, and
+// reaps the child. Byte-exact echo equality is locked by the sci C-driver
+// test for sa_std_process_spawn_bidi; this demo proves the SLA surface.
+
+fn main() -> i32 {
+    let argv = [0u64, 0u64];
+    ARGV_FILL1(&argv, STR_PTR("/bin/cat"), STR_LEN("/bin/cat"));
+    let proc: u64 = 0;
+    let hin: u64 = 0;
+    let hout: u64 = 0;
+    let herr: u64 = 0;
+    let st = sa_std_process_spawn_bidi(&argv, 1, &proc, &hin, &hout, &herr);
+    if st != 0 { return 2; };
+    if proc == 0 { return 3; };
+    if hin == 0 { return 4; };
+    let req = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n";
+    let written: u64 = 0;
+    let wst = sa_io_write(hin, STR_PTR(req), STR_LEN(req), &written);
+    if wst != 0 { return 5; };
+    if written != STR_LEN(req) { return 6; };
+    if sa_std_close(hin) != 0 { return 7; };
+    let buf = [0u8; 128];
+    let chunk = [0u8; 64];
+    let total: u64 = 0;
+    let n: u64 = 0;
+    let eof = false;
+    while eof != true {
+        let rst = sa_io_read(hout, &chunk, 64, &n);
+        if rst != 0 { return 8; };
+        if n == 0 {
+            eof = true;
+        } else {
+            let i: u64 = 0;
+            while i < n {
+                buf[total + i] = chunk[i];
+                i = i + 1;
+            }
+            total = total + n;
+        }
+    }
+    if total != STR_LEN(req) { return 9; };
+    if buf[0] != 123 { return 10; };
+    if buf[total - 1] != 10 { return 11; };
+    let code: u32 = 99;
+    if sa_std_process_wait(proc, &code) != 0 { return 12; };
+    if code != 0 { return 13; };
+    if sa_std_close(hout) != 0 { return 14; };
+    if sa_std_close(herr) != 0 { return 15; };
+    if sa_std_process_close(proc) != 0 { return 16; };
+    println("d1 bridge stdio ok");
+    return 0;
+}
+
+@test "d1 request line shape"() {
+    if STR_LEN("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n") != 41 { panic(101); };
+}

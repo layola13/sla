@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 14_class：Counter + inc（SLA 用 struct + impl 表达）。
+
+struct Counter {
+    count: i32,
+}
+
+impl Counter {
+    fn new() -> Counter {
+        return Counter { count: 0 };
+    }
+
+    fn inc(self) -> Counter {
+        return Counter { count: self.count + 1 };
+    }
+}
+
+fn main() -> i32 {
+    let c = Counter::new();
+    c = c.inc();
+    c = c.inc();
+    println("{}", c.count);
+    return 0;
+}
+
+@test "basic 12 counter impl"() {
+    let c = Counter::new();
+    c = c.inc();
+    c = c.inc();
+    if c.count != 2 { panic(1201); };
+}

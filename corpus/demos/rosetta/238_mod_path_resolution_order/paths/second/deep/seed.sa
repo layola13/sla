@@ -1,0 +1,5 @@
+@export second_seed() -> i32:
+L_ENTRY:
+    value = add 100, 0
+    !value
+    return 100

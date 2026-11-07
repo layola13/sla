@@ -1,0 +1,27 @@
+@import "sa_std/vec.sa"
+
+// DEF-SAB-GAPS regression: an imported .sa macro whose body CALLS an
+// SA std function (VEC_RESERVE_GROW -> @sa_vec_reserve_grow) must see
+// that callee declared in the SAB module. Before the fix, the SAB
+// fragment path inlined the macro body without pulling the macro's
+// direct callees into the module, and the host verifier trapped
+// UnknownRegister ("callee is not declared") on every backend target
+// that compiled the fragment. Covers by-value parameter receivers
+// and plain local receivers.
+
+fn grow_param(v: Vec<i32>) -> Vec<i32> {
+    VEC_RESERVE_GROW(v, 4, 8);
+    return v;
+}
+
+@test "sabgaps macro callee deps param receiver"() {
+    let v: Vec<i32> = Vec::new();
+    let v2 = grow_param(v);
+    if len(v2) != 0 { panic(101); };
+}
+
+@test "sabgaps macro callee deps local receiver"() {
+    let v: Vec<i32> = Vec::new();
+    VEC_RESERVE_GROW(v, 4, 8);
+    if len(v) != 0 { panic(102); };
+}

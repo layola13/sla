@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_local_dependency_count() -> i32 {
+    let path_dependency = 1;
+    return path_dependency;
+}
+
+fn main() -> i32 { let path_dependency = 1; println("{}", path_dependency); return path_dependency; }
+@test "rosetta 202 pkg dependencies local"() { let got = pkg_local_dependency_count(); if got != 1 { panic(202); }; }

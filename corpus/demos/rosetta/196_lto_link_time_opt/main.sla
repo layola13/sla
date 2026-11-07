@@ -1,0 +1,16 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+fn leaf(a: i32, b: i32) -> i32 { return a + b; }
+fn inner(x: i32) -> i32 {
+    let left = leaf(x, 1);
+    let right = leaf(x, 2);
+    return left + right;
+}
+fn cold_path(x: i32) -> i32 {
+    let warm = inner(x);
+    let cold = leaf(3, 4);
+    return warm + cold;
+}
+fn lto_hot_cold_sum() -> i32 { let hot_path = inner(1); let cold_path_result = cold_path(2); return hot_path + cold_path_result; }
+fn main() -> i32 { let hot_path = inner(1); let cold_path_result = cold_path(2); let result = hot_path + cold_path_result; println("{}", result); return result; }
+@test "rosetta 196 196_lto_link_time_opt"() { let got = lto_hot_cold_sum(); if got != 19 { panic(196); }; }

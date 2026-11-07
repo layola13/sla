@@ -1,0 +1,10 @@
+// expect: ArenaEscape
+// F2-A C1 corpus: Jev U3 = A - even a .buffer root (a single
+// flat allocation: Vec<u8>) may only leave the arena through
+// clone(); a bare move-out return is rejected in v1.
+fn neg_buffer_move_out() -> Vec<u8> {
+    arena {
+        let v: Vec<u8> = Vec::new();
+        return v;
+    }
+}

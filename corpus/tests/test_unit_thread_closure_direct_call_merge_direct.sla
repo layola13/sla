@@ -1,0 +1,54 @@
+@import "sa_std/vec.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/core/result.sa"
+
+fn merge_direct_chunk() -> Vec<i32> {
+    let chunk: Vec<i32> = Vec::new();
+    chunk.push(7);
+    chunk.push(11);
+    return chunk;
+}
+
+fn merge_direct_batch(chunk: Vec<i32>) -> i32 {
+    return len(chunk) as i32;
+}
+
+// Branch merge must consume `chunk` on both arms:
+// - thread-spawn capture move (non-copy payload)
+// - plain call move
+// Capture a fn-ptr too so SA uses the known-good inline-join thread path
+// (fn-ptr + noncopy payload), matching test_unit_fn_ptr_thread_pair_direct.
+fn merge_direct_spawn_or_call(use_threads: bool, batch: fn(Vec<i32>) -> i32) -> i32 {
+    let chunk = merge_direct_chunk();
+    if use_threads {
+        let handle = thread::spawn(^|| batch(chunk));
+        return handle.join().unwrap();
+    } else {
+        return batch(chunk);
+    };
+}
+
+@test "thread closure and direct call both consume branch chunk"() {
+    if merge_direct_spawn_or_call(false, merge_direct_batch) != 2 { panic(51380); };
+    if merge_direct_spawn_or_call(true, merge_direct_batch) != 2 { panic(51381); };
+}
+
+fn loop_capture_sum() -> i32 {
+    let acc: i32 = 0;
+    let i: i32 = 3;
+    while i <= 4 {
+        let value = i;
+        let h = thread::spawn(^|| value % 2 == 0);
+        if h.join().unwrap() { acc = acc + 10; } else { acc = acc + 1; };
+        i = i + 1;
+    }
+    return acc;
+}
+
+// Locks the loop-local capture fix: loop-body lets lower to stack slots,
+// whose register holds an address. Captures must load value bits through it
+// (worker reads value bits, same convention as SA-text); storing the address
+// made workers compute on garbage (strict SAB failed, SA passed).
+@test "loop-local closure capture carries value bits"() {
+    if loop_capture_sum() != 11 { panic(51382); };
+}

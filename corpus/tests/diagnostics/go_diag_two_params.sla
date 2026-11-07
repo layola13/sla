@@ -1,0 +1,7 @@
+fn go_diag_two_worker(a: u64, b: u64) {
+}
+
+fn go_diag_two_main() -> i32 {
+    let h = go go_diag_two_worker(1, 2);
+    return 0;
+}

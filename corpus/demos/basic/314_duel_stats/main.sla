@@ -1,0 +1,57 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 单遍 vs 三遍统计对峙（22×27：min+max+sum=1+9+25=35=35）。
+// 一遍聚合与三次扫描一致性锁定。
+
+fn main() -> i32 {
+    let s = [5, 1, 9, 3, 7];
+    let mn1 = s[0];
+    let mx1 = s[0];
+    let t1 = 0;
+    for i in 0..5 {
+        if s[i] < mn1 { mn1 = s[i]; };
+        if s[i] > mx1 { mx1 = s[i]; };
+        t1 = t1 + s[i];
+    }
+    let mn2 = s[0];
+    for i in 1..5 {
+        if s[i] < mn2 { mn2 = s[i]; };
+    }
+    let mx2 = s[0];
+    for i in 1..5 {
+        if s[i] > mx2 { mx2 = s[i]; };
+    }
+    let t2 = 0;
+    for i in 0..5 {
+        t2 = t2 + s[i];
+    }
+    println("{},{}", mn1 + mx1 + t1, mn2 + mx2 + t2);
+    return 0;
+}
+
+@test "basic 314 duel stats"() {
+    let s = [5, 1, 9, 3, 7];
+    let mn1 = s[0];
+    let mx1 = s[0];
+    let t1 = 0;
+    for i in 0..5 {
+        if s[i] < mn1 { mn1 = s[i]; };
+        if s[i] > mx1 { mx1 = s[i]; };
+        t1 = t1 + s[i];
+    }
+    let mn2 = s[0];
+    for i in 1..5 {
+        if s[i] < mn2 { mn2 = s[i]; };
+    }
+    let mx2 = s[0];
+    for i in 1..5 {
+        if s[i] > mx2 { mx2 = s[i]; };
+    }
+    let t2 = 0;
+    for i in 0..5 {
+        t2 = t2 + s[i];
+    }
+    if mn1 + mx1 + t1 != mn2 + mx2 + t2 { panic(31401); };
+    if mn2 + mx2 + t2 != 35 { panic(31402); };
+}

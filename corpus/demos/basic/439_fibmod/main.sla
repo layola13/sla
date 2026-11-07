@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 模斐波那契（fib(10) mod 7=6；fib(100) mod 7=3 经 Pisano 16）。
+// 意对标 237 斐表版的取模版（237 互补；444 做对峙，445 做三向）。
+
+fn fibmod(n: int, m: int) -> int {
+    if n == 0 { return 0; };
+    let a = 0;
+    let b = 1;
+    let i = 1;
+    while i <= n {
+        let t = (a + b) % m;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    return a;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", fibmod(10, 7), fibmod(100, 7), fibmod(5, 10));
+    return 0;
+}
+
+@test "basic 439 fibmod"() {
+    if fibmod(10, 7) != 6 { panic(43901); };
+    if fibmod(100, 7) != 3 { panic(43902); };
+    if fibmod(5, 10) != 5 { panic(43903); };
+}

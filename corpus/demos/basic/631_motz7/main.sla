@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Motzkin 高位二 M(7)=127（M(6)=51 对 51；卷积和 76）。
+// 意对标 628_motz_high（高位版互补；632 做迭代/直和对峙）。
+
+fn moz(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k <= ii - 2 {
+            s = s + t[k] * t[ii - 2 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn main() -> i32 {
+    println("{},{}", moz(6), moz(7));
+    return 0;
+}
+
+@test "basic 631 motz7"() {
+    if moz(7) != 127 { panic(63101); };
+    if moz(6) != 51 { panic(63102); };
+    if moz(5) != 21 { panic(63103); };
+}

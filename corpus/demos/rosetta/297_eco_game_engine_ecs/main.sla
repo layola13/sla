@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn eco_ecs_component_types() -> i32 { let transform = 1; let velocity = 1; let sprite = 1; return transform + velocity + sprite; }
+fn main() -> i32 { let transform = 1; let velocity = 1; let sprite = 1; let result = transform + velocity + sprite; println("{}", result); return result; }
+@test "rosetta 297 eco game engine ecs"() { let got = eco_ecs_component_types(); if got != 3 { panic(297); }; }

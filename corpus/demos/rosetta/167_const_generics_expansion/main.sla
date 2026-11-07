@@ -1,0 +1,10 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+fn const_generic_array_len() -> usize { let fixed_array = [1, 2, 3, 4]; return fixed_array.len(); }
+fn main() -> i32 {
+    let fixed_array = [1, 2, 3, 4];
+    let result = fixed_array.len();
+    println("{}", result);
+    return result;
+}
+@test "rosetta 167 167_const_generics_expansion"() { let got = const_generic_array_len(); if got != 4 { panic(167); }; }

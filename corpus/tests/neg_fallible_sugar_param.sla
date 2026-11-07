@@ -1,0 +1,9 @@
+// expect: FallibleSugarParam
+
+// A_min scope limit: the `T!` sugar exists only in return position.
+// In parameter position it would claim a calling convention the ABI
+// does not have (callers pass the bare payload, not a fallible cell),
+// so the checker rejects it loudly instead of desugaring it.
+fn sugared_param(x: u64!) -> u64 {
+    return 0;
+}

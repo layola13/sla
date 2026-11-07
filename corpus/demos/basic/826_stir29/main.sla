@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Stirling 二类第 10 行左部 S(10,2)=511，S(10,3)=9330，S(10,4)=34105（同式再上三行）。
+// 意对标 696_stir27（n=7 版互补；829 做建表/递归对峙）。
+
+fn sst(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + nn * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", sst(10, 2), sst(10, 3), sst(10, 4));
+    return 0;
+}
+
+@test "basic 826 stir29"() {
+    if sst(10, 2) != 511 { panic(82601); };
+    if sst(10, 3) != 9330 { panic(82602); };
+    if sst(10, 4) != 34105 { panic(82603); };
+    if sst(9, 3) != 3025 { panic(82604); };
+}

@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 481_paren_call：括号包裹被调函数（42,3）。
+// `(add)(...)` 双后端正常（探针 + exe 核对）。
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+fn main() -> i32 {
+    println("{},{}", (add)(40, 2), ((add))(1, 2));
+    return 0;
+}
+
+@test "basic 184 paren call"() {
+    if (add)(40, 2) != 42 { panic(18401); };
+    if ((add))(1, 2) != 3 { panic(18402); };
+}

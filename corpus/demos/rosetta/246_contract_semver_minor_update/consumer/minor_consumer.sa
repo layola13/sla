@@ -1,0 +1,16 @@
+@import "consumer/../impl/minor_impl.sa"
+
+@minor_consumer_value() -> i32:
+L_ENTRY:
+    value = call @minor_value()
+    ext = call @minor_extension()
+    ok = eq value, 246
+    !ext
+    !value
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 246
+
+L_ERR:
+    return 0

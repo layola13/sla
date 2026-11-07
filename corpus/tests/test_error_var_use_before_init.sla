@@ -1,0 +1,9 @@
+// expect: UseBeforeInit
+fn bad_var_use_before_init() -> i32 {
+    var x: i32;
+    return x;
+}
+
+fn main() -> i32 {
+    return bad_var_use_before_init();
+}

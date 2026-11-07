@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/hashset.sa"
+
+// HashSet str 版（268 为 int 版：1,2）。
+// 与 250/251 镜像先例一致，此处换键型。
+
+fn main() -> i32 {
+    let s = HashSet::new();
+    s.insert("a");
+    s.insert("b");
+    s.insert("a");
+    println("{},{}", if s.contains("b") { 1 } else { 0 }, len(s));
+    return 0;
+}
+
+@test "basic 273 hashset str"() {
+    let s = HashSet::new();
+    s.insert("a");
+    s.insert("b");
+    s.insert("a");
+    if !s.contains("b") { panic(27301); };
+    if s.contains("z") { panic(27302); };
+    if len(s) != 2 { panic(27303); };
+}

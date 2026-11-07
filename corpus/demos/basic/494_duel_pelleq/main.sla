@@ -1,0 +1,50 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Pell 基本解双实现对峙（x  ascending vs y ascending：D=5 皆得 904）。
+// 意对标 403 费马对峙的搜索版（488 互补）。
+
+fn is_square(n: int) -> int {
+    let y = 1;
+    while y * y < n {
+        y = y + 1;
+    }
+    if y * y == n { return y; };
+    return 0;
+}
+
+fn fund_x(d: int) -> int {
+    let x = 2;
+    while x <= 1000 {
+        let t = x * x - 1;
+        if t % d == 0 {
+            let y = is_square(t / d);
+            if y != 0 { return x * 100 + y; };
+        };
+        x = x + 1;
+    }
+    return 0;
+}
+
+fn fund_y(d: int) -> int {
+    let y = 1;
+    while y <= 1000 {
+        let t = d * y * y + 1;
+        let x = is_square(t);
+        if x != 0 { return x * 100 + y; };
+        y = y + 1;
+    }
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{}", fund_x(5), fund_y(5));
+    return 0;
+}
+
+@test "basic 494 duel pelleq"() {
+    if fund_x(5) != 904 { panic(49401); };
+    if fund_y(5) != 904 { panic(49402); };
+    if fund_x(5) != fund_y(5) { panic(49403); };
+    if fund_x(2) != 302 { panic(49404); };
+}

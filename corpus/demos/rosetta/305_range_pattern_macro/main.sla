@@ -1,0 +1,43 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn grade(score: i32) -> i32 {
+    if score >= 0 {
+        if score <= 59 { return 0; };
+    };
+    if score >= 60 {
+        if score <= 79 { return 1; };
+    };
+    if score >= 80 {
+        if score <= 89 { return 2; };
+    };
+    if score >= 90 {
+        if score <= 100 { return 3; };
+    } else {
+        return -1;
+    };
+    return -1;
+}
+
+fn main() -> i32 {
+    let a = grade(45);
+    let b = grade(72);
+    let c = grade(85);
+    let d = grade(95);
+    let e = grade(101);
+    println("{},{},{},{},{}", a, b, c, d, e);
+    if a != 0 { return 1; };
+    if b != 1 { return 1; };
+    if c != 2 { return 1; };
+    if d != 3 { return 1; };
+    if e != -1 { return 1; };
+    return 0;
+}
+
+@test "rosetta 305 range pattern macro"() {
+    if grade(45) != 0 { panic(305); };
+    if grade(72) != 1 { panic(306); };
+    if grade(85) != 2 { panic(307); };
+    if grade(95) != 3 { panic(308); };
+    if grade(101) != -1 { panic(309); };
+}

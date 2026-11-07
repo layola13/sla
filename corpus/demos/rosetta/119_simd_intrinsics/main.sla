@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn simd_lane_sum() -> i32 {
+    let lanes: [i32; 4] = [1, 2, 3, 4];
+    let total: i32 = lanes.iter().sum();
+    return total;
+}
+
+fn main() -> i32 {
+    let result = simd_lane_sum();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 119 119_simd_intrinsics"() {
+    let got = simd_lane_sum();
+    if got != 10 {
+        panic(119);
+    };
+};

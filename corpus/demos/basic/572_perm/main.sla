@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 排列数 P(n,k)=n·(n-1)…(n-k+1)（P(5,2)=20，P(6,3)=120，P(10,2)=90；573 做全排列对峙）。
+// 意对标 350 binom（除法版互补；此处为无除连乘，567 下降阶乘同形）。
+
+fn perm(n: int, k: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < k {
+        r = r * (n - i);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", perm(5, 2), perm(6, 3), perm(10, 2));
+    return 0;
+}
+
+@test "basic 572 perm"() {
+    if perm(5, 2) != 20 { panic(57201); };
+    if perm(6, 3) != 120 { panic(57202); };
+    if perm(10, 2) != 90 { panic(57203); };
+    if perm(4, 0) != 1 { panic(57204); };
+}

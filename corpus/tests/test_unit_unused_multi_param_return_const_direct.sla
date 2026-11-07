@@ -1,0 +1,10 @@
+fn unused_multi_param_return_const(dst: ptr, off: int, src: ptr, n: int) -> int {
+    return 0;
+}
+
+@test "direct sab unused multi-param const return stays valid"() {
+    let got = unused_multi_param_return_const("abc", 1, "def", 3);
+    if got != 0 {
+        panic(61084);
+    };
+}

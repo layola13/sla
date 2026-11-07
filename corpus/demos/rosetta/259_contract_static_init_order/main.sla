@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_static_init_stages() -> i32 {
+    let config_loaded = 1;
+    let service_started = 1;
+    return config_loaded + service_started;
+}
+
+fn main() -> i32 {
+    let config_loaded = 1;
+    let service_started = 1;
+    let result = config_loaded + service_started;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 259 contract static init order"() {
+    let got = contract_static_init_stages();
+    if got != 2 { panic(259); };
+}

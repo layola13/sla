@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 阶乘素指数（Legendre：v2(10!)=8，v3(10!)=4，v5(10!)=2）。
+// 意对标 349 阶乘零的素数版（349 互补）。
+
+fn prime_exp_fact(n: int, p: int) -> int {
+    let c = 0;
+    let d = p;
+    while d <= n {
+        c = c + n / d;
+        d = d * p;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", prime_exp_fact(10, 2), prime_exp_fact(10, 3), prime_exp_fact(10, 5));
+    return 0;
+}
+
+@test "basic 392 fact prime exp"() {
+    if prime_exp_fact(10, 2) != 8 { panic(39201); };
+    if prime_exp_fact(10, 3) != 4 { panic(39202); };
+    if prime_exp_fact(10, 5) != 2 { panic(39203); };
+}

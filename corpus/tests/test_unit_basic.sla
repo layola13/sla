@@ -1,0 +1,48 @@
+// Sla unit test framework demo - basic tests
+// Run with: sa sla test tests/test_unit_basic.sla
+
+fn add(a: int, b: int) -> int {
+    return a + b;
+}
+
+fn factorial(n: int) -> int {
+    if n <= 1 {
+        return 1;
+    } else {
+        return n * factorial(n - 1);
+    };
+}
+
+// ─── @test blocks ─────────────────────────────────────────────
+// Syntax:  @test [ignored] [should_panic] "name"() { body }
+// Use:     let ok = expr; if ok { } else { panic(1); };
+
+@test "add two positive numbers"() {
+    let result = add(3, 4);
+    let ok = result == 7;
+    if ok { } else { panic(1); };
+}
+
+@test "add with zero"() {
+    let result = add(0, 42);
+    let ok = result == 42;
+    if ok { } else { panic(1); };
+}
+
+@test "factorial of 5"() {
+    let result = factorial(5);
+    let ok = result == 120;
+    if ok { } else { panic(1); };
+}
+
+@test "add is commutative"() {
+    let ab = add(2, 3);
+    let ba = add(3, 2);
+    let ok = ab == ba;
+    if ok { } else { panic(1); };
+}
+
+@test ignored "this test is skipped by default"() {
+    // Only runs with --include-ignored
+    let x = add(1, 1);
+}

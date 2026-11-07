@@ -1,0 +1,18 @@
+@import "consumer/../bridge/callback_vtable.sa"
+
+@callback_consumer_value() -> i32:
+L_ENTRY:
+    slot = alloc Slot_SIZE
+    store slot+Slot_DATA, 0 as ptr
+    store slot+Slot_VTABLE, &CALLBACK_VT as ptr
+    result = call @register(&slot)
+    ok = eq result, 0
+    !result
+    !slot
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 253
+
+L_ERR:
+    return 0

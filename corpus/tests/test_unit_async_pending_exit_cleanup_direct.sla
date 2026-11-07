@@ -1,0 +1,33 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+@import "sa_std/core/refcell.sa"
+@import "import_fixtures/imported_refcell_helpers.sa"
+
+struct PendingExitPayload {
+    value: i64,
+}
+
+fn pending_exit_borrow_count(cell: &RefCell<PendingExitPayload>) -> i64 {
+    SLA_REFCELL_BORROW_COUNT(cell)
+}
+
+async fn pending_exit_releases_borrow(cell: &RefCell<PendingExitPayload>, fut: future<i64>) -> i64 {
+    let borrowed: &PendingExitPayload = cell.borrow();
+    let value = fut.await;
+    return value;
+}
+
+@test "async pending exit releases active borrow"() {
+    let cell = RefCell::new(PendingExitPayload { value: 137 });
+    let fut = pending_exit_releases_borrow(&cell, future::pending::<i64>());
+    if pending_exit_borrow_count(&cell) != 0 {
+        panic(30950);
+    };
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(30951);
+    };
+    if task::is_ready(task) != false {
+        panic(30952);
+    };
+}

@@ -1,0 +1,29 @@
+@import "sa_std/future.sa"
+
+fn ready_poll_value() -> int {
+    let poll = poll::ready(42);
+    if poll::is_pending(poll) == true {
+        return 0;
+    };
+    if poll::is_ready(poll) != true {
+        return 0;
+    };
+    return poll::value(poll);
+}
+
+fn pending_poll_state() -> bool {
+    let poll = poll::pending::<i32>();
+    if poll::is_ready(poll) == true {
+        return false;
+    };
+    return poll::is_pending(poll);
+}
+
+@test "poll runtime surface"() {
+    if ready_poll_value() != 42 {
+        panic(9301);
+    };
+    if pending_poll_state() != true {
+        panic(9302);
+    };
+}

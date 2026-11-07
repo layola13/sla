@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 循环 vs 公式平均对峙（227×245：5=5）。
+// 双实现一致性锁定（单实现见 227/245）。
+
+fn avg_loop(a: [int; 4]) -> int {
+    let s = 0;
+    for i in 0..4 {
+        s = s + a[i];
+    }
+    return s / 4;
+}
+
+fn avg_form(a: [int; 4]) -> int {
+    return (a[0] + a[3]) * 4 / 2 / 4;
+}
+
+fn main() -> i32 {
+    let a = [2, 4, 6, 8];
+    println("{}", avg_loop(a));
+    return 0;
+}
+
+@test "basic 298 duel avg"() {
+    let a = [2, 4, 6, 8];
+    if avg_loop(a) != avg_form(a) { panic(29801); };
+    if avg_form(a) != 5 { panic(29802); };
+}

@@ -1,0 +1,187 @@
+// Smoke wave 1: register-2 externs in sa_std/identity.sai (idmap/idset
+// handle chains). Panic codes 53xxx.
+@import "sla_std/wrap/identity.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+fn s1_idmap(code: i32) -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_idmap_new(&cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+fn s1_idset(code: i32) -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_idset_new(&cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+@test "smoke1 sa_idmap_free"() {
+    let h = s1_idmap(53010);
+    let rc = sla_idmap_free(h);
+    if rc != 0 { panic(53012); };
+}
+
+@test "smoke1 sa_idmap_set"() {
+    let h = s1_idmap(53020);
+    let rc = sla_idmap_set(h, 7, STR_PTR("seven"), STR_LEN("seven"));
+    if rc != 0 { panic(53021); };
+    let out = [0u64; 4];
+    let rc2 = sla_idmap_has(h, 7, &out[0]);
+    if rc2 != 0 { panic(53022); };
+    if out[0] != 1 { panic(53023); };
+    sla_idmap_free(h);
+}
+
+@test "smoke1 sa_idmap_get"() {
+    let h = s1_idmap(53030);
+    sla_idmap_set(h, 7, STR_PTR("seven"), STR_LEN("seven"));
+    let buf = [0u8; 64];
+    let olen = [0u64; 4];
+    let rc = sla_idmap_get(h, 7, &buf[0], 64, &olen[0]);
+    if rc != 0 { panic(53031); };
+    if olen[0] != 5 { panic(53032); };
+    if buf[0] != 115 { panic(53033); };
+    if buf[4] != 110 { panic(53034); };
+    sla_idmap_free(h);
+}
+
+@test "smoke1 sa_idmap_set_u64"() {
+    let h = s1_idmap(53040);
+    let rc = sla_idmap_set_u64(h, 9, 123456789);
+    if rc != 0 { panic(53041); };
+    let out = [0u64; 4];
+    let rc2 = sla_idmap_get_u64(h, 9, &out[0]);
+    if rc2 != 0 { panic(53042); };
+    if out[0] != 123456789 { panic(53043); };
+    sla_idmap_free(h);
+}
+
+@test "smoke1 sa_idmap_get_u64"() {
+    let h = s1_idmap(53050);
+    sla_idmap_set_u64(h, 3, 42);
+    let out = [0u64; 4];
+    let rc = sla_idmap_get_u64(h, 3, &out[0]);
+    if rc != 0 { panic(53051); };
+    if out[0] != 42 { panic(53052); };
+    // Missing key must fail loudly.
+    let rc2 = sla_idmap_get_u64(h, 99, &out[0]);
+    if rc2 == 0 { panic(53053); };
+    sla_idmap_free(h);
+}
+
+@test "smoke1 sa_idmap_has"() {
+    let h = s1_idmap(53060);
+    sla_idmap_set_u64(h, 5, 1);
+    let out = [0u64; 4];
+    let rc = sla_idmap_has(h, 5, &out[0]);
+    if rc != 0 { panic(53061); };
+    if out[0] != 1 { panic(53062); };
+    let rc2 = sla_idmap_has(h, 6, &out[0]);
+    if rc2 != 0 { panic(53063); };
+    if out[0] != 0 { panic(53064); };
+    sla_idmap_free(h);
+}
+
+@test "smoke1 sa_idmap_remove"() {
+    let h = s1_idmap(53070);
+    sla_idmap_set_u64(h, 5, 1);
+    let rc = sla_idmap_remove(h, 5);
+    if rc != 0 { panic(53071); };
+    let out = [0u64; 4];
+    sla_idmap_has(h, 5, &out[0]);
+    if out[0] != 0 { panic(53072); };
+    sla_idmap_free(h);
+}
+
+@test "smoke1 sa_idmap_len"() {
+    let h = s1_idmap(53080);
+    sla_idmap_set_u64(h, 1, 10);
+    sla_idmap_set_u64(h, 2, 20);
+    sla_idmap_set(h, 3, STR_PTR("three"), STR_LEN("three"));
+    let out = [0u64; 4];
+    let rc = sla_idmap_len(h, &out[0]);
+    if rc != 0 { panic(53081); };
+    if out[0] != 3 { panic(53082); };
+    sla_idmap_free(h);
+}
+
+@test "smoke1 sa_idmap_clear"() {
+    let h = s1_idmap(53090);
+    sla_idmap_set_u64(h, 1, 10);
+    sla_idmap_set_u64(h, 2, 20);
+    let rc = sla_idmap_clear(h);
+    if rc != 0 { panic(53091); };
+    let out = [0u64; 4];
+    sla_idmap_len(h, &out[0]);
+    if out[0] != 0 { panic(53092); };
+    sla_idmap_free(h);
+}
+
+@test "smoke1 sa_idset_free"() {
+    let h = s1_idset(53100);
+    let rc = sla_idset_free(h);
+    if rc != 0 { panic(53101); };
+}
+
+@test "smoke1 sa_idset_add"() {
+    let h = s1_idset(53110);
+    let rc = sla_idset_add(h, 42);
+    if rc != 0 { panic(53111); };
+    let out = [0u64; 4];
+    sla_idset_has(h, 42, &out[0]);
+    if out[0] != 1 { panic(53112); };
+    sla_idset_free(h);
+}
+
+@test "smoke1 sa_idset_has"() {
+    let h = s1_idset(53120);
+    sla_idset_add(h, 42);
+    let out = [0u64; 4];
+    let rc = sla_idset_has(h, 42, &out[0]);
+    if rc != 0 { panic(53121); };
+    if out[0] != 1 { panic(53122); };
+    let rc2 = sla_idset_has(h, 43, &out[0]);
+    if rc2 != 0 { panic(53123); };
+    if out[0] != 0 { panic(53124); };
+    sla_idset_free(h);
+}
+
+@test "smoke1 sa_idset_remove"() {
+    let h = s1_idset(53130);
+    sla_idset_add(h, 42);
+    let rc = sla_idset_remove(h, 42);
+    if rc != 0 { panic(53131); };
+    let out = [0u64; 4];
+    sla_idset_has(h, 42, &out[0]);
+    if out[0] != 0 { panic(53132); };
+    sla_idset_free(h);
+}
+
+@test "smoke1 sa_idset_len"() {
+    let h = s1_idset(53140);
+    sla_idset_add(h, 1);
+    sla_idset_add(h, 2);
+    sla_idset_add(h, 2);
+    let out = [0u64; 4];
+    let rc = sla_idset_len(h, &out[0]);
+    if rc != 0 { panic(53141); };
+    if out[0] != 2 { panic(53142); };
+    sla_idset_free(h);
+}
+
+@test "smoke1 sa_idset_clear"() {
+    let h = s1_idset(53150);
+    sla_idset_add(h, 1);
+    sla_idset_add(h, 2);
+    let rc = sla_idset_clear(h);
+    if rc != 0 { panic(53151); };
+    let out = [0u64; 4];
+    sla_idset_len(h, &out[0]);
+    if out[0] != 0 { panic(53152); };
+    sla_idset_free(h);
+}

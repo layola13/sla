@@ -1,0 +1,7 @@
+@import "sa_std/fs.sa"
+
+@test "direct sab imported macro move arg is not released twice"() {
+    let buffer: u64 = 0;
+    let status = FS_READ_BUFFER_FREE(buffer);
+    let observed = status;
+}

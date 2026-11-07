@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 整数反转（rev(12345)=54321，尾零自然丢弃）。
+// 意对标 234 回文判定的反转版（234 互补；412 做对峙）。
+
+fn rev(n: int) -> int {
+    let r = 0;
+    let m = n;
+    while m > 0 {
+        r = r * 10 + m % 10;
+        m = m / 10;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", rev(12345), rev(100), rev(7));
+    return 0;
+}
+
+@test "basic 409 rev num"() {
+    if rev(12345) != 54321 { panic(40901); };
+    if rev(100) != 1 { panic(40902); };
+    if rev(7) != 7 { panic(40903); };
+}

@@ -1,0 +1,62 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_gate_open = vtable { call = @sla__gate_open }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__gate_open(arrived: i32, required: i32) -> u8:
+L_ENTRY:
+    tmp_0 = sge arrived, required
+    !arrived
+    !required
+    return tmp_0
+
+@main() -> i32:
+L_ENTRY:
+    tmp_1 = 3
+    tmp_2 = 3
+    tmp_3 = call @sla__gate_open(tmp_1, tmp_2)
+    !tmp_1
+    !tmp_2
+    ready = tmp_3
+    tmp_4 = call @sa_fmt_bool(ready)
+    tmp_5 = call @sa_fmt_buffer_data(tmp_4)
+    tmp_6 = call @sa_fmt_buffer_len(tmp_4)
+    tmp_7 = tmp_5
+    call @sa_print_bytes(&tmp_7, tmp_6)
+    call @sa_fmt_buffer_free(^tmp_4)
+    !tmp_7
+    !tmp_6
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_8 = 0
+    !ready
+    return tmp_8
+
+@test "rosetta 084 84_sync_gate"():
+L_TEST_ENTRY_0:
+    tmp_9 = 3
+    tmp_10 = 3
+    tmp_11 = call @sla__gate_open(tmp_9, tmp_10)
+    !tmp_9
+    !tmp_10
+    got = tmp_11
+    tmp_12 = 1
+    tmp_13 = ne got, tmp_12
+    !tmp_12
+    br tmp_13 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_13
+    panic(84)
+
+L_ELSE_2:
+    !tmp_13
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

@@ -1,0 +1,50 @@
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/core/result.sa"
+
+// DEF-ARC-DROP (F1): Box drop = payload drop + cell release. Pre-fix
+// a Box binding's release was a bare register release (BOX_FREE is
+// just `!reg`): the payload's owned values were never dropped and
+// the cell was never freed. These tests observe the payload side
+// through an Arc held inside the box: when the box dies, the inner
+// Arc's count must fall by exactly one.
+
+struct Counter { n: i32 }
+
+struct Wrap { a: Arc<Counter> }
+
+fn make_box_of_wrap(a: Arc<Counter>) -> i32 {
+    let bx = Box::new(Wrap { a: a });
+    return (*bx).a.strong_count();
+}
+
+@test "box drop decrements arc payload in struct"() {
+    let probe = Arc::new(Counter { n: 5 });
+    let during = make_box_of_wrap(probe.clone());
+    if during != 2 { panic(7401); };
+    // The box died inside the callee: payload struct's field drop
+    // decremented the inner Arc back to the probe's single ref.
+    if probe.strong_count() != 1 { panic(7402); };
+    if (*probe).n != 5 { panic(7403); };
+}
+
+fn make_box_of_arc(a: Arc<Counter>) -> i32 {
+    let bx = Box::new(a);
+    return (*bx).strong_count();
+}
+
+@test "box drop decrements arc payload direct"() {
+    let probe = Arc::new(Counter { n: 9 });
+    let during = make_box_of_arc(probe.clone());
+    if during != 2 { panic(7411); };
+    if probe.strong_count() != 1 { panic(7412); };
+}
+
+fn make_box_scalar() -> i32 {
+    let bx = Box::new(7328197);
+    return *bx;
+}
+
+@test "box scalar payload still works"() {
+    if make_box_scalar() != 7328197 { panic(7421); };
+}

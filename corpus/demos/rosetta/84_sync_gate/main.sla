@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct GateState {
+    arrived: i32,
+    required: i32,
+    drained: bool,
+}
+
+fn gate_code(state: GateState) -> i32 {
+    if state.drained == true {
+        return 2;
+    };
+    if state.arrived >= state.required {
+        return 1;
+    };
+    return 0;
+}
+
+fn main() -> i32 {
+    let code = gate_code(GateState { arrived: 3, required: 3, drained: false });
+    println("{}", code);
+    return code;
+};
+
+@test "rosetta 084 84_sync_gate"() {
+    let got = gate_code(GateState { arrived: 3, required: 3, drained: false });
+    if got != 1 {
+        panic(84);
+    };
+};

@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+fn eval_line(line: ptr) -> i32 {
+    if str_eq(line, ":quit") == true {
+        return 0;
+    } else {
+        if str_eq(line, ":mode") == true {
+            return 3;
+        } else {
+            if str_eq(line, "help") == true {
+                return 1;
+            } else {
+                return 2;
+            };
+        };
+    };
+}
+
+fn main() -> i32 {
+    let result = eval_line(":mode");
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 095 95_repl_shell"() {
+    let got = eval_line(":mode");
+    if got != 3 {
+        panic(95);
+    };
+};

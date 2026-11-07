@@ -1,0 +1,140 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@main() -> i32:
+L_ENTRY:
+    value = alloc 12
+    store value+0, 0 as i64
+    tmp_0 = 7
+    store value+8, tmp_0 as i32
+    tmp_1 = alloc 4
+    jmp L_MATCH_CHECK_0_2
+
+L_MATCH_CHECK_0_2:
+    tmp_2 = load value+0 as i64
+    tmp_3 = 0
+    tmp_4 = eq tmp_2, tmp_3
+    !tmp_2
+    !tmp_3
+    br tmp_4 -> L_MATCH_CASE_0_2, L_MATCH_CHECK_1_2
+
+L_MATCH_CASE_0_2:
+    !tmp_4
+    v = load value+8 as i32
+    tmp_5 = add v, 0
+    store tmp_1+0, tmp_5 as i32
+    !tmp_5
+    !v
+    jmp L_MATCH_MERGE_0
+
+L_MATCH_CHECK_1_2:
+    !tmp_4
+    tmp_6 = load value+0 as i64
+    tmp_7 = 1
+    tmp_8 = eq tmp_6, tmp_7
+    !tmp_6
+    !tmp_7
+    br tmp_8 -> L_MATCH_CASE_1_2, L_MATCH_NO_MATCH_1
+
+L_MATCH_CASE_1_2:
+    !tmp_8
+    tmp_9 = 0
+    store tmp_1+0, tmp_9 as i32
+    !tmp_9
+    jmp L_MATCH_MERGE_0
+
+L_MATCH_NO_MATCH_1:
+    !tmp_8
+    panic(1)
+
+L_MATCH_MERGE_0:
+    tmp_10 = load tmp_1+0 as i32
+    !tmp_1
+    result = tmp_10
+    tmp_11 = call @sa_fmt_u64(result, 10)
+    tmp_12 = call @sa_fmt_buffer_data(tmp_11)
+    tmp_13 = call @sa_fmt_buffer_len(tmp_11)
+    tmp_14 = tmp_12
+    call @sa_print_bytes(&tmp_14, tmp_13)
+    call @sa_fmt_buffer_free(^tmp_11)
+    !tmp_14
+    !tmp_13
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_15 = 0
+    !value
+    !result
+    return tmp_15
+
+@test "rosetta 039 generic enum i32"():
+L_TEST_ENTRY_3:
+    value = alloc 12
+    store value+0, 0 as i64
+    tmp_16 = 7
+    store value+8, tmp_16 as i32
+    tmp_17 = alloc 4
+    jmp L_MATCH_CHECK_0_6
+
+L_MATCH_CHECK_0_6:
+    tmp_18 = load value+0 as i64
+    tmp_19 = 0
+    tmp_20 = eq tmp_18, tmp_19
+    !tmp_18
+    !tmp_19
+    br tmp_20 -> L_MATCH_CASE_0_6, L_MATCH_CHECK_1_6
+
+L_MATCH_CASE_0_6:
+    !tmp_20
+    v = load value+8 as i32
+    tmp_21 = add v, 0
+    store tmp_17+0, tmp_21 as i32
+    !tmp_21
+    !v
+    jmp L_MATCH_MERGE_4
+
+L_MATCH_CHECK_1_6:
+    !tmp_20
+    tmp_22 = load value+0 as i64
+    tmp_23 = 1
+    tmp_24 = eq tmp_22, tmp_23
+    !tmp_22
+    !tmp_23
+    br tmp_24 -> L_MATCH_CASE_1_6, L_MATCH_NO_MATCH_5
+
+L_MATCH_CASE_1_6:
+    !tmp_24
+    tmp_25 = 0
+    store tmp_17+0, tmp_25 as i32
+    !tmp_25
+    jmp L_MATCH_MERGE_4
+
+L_MATCH_NO_MATCH_5:
+    !tmp_24
+    panic(1)
+
+L_MATCH_MERGE_4:
+    tmp_26 = load tmp_17+0 as i32
+    !tmp_17
+    result = tmp_26
+    tmp_27 = 7
+    tmp_28 = ne result, tmp_27
+    !tmp_27
+    br tmp_28 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_28
+    panic(39)
+
+L_ELSE_8:
+    !tmp_28
+    jmp L_MERGE_9
+
+L_MERGE_9:
+    !value
+    !result
+    return
+

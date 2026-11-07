@@ -1,0 +1,8 @@
+@import "src/defaults/index.sa"
+
+@src_package_value() -> i32:
+L_ENTRY:
+    defaults = call @defaults_package_value()
+    value = add 200, defaults
+    !defaults
+    return value

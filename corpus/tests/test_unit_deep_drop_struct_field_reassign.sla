@@ -1,0 +1,51 @@
+@import "sa_std/vec.sa"
+
+// DEF deep-drop regression (DESIGN.md §4.3/§4.4): reassigning a
+// heap-struct Vec field must drop the overwritten value's buffer
+// (probe_c / slaredis reset idiom), and the struct's scope-exit
+// drop must free the final field value. Functional half: after
+// each reassignment the field must read back as the NEW value
+// (dropping the new value instead of the old, or freeing the
+// storage under the live field, breaks the readback). The leak
+// half is locked by the emission assertions in plugin_tests and
+// the probe_c A/B memory numbers in the batch report.
+
+struct Holder {
+    buf: Vec<u8>,
+    tag: u64,
+}
+
+fn filled_vec(n: u64, seed: u8) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(seed + (i % 5) as u8);
+        i = i + 1;
+    }
+    return v;
+}
+
+fn sum_vec(v: &Vec<u8>) -> u64 {
+    let sum: u64 = 0;
+    let i: u64 = 0;
+    while i < 48 {
+        sum = sum + (v[i] as u64);
+        i = i + 1;
+    }
+    return sum;
+}
+
+@test "deep drop frees overwritten struct vec field"() {
+    let h = Box::into_raw(Box::new(Holder { buf: filled_vec(48, 1), tag: 7 }));
+    // sum(i%5 for i in 0..48) = 9 * 10 + (0+1+2) = 93; +48 * seed.
+    if sum_vec(&(*h).buf) != 93 + 48 { panic(4201); };
+    let r: u64 = 0;
+    while r < 25 {
+        (*h).buf = filled_vec(48, 2);
+        if sum_vec(&(*h).buf) != 93 + 96 { panic(4202); };
+        (*h).buf = filled_vec(48, 3);
+        if sum_vec(&(*h).buf) != 93 + 144 { panic(4203); };
+        r = r + 1;
+    }
+    if (*h).tag != 7 { panic(4204); };
+}

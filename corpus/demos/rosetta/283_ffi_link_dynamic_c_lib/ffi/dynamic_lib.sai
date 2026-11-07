@@ -1,0 +1,1 @@
+@extern dynamiclib_probe(tag: i32) -> i32

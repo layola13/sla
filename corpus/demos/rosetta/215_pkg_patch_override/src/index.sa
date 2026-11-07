@@ -1,0 +1,8 @@
+@import "src/patches/index.sa"
+
+@src_package_value() -> i32:
+L_ENTRY:
+    patches = call @patches_package_value()
+    value = add 200, patches
+    !patches
+    return value

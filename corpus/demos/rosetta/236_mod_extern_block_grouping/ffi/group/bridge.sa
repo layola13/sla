@@ -1,0 +1,18 @@
+@import "ffi/group/core/seed.sa"
+
+@export ffi_probe(&slot: ptr) -> i32:
+L_ENTRY:
+    seed = call @ffi_seed()
+    value = load slot+Group_value as i32
+    total = add value, seed
+    !seed
+    !value
+    !slot
+    return total
+
+@export ffi_reset(&slot: ptr) -> i32:
+L_ENTRY:
+    seed = call @ffi_seed()
+    store slot+Group_value, seed as i32
+    !slot
+    return seed

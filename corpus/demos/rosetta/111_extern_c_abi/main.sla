@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+@no_mangle pub extern "C" fn add_pair(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+fn extern_c_add_pair_value() -> i32 {
+    let result = unsafe { add_pair(11, 12) };
+    return result;
+}
+
+fn main() -> i32 {
+    let result = unsafe { add_pair(11, 12) };
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 111 111_extern_c_abi"() {
+    let got = extern_c_add_pair_value();
+    if got != 23 {
+        panic(111);
+    };
+};

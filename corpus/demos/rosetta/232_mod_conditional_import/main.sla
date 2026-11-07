@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn conditional_import_selected_branch() -> i32 {
+    let active_platform_branch = 1;
+    return active_platform_branch;
+}
+
+fn main() -> i32 {
+    let result = conditional_import_selected_branch();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 232 mod conditional import"() {
+    let got = conditional_import_selected_branch();
+    if got != 1 {
+        panic(232);
+    };
+}

@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn sync_needed(local_version: i32, remote_version: i32, dirty: bool, offline: bool) -> bool {
+    if offline == true {
+        return false;
+    } else {
+        if dirty == true {
+            return true;
+        } else {
+            return local_version < remote_version;
+        };
+    };
+}
+
+fn main() -> i32 {
+    let sync = sync_needed(7, 9, false, false);
+    println("{}", sync);
+    return 0;
+};
+
+@test "rosetta 097 97_sync_service"() {
+    let got = sync_needed(7, 9, false, false);
+    if got != true {
+        panic(97);
+    };
+};

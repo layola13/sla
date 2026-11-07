@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 13_struct / 19_destructure：struct 构造 + 字段读写。
+
+struct Pt {
+    x: i32,
+    y: i32,
+}
+
+fn pt_sum(p: Pt) -> i32 {
+    return p.x + p.y;
+}
+
+fn main() -> i32 {
+    let p = Pt { x: 3, y: 4 };
+    println("{}", p.x + p.y);
+    p.x = 10;
+    println("{}", p.x * p.y);
+    return 0;
+}
+
+@test "basic 11 struct fields"() {
+    let p = Pt { x: 3, y: 4 };
+    if pt_sum(p) != 7 { panic(1101); };
+    p.x = 10;
+    if p.x != 10 { panic(1102); };
+    if p.x * p.y != 40 { panic(1103); };
+}

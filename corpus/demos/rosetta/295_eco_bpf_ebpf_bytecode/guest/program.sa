@@ -1,0 +1,21 @@
+@import "guest/program.sal"
+
+@ffi_wrapper ebpf_gate(*packet: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow packet
+    kind = load view+BpfPacket_kind as i32
+    value = load view+BpfPacket_value as i32
+    sum = add kind, value
+    !value
+    !kind
+    !view
+    return sum
+
+@export ebpf_guest_entry() -> i32:
+L_ENTRY:
+    packet = alloc BpfPacket_SIZE
+    store packet+BpfPacket_kind, 295 as i32
+    store packet+BpfPacket_value, 0 as i32
+    value = call @ebpf_gate(*packet)
+    !packet
+    return value

@@ -1,0 +1,14 @@
+@import "consumer/../bridge/deprecated_bridge.sa"
+
+@deprecated_consumer_value() -> i32:
+L_ENTRY:
+    value = call @legacy_value()
+    ok = eq value, 260
+    !value
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 260
+
+L_ERR:
+    return 0

@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 汉明距离（85 vs 170 → 8；7 vs 3 → 1）。
+// 意对标 510 位计数对的应用版（510 互补；避 `^` 未知算子）。
+
+fn hamming(a: int, b: int) -> int {
+    let c = 0;
+    let x = a;
+    let y = b;
+    while x != 0 {
+        if x % 2 != y % 2 { c = c + 1; };
+        x = x / 2;
+        y = y / 2;
+    }
+    while y != 0 {
+        if y % 2 != 0 { c = c + 1; };
+        y = y / 2;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", hamming(85, 170), hamming(7, 3), hamming(0, 0));
+    return 0;
+}
+
+@test "basic 511 hamming"() {
+    if hamming(85, 170) != 8 { panic(51101); };
+    if hamming(7, 3) != 1 { panic(51102); };
+    if hamming(0, 0) != 0 { panic(51103); };
+}

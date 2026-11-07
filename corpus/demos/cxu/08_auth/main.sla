@@ -1,0 +1,64 @@
+// D8: auth small items — the CXU auth surface distilled.
+// sa_bcrypt_* / sa_keyring_* (sa_std, crypto.sai): bcrypt password
+// hashing + verify, and an OS keyring roundtrip (set/get/remove,
+// missing entries are an explicit status 3). The keyring half needs a
+// session Secret Service; run.sh provides one (dbus-run-session +
+// gnome-keyring-daemon).
+@import "sa_std/crypto.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/io/print.sai"
+@import "byteseq.sa"
+
+fn main() -> i32 {
+    // bcrypt: hash at cost 10, verify right and wrong passwords.
+    let hbuf = [0u8; 128];
+    let hlen: u64 = 0;
+    if sa_bcrypt_hash(STR_PTR("correct horse"), STR_LEN("correct horse"), 10, &hbuf, 128, &hlen) != 0 {
+        return 2;
+    };
+    if hlen != 60 {
+        return 3;
+    };
+    // "$2b$10$" prefix, bytewise ($=36 2=50 b=98 1=49 0=48).
+    if hbuf[0] != 36 || hbuf[1] != 50 || hbuf[2] != 98 || hbuf[3] != 36 || hbuf[4] != 49 || hbuf[5] != 48 || hbuf[6] != 36 {
+        return 4;
+    };
+    let slot = [0u64; 1];
+    let matched: u32 = 0;
+    if sa_bcrypt_verify(STR_PTR("correct horse"), STR_LEN("correct horse"), &hbuf, hlen, &matched) != 0 || matched != 1 {
+        return 5;
+    };
+    if sa_bcrypt_verify(STR_PTR("wrong horse"), STR_LEN("wrong horse"), &hbuf, hlen, &matched) != 0 || matched != 0 {
+        return 6;
+    };
+
+    // keyring: availability, set/get/remove roundtrip, explicit misses.
+    if sa_keyring_available() != 1 {
+        return 7;
+    };
+    if sa_keyring_set(STR_PTR("session"), STR_LEN("session"), STR_PTR("cxu-demo-token"), STR_LEN("cxu-demo-token"), STR_PTR("s3cret-value"), STR_LEN("s3cret-value")) != 0 {
+        return 8;
+    };
+    let vbuf = [0u8; 128];
+    let vlen: u64 = 0;
+    if sa_keyring_get(STR_PTR("cxu-demo-token"), STR_LEN("cxu-demo-token"), &vbuf, 128, &vlen) != 0 {
+        return 9;
+    };
+    BYTES_EQ(&slot, &vbuf, vlen, STR_PTR("s3cret-value"), STR_LEN("s3cret-value"));
+    if slot[0] != 1 {
+        return 10;
+    };
+    if sa_keyring_remove(STR_PTR("cxu-demo-token"), STR_LEN("cxu-demo-token")) != 0 {
+        return 11;
+    };
+    let gone = sa_keyring_get(STR_PTR("cxu-demo-token"), STR_LEN("cxu-demo-token"), &vbuf, 128, &vlen);
+    if gone != 3 {
+        return 12;
+    };
+    if sa_keyring_remove(STR_PTR("cxu-demo-token"), STR_LEN("cxu-demo-token")) != 3 {
+        return 13;
+    };
+    println("d8 auth ok");
+    return 0;
+}

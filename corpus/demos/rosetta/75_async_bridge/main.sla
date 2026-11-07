@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/future.sa"
+
+async fn compute() -> i32 {
+    let left = 2;
+    let right = 3;
+    return left + right;
+}
+
+fn async_bridge_value() -> i32 {
+    return compute().await;
+}
+
+fn main() -> i32 {
+    let result = async_bridge_value();
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 075 75_async_bridge"() {
+    let got = async_bridge_value();
+    if got != 5 {
+        panic(75);
+    };
+};

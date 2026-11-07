@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1057_for_call_bound：调用作循环上界（6）。
+// SLA `for` 无步长且界须为区间，此处用 `while i < n()` 表达
+//（每次迭代重求上界，与 TS 语义一致）；
+
+fn n() -> i32 { return 4; }
+
+fn main() -> i32 {
+    let t = 0;
+    let i = 0;
+    while i < n() {
+        t = t + i;
+        i = i + 1;
+    }
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 163 call bound loop"() {
+    let t = 0;
+    let i = 0;
+    while i < n() {
+        t = t + i;
+        i = i + 1;
+    }
+    if t != 6 { panic(16301); };
+}

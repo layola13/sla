@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Bell 数（B(5)=52，经 Stirling 第二类求和）。
+// 意对标 351 Catalan 的集合划分版（351 互补；454 做对峙）。
+
+fn stirling2(n: int, k: int) -> int {
+    if n == 0 { return 0; };
+    if k == 0 { return 0; };
+    if k == 1 { return 1; };
+    if k > n { return 0; };
+    if k == n { return 1; };
+    return k * stirling2(n - 1, k) + stirling2(n - 1, k - 1);
+}
+
+fn bell(n: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= n {
+        s = s + stirling2(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", bell(5), bell(4), stirling2(5, 3));
+    return 0;
+}
+
+@test "basic 451 bell"() {
+    if bell(5) != 52 { panic(45101); };
+    if bell(4) != 15 { panic(45102); };
+    if stirling2(5, 3) != 25 { panic(45103); };
+    if stirling2(5, 2) != 15 { panic(45104); };
+}

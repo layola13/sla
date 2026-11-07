@@ -1,0 +1,8 @@
+@import "src/profiles/release/index.sa"
+
+@src_package_value() -> i32:
+L_ENTRY:
+    profile = call @release_package_value()
+    value = add 200, profile
+    !profile
+    return value

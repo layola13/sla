@@ -1,0 +1,8 @@
+@import "profiles/native/detail/seed.sa"
+
+@export native_value() -> i32:
+L_ENTRY:
+    seed = call @native_seed()
+    value = add seed, 200
+    !seed
+    return value

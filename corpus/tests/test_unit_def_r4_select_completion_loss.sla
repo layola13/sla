@@ -1,0 +1,197 @@
+// DEF-R4 regression: a completion payload could vanish between
+// a worker's completed chan send and the dispatcher's receive
+// when the dispatcher was parked in a multi-channel select.
+//
+// Mechanism (sa_task.zig sa_chan_select, phase-2 registration
+// re-check, pre-fix): the receive case first TOOK a value from
+// a waiting sender (chanTakeFromSender fires the sender: its
+// send is complete and it exits), and only then tried to claim
+// the select. When a peer case (here: a feeder offering on a
+// rendezvous chan) won the claim in between, the taken payload
+// had nowhere to go and was silently dropped -- the sender's
+// send returned success, the value never reached any receiver.
+// In slanginx's acceptor shape this leaked dispatcher slots
+// until a generation drain could never see in_flight == 0 and
+// the whole server parked forever (workers exited, schedulers
+// alive, zero completions delivered). Fix: claim before moving
+// the payload, with an unclaim rollback for the stale-queue
+// corner, in both the receive and send re-checks.
+//
+// Shape: a feeder goroutine offers dispatch tokens on a cap-0
+// chan; the consumer dispatches one-shot workers (each sends
+// ONE payload on a cap-64 completions chan and exits) and
+// recycles payloads, joining the worker per recycle. Final
+// accounting must be exact: spawned == sent == recycled +
+// still-buffered. On the pre-fix runtime the receive count
+// falls short within a few thousand dispatches (panic 9603).
+
+@import "sa_std/task.sai"
+
+const R4_TARGET: u64 = 8000;
+
+struct R4Cell {
+    sent: u64,
+    handle: u64,
+    id: u64,
+    completions: Chan<u64>,
+}
+
+struct R4Ctx {
+    reqs: Chan<u64>,
+    completions: Chan<u64>,
+    cells: [*R4Cell; 8192],
+    spawned: u64,
+    recycled: u64,
+}
+
+struct R4RecvBox {
+    payload: u64,
+    got: bool,
+    closed: bool,
+}
+
+fn r4_worker(arg: *R4Cell) {
+    (*arg).completions.send((*arg).id);
+    (*arg).sent = 1;
+}
+
+fn r4_feeder(ctx: *R4Ctx) {
+    let i: u64 = 0;
+    while i < R4_TARGET {
+        (*ctx).reqs.send(i);
+        i = i + 1;
+    }
+}
+
+fn r4_try_recv(ctx: *R4Ctx, out: &R4RecvBox) {
+    out.payload = 0;
+    out.got = false;
+    out.closed = false;
+    select {
+        case let (v, closed) = (*ctx).completions.recv() {
+            out.payload = v;
+            out.got = true;
+            out.closed = closed;
+        }
+        default {
+            out.got = false;
+        }
+    }
+}
+
+fn r4_recycle(ctx: *R4Ctx, id: u64) {
+    let cell: *R4Cell = (*ctx).cells[id];
+    let h: u64 = (*cell).handle;
+    if h != 0 {
+        (*cell).handle = 0;
+        let st = sa_task_join(h);
+        if st != 0 {
+            panic(9604);
+        };
+    };
+    (*ctx).recycled = (*ctx).recycled + 1;
+}
+
+// NOTE: the dispatch step sits in the @test body, outside the
+// select arms (a `go` whose callee is resolved from inside a
+// select case trips a checker reachability loss -- "Undefined
+// call" -- unrelated to this defect; cf.
+// test_unit_reachability_call_mutated_field.sla). The select
+// itself, and the runtime interleavings it creates, are the
+// shape under test and are unchanged.
+
+@test "def-r4 select completion loss"() {
+    let reqs: Chan<u64> = Chan::new(0);
+    let completions: Chan<u64> = Chan::new(64);
+    let dummy = Box::into_raw(Box::new(R4Cell { sent: 0, handle: 0, id: 0, completions: completions }));
+    let ctx = Box::into_raw(Box::new(R4Ctx {
+        reqs: reqs,
+        completions: completions,
+        cells: [dummy; 8192],
+        spawned: 0,
+        recycled: 0,
+    }));
+    let fh = go r4_feeder(ctx);
+    let idle_ms: u64 = 0;
+    let pending: u64 = 0;
+    let has_pending: bool = false;
+    while (*ctx).recycled < R4_TARGET {
+        let progressed: bool = true;
+        while progressed {
+            let rb = R4RecvBox { payload: 0, got: false, closed: false };
+            r4_try_recv(ctx, &rb);
+            if rb.closed {
+                panic(9605);
+            };
+            if !rb.got {
+                progressed = false;
+            } else {
+                r4_recycle(ctx, rb.payload);
+            };
+        }
+        if (*ctx).recycled >= R4_TARGET {
+            break;
+        };
+        select {
+            case let (id, closedr) = (*ctx).reqs.recv() {
+                if closedr {
+                    panic(9606);
+                };
+                pending = id;
+                has_pending = true;
+                idle_ms = 0;
+            }
+            case let (id2, closedc) = (*ctx).completions.recv() {
+                if closedc {
+                    panic(9607);
+                };
+                r4_recycle(ctx, id2);
+                idle_ms = 0;
+            }
+            timeout(50000000) {
+                idle_ms = idle_ms + 50;
+            }
+        }
+        if has_pending {
+            has_pending = false;
+            let cell = Box::into_raw(Box::new(R4Cell { sent: 0, handle: 0, id: pending, completions: (*ctx).completions }));
+            (*ctx).cells[pending] = cell;
+            let cell2: *R4Cell = (*ctx).cells[pending];
+            let h = go r4_worker(cell2);
+            (*cell2).handle = h;
+            (*ctx).spawned = (*ctx).spawned + 1;
+        };
+        if idle_ms > 4000 {
+            break;
+        };
+    }
+    // Anything still buffered would have been recycled by the
+    // loop-top drain; count it so the equality stays honest.
+    let left: u64 = 0;
+    let draining: bool = true;
+    while draining {
+        select {
+            case let (v, closed) = (*ctx).completions.recv() {
+                left = left + 1;
+            }
+            default {
+                draining = false;
+            }
+        }
+    }
+    let sent_n: u64 = 0;
+    let i: u64 = 0;
+    while i < R4_TARGET {
+        sent_n = sent_n + (*(*ctx).cells[i]).sent;
+        i = i + 1;
+    }
+    if (*ctx).spawned != R4_TARGET {
+        panic(9601);
+    };
+    if sent_n != R4_TARGET {
+        panic(9602);
+    };
+    if (*ctx).recycled + left != R4_TARGET {
+        panic(9603);
+    };
+}

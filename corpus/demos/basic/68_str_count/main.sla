@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+// 对标 tsgosa 185_str_join2：三词中命中 `"b"` 计数（=1）。
+// `for-of` 用直列 `str_eq` 改写（`for in` 迭代器协议见 Phase 6，暂不碰）；
+// 字符串断言统一用 `str_eq`（物化口径见 #3/#5，写法见 10_strings）。
+
+fn main() -> i32 {
+    let w0 = "a";
+    let w1 = "b";
+    let w2 = "c";
+    let n = 0;
+    if str_eq(w0, "b") { n = n + 1; };
+    if str_eq(w1, "b") { n = n + 1; };
+    if str_eq(w2, "b") { n = n + 1; };
+    println("{},{}", 3, n);
+    return 0;
+}
+
+@test "basic 68 str count"() {
+    let w0 = "a";
+    let w1 = "b";
+    let w2 = "c";
+    let n = 0;
+    if str_eq(w0, "b") { n = n + 1; };
+    if str_eq(w1, "b") { n = n + 1; };
+    if str_eq(w2, "b") { n = n + 1; };
+    if n != 1 { panic(6801); };
+}

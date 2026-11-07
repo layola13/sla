@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn seqlock_optimistic_value() -> i32 {
+    return seqlock_read(2, 10, 2);
+}
+
+fn seqlock_read(begin_version: i32, value: i32, end_version: i32) -> i32 {
+    if begin_version == end_version {
+        if begin_version % 2 == 0 {
+            return value + end_version;
+        } else {
+            return 0;
+        };
+    } else {
+        return 0;
+    };
+}
+
+fn main() -> i32 {
+    let result = seqlock_read(2, 10, 2);
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 129 129_seqlock_optimistic"() {
+    let got = seqlock_optimistic_value();
+    if got != 12 {
+        panic(129);
+    };
+};

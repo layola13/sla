@@ -1,0 +1,46 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 连分数展开（415/93=[4;2,6,7]：首 4，共 4 项，末 7）。
+// 意对标 476 埃及贪心的欧几里得版（476 互补；497 做收敛子）。
+
+fn cf_first(num: int, den: int) -> int {
+    return num / den;
+}
+
+fn cf_len(num: int, den: int) -> int {
+    let c = 0;
+    let n = num;
+    let d = den;
+    while d != 0 {
+        c = c + 1;
+        let t = n % d;
+        n = d;
+        d = t;
+    }
+    return c;
+}
+
+fn cf_last(num: int, den: int) -> int {
+    let last = 0;
+    let n = num;
+    let d = den;
+    while d != 0 {
+        last = n / d;
+        let t = n % d;
+        n = d;
+        d = t;
+    }
+    return last;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", cf_first(415, 93), cf_len(415, 93), cf_last(415, 93));
+    return 0;
+}
+
+@test "basic 496 contfrac"() {
+    if cf_first(415, 93) != 4 { panic(49601); };
+    if cf_len(415, 93) != 4 { panic(49602); };
+    if cf_last(415, 93) != 7 { panic(49603); };
+}

@@ -1,0 +1,17 @@
+#def GitDep_SIZE = 12
+#def GitDep_hash = +0
+#def GitDep_rev = +4
+#def GitDep_checkout = +8
+
+@git_dep_seed() -> i32:
+L_ENTRY:
+    value = add 200, 3
+    !value
+    return 3
+
+@git_dep_value() -> i32:
+L_ENTRY:
+    seed = call @git_dep_seed()
+    value = add 200, seed
+    !seed
+    return value

@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 丰数和（<=20 和为 12+18+20=50）。
+// 意对标 358 素数和的丰数版（358 互补）。
+
+fn sigma(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        if n % i == 0 { s = s + i; };
+        i = i + 1;
+    }
+    return s;
+}
+
+fn abundant_sum(limit: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= limit {
+        if sigma(k) > 2 * k { s = s + k; };
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", abundant_sum(20), abundant_sum(12), abundant_sum(11));
+    return 0;
+}
+
+@test "basic 524 abundant sum"() {
+    if abundant_sum(20) != 50 { panic(52401); };
+    if abundant_sum(12) != 12 { panic(52402); };
+    if abundant_sum(11) != 0 { panic(52403); };
+}

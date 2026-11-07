@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Message {
+    actor: i32,
+    payload: i32,
+}
+
+fn mailbox_score(inbox: [Message; 2]) -> i32 {
+    let total = 0;
+    for message in inbox {
+        let actor = message.actor;
+        let payload = message.payload;
+        let score = actor + payload;
+        total = total + score;
+    }
+    return total;
+}
+
+fn main() -> i32 {
+    let inbox = [
+        Message { actor: 1, payload: 2 },
+        Message { actor: 2, payload: 3 },
+    ];
+    let sum = mailbox_score(inbox);
+    println("{}", sum);
+    return sum;
+}
+
+@test "rosetta 066 66_actor_mailbox"() {
+    if main() != 8 {
+        panic(66);
+    };
+}

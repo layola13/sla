@@ -1,0 +1,51 @@
+// J-3 (typed_macro_params, Jev slasl_macro_ruling j3): macro
+// parameters may declare types. Arguments are checked against the
+// declared type at the call site, and the declared type is visible
+// inside the macro body. On the pre-J-3 baseline this file fails at
+// parse time (macro parameters were bare identifiers only).
+
+macro double_into(out: i64, x: i64) {
+    out = x + x;
+}
+
+macro halve_into(out: f64, x: f64) {
+    out = x * 0.5;
+}
+
+// Mixed form: only some parameters carry a declared type.
+macro add_ctx_into(out: i64, x: i64, scale) {
+    out = (x + scale) * 2;
+}
+
+fn helper_i64(v: i64) -> i64 {
+    return v + 1;
+}
+
+// The declared type is visible inside the body: the parameter can be
+// passed straight to a typed function without an `.infer` placeholder.
+macro bump_into(out: i64, x: i64) {
+    out = helper_i64(x);
+}
+
+@test "typed macro params accept matching argument types"() {
+    let r1: i64 = 0;
+    double_into(r1, 21);
+    if r1 != 42 {
+        panic(31101);
+    };
+    let r2: f64 = 0.0;
+    halve_into(r2, 9.0);
+    if r2 != 4.5 {
+        panic(31102);
+    };
+    let r3: i64 = 0;
+    add_ctx_into(r3, 10, 5);
+    if r3 != 30 {
+        panic(31103);
+    };
+    let r4: i64 = 0;
+    bump_into(r4, 41);
+    if r4 != 42 {
+        panic(31104);
+    };
+}

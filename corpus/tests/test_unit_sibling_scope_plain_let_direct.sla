@@ -1,0 +1,20 @@
+fn scan_like(limit: i64, stop: i64) -> i64 {
+    let i = 0;
+    while i < limit {
+        if i == stop {
+            let id_len = i + 1;
+            return id_len;
+        };
+        i = i + 1;
+    }
+    let id_len = i + 2;
+    return id_len;
+}
+
+@test "sibling scope plain let early return"() {
+    if scan_like(3, 1) != 2 { panic(1); };
+}
+
+@test "sibling scope plain let loop exit"() {
+    if scan_like(3, 9) != 5 { panic(2); };
+}

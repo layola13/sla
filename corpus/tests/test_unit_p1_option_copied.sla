@@ -1,0 +1,24 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/core/option.sa"
+
+// P1/P0 coverage: Option.copied and Option.unwrap_or_default —
+// SAB audit registry entries Option.copied and
+// Option.unwrap_or_default were ok on both backends at registry
+// stamp ee7b41c3, but no unit corpus file references either
+// (only a demo hits unwrap_or_default).
+
+@test "p1 option copied from map get"() {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+    if m.get("zzz").copied().unwrap_or_default() != 0 { panic(208); };
+    if m.get("a").copied().unwrap_or_default() != 1 { panic(231); };
+    if m.get("b").copied().unwrap_or(9) != 2 { panic(232); };
+}
+
+@test "p1 option unwrap_or_default direct"() {
+    let none: Option<i32> = None;
+    if none.unwrap_or_default() != 0 { panic(233); };
+    let some: Option<i32> = Some(5);
+    if some.unwrap_or_default() != 5 { panic(234); };
+}

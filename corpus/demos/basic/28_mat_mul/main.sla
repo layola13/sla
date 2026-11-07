@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 184_matrix_mul：2x2 乘法对角元（t00=4, t11=8）。
+// a=[[1,2],[3,4]], b=[[2,0],[1,2]]，行主序扁平。
+
+fn main() -> i32 {
+    let a = [1, 2, 3, 4];
+    let b = [2, 0, 1, 2];
+    let t00 = a[0] * b[0] + a[1] * b[2];
+    let t11 = a[2] * b[1] + a[3] * b[3];
+    println("{},{}", t00, t11);
+    return 0;
+}
+
+@test "basic 28 matrix mul diag"() {
+    let a = [1, 2, 3, 4];
+    let b = [2, 0, 1, 2];
+    let t00 = a[0] * b[0] + a[1] * b[2];
+    let t11 = a[2] * b[1] + a[3] * b[3];
+    if t00 != 4 { panic(2801); };
+    if t11 != 8 { panic(2802); };
+}

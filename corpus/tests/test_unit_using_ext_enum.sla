@@ -1,0 +1,24 @@
+// DEF-E0 regression: `using` static extension whose first parameter is
+// an ENUM type.
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+mod color_ext {
+    pub fn code(c: Color) -> i32 {
+        match c {
+            Color::Red => { return 1; },
+            Color::Green => { return 2; },
+            Color::Blue => { return 3; },
+        }
+    }
+}
+
+using color_ext;
+
+@test "using ext: enum extension"() {
+    let c = Color::Green;
+    if c.code() != 2 { panic(35500); };
+}

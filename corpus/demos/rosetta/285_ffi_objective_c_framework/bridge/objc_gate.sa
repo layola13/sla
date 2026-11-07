@@ -1,0 +1,13 @@
+@import "bridge/objc_gate.sal"
+@import "bridge/../ffi/objective_c.sai"
+
+@ffi_wrapper objc_framework_gate(*frame: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow frame
+    tag = load view+ObjCFrame_tag as i32
+    framework = load view+ObjCFrame_framework as i32
+    result = add tag, framework
+    !framework
+    !tag
+    !view
+    return result

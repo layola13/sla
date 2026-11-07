@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 转置和恒等式（sum(A)+sum(A^T)=2*sum(A)）。
+// 意对标 19 转置求和的恒等式版（327 迹版互补）。
+
+fn mat_sum(a11: int, a12: int, a21: int, a22: int) -> int {
+    return a11 + a12 + a21 + a22;
+}
+
+fn trans_double(a11: int, a12: int, a21: int, a22: int) -> int {
+    let s = mat_sum(a11, a12, a21, a22);
+    let st = mat_sum(a11, a21, a12, a22);
+    return s + st;
+}
+
+fn main() -> i32 {
+    println("{},{}", trans_double(1, 2, 3, 4), trans_double(2, 0, 0, 3));
+    return 0;
+}
+
+@test "basic 354 mat trans sum"() {
+    if trans_double(1, 2, 3, 4) != 20 { panic(35401); };
+    if trans_double(2, 0, 0, 3) != 10 { panic(35402); };
+    if mat_sum(1, 2, 3, 4) != 10 { panic(35403); };
+}

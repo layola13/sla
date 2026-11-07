@@ -1,0 +1,3 @@
+#def WasmHostFrame_SIZE = 8
+#def WasmHostFrame_tag = +0
+#def WasmHostFrame_status = +4

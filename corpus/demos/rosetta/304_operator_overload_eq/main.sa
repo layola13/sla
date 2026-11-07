@@ -1,0 +1,149 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_struct_equality_score = vtable { call = @sla__struct_equality_score }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__struct_equality_score() -> i32:
+L_ENTRY:
+    a = alloc 8
+    tmp_0 = 10
+    store a+0, tmp_0 as i32
+    tmp_1 = 20
+    store a+4, tmp_1 as i32
+    b = alloc 8
+    tmp_2 = 10
+    store b+0, tmp_2 as i32
+    tmp_3 = 20
+    store b+4, tmp_3 as i32
+    c = alloc 8
+    tmp_4 = 99
+    store c+0, tmp_4 as i32
+    tmp_5 = 0
+    store c+4, tmp_5 as i32
+    tmp_6 = load a+0 as i32
+    tmp_7 = load b+0 as i32
+    tmp_8 = eq tmp_6, tmp_7
+    tmp_9 = load a+4 as i32
+    tmp_10 = load b+4 as i32
+    tmp_11 = eq tmp_9, tmp_10
+    tmp_12 = and tmp_8, tmp_11
+    tmp_13 = or tmp_12, 0
+    br tmp_13 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_13
+    tmp_14 = load a+0 as i32
+    tmp_15 = load c+0 as i32
+    tmp_16 = eq tmp_14, tmp_15
+    tmp_17 = load a+4 as i32
+    tmp_18 = load c+4 as i32
+    tmp_19 = eq tmp_17, tmp_18
+    tmp_20 = and tmp_16, tmp_19
+    tmp_21 = ne tmp_20, 1
+    br tmp_21 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_21
+    tmp_22 = 11
+    !b
+    !a
+    !c
+    return tmp_22
+
+L_ELSE_4:
+    !tmp_21
+    tmp_23 = 0
+    !b
+    !a
+    !c
+    return tmp_23
+
+
+L_ELSE_1:
+    !tmp_13
+    tmp_25 = 0
+    !b
+    !a
+    !c
+    return tmp_25
+
+
+@main() -> i32:
+L_ENTRY:
+    tmp_27 = call @sla__struct_equality_score()
+    result = tmp_27
+    tmp_28 = call @sa_fmt_u64(result, 10)
+    tmp_29 = call @sa_fmt_buffer_data(tmp_28)
+    tmp_30 = call @sa_fmt_buffer_len(tmp_28)
+    tmp_31 = tmp_29
+    call @sa_print_bytes(&tmp_31, tmp_30)
+    call @sa_fmt_buffer_free(^tmp_28)
+    !tmp_31
+    !tmp_30
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 304 operator_overload_eq"():
+L_TEST_ENTRY_6:
+    a = alloc 8
+    tmp_32 = 10
+    store a+0, tmp_32 as i32
+    tmp_33 = 20
+    store a+4, tmp_33 as i32
+    b = alloc 8
+    tmp_34 = 10
+    store b+0, tmp_34 as i32
+    tmp_35 = 20
+    store b+4, tmp_35 as i32
+    c = alloc 8
+    tmp_36 = 99
+    store c+0, tmp_36 as i32
+    tmp_37 = 0
+    store c+4, tmp_37 as i32
+    tmp_38 = load a+0 as i32
+    tmp_39 = load b+0 as i32
+    tmp_40 = eq tmp_38, tmp_39
+    tmp_41 = load a+4 as i32
+    tmp_42 = load b+4 as i32
+    tmp_43 = eq tmp_41, tmp_42
+    tmp_44 = and tmp_40, tmp_43
+    tmp_45 = ne tmp_44, 1
+    br tmp_45 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_45
+    panic(304)
+
+L_ELSE_8:
+    !tmp_45
+    jmp L_MERGE_9
+
+L_MERGE_9:
+    tmp_48 = load a+0 as i32
+    tmp_49 = load c+0 as i32
+    tmp_50 = eq tmp_48, tmp_49
+    tmp_51 = load a+4 as i32
+    tmp_52 = load c+4 as i32
+    tmp_53 = eq tmp_51, tmp_52
+    tmp_54 = and tmp_50, tmp_53
+    tmp_55 = or tmp_54, 0
+    br tmp_55 -> L_THEN_10, L_ELSE_11
+
+L_THEN_10:
+    !tmp_55
+    panic(305)
+
+L_ELSE_11:
+    !tmp_55
+    jmp L_MERGE_12
+
+L_MERGE_12:
+    !b
+    !a
+    !c
+    return
+

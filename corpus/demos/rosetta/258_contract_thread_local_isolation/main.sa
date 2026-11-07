@@ -1,0 +1,56 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_contract_thread_local_slots = vtable { call = @sla__contract_thread_local_slots }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__contract_thread_local_slots() -> i32:
+L_ENTRY:
+    tmp_0 = 1
+    main_thread_slot = tmp_0
+    tmp_1 = 1
+    worker_thread_slot = tmp_1
+    tmp_2 = add main_thread_slot, worker_thread_slot
+    !worker_thread_slot
+    !main_thread_slot
+    return tmp_2
+
+@main() -> i32:
+L_ENTRY:
+    tmp_3 = call @sla__contract_thread_local_slots()
+    result = tmp_3
+    tmp_4 = call @sa_fmt_u64(result, 10)
+    tmp_5 = call @sa_fmt_buffer_data(tmp_4)
+    tmp_6 = call @sa_fmt_buffer_len(tmp_4)
+    tmp_7 = tmp_5
+    call @sa_print_bytes(&tmp_7, tmp_6)
+    call @sa_fmt_buffer_free(^tmp_4)
+    !tmp_7
+    !tmp_6
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 258 contract thread local isolation"():
+L_TEST_ENTRY_0:
+    tmp_8 = call @sla__contract_thread_local_slots()
+    got = tmp_8
+    tmp_9 = 2
+    tmp_10 = ne got, tmp_9
+    !tmp_9
+    br tmp_10 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_10
+    panic(258)
+
+L_ELSE_2:
+    !tmp_10
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

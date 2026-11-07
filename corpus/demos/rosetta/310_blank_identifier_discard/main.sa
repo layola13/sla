@@ -1,0 +1,82 @@
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_blank_identifier_demo = vtable { call = @sla__blank_identifier_demo }
+@sla__blank_identifier_demo() -> i32:
+L_ENTRY:
+    tmp_0 = alloc 12
+    tmp_1 = 1
+    store tmp_0+0, tmp_1 as i32
+    !tmp_1
+    tmp_2 = 2
+    store tmp_0+4, tmp_2 as i32
+    !tmp_2
+    tmp_3 = 3
+    store tmp_0+8, tmp_3 as i32
+    !tmp_3
+    !tmp_0
+    tmp_4 = alloc 16
+    tmp_5 = 10
+    store tmp_4+0, tmp_5 as i64
+    !tmp_5
+    tmp_6 = 20
+    store tmp_4+8, tmp_6 as i64
+    !tmp_6
+    tmp_7 = 30
+    store tmp_4+16, tmp_7 as i64
+    !tmp_7
+    tmp_8 = 40
+    store tmp_4+24, tmp_8 as i64
+    !tmp_8
+    tmp_9 = load tmp_4+0 as i64
+    !tmp_9
+    tmp_10 = load tmp_4+8 as i64
+    second = tmp_10
+    !tmp_10
+    tmp_11 = load tmp_4+16 as i64
+    !tmp_11
+    tmp_12 = load tmp_4+24 as i64
+    !tmp_12
+    !tmp_4
+    tmp_13 = alloc 16
+    tmp_14 = 7
+    store tmp_13+0, tmp_14 as i64
+    !tmp_14
+    tmp_15 = 8
+    store tmp_13+8, tmp_15 as i64
+    !tmp_15
+    w2 = load tmp_13+0 as i64
+    !tmp_13
+    tmp_16 = add second, tmp_12
+    !second
+    tmp_17 = add tmp_16, w2
+    !tmp_16
+    !w2
+    return tmp_17
+
+@test "blank identifier discard demo"():
+L_TEST_ENTRY_0:
+    tmp_18 = call @sla__blank_identifier_demo()
+    got = tmp_18
+    tmp_19 = 57
+    tmp_20 = ne got, tmp_19
+    !tmp_19
+    br tmp_20 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_20
+    panic(310)
+
+L_ELSE_2:
+    !tmp_20
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return

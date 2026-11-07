@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 271_switch_arms：臂内计算（x+10=12）+ 布尔暂存分支（100）。
+// 与 107（臂赋常量）互补，此处臂体用判别式；暂存布尔再分支（209 口径）。
+
+fn main() -> i32 {
+    let x = 2;
+    let a = 0;
+    switch x {
+        1 => {
+            a = 1;
+        },
+        2 => {
+            a = x + 10;
+        },
+        default => {},
+    };
+    let ok = x == 2;
+    let b = if ok { 100 } else if x == 1 { 200 } else { 300 };
+    println("{},{}", a, b);
+    return 0;
+}
+
+@test "basic 235 sw arm"() {
+    let x = 2;
+    let a = 0;
+    switch x {
+        1 => {
+            a = 1;
+        },
+        2 => {
+            a = x + 10;
+        },
+        default => {},
+    };
+    if a != 12 { panic(23501); };
+    let ok = x == 2;
+    if !ok { panic(23502); };
+}

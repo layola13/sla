@@ -1,0 +1,6 @@
+// expect: NotAStruct
+// neg: field access on a primitive value
+fn main() -> i32 {
+    let x: i32 = 5;
+    return x.foo;
+}

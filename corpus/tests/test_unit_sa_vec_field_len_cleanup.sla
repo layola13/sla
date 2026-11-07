@@ -1,0 +1,26 @@
+@import "sa_std/vec.sa"
+
+struct LenItem {
+    value: u64,
+}
+
+struct LenHolder {
+    items: Vec<LenItem>,
+}
+
+fn len_holder_new() -> LenHolder {
+    let items: Vec<LenItem> = Vec::new();
+    return LenHolder { items: items };
+}
+
+@test "sa text len of vec field cleans loaded owner"() {
+    let holder = len_holder_new();
+    holder.items.push(LenItem { value: 7 });
+
+    if len(holder.items) != 1 {
+        panic(44301);
+    };
+    if holder.items[0].value != 7 {
+        panic(44302);
+    };
+}

@@ -1,0 +1,17 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/vec_grow.sla"
+
+// MINIM V2 (control): sa_vec_rewind_bytes on a push-built Vec --
+// does not call any extend_packed helper.
+@test "minim vec rewind bytes"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(1);
+    v.push(2);
+    v.push(3);
+    v = sa_vec_rewind_bytes(v, 2);
+    if (len(v) as u64) != 2 { panic(131); };
+    if v[0] != 1 { panic(132); };
+    if v[1] != 2 { panic(133); };
+}

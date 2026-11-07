@@ -1,0 +1,59 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_consume = vtable { call = @sla__consume }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__consume(data: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load data+0 as i32
+    return tmp_0
+
+@main() -> i32:
+L_ENTRY:
+    data = alloc 4
+    tmp_1 = 11
+    store data+0, tmp_1 as i32
+    tmp_2 = call @sla__consume(data)
+    tmp_3 = call @sa_fmt_u64(tmp_2, 10)
+    tmp_4 = call @sa_fmt_buffer_data(tmp_3)
+    tmp_5 = call @sa_fmt_buffer_len(tmp_3)
+    tmp_6 = tmp_4
+    call @sa_print_bytes(&tmp_6, tmp_5)
+    call @sa_fmt_buffer_free(^tmp_3)
+    !tmp_6
+    !tmp_5
+    !tmp_2
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_7 = 0
+    !data
+    return tmp_7
+
+@test "rosetta 027 move semantics"():
+L_TEST_ENTRY_0:
+    data = alloc 4
+    tmp_8 = 11
+    store data+0, tmp_8 as i32
+    tmp_9 = call @sla__consume(data)
+    result = tmp_9
+    tmp_10 = 11
+    tmp_11 = ne result, tmp_10
+    !tmp_10
+    br tmp_11 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_11
+    panic(27)
+
+L_ELSE_2:
+    !tmp_11
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !data
+    !result
+    return
+

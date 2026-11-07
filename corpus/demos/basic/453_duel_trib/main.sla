@@ -1,0 +1,42 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Tribonacci 双实现对峙（循环 vs 递归：T(10)=81 双边）。
+// 意对标 432 峰值对峙的三阶版（448 互补）。
+
+fn trib_loop(n: int) -> int {
+    if n == 0 { return 0; };
+    if n == 1 { return 0; };
+    if n == 2 { return 1; };
+    let a = 0;
+    let b = 0;
+    let c = 1;
+    let i = 2;
+    while i < n {
+        let t = a + b + c;
+        a = b;
+        b = c;
+        c = t;
+        i = i + 1;
+    }
+    return c;
+}
+
+fn trib_rec(n: int) -> int {
+    if n == 0 { return 0; };
+    if n == 1 { return 0; };
+    if n == 2 { return 1; };
+    return trib_rec(n - 1) + trib_rec(n - 2) + trib_rec(n - 3);
+}
+
+fn main() -> i32 {
+    println("{},{}", trib_loop(10), trib_rec(10));
+    return 0;
+}
+
+@test "basic 453 duel trib"() {
+    if trib_loop(10) != 81 { panic(45301); };
+    if trib_rec(10) != 81 { panic(45302); };
+    if trib_loop(10) != trib_rec(10) { panic(45303); };
+    if trib_rec(7) != 13 { panic(45304); };
+}

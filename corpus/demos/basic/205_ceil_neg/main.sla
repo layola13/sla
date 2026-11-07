@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1426_ceil_neg：负数上取整（ceil(-2.5)=-2）。
+// 复用 130 的分支 `ceil`（`as i32` 截断 + 符号分支）；130 只断言正数分支，
+// 此处覆盖负数分支（向零截断即结果）。
+
+fn ceil(x: f64) -> i32 {
+    let t = x as i32;
+    if x > 0.0 && x != t as f64 { return t + 1; };
+    return t;
+}
+
+fn main() -> i32 {
+    println("{}", ceil(-2.5));
+    return 0;
+}
+
+@test "basic 205 ceil neg"() {
+    if ceil(-2.5) != -2 { panic(20501); };
+    if ceil(4.1) != 5 { panic(20502); };
+}

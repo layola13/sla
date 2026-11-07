@@ -1,0 +1,7 @@
+// ARGV_FILL1: fills a [u64; 2] (layout-identical to [Slice; 1]) from one
+// (ptr, len) pair. arr_ptr must be &array from .sla. Modeled on codexmini's
+// X_ARGV_FILL (ptr -> u64 casts are not allowed in .sla, hence the SA macro).
+[MACRO] ARGV_FILL1 %arr_ptr, %p0, %l0
+    store %arr_ptr+0, %p0 as ptr
+    store %arr_ptr+8, %l0 as u64
+[END_MACRO]

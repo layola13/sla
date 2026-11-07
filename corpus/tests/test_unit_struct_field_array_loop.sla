@@ -1,0 +1,63 @@
+struct Data {
+    active: [bool; 4],
+    values: [i32; 4],
+}
+
+fn sum_active(data: Data) -> i32 {
+    let total: i32 = 0;
+    let i = 0;
+    while i < 4 {
+        let is_active = data.active[i];
+        if is_active == true {
+            let v = data.values[i];
+            total = total + v;
+        };
+        i = i + 1;
+    }
+    return total;
+}
+
+struct World {
+    a_active: [bool; 4],
+    a_values: [i32; 4],
+    b_active: [bool; 4],
+    b_values: [i32; 4],
+}
+
+fn nested_join(world: World) -> i32 {
+    let total: i32 = 0;
+    let i = 0;
+    while i < 4 {
+        if world.a_active[i] == true {
+            let j = 0;
+            while j < 4 {
+                if world.b_active[j] == true {
+                    total = total + world.b_values[j];
+                };
+                j = j + 1;
+            }
+        };
+        i = i + 1;
+    }
+    return total;
+}
+
+@test "single loop struct field array"() {
+    let d = Data {
+        active: [true, true, false, false],
+        values: [10i32, 20i32, 0i32, 0i32],
+    };
+    let got = sum_active(d);
+    if got != 30 { panic(1); };
+}
+
+@test "nested loop struct field arrays"() {
+    let w = World {
+        a_active: [true, false, false, false],
+        a_values: [0i32, 0i32, 0i32, 0i32],
+        b_active: [true, true, false, false],
+        b_values: [5i32, 7i32, 0i32, 0i32],
+    };
+    let got = nested_join(w);
+    if got != 12 { panic(2); };
+}

@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1026_catch_arith 的值语义改写（3,false）。
+// SLA 无 try/catch（见 275），错误值语义用 `Result<T, E>` 表达：
+// 此处为 basic 首个 Result demo（`Ok/Err + is_ok + unwrap`，探针三线全绿）。
+
+fn div(a: i32, b: i32) -> Result<int, int> {
+    if b == 0 { return Err(0 - 1); };
+    return Ok(a / b);
+}
+
+fn main() -> i32 {
+    let v = 0;
+    if div(7, 2).is_ok() { v = div(7, 2).unwrap(); };
+    let e = div(7, 0).is_ok();
+    println("{},{}", v, e);
+    return 0;
+}
+
+@test "basic 192 result basic"() {
+    if div(7, 2).unwrap() != 3 { panic(19201); };
+    if div(7, 2).is_ok() != true { panic(19202); };
+    if div(7, 0).is_ok() != false { panic(19203); };
+}

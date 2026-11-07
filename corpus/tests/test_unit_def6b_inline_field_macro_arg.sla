@@ -1,0 +1,61 @@
+// (b)-face regression corpus: a std-owner handle field (String)
+// used DIRECTLY as an imported-macro argument — STR_LEN(a.unit).
+// STR_LEN's second parameter is a direct-address-slot param: the
+// macro body dereferences it as memory (SLICE_GET_LEN loads at
+// +Slice_len). The arg lowering passed the field's ADDRESS
+// (ptr_add a, 8) for every field shape, but a String field slot
+// holds a one-word handle to the heap StringBuf header — the macro
+// then read the word PAST the field as the length (silently wrong
+// inside a function; BorrowConflict 1008 "pointer offset exceeds
+// allocation size" where the verifier could prove the overflow,
+// e.g. directly in a test body). Both backends, baseline-identical.
+// Correct lowering for handle-typed projections: load the handle
+// and pass it — the same pointer an identifier holding the String
+// would pass. Extraction into a let first (the DEF-5 shape) always
+// worked; Vec fields via the len() builtin always worked.
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+@import "sa_std/core/box.sa"
+
+struct Qty {
+    v: i64, unit: String,
+}
+
+fn len_owned(a: Qty) -> u64 {
+    return STR_LEN(a.unit) as u64;
+}
+
+fn len_borrow(a: &Qty) -> u64 {
+    return STR_LEN(a.unit) as u64;
+}
+
+@test "def6b str_len of string field on owned param"() {
+    let a = Qty { v: 1, unit: format("kg") };
+    if len_owned(a) != 2 { panic(1901); };
+}
+
+@test "def6b str_len of string field inline in test body"() {
+    let a = Qty { v: 1, unit: format("mol") };
+    if STR_LEN(a.unit) as u64 != 3 { panic(1902); };
+    // The field itself must be untouched by the read.
+    if STR_LEN(a.unit) as u64 != 3 { panic(1903); };
+}
+
+@test "def6b str_len of string field through borrow param"() {
+    let a = Qty { v: 1, unit: format("kg") };
+    if len_borrow(&a) != 2 { panic(1904); };
+}
+
+@test "def6b str_len of string field through pointer deref"() {
+    let p = Box::into_raw(Box::new(Qty { v: 1, unit: format("mol") }));
+    if STR_LEN((*p).unit) as u64 != 3 { panic(1905); };
+    let done_p = unsafe { Box::from_raw(p) };
+}
+
+@test "def6b str_len of string field through vec index"() {
+    let v: Vec<Qty> = Vec::new();
+    v.push(Qty { v: 1, unit: format("kg") });
+    v.push(Qty { v: 2, unit: format("ampere") });
+    if STR_LEN(v[1].unit) as u64 != 6 { panic(1906); };
+    if STR_LEN(v[0].unit) as u64 != 2 { panic(1907); };
+}

@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/slice.sa"
+
+fn sum(nums: &[i32]) -> i32 {
+    nums.iter().copied().sum()
+}
+
+fn variadic_slice_sum() -> i32 {
+    let values: [i32; 3] = [1, 2, 3];
+    return sum(&values);
+}
+
+fn main() -> i32 {
+    let result = variadic_slice_sum();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 116 116_va_list_variadic"() {
+    let got = variadic_slice_sum();
+    if got != 6 {
+        panic(116);
+    };
+}

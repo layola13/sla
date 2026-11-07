@@ -1,0 +1,29 @@
+@import "sa_std/core/option.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 18_optional：Option Some/None + match（通配臂写法，避开
+// SA-text 的 PhiStateConflict，见 tests/test_unit_option_match.sla 注释）。
+
+fn opt_or(opt: Option<int>, fallback: int) -> int {
+    let r = match opt {
+        Some(v) => { v + 1 },
+        None => { fallback },
+    };
+    return r;
+}
+
+fn main() -> i32 {
+    let a: Option<int> = Option::Some(41);
+    println("{}", opt_or(a, -1));
+    let b: Option<int> = Option::None;
+    println("{}", opt_or(b, -1));
+    return 0;
+}
+
+@test "basic 15 option match"() {
+    let a: Option<int> = Option::Some(41);
+    if opt_or(a, -1) != 42 { panic(1501); };
+    let b: Option<int> = Option::None;
+    if opt_or(b, -1) != -1 { panic(1502); };
+}

@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn global_state_counter_value() -> i32 {
+    let counter = 0;
+    counter = counter + 2;
+    counter = counter + 3;
+    return counter;
+}
+
+fn main() -> i32 {
+    let result = global_state_counter_value();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 118 118_global_mutable_state"() {
+    let got = global_state_counter_value();
+    if got != 5 {
+        panic(118);
+    };
+}

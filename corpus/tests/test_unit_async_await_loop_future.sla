@@ -1,0 +1,105 @@
+// Regression: genAwait sub-fix shipped with the Loop continuation plan.
+//
+// Once loop-shaped futures became genuinely pending, an eager fn
+// awaiting a custom future (an async fn call, a join2/select2 result, a
+// defer_ready chain) could return the child's pending state as its own
+// result and drop the continuation. The fix makes genAwait busy-poll
+// custom futures with FUTURE_POLL until Ready and then read the value.
+// The cases below pin that behavior in the shapes the fix was verified
+// against: a timer-backed async fn (its inner await of delay_ms is the
+// exact site of the dropped continuation), a select2 race over two such
+// fns, a join2 await over defer_ready futures, and the delay future's
+// own first-poll-Pending contract.
+//
+// Registered residuals NOT covered here (see the delivery notes):
+// join2 over loop-shaped children misreads pair_left, and a sync fn
+// `.await` on a loop-shaped future returns 0 instead of its value.
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+@import "sa_std/timer.sla"
+@import "sa_std/time.sla"
+
+async fn delayed_tag(ms: u64, tag: i32) -> i32 {
+    let tick: i32 = delay_ms(ms).await;
+    return tag + tick;
+}
+
+async fn joined_defer_sum() -> i32 {
+    let pair = future::join2(future::defer_ready(20), future::ready(22)).await;
+    return future::pair_left(pair) + future::pair_right(pair);
+}
+
+fn sleep_1ms() {
+    thread_sleep(Duration::from_millis(1));
+}
+
+@test "task driven timer-backed async fn returns its value"() {
+    let t = task::new(delayed_tag(30, 100));
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 2000 {
+            panic(7801);
+        };
+        sleep_1ms();
+    }
+    if task::result(t) != 100 {
+        panic(7802);
+    };
+}
+
+@test "select2 over timer-backed fns picks the earlier deadline"() {
+    let race = future::select2(delayed_tag(30, 100), delayed_tag(400, 200));
+    let t = task::new(race);
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 5000 {
+            panic(7803);
+        };
+        sleep_1ms();
+    }
+    let either = task::result(t);
+    if future::either_side(either) != 1 {
+        panic(7804);
+    };
+    if future::either_left(either) != 100 {
+        panic(7805);
+    };
+}
+
+@test "await of join2 over defer_ready futures returns the pair"() {
+    let t = task::new(joined_defer_sum());
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 1000 {
+            panic(7806);
+        };
+    }
+    if task::result(t) != 42 {
+        panic(7807);
+    };
+}
+
+@test "delay future first poll is pending and completes"() {
+    let t = task::new(delay_ms(30));
+    let first = task::poll(t);
+    if first {
+        panic(7808);
+    };
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 2000 {
+            panic(7809);
+        };
+        sleep_1ms();
+    }
+    if task::result(t) != 0 {
+        panic(7810);
+    };
+    if guard < 5 {
+        panic(7811);
+    };
+}

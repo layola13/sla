@@ -1,0 +1,8 @@
+@import "internal/detail/seed.sa"
+
+@export internal_value() -> i32:
+L_ENTRY:
+    seed = call @private_seed()
+    value = add seed, 20
+    !seed
+    return value

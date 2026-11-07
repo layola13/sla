@@ -1,0 +1,86 @@
+@import "sa_std/vec.sa"
+
+// DEF deep-drop crash-A regression (replace semantics,
+// counter-examples): the shapes replace must NOT touch.
+//   - clone-on-extract (DEF-5): reads through a raw-pointer root
+//     into a binding (let or identifier assignment) hand over a
+//     deep CLONE; source and clone evolve independently. Replace
+//     applies to assignments into places, never to these binding
+//     reads, and never through the deref root of a clone shape.
+//   - fresh-constructor resets (the poll model's `x = Vec::new()`)
+//     keep dropping the overwritten value exactly as before.
+//   - identifier-to-identifier assignment stays the existing move.
+// These pass before and after the fix; they guard the demarcation.
+
+struct Holder {
+    items: Vec<Vec<u8>>,
+    tag: u64,
+}
+
+fn filled_vec(n: u64, seed: u8) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(seed + (i % 5) as u8);
+        i = i + 1;
+    }
+    return v;
+}
+
+fn sum_inner(v: &Vec<Vec<u8>>, which: u64) -> u64 {
+    let sum: u64 = 0;
+    let i: u64 = 0;
+    while i < 48 {
+        sum = sum + (v[which][i] as u64);
+        i = i + 1;
+    }
+    return sum;
+}
+
+@test "clone on extract still clones for deref rooted reads"() {
+    let src = Box::into_raw(Box::new(Holder { items: Vec::new(), tag: 1 }));
+    (*src).items.push(filled_vec(48, 2));
+    let z: Vec<Vec<u8>> = Vec::new();
+    z = (*src).items;
+    // Mutating the source must not leak into the clone.
+    (*src).items.push(filled_vec(48, 3));
+    if len(z) != 1 { panic(4801); };
+    if len((*src).items) != 2 { panic(4802); };
+    if sum_inner(&z, 0) != 93 + 96 { panic(4803); };
+    // Mutating the clone must not leak into the source.
+    z.push(filled_vec(48, 4));
+    if len((*src).items) != 2 { panic(4804); };
+    if sum_inner(&z, 1) != 93 + 192 { panic(4807); };
+}
+
+@test "let clone on extract survives source reset"() {
+    // The let form clones too: resetting the source leaves the
+    // clone fully intact. (Kept in its own test: two clones of the
+    // same source place in one function crash the pre-fix toolchain
+    // for an unrelated, already-registered reason -- see the batch
+    // report; the shapes are guarded separately here.)
+    let src = Box::into_raw(Box::new(Holder { items: Vec::new(), tag: 1 }));
+    (*src).items.push(filled_vec(48, 2));
+    (*src).items.push(filled_vec(48, 3));
+    let w = (*src).items;
+    (*src).items = Vec::new();
+    if len(w) != 2 { panic(4805); };
+    if sum_inner(&w, 1) != 93 + 144 { panic(4806); };
+}
+
+@test "reset and identifier move keep working beside replace"() {
+    let c = Box::into_raw(Box::new(Holder { items: Vec::new(), tag: 3 }));
+    let r: u64 = 0;
+    while r < 25 {
+        (*c).items.push(filled_vec(48, 1));
+        (*c).items = Vec::new();
+        if len((*c).items) != 0 { panic(4811); };
+        r = r + 1;
+    }
+    let a: Vec<Vec<u8>> = Vec::new();
+    a.push(filled_vec(48, 5));
+    let b: Vec<Vec<u8>> = Vec::new();
+    b = a;
+    if len(b) != 1 { panic(4812); };
+    if sum_inner(&b, 0) != 93 + 240 { panic(4813); };
+}

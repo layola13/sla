@@ -1,0 +1,64 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/string.sa"
+
+// DEF-HASHMAP-XTALK (A-form) ownership: clear() must return every
+// entry's heap value cell before the std clear zeroes the slots, and
+// the map must stay fully usable afterwards. A second clear and a
+// drop after clear must not free any cell twice (the slot array is
+// zeroed by the first clear, so later walks find no FILLED slot).
+
+@test "xtalk clear and reuse"() {
+    let m: HashMap<i32, i32> = HashMap::new();
+    let i: i32 = 0;
+    while i < 40 {
+        m.insert(i, i * 10);
+        i = i + 1;
+    }
+    if len(m) != 40 { panic(79100); };
+    m.clear();
+    if len(m) != 0 { panic(79101); };
+    if m.get(3).is_some() { panic(79102); };
+    let j: i32 = 0;
+    while j < 40 {
+        m.insert(j, j + 900);
+        j = j + 1;
+    }
+    let k: i32 = 0;
+    while k < 40 {
+        if m.get(k).copied().unwrap_or(0) != k + 900 { panic(79103); };
+        k = k + 1;
+    }
+}
+
+@test "xtalk clear empty and double"() {
+    let m: HashMap<i32, i32> = HashMap::new();
+    m.clear();
+    m.insert(1, 10);
+    m.insert(2, 20);
+    m.clear();
+    m.clear();
+    if len(m) != 0 { panic(79201); };
+    m.insert(3, 30);
+    if m.get(3).copied().unwrap_or(0) != 30 { panic(79202); };
+}
+
+@test "xtalk clear then overwrite"() {
+    let m: HashMap<i32, i32> = HashMap::new();
+    let i: i32 = 0;
+    while i < 16 {
+        m.insert(i, i);
+        i = i + 1;
+    }
+    m.clear();
+    let j: i32 = 0;
+    while j < 16 {
+        let old = m.insert(j, j * 2);
+        if old.is_some() { panic(79301); };
+        j = j + 1;
+    }
+    let k: i32 = 0;
+    while k < 16 {
+        if m.get(k).copied().unwrap_or(0) != k * 2 { panic(79302); };
+        k = k + 1;
+    }
+}

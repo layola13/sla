@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1220_double_negation 的布尔部（false,true,true,false）。
+// `!`/`!!` 只容布尔操作数（`!5` 按严格布尔拒识，见 129；
+// 整数取反语义用 `== 0` / `!= 0` 表达）。
+
+fn main() -> i32 {
+    let t = true;
+    let f = false;
+    println("{},{},{},{}", !t, !f, !!t, !!f);
+    return 0;
+}
+
+@test "basic 169 bool not"() {
+    if !true != false { panic(16901); };
+    if !false != true { panic(16902); };
+    if !!true != true { panic(16903); };
+    if !!false != false { panic(16904); };
+}

@@ -1,0 +1,24 @@
+@import "bridge/callback_thunk.sal"
+@import "bridge/../ffi/callback.sai"
+
+@const CALLBACK_VT = vtable { call = @callback_step }
+
+@callback_step(value: i32) -> i32:
+L_ENTRY:
+    next = add value, 1
+    !value
+    return next
+
+@ffi_wrapper callback_thunk(*state: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow state
+    vt = load view+CallbackState_vtable as ptr
+    fn = load vt+CallbackVTable_call as ptr
+    value = load view+CallbackState_value as i32
+    result = call_indirect fn(value)
+    store view+CallbackState_value, result as i32
+    !value
+    !fn
+    !vt
+    !view
+    return result

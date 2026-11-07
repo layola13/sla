@@ -1,0 +1,93 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+@import "sa_std/vec_deque.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_first_job_score = vtable { call = @sla__first_job_score }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__first_job_score() -> i32:
+L_ENTRY:
+    EXPAND VEC_DEQUE_NEW tmp_0
+    queue = tmp_0
+    tmp_1 = alloc 8
+    tmp_2 = 7
+    store tmp_1+0, tmp_2 as i32
+    tmp_3 = 3
+    store tmp_1+4, tmp_3 as i32
+    EXPAND VEC_DEQUE_PUSH_BACK queue, tmp_1
+    !tmp_1
+    tmp_4 = alloc 8
+    tmp_5 = 9
+    store tmp_4+0, tmp_5 as i32
+    tmp_6 = 5
+    store tmp_4+4, tmp_6 as i32
+    EXPAND VEC_DEQUE_PUSH_BACK queue, tmp_4
+    !tmp_4
+    EXPAND VEC_DEQUE_TRY_POP_FRONT tmp_7, tmp_8, queue
+    br tmp_7 -> L_VEC_DEQUE_POP_FRONT_SOME_0, L_VEC_DEQUE_POP_FRONT_NONE_1
+
+L_VEC_DEQUE_POP_FRONT_SOME_0:
+    !tmp_7
+    EXPAND OPTION_NEW_SOME tmp_9, tmp_8
+    !tmp_8
+    jmp L_VEC_DEQUE_POP_FRONT_END_2
+
+L_VEC_DEQUE_POP_FRONT_NONE_1:
+    !tmp_7
+    !tmp_8
+    EXPAND OPTION_NEW_NONE tmp_9
+    jmp L_VEC_DEQUE_POP_FRONT_END_2
+
+L_VEC_DEQUE_POP_FRONT_END_2:
+    EXPAND OPTION_UNWRAP tmp_10, tmp_9
+    !tmp_9
+    first = tmp_10
+    tmp_11 = load first+0 as i32
+    tmp_12 = load first+4 as i32
+    tmp_13 = add tmp_11, tmp_12
+    !tmp_11
+    !tmp_12
+    !queue
+    !first
+    return tmp_13
+
+@main() -> i32:
+L_ENTRY:
+    tmp_14 = call @sla__first_job_score()
+    value = tmp_14
+    tmp_15 = call @sa_fmt_u64(value, 10)
+    tmp_16 = call @sa_fmt_buffer_data(tmp_15)
+    tmp_17 = call @sa_fmt_buffer_len(tmp_15)
+    tmp_18 = tmp_16
+    call @sa_print_bytes(&tmp_18, tmp_17)
+    call @sa_fmt_buffer_free(^tmp_15)
+    !tmp_18
+    !tmp_17
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return value
+
+@test "rosetta 089 89_job_queue"():
+L_TEST_ENTRY_3:
+    tmp_19 = call @sla__first_job_score()
+    got = tmp_19
+    tmp_20 = 10
+    tmp_21 = ne got, tmp_20
+    !tmp_20
+    br tmp_21 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_21
+    panic(89)
+
+L_ELSE_5:
+    !tmp_21
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !got
+    return
+

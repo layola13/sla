@@ -1,0 +1,76 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian 高位对峙：建表 vs 交错和（(5,2)：66 对 66；(6,2)：302 对 302）。
+// 意对标 668_eul_high × 669_duel_eul（高位源与对峙体例合流）。
+
+fn eul(n: int, m: int) -> int {
+    let w = m + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + m {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= m {
+            t[mm * w + nn] = (mm - nn) * t[(mm - 1) * w + nn - 1] + (nn + 1) * t[(mm - 1) * w + nn];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + m];
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn pwr(b: int, e: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < e {
+        r = r * b;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn ealt(n: int, m: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= m + 1 {
+        let term = binom_mul(n + 1, k) * pwr(m + 1 - k, n);
+        if k % 2 == 0 { s = s + term; } else { s = s - term; };
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", eul(5, 2), ealt(5, 2), eul(6, 2), ealt(6, 2));
+    return 0;
+}
+
+@test "basic 670 duel eul high"() {
+    if eul(5, 2) != 66 { panic(67001); };
+    if ealt(5, 2) != 66 { panic(67002); };
+    if eul(6, 2) != 302 { panic(67003); };
+    if ealt(6, 2) != 302 { panic(67004); };
+}

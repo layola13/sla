@@ -1,0 +1,27 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn await_local_join2_pending() -> i32 {
+    let left = future::ready(11);
+    let right = future::pending::<i32>();
+    let pair = future::join2(left, right).await;
+    return future::pair_left(pair);
+}
+
+fn local_join2_pending_await_stays_pending() -> bool {
+    let fut = await_local_join2_pending();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9721);
+    };
+    if task::is_ready(task) != false {
+        panic(9722);
+    };
+    return true;
+}
+
+@test "async await local join2 pending state"() {
+    if local_join2_pending_await_stays_pending() != true {
+        panic(9723);
+    };
+}

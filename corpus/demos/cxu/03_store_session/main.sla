@@ -1,0 +1,101 @@
+@import "plugin/node/node_extra.sai"
+@import "sa_std/encoding/json.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/io/print.sai"
+@import "byteseq.sa"
+
+// D3 — sessions + persistence, distilled from CXU's storage layer
+// (better-sqlite3 session/history tables + JSON payloads in apps/server).
+//
+// Real SQLite comes from the node plugin's sqlite facade
+// (sa_node_plugin_sqlite_*), reached through the qualified plugin import
+// plugin/node/node_extra.sai. Query results come back as JSON text and
+// are read with sa_std's JSON surface — the same shape CXU uses when it
+// stores a JSON payload column and parses it back.
+//
+// Flow: create table -> insert two sessions (JSON payloads) -> update ->
+// count via query_json -> extract s1's payload, parse the nested JSON,
+// check model + temp -> stringify/parse round trip -> close.
+// Prints "d3 store ok" when every check passes.
+
+fn bytes_is(p_ptr: ptr, p_len: u64, lit_ptr: ptr, lit_len: u64) -> bool {
+    let slot = [0u64; 1];
+    BYTES_EQ(&slot, p_ptr, p_len, lit_ptr, lit_len);
+    return slot[0] == 1;
+}
+
+fn exec_sql(db: ptr, sql: ptr, sql_len: u64) -> bool {
+    return sa_node_plugin_sqlite_exec(db, sql, sql_len) == 0;
+}
+
+fn main() -> i32 {
+    let db: ptr = PTR_NULL();
+    let dbpath = "work/sessions.db";
+    if sa_node_plugin_sqlite_open(STR_PTR(dbpath), STR_LEN(dbpath), &db) != 0 { return 2; };
+    let ddl = "CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, title TEXT NOT NULL, turns INTEGER NOT NULL, payload TEXT NOT NULL)";
+    if !exec_sql(db, STR_PTR(ddl), STR_LEN(ddl)) { return 3; };
+    let ins1 = "INSERT INTO sessions(id, title, turns, payload) VALUES('s1', 'first', 1, '{\"model\":\"gpt-cxu\",\"temp\":0.2}')";
+    if !exec_sql(db, STR_PTR(ins1), STR_LEN(ins1)) { return 4; };
+    let ins2 = "INSERT INTO sessions(id, title, turns, payload) VALUES('s2', 'second', 2, '{\"model\":\"claude-cxu\",\"temp\":0.7}')";
+    if !exec_sql(db, STR_PTR(ins2), STR_LEN(ins2)) { return 5; };
+    let upd = "UPDATE sessions SET turns = 3 WHERE id = 's1'";
+    if !exec_sql(db, STR_PTR(upd), STR_LEN(upd)) { return 6; };
+
+    // COUNT through query_json + std JSON.
+    let q1 = "SELECT COUNT(*) AS n FROM sessions";
+    let r_ptr: ptr = PTR_NULL();
+    let r_len: u64 = 0;
+    if sa_node_plugin_sqlite_query_json(db, STR_PTR(q1), STR_LEN(q1), &r_ptr, &r_len) != 0 { return 7; };
+    let rows = sa_json_parse(r_ptr, r_len);
+    if rows == 0 { return 8; };
+    let row: u64 = 0;
+    if sa_json_array_get(rows, 0, &row) != 0 { return 9; };
+    let n: i64 = 0;
+    if sa_json_object_get_i64(row, STR_PTR("n"), STR_LEN("n"), &n) != 0 { return 10; };
+    if n != 2 { return 11; };
+    let _ = sa_json_free(rows);
+
+    // s1 payload: outer JSON row -> payload string -> nested JSON parse.
+    let q2 = "SELECT payload FROM sessions WHERE id = 's1'";
+    let p_ptr: ptr = PTR_NULL();
+    let p_len: u64 = 0;
+    if sa_node_plugin_sqlite_query_json(db, STR_PTR(q2), STR_LEN(q2), &p_ptr, &p_len) != 0 { return 12; };
+    let rows2 = sa_json_parse(p_ptr, p_len);
+    if rows2 == 0 { return 13; };
+    let row2: u64 = 0;
+    if sa_json_array_get(rows2, 0, &row2) != 0 { return 14; };
+    let pay_ptr: ptr = PTR_NULL();
+    let pay_len: u64 = 0;
+    if sa_json_object_get_string(row2, STR_PTR("payload"), STR_LEN("payload"), &pay_ptr, &pay_len) != 0 { return 15; };
+    let payload = sa_json_parse(pay_ptr, pay_len);
+    if payload == 0 { return 16; };
+    let m_ptr: ptr = PTR_NULL();
+    let m_len: u64 = 0;
+    if sa_json_object_get_string(payload, STR_PTR("model"), STR_LEN("model"), &m_ptr, &m_len) != 0 { return 17; };
+    if !bytes_is(m_ptr, m_len, STR_PTR("gpt-cxu"), STR_LEN("gpt-cxu")) { return 18; };
+    let temp: f64 = 0.0;
+    if sa_json_object_get_f64(payload, STR_PTR("temp"), STR_LEN("temp"), &temp) != 0 { return 19; };
+    if temp < 0.19 { return 20; };
+    if temp > 0.21 { return 21; };
+
+    // Round trip: stringify the payload node, parse it back, re-extract.
+    let buf: u64 = 0;
+    if sa_json_stringify(payload, &buf) != 0 { return 22; };
+    let b_ptr: ptr = sa_json_buffer_data(buf);
+    let b_len: u64 = sa_json_buffer_len(buf);
+    let payload2 = sa_json_parse(b_ptr, b_len);
+    if payload2 == 0 { return 23; };
+    let m2_ptr: ptr = PTR_NULL();
+    let m2_len: u64 = 0;
+    if sa_json_object_get_string(payload2, STR_PTR("model"), STR_LEN("model"), &m2_ptr, &m2_len) != 0 { return 24; };
+    if !bytes_is(m2_ptr, m2_len, STR_PTR("gpt-cxu"), STR_LEN("gpt-cxu")) { return 25; };
+    let _ = sa_json_buffer_free(buf);
+    let _ = sa_json_free(payload2);
+    let _ = sa_json_free(payload);
+    let _ = sa_json_free(rows2);
+
+    if sa_node_plugin_sqlite_close(db) != 0 { return 26; };
+    println("d3 store ok");
+    return 0;
+}

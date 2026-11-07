@@ -1,0 +1,17 @@
+// expect: TypeMismatch
+// J-3 negative: an argument whose type does not match the declared
+// parameter type is rejected at the call site with a diagnostic that
+// names the macro, the parameter and both types. Judged by standalone
+// `sla check` (see plugin_tests.zig registration); the legal control
+// is tests/test_unit_typed_macro_params.sla checking clean.
+
+macro double_into(out: i64, x: i64) {
+    out = x + x;
+}
+
+fn f() -> i64 {
+    let r: i64 = 0;
+    let bad: f64 = 1.5;
+    double_into(r, bad);
+    return r;
+}

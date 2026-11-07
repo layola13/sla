@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 127_sorted：手写 every（[1,2,3,4] 全正=true，[1,-2,3]=false）。
+
+fn all_positive(a: [int; 4]) -> bool {
+    for i in 0..4 {
+        if a[i] <= 0 {
+            return false;
+        };
+    }
+    return true;
+}
+
+fn main() -> i32 {
+    println("{}", all_positive([1, 2, 3, 4]));
+    println("{}", all_positive([1, -2, 3, 4]));
+    return 0;
+}
+
+@test "basic 42 every positive"() {
+    if all_positive([1, 2, 3, 4]) != true { panic(4201); };
+    if all_positive([1, -2, 3, 4]) { panic(4202); };
+}

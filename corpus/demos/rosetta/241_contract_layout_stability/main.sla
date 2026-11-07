@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_layout_stable_field_count() -> i32 {
+    let tag_field = 1;
+    let len_field = 1;
+    return tag_field + len_field;
+}
+
+fn main() -> i32 {
+    let tag_field = 1;
+    let len_field = 1;
+    let result = tag_field + len_field;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 241 contract layout stability"() {
+    let got = contract_layout_stable_field_count();
+    if got != 2 { panic(241); };
+}

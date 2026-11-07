@@ -1,0 +1,228 @@
+@import "sa_std/http_proxy.sla"
+
+// REG-SHARD3 coverage: SAB registry `declared` entries for the
+// http_proxy.sla byte/string helpers (proxy_hex_val, proxy_is_digit,
+// proxy_is_space, proxy_lower_byte, proxy_find_byte, proxy_ranges_eq,
+// proxy_range_eq_lower, proxy_range_str, proxy_lower_range,
+// proxy_lower_str, proxy_trim_str, proxy_u32_str, proxy_parse_port,
+// proxy_dot_suffix_match). Registry stamp ee7b41c3 lists all of them
+// class=declared with zero corpus references; assertions below pin
+// the documented byte-level semantics from the source.
+
+fn reg3_str_eq(s: String, lit: String) -> bool {
+    let sn: u64 = len(s);
+    if sn != len(lit) {
+        return false;
+    };
+    let sp: ptr = STR_PTR(s);
+    let lp: ptr = STR_PTR(lit);
+    let i: u64 = 0;
+    while i < sn {
+        if PTR_BYTE_AT(sp, i) != PTR_BYTE_AT(lp, i) {
+            return false;
+        };
+        i = i + 1;
+    }
+    return true;
+}
+
+@test "reg3 proxy hex_val"() {
+    if proxy_hex_val(48) != 0 { panic(3001); };
+    if proxy_hex_val(57) != 9 { panic(3002); };
+    if proxy_hex_val(97) != 10 { panic(3003); };
+    if proxy_hex_val(102) != 15 { panic(3004); };
+    if proxy_hex_val(65) != 10 { panic(3005); };
+    if proxy_hex_val(70) != 15 { panic(3006); };
+    if proxy_hex_val(103) != -1 { panic(3007); };
+    if proxy_hex_val(47) != -1 { panic(3008); };
+}
+
+@test "reg3 proxy is_digit"() {
+    if !proxy_is_digit(48) { panic(3011); };
+    if !proxy_is_digit(57) { panic(3012); };
+    if proxy_is_digit(58) { panic(3013); };
+    if proxy_is_digit(97) { panic(3014); };
+}
+
+@test "reg3 proxy is_space"() {
+    if !proxy_is_space(32) { panic(3021); };
+    if !proxy_is_space(9) { panic(3022); };
+    if !proxy_is_space(13) { panic(3023); };
+    if !proxy_is_space(10) { panic(3024); };
+    if proxy_is_space(65) { panic(3025); };
+    if proxy_is_space(11) { panic(3026); };
+}
+
+@test "reg3 proxy lower_byte"() {
+    if proxy_lower_byte(65) != 97 { panic(3031); };
+    if proxy_lower_byte(90) != 122 { panic(3032); };
+    if proxy_lower_byte(97) != 97 { panic(3033); };
+    if proxy_lower_byte(48) != 48 { panic(3034); };
+}
+
+@test "reg3 proxy find_byte"() {
+    let s: String = format("aXbXc");
+    let p: ptr = STR_PTR(s);
+    if proxy_find_byte(p, 5, 0, 88) != 1 { panic(3041); };
+    if proxy_find_byte(p, 5, 2, 88) != 3 { panic(3042); };
+    if proxy_find_byte(p, 5, 0, 122) != -1 { panic(3043); };
+    if proxy_find_byte(p, 5, 5, 88) != -1 { panic(3044); };
+    if proxy_find_byte(p, 5, 0, 97) != 0 { panic(3045); };
+}
+
+@test "reg3 proxy ranges_eq"() {
+    let a: String = format("xxhelloYY");
+    let b: String = format("hello");
+    let c: String = format("hellp");
+    let ap: ptr = STR_PTR(a);
+    let bp: ptr = STR_PTR(b);
+    let cp: ptr = STR_PTR(c);
+    if !proxy_ranges_eq(ap, 2, bp, 0, 5) { panic(3051); };
+    if proxy_ranges_eq(ap, 2, cp, 0, 5) { panic(3052); };
+    if !proxy_ranges_eq(ap, 0, bp, 0, 0) { panic(3053); };
+    if proxy_ranges_eq(ap, 3, bp, 0, 4) { panic(3054); };
+}
+
+@test "reg3 proxy range_eq_lower"() {
+    let a: String = format("HTTP");
+    let ap: ptr = STR_PTR(a);
+    if !proxy_range_eq_lower(ap, 0, 4, format("http")) { panic(3061); };
+    let a2: String = format("xHTTPx");
+    if !proxy_range_eq_lower(STR_PTR(a2), 1, 4, format("http")) { panic(3062); };
+    let b: String = format("HtTp");
+    let bp2: ptr = STR_PTR(b);
+    if !proxy_range_eq_lower(bp2, 0, 4, format("http")) { panic(3063); };
+    if proxy_range_eq_lower(ap, 0, 4, format("htto")) { panic(3064); };
+    if proxy_range_eq_lower(ap, 0, 3, format("http")) { panic(3065); };
+}
+
+@test "reg3 proxy range_str"() {
+    let a: String = format("xxhelloYY");
+    let ap: ptr = STR_PTR(a);
+    let mid: String = proxy_range_str(ap, 2, 5);
+    if !reg3_str_eq(mid, format("hello")) { panic(3071); };
+    let empty: String = proxy_range_str(ap, 0, 0);
+    if len(empty) != 0 { panic(3072); };
+    let one: String = proxy_range_str(ap, 0, 1);
+    if !reg3_str_eq(one, format("x")) { panic(3073); };
+}
+
+@test "reg3 proxy lower_range and lower_str"() {
+    let a: String = format("AbC9xY");
+    let ap: ptr = STR_PTR(a);
+    let low: String = proxy_lower_range(ap, 0, 6);
+    if !reg3_str_eq(low, format("abc9xy")) { panic(3081); };
+    let part: String = proxy_lower_range(ap, 1, 3);
+    if !reg3_str_eq(part, format("bc9")) { panic(3082); };
+    let whole: String = proxy_lower_str(format("HeLLo"));
+    if !reg3_str_eq(whole, format("hello")) { panic(3083); };
+}
+
+@test "reg3 proxy trim_str"() {
+    let t1: String = proxy_trim_str(format("  ab  "));
+    if !reg3_str_eq(t1, format("ab")) { panic(3101); };
+    let t2: String = proxy_trim_str(format("ab"));
+    if !reg3_str_eq(t2, format("ab")) { panic(3102); };
+    let t3: String = proxy_trim_str(format("   "));
+    if len(t3) != 0 { panic(3103); };
+    let t4: String = proxy_trim_str(format("\t\r\nx\n"));
+    if !reg3_str_eq(t4, format("x")) { panic(3104); };
+}
+
+@test "reg3 proxy u32_str"() {
+    if !reg3_str_eq(proxy_u32_str(0), format("0")) { panic(3111); };
+    if !reg3_str_eq(proxy_u32_str(7), format("7")) { panic(3112); };
+    if !reg3_str_eq(proxy_u32_str(80), format("80")) { panic(3113); };
+    if !reg3_str_eq(proxy_u32_str(65535), format("65535")) { panic(3114); };
+    if !reg3_str_eq(proxy_u32_str(4294967295), format("4294967295")) { panic(3115); };
+}
+
+@test "reg3 proxy parse_port ok"() {
+    let s: String = format("x443y");
+    let p: ptr = STR_PTR(s);
+    let r = proxy_parse_port(p, 1, 3);
+    match r {
+        Ok(v) => {
+            if v != 443 { panic(3121); };
+        },
+        Err(e) => { panic(3122); },
+    };
+    let s2: String = format("1");
+    let r2 = proxy_parse_port(STR_PTR(s2), 0, 1);
+    match r2 {
+        Ok(v) => {
+            if v != 1 { panic(3123); };
+        },
+        Err(e) => { panic(3124); },
+    };
+    let s3: String = format("65535");
+    let r3 = proxy_parse_port(STR_PTR(s3), 0, 5);
+    match r3 {
+        Ok(v) => {
+            if v != 65535 { panic(3125); };
+        },
+        Err(e) => { panic(3126); },
+    };
+}
+
+@test "reg3 proxy parse_port err"() {
+    let s: String = format("0");
+    let r = proxy_parse_port(STR_PTR(s), 0, 1);
+    match r {
+        Ok(v) => { panic(3131); },
+        Err(e) => {
+            if e != SA_STD_ERR_INVALID_ARGUMENT { panic(3132); };
+        },
+    };
+    let s2: String = format("65536");
+    let r2 = proxy_parse_port(STR_PTR(s2), 0, 5);
+    match r2 {
+        Ok(v) => { panic(3133); },
+        Err(e) => {
+            if e != SA_STD_ERR_INVALID_ARGUMENT { panic(3134); };
+        },
+    };
+    let s3: String = format("8a");
+    let r3 = proxy_parse_port(STR_PTR(s3), 0, 2);
+    match r3 {
+        Ok(v) => { panic(3135); },
+        Err(e) => {
+            if e != SA_STD_ERR_INVALID_ARGUMENT { panic(3136); };
+        },
+    };
+    let s4: String = format("123456");
+    let r4 = proxy_parse_port(STR_PTR(s4), 0, 6);
+    match r4 {
+        Ok(v) => { panic(3137); },
+        Err(e) => {
+            if e != SA_STD_ERR_INVALID_ARGUMENT { panic(3138); };
+        },
+    };
+    let s5: String = format("80");
+    let r5 = proxy_parse_port(STR_PTR(s5), 0, 0);
+    match r5 {
+        Ok(v) => { panic(3139); },
+        Err(e) => {
+            if e != SA_STD_ERR_INVALID_ARGUMENT { panic(3140); };
+        },
+    };
+}
+
+@test "reg3 proxy dot_suffix_match"() {
+    let host: String = format("www.example.com");
+    let suf: String = format("example.com");
+    let hp: ptr = STR_PTR(host);
+    let sp: ptr = STR_PTR(suf);
+    if !proxy_dot_suffix_match(hp, 0, 15, sp, 0, 11) { panic(3141); };
+    // host == suffix: no leading dot room -> false
+    if proxy_dot_suffix_match(hp, 4, 11, sp, 0, 11) { panic(3142); };
+    // char before suffix is not '.': "wwwexample.com" vs "example.com"
+    let host2: String = format("wwwexample.com");
+    if proxy_dot_suffix_match(STR_PTR(host2), 0, 14, sp, 0, 11) { panic(3143); };
+    // suffix bytes differ: "www.example.com" vs "ample.com" (preceded by 'x')
+    let suf2: String = format("ample.com");
+    if proxy_dot_suffix_match(hp, 0, 15, STR_PTR(suf2), 0, 9) { panic(3144); };
+    // offset form: host span inside a larger buffer
+    let buf: String = format("..www.example.com..");
+    if !proxy_dot_suffix_match(STR_PTR(buf), 2, 15, sp, 0, 11) { panic(3145); };
+}

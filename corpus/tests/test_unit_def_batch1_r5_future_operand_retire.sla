@@ -1,0 +1,56 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+// DEF-BATCH1-R5 regression: the async lowering hands an async call's state
+// result into EXPAND FUTURE_NEW (and the future object into TASK_NEW)
+// without a transfer-retire, so the operand stayed Active at function exit
+// and the verifier reported MemoryLeak on a correct program. The std
+// macros take ownership of the operand; the caller retires it (the same
+// sequence already retires the FUTURE_SELECT2_STATE_NEW operands).
+
+async fn spin_tag(n: i32, tag: i32) -> i32 {
+    let i: i32 = 0;
+    while i < n {
+        let tick: i32 = future::defer_ready(0).await;
+        i = i + 1 + tick;
+    }
+    return tag;
+}
+
+@test "batch1 r5 select2 future_new operand retire"() {
+    let race = future::select2(spin_tag(3, 100), spin_tag(50, 200));
+    let t = task::new(race);
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 100000 {
+            panic(7601);
+        };
+    }
+    let either = task::result(t);
+    if future::either_side(either) != 1 {
+        panic(7602);
+    };
+    if future::either_left(either) != 100 {
+        panic(7603);
+    };
+}
+
+@test "batch1 r5 join2 future_new operand retire"() {
+    let pair = future::join2(spin_tag(2, 10), spin_tag(4, 20));
+    let t = task::new(pair);
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 100000 {
+            panic(7611);
+        };
+    }
+    let both = task::result(t);
+    if future::pair_left(both) != 10 {
+        panic(7612);
+    };
+    if future::pair_right(both) != 20 {
+        panic(7613);
+    };
+}

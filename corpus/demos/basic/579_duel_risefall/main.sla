@@ -1,0 +1,39 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 升降对峙：rising(n,1) == falling(n,n) == n!
+//（n=4：24 对 24；n=5：120 对 120）。
+// 意对标 577 rising × 578 falling（两源单实现见各源；286 系对峙体例）。
+
+fn rising(n: int, x: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < n {
+        r = r * (x + i);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn falling(n: int, x: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < n {
+        r = r * (x - i);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", rising(4, 1), falling(4, 4), rising(5, 1), falling(5, 5));
+    return 0;
+}
+
+@test "basic 579 duel risefall"() {
+    if rising(4, 1) != 24 { panic(57901); };
+    if falling(4, 4) != 24 { panic(57902); };
+    if rising(5, 1) != 120 { panic(57903); };
+    if falling(5, 5) != 120 { panic(57904); };
+    if rising(5, 1) != falling(5, 5) { panic(57905); };
+}

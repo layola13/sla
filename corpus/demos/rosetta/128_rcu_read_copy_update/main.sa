@@ -1,0 +1,69 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/arc.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_rcu_snapshot_total = vtable { call = @sla__rcu_snapshot_total }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__rcu_snapshot_total() -> i32:
+L_ENTRY:
+    tmp_0 = 1
+    EXPAND ARC_NEW tmp_1, tmp_0
+    !tmp_0
+    old_snapshot = tmp_1
+    EXPAND ARC_GET tmp_2, old_snapshot
+    reader_seen = tmp_2
+    EXPAND ARC_GET tmp_3, old_snapshot
+    tmp_4 = 1
+    tmp_5 = add tmp_3, tmp_4
+    !tmp_3
+    !tmp_4
+    EXPAND ARC_NEW tmp_6, tmp_5
+    !tmp_5
+    new_snapshot = tmp_6
+    EXPAND ARC_GET tmp_7, new_snapshot
+    updater_seen = tmp_7
+    tmp_8 = add reader_seen, updater_seen
+    !new_snapshot
+    !old_snapshot
+    return tmp_8
+
+@main() -> i32:
+L_ENTRY:
+    tmp_9 = call @sla__rcu_snapshot_total()
+    result = tmp_9
+    tmp_10 = call @sa_fmt_u64(result, 10)
+    tmp_11 = call @sa_fmt_buffer_data(tmp_10)
+    tmp_12 = call @sa_fmt_buffer_len(tmp_10)
+    tmp_13 = tmp_11
+    call @sa_print_bytes(&tmp_13, tmp_12)
+    call @sa_fmt_buffer_free(^tmp_10)
+    !tmp_13
+    !tmp_12
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 128 128_rcu_read_copy_update"():
+L_TEST_ENTRY_0:
+    tmp_14 = call @sla__rcu_snapshot_total()
+    got = tmp_14
+    tmp_15 = 3
+    tmp_16 = ne got, tmp_15
+    !tmp_15
+    br tmp_16 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_16
+    panic(128)
+
+L_ELSE_2:
+    !tmp_16
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

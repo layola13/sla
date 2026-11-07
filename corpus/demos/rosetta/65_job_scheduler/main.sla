@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Job {
+    ready: bool,
+    cost: i32,
+}
+
+fn scheduled_cost(jobs: [Job; 4]) -> i32 {
+    let done = 0;
+    for job in jobs {
+        if job.ready {
+            let cost = job.cost;
+            done = done + cost;
+        };
+    }
+    return done;
+}
+
+fn main() -> i32 {
+    let jobs = [
+        Job { ready: true, cost: 1 },
+        Job { ready: false, cost: 2 },
+        Job { ready: true, cost: 3 },
+        Job { ready: true, cost: 4 },
+    ];
+    let done = scheduled_cost(jobs);
+    println("{}", done);
+    return 0;
+}
+
+@test "rosetta 065 65_job_scheduler"() {
+    if main() != 0 {
+        panic(65);
+    };
+}

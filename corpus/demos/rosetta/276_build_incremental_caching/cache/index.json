@@ -1,0 +1,4 @@
+{
+  "packages": ["core", "extras"],
+  "hashes": "cache/hashes.txt"
+}

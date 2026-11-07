@@ -1,0 +1,11 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_custom_metadata_fields() -> i32 {
+    let owner_field = 1;
+    let category_field = 1;
+    return owner_field + category_field;
+}
+
+fn main() -> i32 { let owner_field = 1; let category_field = 1; let result = owner_field + category_field; println("{}", result); return result; }
+@test "rosetta 218 pkg metadata custom"() { let got = pkg_custom_metadata_fields(); if got != 2 { panic(218); }; }

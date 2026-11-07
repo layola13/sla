@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 结构体数组面（141 容器 × 11 结构组合）：Pt 形（`{x:3,y:4}` 系出自
+// tsgosa 13_struct，87 覆盖其嵌套写，此处覆盖 Vec 存取：长 2，
+// 跨元字段和 5，次元 x 为 3）。
+
+struct Pt { x: i32, y: i32 }
+
+fn main() -> i32 {
+    let v: Vec<Pt> = Vec::new();
+    v.push(Pt { x: 1, y: 2 });
+    v.push(Pt { x: 3, y: 4 });
+    println("{},{},{}", len(v), v[0].x + v[1].y, v[1].x);
+    return 0;
+}
+
+@test "basic 223 vec struct"() {
+    let v: Vec<Pt> = Vec::new();
+    v.push(Pt { x: 1, y: 2 });
+    v.push(Pt { x: 3, y: 4 });
+    if len(v) != 2 { panic(22301); };
+    if v[0].x + v[1].y != 5 { panic(22302); };
+    if v[1].x != 3 { panic(22303); };
+}

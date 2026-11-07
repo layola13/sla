@@ -1,0 +1,86 @@
+@import "sa_std/url.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Registry shard 4 coverage: url userinfo handling from
+// sa_std/url.sla (SAB registry class=declared, never probed,
+// zero corpus references at census 2026-11-06).
+// Entries: url_user_name, url_user_password, url_userinfo,
+// url_userinfo_escape, url_with_userinfo, url_strings_eq.
+
+fn s4_eq(a: String, b: String) -> bool {
+    let pa: ptr = STR_PTR(a);
+    let pb: ptr = STR_PTR(b);
+    if len(a) != len(b) { return false; };
+    let i: u64 = 0;
+    while i < len(a) {
+        if PTR_BYTE_AT(pa, i) != PTR_BYTE_AT(pb, i) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn u4_parse(s: String) -> Url {
+    let r = url_parse(s);
+    match r {
+        Ok(u) => { return u; },
+        Err(e) => { panic(43190); },
+    }
+}
+
+fn o4_some(o: Option<String>) -> String {
+    match o {
+        Some(v) => { return v; },
+        None => { panic(43191); },
+    }
+}
+
+@test "reg4 url user name and password split"() {
+    let u = u4_parse(format("https://user:pass@h/"));
+    if !s4_eq(o4_some(url_user_name(&u)), format("user")) { panic(43101); };
+    if !s4_eq(o4_some(url_user_password(&u)), format("pass")) { panic(43102); };
+    let v = u4_parse(format("https://user@h/"));
+    if !s4_eq(o4_some(url_user_name(&v)), format("user")) { panic(43103); };
+    if url_user_password(&v).is_some() { panic(43104); };
+    let w = u4_parse(format("https://h/"));
+    if url_user_name(&w).is_some() { panic(43105); };
+    if url_user_password(&w).is_some() { panic(43106); };
+}
+
+@test "reg4 url user name and password decode escapes"() {
+    let u = u4_parse(format("https://us%3Aer:p%40ss@h/"));
+    if !s4_eq(o4_some(url_user_name(&u)), format("us:er")) { panic(43111); };
+    if !s4_eq(o4_some(url_user_password(&u)), format("p@ss")) { panic(43112); };
+}
+
+@test "reg4 url userinfo builds escaped pair"() {
+    if !s4_eq(url_userinfo(format("user"), Some(format("pass"))), format("user:pass")) { panic(43121); };
+    if !s4_eq(url_userinfo(format("user"), None), format("user")) { panic(43122); };
+    if !s4_eq(url_userinfo(format("us er"), None), format("us%20er")) { panic(43123); };
+}
+
+@test "reg4 url userinfo escape uses userinfo mode"() {
+    // Mode 3 keeps sub-delims and ':' but not '@' or '/'.
+    if !s4_eq(url_userinfo_escape(format("a:b@c")), format("a:b%40c")) { panic(43131); };
+    if !s4_eq(url_userinfo_escape(format("a/b")), format("a%2Fb")) { panic(43132); };
+    if !s4_eq(url_userinfo_escape(format("plain")), format("plain")) { panic(43133); };
+}
+
+@test "reg4 url with userinfo replaces the field"() {
+    let b = u4_parse(format("http://h/p"));
+    let w = url_with_userinfo(&b, format("u"), Some(format("p")));
+    if w.has_userinfo != true { panic(43141); };
+    if !s4_eq(url_to_string(&w), format("http://u:p@h/p")) { panic(43142); };
+    if !s4_eq(o4_some(url_user_name(&w)), format("u")) { panic(43143); };
+    if !s4_eq(o4_some(url_user_password(&w)), format("p")) { panic(43144); };
+    // The base is untouched.
+    if b.has_userinfo != false { panic(43145); };
+}
+
+@test "reg4 url strings eq"() {
+    if url_strings_eq(format("abc"), format("abc")) != true { panic(43151); };
+    if url_strings_eq(format("abc"), format("abd")) != false { panic(43152); };
+    if url_strings_eq(format("abc"), format("abcd")) != false { panic(43153); };
+    if url_strings_eq(format(""), format("")) != true { panic(43154); };
+    if url_strings_eq(format(""), format("a")) != false { panic(43155); };
+}

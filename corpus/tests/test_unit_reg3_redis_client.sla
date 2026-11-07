@@ -1,0 +1,179 @@
+@import "sa_std/redis.sla"
+
+// REG-SHARD3 coverage: SAB registry `declared` entries for the
+// redis.sla typed command surface (redis_command, redis_get,
+// redis_set, redis_set_ex, redis_set_px, redis_set_opts, redis_del,
+// redis_exists, redis_expire, redis_ttl, redis_incr, redis_incrby,
+// redis_hget, redis_hset, redis_hgetall, redis_lpush, redis_rpush,
+// redis_lrange, redis_sadd, redis_smembers, redis_keys, redis_zadd,
+// redis_zrange, redis_zrange_withscores, redis_ping, redis_ping_msg,
+// redis_auth, redis_auth_user, redis_select, redis_eval,
+// redis_evalsha, redis_script_load, redis_connect,
+// redis_connect_auth_db, redis_read_chunk, redis_write_all).
+// All class=declared, zero corpus references at ee7b41c3.
+//
+// Form: every command funnels through redis_command, whose contract
+// on a non-open client is a deterministic SA_STD_ERR_INVALID_HANDLE
+// step with an INVALID reply and no I/O attempted; argument
+// validation failures surface as SA_STD_ERR_INVALID_ARGUMENT before
+// the gate. Those two paths pin each helper's lowering exactly,
+// without a server. (Live-server behavior is sci/tests'
+// redis_client_loopback.sla's brief, not this corpus batch's.)
+
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+fn reg3_key() -> Vec<u8> {
+    return reg3_bytes(STR_PTR("k"), STR_LEN("k"));
+}
+
+fn reg3_val() -> Vec<u8> {
+    return reg3_bytes(STR_PTR("v"), STR_LEN("v"));
+}
+
+fn reg3_gate(step: RedisStep, code: u32) {
+    if step.status != SA_STD_ERR_INVALID_HANDLE {
+        panic(code);
+    };
+    if redis_value_kind(&step.reply) != SA_REDIS_KIND_INVALID {
+        panic(code + 1);
+    };
+    if step.client.open {
+        panic(code + 2);
+    };
+}
+
+@test "reg3 redis command gate"() {
+    let a = redis_args_verb(STR_PTR("GET"), STR_LEN("GET"));
+    a = redis_args_push(a, reg3_key());
+    reg3_gate(redis_command(redis_empty_client(), a), 5001);
+    // A failed client reports NET before the handle gate.
+    let a2 = redis_args_verb(STR_PTR("GET"), STR_LEN("GET"));
+    a2 = redis_args_push(a2, reg3_key());
+    let dead = redis_empty_client();
+    dead.failed = true;
+    let st = redis_command(dead, a2);
+    if st.status != SA_STD_ERR_NET { panic(5004); };
+}
+
+@test "reg3 redis get set del exists"() {
+    reg3_gate(redis_get(redis_empty_client(), reg3_key()), 5011);
+    reg3_gate(redis_set(redis_empty_client(), reg3_key(), reg3_val()), 5014);
+    reg3_gate(redis_del(redis_empty_client(), reg3_key()), 5017);
+    reg3_gate(redis_exists(redis_empty_client(), reg3_key()), 5020);
+}
+
+@test "reg3 redis expire ttl incr"() {
+    reg3_gate(redis_expire(redis_empty_client(), reg3_key(), 60), 5031);
+    reg3_gate(redis_ttl(redis_empty_client(), reg3_key()), 5034);
+    reg3_gate(redis_incr(redis_empty_client(), reg3_key()), 5037);
+    reg3_gate(redis_incrby(redis_empty_client(), reg3_key(), 0 - 3), 5040);
+}
+
+@test "reg3 redis hash ops"() {
+    reg3_gate(redis_hget(redis_empty_client(), reg3_key(), reg3_val()), 5051);
+    reg3_gate(redis_hset(redis_empty_client(), reg3_key(), reg3_val(), reg3_val()), 5054);
+    reg3_gate(redis_hgetall(redis_empty_client(), reg3_key()), 5057);
+}
+
+@test "reg3 redis list and set ops"() {
+    reg3_gate(redis_lpush(redis_empty_client(), reg3_key(), reg3_val()), 5061);
+    reg3_gate(redis_rpush(redis_empty_client(), reg3_key(), reg3_val()), 5064);
+    reg3_gate(redis_lrange(redis_empty_client(), reg3_key(), 0, -1), 5067);
+    reg3_gate(redis_sadd(redis_empty_client(), reg3_key(), reg3_val()), 5070);
+    reg3_gate(redis_smembers(redis_empty_client(), reg3_key()), 5073);
+    reg3_gate(redis_keys(redis_empty_client(), reg3_bytes(STR_PTR("*"), STR_LEN("*"))), 5076);
+}
+
+@test "reg3 redis zset ops"() {
+    reg3_gate(redis_zadd(redis_empty_client(), reg3_key(), reg3_bytes(STR_PTR("1.5"), STR_LEN("1.5")), reg3_val()), 5081);
+    reg3_gate(redis_zrange(redis_empty_client(), reg3_key(), 0, -1), 5084);
+    reg3_gate(redis_zrange_withscores(redis_empty_client(), reg3_key(), 0, -1), 5087);
+}
+
+@test "reg3 redis ping and auth"() {
+    reg3_gate(redis_ping(redis_empty_client()), 5091);
+    reg3_gate(redis_ping_msg(redis_empty_client(), reg3_val()), 5094);
+    reg3_gate(redis_auth(redis_empty_client(), reg3_val()), 5097);
+    reg3_gate(redis_auth_user(redis_empty_client(), reg3_bytes(STR_PTR("u"), STR_LEN("u")), reg3_val()), 5100);
+}
+
+@test "reg3 redis select forms"() {
+    reg3_gate(redis_select(redis_empty_client(), 3), 5111);
+    // Negative db is an argument error, before any command runs.
+    let st = redis_select(redis_empty_client(), 0 - 1);
+    if st.status != SA_STD_ERR_INVALID_ARGUMENT { panic(5114); };
+}
+
+@test "reg3 redis set opts validation"() {
+    // NX and XX together are rejected locally.
+    let s1 = redis_set_opts(redis_empty_client(), reg3_key(), reg3_val(), true, true, SA_REDIS_SET_TTL_NONE, 0);
+    if s1.status != SA_STD_ERR_INVALID_ARGUMENT { panic(5121); };
+    // Unknown ttl kind is rejected locally.
+    let s2 = redis_set_opts(redis_empty_client(), reg3_key(), reg3_val(), false, false, 99, 10);
+    if s2.status != SA_STD_ERR_INVALID_ARGUMENT { panic(5122); };
+    // A TTL kind with a non-positive ttl is rejected locally.
+    let s3 = redis_set_opts(redis_empty_client(), reg3_key(), reg3_val(), false, false, SA_REDIS_SET_TTL_EX, 0);
+    if s3.status != SA_STD_ERR_INVALID_ARGUMENT { panic(5123); };
+    // Valid option sets reach the command gate.
+    reg3_gate(redis_set_opts(redis_empty_client(), reg3_key(), reg3_val(), false, false, SA_REDIS_SET_TTL_NONE, 0), 5124);
+    reg3_gate(redis_set_opts(redis_empty_client(), reg3_key(), reg3_val(), true, false, SA_REDIS_SET_TTL_EX, 60), 5127);
+    reg3_gate(redis_set_opts(redis_empty_client(), reg3_key(), reg3_val(), false, true, SA_REDIS_SET_TTL_PX, 500), 5130);
+    // The EX/PX conveniences inherit both paths.
+    reg3_gate(redis_set_ex(redis_empty_client(), reg3_key(), reg3_val(), 60), 5133);
+    let s4 = redis_set_ex(redis_empty_client(), reg3_key(), reg3_val(), 0);
+    if s4.status != SA_STD_ERR_INVALID_ARGUMENT { panic(5136); };
+    reg3_gate(redis_set_px(redis_empty_client(), reg3_key(), reg3_val(), 500), 5137);
+    let s5 = redis_set_px(redis_empty_client(), reg3_key(), reg3_val(), 0 - 1);
+    if s5.status != SA_STD_ERR_INVALID_ARGUMENT { panic(5140); };
+}
+
+@test "reg3 redis eval and script load"() {
+    let keys = redis_args_new();
+    keys = redis_args_push(keys, reg3_key());
+    let argv = redis_args_new();
+    reg3_gate(redis_eval(redis_empty_client(), reg3_bytes(STR_PTR("return 1"), STR_LEN("return 1")), keys, argv), 5151);
+    let keys2 = redis_args_new();
+    let argv2 = redis_args_new();
+    reg3_gate(redis_evalsha(redis_empty_client(), reg3_bytes(STR_PTR("beef"), STR_LEN("beef")), keys2, argv2), 5154);
+    reg3_gate(redis_script_load(redis_empty_client(), reg3_bytes(STR_PTR("return 1"), STR_LEN("return 1"))), 5157);
+}
+
+@test "reg3 redis connect refused and oversized host"() {
+    // Loopback port 1 refuses instantly: a non-OK status and a
+    // still-closed client, never a hang or a fake success.
+    let st = redis_connect(reg3_bytes(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1")), 1);
+    if st.status == SA_STD_OK { panic(5161); };
+    if st.client.open { panic(5162); };
+    if redis_value_kind(&st.reply) != SA_REDIS_KIND_INVALID { panic(5163); };
+    // Host longer than SA_REDIS_MAX_HOST (512) is an argument error.
+    let big: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < 600 {
+        big.push(97);
+        i = i + 1;
+    }
+    let st2 = redis_connect(big, 6379);
+    if st2.status != SA_STD_ERR_INVALID_ARGUMENT { panic(5164); };
+    if st2.client.open { panic(5165); };
+    // The combined form surfaces the same connect failure.
+    let st3 = redis_connect_auth_db(reg3_bytes(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1")), 1, reg3_bytes(STR_PTR("u"), STR_LEN("u")), reg3_val(), 2);
+    if st3.status == SA_STD_OK { panic(5166); };
+    if st3.client.open { panic(5167); };
+}
+
+@test "reg3 redis read_chunk dead handle"() {
+    let chunk = redis_read_chunk(0);
+    if chunk.status == SA_STD_OK { panic(5171); };
+    if (len(chunk.data) as u64) != 0 { panic(5172); };
+}
+
+@test "reg3 redis write_all forms"() {
+    // Empty payload is a no-op success even on a dead handle.
+    let empty: Vec<u8> = Vec::new();
+    if redis_write_all(0, empty) != SA_STD_OK { panic(5181); };
+    // A real payload on handle 0 must fail with a status.
+    if redis_write_all(0, reg3_val()) == SA_STD_OK { panic(5182); };
+}

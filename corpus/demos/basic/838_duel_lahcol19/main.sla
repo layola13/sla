@@ -1,0 +1,52 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 首列对峙：建表 vs 阶乘（(7,1)：5040 对 5040；(8,1)：40320 对 40320；(9,1)：362880 对 362880）。
+// 意对标 711_lah_col1（低位首列互补；843 做次对角对峙）。
+
+fn lah(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn fact(n: int) -> int {
+    let r = 1;
+    let i = 1;
+    while i <= n {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{},{}", lah(7, 1), fact(7), lah(8, 1), fact(8), lah(9, 1));
+    return 0;
+}
+
+@test "basic 838 duel lahcol19"() {
+    if lah(7, 1) != 5040 { panic(83801); };
+    if fact(7) != 5040 { panic(83802); };
+    if lah(8, 1) != 40320 { panic(83803); };
+    if fact(8) != 40320 { panic(83804); };
+    if lah(9, 1) != fact(9) { panic(83805); };
+}

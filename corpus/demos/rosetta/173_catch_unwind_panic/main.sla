@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+
+fn catch_unwind_observable() -> i32 {
+    let result = std::panic::catch_unwind(|| panic("stop"));
+    let got = if result.is_ok() { 1 } else { 0 };
+    return got;
+}
+
+fn main() -> i32 {
+    let result = std::panic::catch_unwind(|| panic("stop"));
+    let got = if result.is_ok() { 1 } else { 0 };
+    println("{}", got);
+    return got;
+}
+
+@test "rosetta 173 173_catch_unwind_panic"() {
+    let got = catch_unwind_observable();
+    if got != 0 { panic(173); };
+}

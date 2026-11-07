@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn print_number(value: i32) -> i32 {
+    println("value={}", value);
+    return value;
+}
+
+@test "println formats primitive"() {
+    let got = print_number(7);
+    if got != 7 {
+        panic(1);
+    };
+};
+
+@test "println formats bool and strings"() {
+    println("{} {}", true, "literal");
+};

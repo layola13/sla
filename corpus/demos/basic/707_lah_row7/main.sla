@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 第 7 行 5040,15120,12600,4200,630,42,1（行和 37633；行和循环求和）。
+// 意对标 706_lah7（单格版互补；同式行复算）。
+
+fn ltb(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn lsum(n: int) -> int {
+    let s = 0;
+    let k = 1;
+    while k <= n {
+        s = s + ltb(n, k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", ltb(7, 1), ltb(7, 2), lsum(7));
+    return 0;
+}
+
+@test "basic 707 lah row7"() {
+    if ltb(7, 1) != 5040 { panic(70701); };
+    if ltb(7, 2) != 15120 { panic(70702); };
+    if lsum(7) != 37633 { panic(70703); };
+    if ltb(7, 7) != 1 { panic(70704); };
+}

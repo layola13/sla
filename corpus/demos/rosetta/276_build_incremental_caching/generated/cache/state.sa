@@ -1,0 +1,14 @@
+// Generated from build/cache.toml and cache/index.json.
+#def CACHE_ENTRY_COUNT = 2
+
+@cache_state_value() -> i32:
+L_ENTRY:
+    value = add 275, 1
+    !value
+    return 276
+
+@cache_state_count() -> i32:
+L_ENTRY:
+    count = add 1, 1
+    !count
+    return CACHE_ENTRY_COUNT

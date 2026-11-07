@@ -1,0 +1,27 @@
+// Function overloading on the extern face: two `extern "C"` prototypes
+// with the same name and different parameter types form an overload
+// set; the @no_mangle definitions pair with their prototypes per
+// signature class, and each member is emitted under its member symbol
+// (`ext_pick__ov_i32` / `ext_pick__ov_f64`). Baseline: Redeclaration.
+
+extern "C" {
+    fn ext_pick(x: i32) -> i32;
+    fn ext_pick(x: f64) -> i32;
+}
+
+@no_mangle pub extern "C" fn ext_pick(x: i32) -> i32 {
+    return 1;
+}
+
+@no_mangle pub extern "C" fn ext_pick(x: f64) -> i32 {
+    return 2;
+}
+
+@test "overload extern by type"() {
+    let a: i32 = 41;
+    let b: f64 = 2.5;
+    let r1 = unsafe { ext_pick(a) };
+    if r1 != 1 { panic(801); };
+    let r2 = unsafe { ext_pick(b) };
+    if r2 != 2 { panic(802); };
+};

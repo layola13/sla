@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 156_destructure_call：数组解构取值（7+8=15，长 2）。
+// SLA 暂无解构语法，用显式索引表达同一语义。
+
+fn main() -> i32 {
+    let p = [7, 8];
+    let a = p[0];
+    let b = p[1];
+    println("{},{}", a + b, len(p));
+    return 0;
+}
+
+@test "basic 86 destructure"() {
+    let p = [7, 8];
+    let a = p[0];
+    let b = p[1];
+    if a + b != 15 { panic(8601); };
+    if len(p) != 2 { panic(8602); };
+}

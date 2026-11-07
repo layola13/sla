@@ -1,0 +1,11 @@
+// expect: FallibleResultDiscarded
+@import "sa_std/testing/assert.sai"
+
+// A_min must-consume: a fallible (`T!`) call is `Result<T, i32>`; a
+// bare expression statement drops the whole Result — status and
+// payload alike — so the checker rejects it. Consume it with a
+// match, bind it, or discard it explicitly with `let _ =`.
+fn discard_fallible_result() -> i32 {
+    sa_test_fallible_i32_value(1);
+    return 0;
+}

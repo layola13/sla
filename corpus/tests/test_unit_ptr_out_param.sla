@@ -1,0 +1,42 @@
+// ZOZI-5 regression corpus: extern out-params of pointer-typed locals.
+// Before the fix, a borrowed pointer-typed binding never got a stack
+// home (planBorrowedBindingStorage only materialized primitives), so
+// `&slot` lowered to a copy of slot's VALUE and a C callee writing
+// through the `**T` out-param wrote to the value-as-address (null for
+// a null-initialized local: segfault; the JSC shape silently lost the
+// write). u64 out-params (DEF-4 bump pattern) already worked.
+
+@import "sa_std/ptr.sa"
+@import "sa_std/core/box.sa"
+
+struct Opaque;
+struct Handle { tag: i32 }
+
+extern "C" {
+    fn zozi_set_pp(pp: **Opaque, value: *Opaque) -> void;
+    fn zozi_set_handle_pp(pp: **Handle, value: *Handle) -> void;
+}
+
+@no_mangle pub extern "C" fn zozi_set_pp(pp: **Opaque, value: *Opaque) -> void {
+    unsafe { *pp = value; };
+}
+
+@no_mangle pub extern "C" fn zozi_set_handle_pp(pp: **Handle, value: *Handle) -> void {
+    unsafe { *pp = value; };
+}
+
+@test "pointer out-param write-back"() {
+    let target = Box::into_raw(Box::new(Handle { tag: 5 }));
+    let slot: *Opaque = ptr::null::<Opaque>();
+    unsafe { zozi_set_pp(&slot, target as *Opaque) };
+    if slot != (target as *Opaque) { panic(401); };
+    let hslot: *Handle = ptr::null::<Handle>();
+    unsafe { zozi_set_handle_pp(&hslot, target) };
+    if hslot != target { panic(402); };
+    if (*hslot).tag != 5 { panic(403); };
+    // plain SLA-side reassignment of a slotted pointer binding must
+    // store through the slot, not rebind the slot address.
+    hslot = ptr::null::<Handle>();
+    if hslot != ptr::null::<Handle>() { panic(404); };
+    let _reclaim = unsafe { Box::from_raw(target) };
+}

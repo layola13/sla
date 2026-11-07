@@ -1,0 +1,13 @@
+@import "workspace/shared/config.sal"
+
+@workspace_base_value() -> i32:
+L_ENTRY:
+    value = add WORKSPACE_BASE, 0
+    !value
+    return WORKSPACE_BASE
+
+@shared_config_value() -> i32:
+L_ENTRY:
+    value = add WORKSPACE_SHARED, 0
+    !value
+    return WORKSPACE_SHARED

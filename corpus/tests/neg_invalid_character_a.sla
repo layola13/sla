@@ -1,0 +1,6 @@
+// expect: InvalidCharacter
+// neg: radix literal 0x with no digits
+fn main() -> i32 {
+    let x = 0x;
+    return 0;
+}

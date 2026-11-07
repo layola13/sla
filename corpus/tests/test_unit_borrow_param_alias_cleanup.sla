@@ -1,0 +1,23 @@
+struct Issue013Foo {
+    value: int,
+}
+
+fn issue013_dead_alias(env: &Issue013Foo) -> int {
+    let alias: &Issue013Foo = env;
+    return 0;
+}
+
+fn issue013_live_alias(env: &Issue013Foo) -> int {
+    let alias: &Issue013Foo = env;
+    return alias.value;
+}
+
+@test "borrow param alias cleanup skips moved source"() {
+    let value = Issue013Foo { value: 7 };
+    if issue013_dead_alias(&value) != 0 {
+        panic(10013);
+    };
+    if issue013_live_alias(&value) != 7 {
+        panic(10014);
+    };
+}

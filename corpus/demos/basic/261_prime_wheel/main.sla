@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 183_prime_upto 的轮式版（46 为试除版：30 以内 10 个，29 素）。
+// 6k±1 轮（先除 2/3，步长 6 验 i 与 i+2）。
+
+fn is_prime_w(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 || n == 3 { return 1; };
+    if n % 2 == 0 || n % 3 == 0 { return 0; };
+    let i = 5;
+    while i * i <= n {
+        if n % i == 0 || n % (i + 2) == 0 { return 0; };
+        i = i + 6;
+    }
+    return 1;
+}
+
+fn main() -> i32 {
+    let cnt = 0;
+    let c = 2;
+    while c <= 30 {
+        if is_prime_w(c) == 1 { cnt = cnt + 1; };
+        c = c + 1;
+    }
+    println("{},{}", cnt, is_prime_w(29));
+    return 0;
+}
+
+@test "basic 261 prime wheel"() {
+    if is_prime_w(29) != 1 { panic(26101); };
+    if is_prime_w(25) != 0 { panic(26102); };
+    if is_prime_w(2) != 1 { panic(26103); };
+    let cnt = 0;
+    let c = 2;
+    while c <= 30 {
+        if is_prime_w(c) == 1 { cnt = cnt + 1; };
+        c = c + 1;
+    }
+    if cnt != 10 { panic(26104); };
+}

@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn extern_block_grouped_symbol_count() -> i32 {
+    let open_symbol = 1;
+    let close_symbol = 1;
+    return open_symbol + close_symbol;
+}
+
+fn main() -> i32 {
+    let open_symbol = 1;
+    let close_symbol = 1;
+    let result = open_symbol + close_symbol;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 236 mod extern block grouping"() {
+    let got = extern_block_grouped_symbol_count();
+    if got != 2 {
+        panic(236);
+    };
+}

@@ -1,0 +1,42 @@
+@import "sa_std/vec.sa"
+
+struct ParallelRunnerLoopFnPtrHolder {
+    runs: Vec<fn(i32) -> i32>,
+    run_order_positions: Vec<i64>,
+}
+
+fn parallel_runner_loop_inc(value: i32) -> i32 {
+    return value + 1;
+}
+
+fn parallel_runner_loop_holder_new() -> ParallelRunnerLoopFnPtrHolder {
+    let runs: Vec<fn(i32) -> i32> = Vec::new();
+    let run_order_positions: Vec<i64> = Vec::new();
+    return ParallelRunnerLoopFnPtrHolder { runs: runs, run_order_positions: run_order_positions };
+}
+
+fn parallel_runner_loop_holder_push(holder: ParallelRunnerLoopFnPtrHolder, run: fn(i32) -> i32) -> ParallelRunnerLoopFnPtrHolder {
+    let order_pos = len(holder.runs) as i64;
+    holder.runs.push(run);
+    holder.run_order_positions.push(order_pos);
+    return holder;
+}
+
+fn parallel_runner_loop_holder_extend(parent: ParallelRunnerLoopFnPtrHolder, child: ParallelRunnerLoopFnPtrHolder) -> ParallelRunnerLoopFnPtrHolder {
+    let order_pos: i64 = 0;
+    let total = len(child.run_order_positions) as i64;
+    while order_pos < total {
+        if child.run_order_positions[order_pos] != order_pos { panic(52201); };
+        parent = parallel_runner_loop_holder_push(parent, child.runs[order_pos]);
+        order_pos = order_pos + 1;
+    }
+    return parent;
+}
+
+@test "parallel runner loop fnptr transfer"() {
+    let parent = parallel_runner_loop_holder_new();
+    let child0 = parallel_runner_loop_holder_new();
+    let child1 = parallel_runner_loop_holder_push(child0, parallel_runner_loop_inc);
+    let out = parallel_runner_loop_holder_extend(parent, child1);
+    if len(out.runs) as i64 != 1 { panic(52202); };
+}

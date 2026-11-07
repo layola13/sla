@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Bell 续高位二项递推 bell(n+1)=sum C(n,k)bell(k)（B(8)=4140，B(9)=21147）。
+// 意对标 703_stir2_bell（n≤8 版互补；779 做递推/三角对峙）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn bell(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let k = 0;
+    while k <= n - 1 {
+        s = s + binom_mul(n - 1, k) * bell(k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", bell(8), bell(9));
+    return 0;
+}
+
+@test "basic 776 bell9"() {
+    if bell(8) != 4140 { panic(77601); };
+    if bell(9) != 21147 { panic(77602); };
+    if bell(7) != 877 { panic(77603); };
+}

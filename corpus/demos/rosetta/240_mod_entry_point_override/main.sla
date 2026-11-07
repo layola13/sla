@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn entry_point_override_selected() -> i32 {
+    let custom_entry_selected = 1;
+    return custom_entry_selected;
+}
+
+fn main() -> i32 {
+    let result = entry_point_override_selected();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 240 mod entry point override"() {
+    let got = entry_point_override_selected();
+    if got != 1 {
+        panic(240);
+    };
+}

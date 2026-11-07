@@ -1,0 +1,45 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn await_three_defer_ready_values() -> i32 {
+    let a = future::defer_ready(20).await;
+    let b = future::defer_ready(21).await;
+    let c = future::defer_ready(1).await;
+    return c;
+}
+
+fn direct_three_await_resume_on_fourth_poll() -> i32 {
+    let fut = await_three_defer_ready_values();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9531);
+    };
+    if task::is_ready(task) != false {
+        panic(9532);
+    };
+    if task::poll(task) != false {
+        panic(9533);
+    };
+    if task::is_ready(task) != false {
+        panic(9534);
+    };
+    if task::poll(task) != false {
+        panic(9535);
+    };
+    if task::is_ready(task) != false {
+        panic(9536);
+    };
+    if task::poll(task) != true {
+        panic(9537);
+    };
+    if task::is_ready(task) != true {
+        panic(9538);
+    };
+    return task::result(task);
+}
+
+@test "async linear three await defers resume on fourth poll"() {
+    if direct_three_await_resume_on_fourth_poll() != 1 {
+        panic(9539);
+    };
+}

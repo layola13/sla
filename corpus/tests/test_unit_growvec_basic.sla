@@ -1,0 +1,45 @@
+@import "sa_std/vec.sa"
+@import "sa_std/growvec.sa"
+
+// F1 GrowVec basic surface: new/with_max/push/len/index read+write,
+// while-iteration, and an equivalence cross-check against Vec under
+// an identical load.
+@test "growvec basic push len index"() {
+    let g: GrowVec<u64> = GrowVec::new();
+    if len(g) != 0 { panic(1); };
+    let i: u64 = 0;
+    while i < 1000 {
+        g.push(i * 3);
+        i = i + 1;
+    }
+    if len(g) != 1000 { panic(2); };
+    if g[0] != 0 { panic(3); };
+    if g[999] != 2997 { panic(4); };
+    g[5] = 4242;
+    if g[5] != 4242 { panic(5); };
+    let sum: u64 = 0;
+    let j: u64 = 0;
+    while j < len(g) {
+        sum = sum + g[j];
+        j = j + 1;
+    }
+    if sum != 1502727 { panic(6); };
+    let h: GrowVec<u64> = GrowVec::with_max(4);
+    h.push(7);
+    h.push(8);
+    if len(h) != 2 { panic(7); };
+    if h[1] != 8 { panic(8); };
+    let v: Vec<u64> = Vec::new();
+    let k: u64 = 0;
+    while k < 1000 {
+        v.push(k * 3);
+        k = k + 1;
+    }
+    v[5] = 4242;
+    let m: u64 = 0;
+    while m < 1000 {
+        if g[m] != v[m] { panic(9); };
+        m = m + 1;
+    }
+    println("GROWVEC_BASIC_OK");
+}

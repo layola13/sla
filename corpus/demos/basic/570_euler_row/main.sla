@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian 行和 Σ_d A(n,d) = n!（row3=6，row4=24，row5=120；571 做阶乘对峙）。
+// 意对标 569 euler（单格版互补；532 行和体例）。
+
+fn euler(n: int, d: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let nn = 1;
+    while nn <= n {
+        let dd = 0;
+        while dd <= nn - 1 {
+            let a = 0;
+            if dd > 0 { a = (nn - dd) * t[(nn - 1) * w + dd - 1]; };
+            let b = (dd + 1) * t[(nn - 1) * w + dd];
+            t[nn * w + dd] = a + b;
+            dd = dd + 1;
+        }
+        nn = nn + 1;
+    }
+    return t[n * w + d];
+}
+
+fn euler_row(n: int) -> int {
+    let s = 0;
+    let d = 0;
+    while d <= n - 1 {
+        s = s + euler(n, d);
+        d = d + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", euler_row(3), euler_row(4), euler_row(5));
+    return 0;
+}
+
+@test "basic 570 eulerrow"() {
+    if euler_row(3) != 6 { panic(57001); };
+    if euler_row(4) != 24 { panic(57002); };
+    if euler_row(5) != 120 { panic(57003); };
+}

@@ -1,0 +1,15 @@
+fn set_number(out: &i64) -> bool {
+    *out = 7;
+    return true;
+}
+
+@test "borrowed primitive let in call condition is addressable"() {
+    let value: i64 = 0;
+    if set_number(&value) == true {
+        if value != 7 {
+            panic(44001);
+        };
+    } else {
+        panic(44002);
+    };
+}

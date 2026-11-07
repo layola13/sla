@@ -1,0 +1,7 @@
+@import "sa_std/string.sa"
+
+fn main() -> i32 {
+    let a = "alpha";
+    let c = str_eq(a, a);
+    return 0;
+}

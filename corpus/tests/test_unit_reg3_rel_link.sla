@@ -1,0 +1,61 @@
+@import "sa_std/rel_link.sla"
+
+// REG-SHARD3 coverage: SAB registry `declared` entries for the
+// rel_link.sla relative-offset link helpers (rel_ptr, rel_off,
+// rel_link_get, rel_link_set, rel_link_ptr). All class=declared,
+// zero corpus references at registry stamp ee7b41c3. Contract (from
+// the file header): offsets are relative to a caller base, offset 0
+// is a valid link to the base itself, REL_NIL (4294967295) is the
+// null link, and link fields are little-endian u32 in caller memory.
+
+@test "reg3 rel off and ptr round trip"() {
+    let buf: [u8; 64] = [0u8; 64];
+    let base: ptr = PTR_BYTE_ADD(&buf, 0);
+    let base_addr: u64 = PTR_ADDR(base);
+    if rel_off(base, base) != 0 { panic(6001); };
+    let p16: ptr = PTR_BYTE_ADD(base, 16);
+    if rel_off(base, p16) != 16 { panic(6002); };
+    let np: ptr = PTR_NULL();
+    if rel_off(base, np) != REL_NIL { panic(6003); };
+    if REL_NIL != 4294967295 { panic(6004); };
+    if PTR_ADDR(rel_ptr(base, 0)) != base_addr { panic(6005); };
+    if PTR_ADDR(rel_ptr(base, 32)) != base_addr + 32 { panic(6006); };
+    if PTR_ADDR(rel_ptr(base, REL_NIL)) != 0 { panic(6007); };
+    // Round trip: off -> ptr -> off is the identity.
+    let p: ptr = rel_ptr(base, 40);
+    if rel_off(base, p) != 40 { panic(6008); };
+}
+
+@test "reg3 rel link set get little endian"() {
+    let buf: [u8; 64] = [0u8; 64];
+    let base: ptr = PTR_BYTE_ADD(&buf, 0);
+    rel_link_set(base, 8, 3735928559);
+    // 0xDEADBEEF stored little-endian at bytes 8..12.
+    if buf[8] != 239 { panic(6011); };
+    if buf[9] != 190 { panic(6012); };
+    if buf[10] != 173 { panic(6013); };
+    if buf[11] != 222 { panic(6014); };
+    if rel_link_get(base, 8) != 3735928559 { panic(6015); };
+    // Neighbouring fields are untouched.
+    if rel_link_get(base, 12) != 0 { panic(6016); };
+    rel_link_set(base, 0, 0);
+    if rel_link_get(base, 0) != 0 { panic(6017); };
+    rel_link_set(base, 4, REL_NIL);
+    if rel_link_get(base, 4) != 4294967295 { panic(6018); };
+}
+
+@test "reg3 rel link ptr resolution"() {
+    let buf: [u8; 64] = [0u8; 64];
+    let base: ptr = PTR_BYTE_ADD(&buf, 0);
+    let base_addr: u64 = PTR_ADDR(base);
+    let node: ptr = PTR_BYTE_ADD(base, 16);
+    // Link field at node+0 holds offset 40 -> base+40.
+    rel_link_set(node, 0, 40);
+    if PTR_ADDR(rel_link_ptr(base, node, 0)) != base_addr + 40 { panic(6021); };
+    // Offset 0 resolves to the base itself (a valid link).
+    rel_link_set(node, 0, 0);
+    if PTR_ADDR(rel_link_ptr(base, node, 0)) != base_addr { panic(6022); };
+    // REL_NIL resolves to the null pointer.
+    rel_link_set(node, 0, REL_NIL);
+    if PTR_ADDR(rel_link_ptr(base, node, 0)) != 0 { panic(6023); };
+}

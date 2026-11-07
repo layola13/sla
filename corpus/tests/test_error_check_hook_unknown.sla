@@ -1,0 +1,10 @@
+// expect: UnknownCheckHook
+// J-5 negative: attaching a hook name that is not registered is
+// UnknownCheckHook at check time, not a silent no-op. Judged by
+// standalone `sla check` (see plugin_tests.zig registration).
+
+@check_hook no_such_hook;
+
+fn f() -> i64 {
+    return 0;
+}

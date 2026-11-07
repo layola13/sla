@@ -1,0 +1,21 @@
+@import "lsp/server.sal"
+
+@ffi_wrapper lsp_server_gate(*state: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow state
+    req = load view+LspState_req as i32
+    seq = load view+LspState_seq as i32
+    value = add req, seq
+    !seq
+    !req
+    !view
+    return value
+
+@export lsp_server_entry() -> i32:
+L_ENTRY:
+    state = alloc LspState_SIZE
+    store state+LspState_req, 299 as i32
+    store state+LspState_seq, 0 as i32
+    value = call @lsp_server_gate(*state)
+    !state
+    return value

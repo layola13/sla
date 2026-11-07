@@ -1,0 +1,1 @@
+@extern sa_library_dynamic_value() -> i32

@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn sum_first_two(a: i32, b: i32, _c: i32, _d: i32) -> i32 {
+    return a + b;
+}
+
+fn head(t: (i32, i32, i32)) -> i32 {
+    return t.0;
+}
+
+fn main() -> i32 {
+    let s = sum_first_two(10, 20, 30, 40);
+    let h = head((100, 200, 300));
+    println("{},{}", s, h);
+    if s != 30 { return 1; };
+    if h != 100 { return 1; };
+    return 0;
+}
+
+@test "rosetta 308 rest pattern macro"() {
+    if sum_first_two(10, 20, 30, 40) != 30 { panic(308); };
+    if head((100, 200, 300)) != 100 { panic(309); };
+}

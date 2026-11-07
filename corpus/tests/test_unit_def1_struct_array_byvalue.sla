@@ -1,0 +1,138 @@
+// DEF-1 regression corpus: by-value structs with inline array fields
+// on the SAB backend. Before the fix, sab_codegen's struct copy
+// helpers (genCopyValue / genShallowCopyCallArgValue) copied an array
+// field with a single aggregate load/store, moving only one word and
+// leaving the rest of the destination unwritten; reading an array
+// field as a value (genField) likewise loaded one word instead of
+// decaying to the field address. Heng engine evidence shapes (lang
+// PathB, check [i64;36] + field move-out, grade chained by-value,
+// kb FMap): reads past the head were zero/garbage, move-outs crashed.
+// Text backend was unaffected. All tests must pass on BOTH backends.
+
+struct D1BagU8 {
+    bytes: [u8; 64], len: u64,
+};
+
+struct D1BagI64 {
+    vals: [i64; 36], tag: i64,
+};
+
+struct D1Small {
+    vals: [i64; 4], tag: i64,
+};
+
+fn d1_sum_bag(b: D1BagU8) -> u64 {
+    let s: u64 = 0;
+    let j: u64 = 0;
+    while j < 64 {
+        s = s + (b.bytes[j] as u64);
+        j = j + 1;
+    }
+    return s;
+}
+
+@test "def1 by-value param read full contents"() {
+    let b = D1BagU8 { bytes: [0u8; 64], len: 0 };
+    let i: u64 = 0;
+    while i < 64 {
+        b.bytes[i] = (i + 1) as u8;
+        i = i + 1;
+    }
+    if d1_sum_bag(b) != 2080 { panic(1111); };
+}
+
+fn d1_sum_small(b: D1Small) -> i64 {
+    return b.vals[0] + b.vals[1] + b.vals[2] + b.vals[3];
+}
+
+@test "def1 small struct by-value param read"() {
+    let b = D1Small { vals: [10i64, 20i64, 30i64, 40i64], tag: 1 };
+    if d1_sum_small(b) != 100 { panic(1112); };
+}
+
+fn d1_fill_and_sum(b: D1BagI64) -> i64 {
+    let i: i64 = 0;
+    while i < 36 {
+        b.vals[i] = i + 1;
+        i = i + 1;
+    }
+    let s: i64 = 0;
+    let j: i64 = 0;
+    while j < 36 {
+        s = s + b.vals[j];
+        j = j + 1;
+    }
+    return s;
+}
+
+@test "def1 by-value param write persists i64x36"() {
+    let b = D1BagI64 { vals: [0i64; 36], tag: 7 };
+    if d1_fill_and_sum(b) != 666 { panic(1102); };
+}
+
+fn d1_make() -> D1BagI64 {
+    let b = D1BagI64 { vals: [0i64; 36], tag: 5 };
+    let i: i64 = 0;
+    while i < 36 {
+        b.vals[i] = i + 1;
+        i = i + 1;
+    }
+    return b;
+}
+
+@test "def1 field move-out into new struct"() {
+    let r = d1_make();
+    let s2 = D1BagI64 { vals: r.vals, tag: r.tag };
+    let s: i64 = 0;
+    let j: i64 = 0;
+    while j < 36 {
+        s = s + s2.vals[j];
+        j = j + 1;
+    }
+    if s != 666 { panic(1131); };
+}
+
+@test "def1 field move-out into binding"() {
+    let r = d1_make();
+    let arr = r.vals;
+    let s: i64 = 0;
+    let j: i64 = 0;
+    while j < 36 {
+        s = s + arr[j];
+        j = j + 1;
+    }
+    if s != 666 { panic(1132); };
+}
+
+@test "def1 direct index reads past head"() {
+    let r = d1_make();
+    if r.vals[0] != 1 { panic(1133); };
+    if r.vals[8] != 9 { panic(1134); };
+    if r.vals[35] != 36 { panic(1135); };
+}
+
+fn d1_pass1(c: D1BagI64) -> D1BagI64 {
+    return c;
+}
+
+fn d1_pass2(c: D1BagI64) -> i64 {
+    let s: i64 = 0;
+    let j: i64 = 0;
+    while j < 36 {
+        s = s + c.vals[j];
+        j = j + 1;
+    }
+    return s;
+}
+
+@test "def1 two read paths agree"() {
+    let c = d1_pass1(d1_make());
+    let direct: i64 = 0;
+    let j: i64 = 0;
+    while j < 36 {
+        direct = direct + c.vals[j];
+        j = j + 1;
+    }
+    if direct != 666 { panic(1142); };
+    if d1_pass2(c) != direct { panic(1143); };
+}

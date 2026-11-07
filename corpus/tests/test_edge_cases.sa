@@ -1,0 +1,145 @@
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+[MACRO] add_one_macro %var_ref
+    tmp_0 = 1
+    add_one_macro_temp_uniq_0 = tmp_0
+    tmp_1 = add %var_ref, add_one_macro_temp_uniq_0
+    !%var_ref
+    %var_ref = tmp_1
+[END_MACRO]
+
+@const SLA_FNPTR_VT_nested_loops = vtable { call = @sla__nested_loops }
+@const SLA_FNPTR_VT_nested_conditionals = vtable { call = @sla__nested_conditionals }
+@const SLA_FNPTR_VT_test_macro_hygiene = vtable { call = @sla__test_macro_hygiene }
+@sla__nested_loops(outer_lim: i64, inner_lim: i64) -> i64:
+L_ENTRY:
+    temp = stack_alloc 16
+    i_slot = stack_alloc 8
+    j_slot = stack_alloc 8
+    tmp_2 = 0
+    sum = tmp_2
+    tmp_3 = 1
+    store i_slot+0, tmp_3 as i64
+    !tmp_3
+    jmp L_LOOP_HEAD_0
+
+L_LOOP_HEAD_0:
+    tmp_4 = load i_slot+0 as i64
+    tmp_5 = slt tmp_4, outer_lim
+    br tmp_5 -> L_LOOP_BODY_1, L_LOOP_COND_FALSE_3
+
+L_LOOP_BODY_1:
+    !tmp_5
+    i = add tmp_4, 0
+    // Hoisted stack slot temp initialized
+    tmp_6 = 1
+    store j_slot+0, tmp_6 as i64
+    !tmp_6
+    jmp L_LOOP_HEAD_5
+
+L_LOOP_HEAD_5:
+    tmp_7 = load j_slot+0 as i64
+    tmp_8 = slt tmp_7, inner_lim
+    br tmp_8 -> L_LOOP_BODY_6, L_LOOP_COND_FALSE_8
+
+L_LOOP_BODY_6:
+    !tmp_8
+    j = add tmp_7, 0
+    tmp_9 = add sum, i
+    tmp_10 = add tmp_9, j
+    !tmp_9
+    !sum
+    sum = tmp_10
+L_LOOP_CONTINUE_7:
+    tmp_11 = add tmp_7, 1
+    store j_slot+0, tmp_11 as i64
+    !tmp_11
+    !tmp_7
+    !j
+    jmp L_LOOP_HEAD_5
+
+L_LOOP_COND_FALSE_8:
+    !tmp_8
+    !tmp_7
+    jmp L_LOOP_EXIT_9
+
+L_LOOP_EXIT_9:
+L_LOOP_CONTINUE_2:
+    tmp_12 = add tmp_4, 1
+    store i_slot+0, tmp_12 as i64
+    !tmp_12
+    !tmp_4
+    !i
+    jmp L_LOOP_HEAD_0
+
+L_LOOP_COND_FALSE_3:
+    !tmp_5
+    !tmp_4
+    jmp L_LOOP_EXIT_4
+
+L_LOOP_EXIT_4:
+    !outer_lim
+    !inner_lim
+    return sum
+
+@sla__nested_conditionals(a: i64, b: i64) -> i64:
+L_ENTRY:
+    tmp_13 = sgt a, b
+    br tmp_13 -> L_THEN_10, L_ELSE_11
+
+L_THEN_10:
+    !tmp_13
+    tmp_14 = 10
+    tmp_15 = sgt a, tmp_14
+    !tmp_14
+    br tmp_15 -> L_THEN_13, L_ELSE_14
+
+L_THEN_13:
+    !tmp_15
+    !b
+    return a
+
+L_ELSE_14:
+    !tmp_15
+    tmp_16 = 10
+    !b
+    !a
+    return tmp_16
+
+
+L_ELSE_11:
+    !tmp_13
+    tmp_18 = 20
+    tmp_19 = sgt b, tmp_18
+    !tmp_18
+    br tmp_19 -> L_THEN_16, L_ELSE_17
+
+L_THEN_16:
+    !tmp_19
+    !a
+    return b
+
+L_ELSE_17:
+    !tmp_19
+    tmp_20 = 20
+    !b
+    !a
+    return tmp_20
+
+
+
+@sla__test_macro_hygiene(val: i64) -> i64:
+L_ENTRY:
+    temp = val
+    EXPAND add_one_macro temp
+    !tmp_23
+    !val
+    return temp
+

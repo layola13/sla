@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 等差数列求和（3+7+11+15+19=55；公式 5*(2*3+4*4)/2=55）。
+// 意对标 tsgosa 04_while_sum 的等差版（04 为逐一版）：循环×公式对峙。
+
+fn main() -> i32 {
+    let s = 0;
+    let v = 3;
+    let cnt = 0;
+    while cnt < 5 {
+        s = s + v;
+        v = v + 4;
+        cnt = cnt + 1;
+    }
+    let f = 5 * (2 * 3 + 4 * 4) / 2;
+    println("{},{}", s, f);
+    return 0;
+}
+
+@test "basic 330 arith seq"() {
+    let s = 0;
+    let v = 3;
+    let cnt = 0;
+    while cnt < 5 {
+        s = s + v;
+        v = v + 4;
+        cnt = cnt + 1;
+    }
+    if s != 55 { panic(33001); };
+    if s != 5 * (2 * 3 + 4 * 4) / 2 { panic(33002); };
+}

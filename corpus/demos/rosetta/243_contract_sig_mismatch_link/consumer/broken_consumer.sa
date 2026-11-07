@@ -1,0 +1,12 @@
+@import "consumer/../layout/slot.sal"
+@import "consumer/../bridge/link_target.sa"
+
+@broken_consumer_value() -> i32:
+L_ENTRY:
+    slot = alloc Slot_SIZE
+    store slot+Slot_value, 1 as i32
+    // Intentional mismatch: link_target takes an i32, but the consumer passes a pointer.
+    result = call @link_target(&slot)
+    !slot
+    !result
+    return 243

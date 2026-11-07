@@ -1,0 +1,54 @@
+// J-1 (declaration_sublanguage_registration, Jev slasl_macro_ruling
+// j1): after `@sublanguage shader;` registers the kind, `shader`
+// declarations are produced by the shader sub-parser as typed
+// declarations and checked by the shared checker (DESIGN.md 6.2
+// subset) alongside ordinary SLA code. The two shaders below are
+// the SLASL reference prototype's Base and Tint fragments. On the
+// pre-J-1 baseline this file fails at parse time (`@sublanguage`
+// was not a known @-declaration).
+
+@sublanguage shader;
+
+shader Base {
+    priority 0;
+    @global struct Camera { view_proj: mat4; }
+    @input position: vec3;
+    @input uv: vec2;
+    @param base_color: vec4;
+    @param tex: sampler2D;
+    var v_uv: vec2;
+    vertex {
+        v_uv = uv;
+        clip_position = Camera.view_proj * vec4(position, 1.0);
+    }
+    fragment {
+        frag_color = tex.get(v_uv) * base_color;
+    }
+}
+
+shader Tint {
+    priority 10;
+    @param tint: vec4;
+    @const USE_TINT: bool = true;
+    var tint_boost: vec4;
+    var tint_pre: vec4;
+    init {
+        tint_pre = tint_boost + tint;
+        tint_boost = tint * 0.5;
+    }
+    fragment {
+        if USE_TINT {
+            frag_color = frag_color * tint_pre;
+        }
+    }
+}
+
+fn meaning() -> i64 {
+    return 42;
+}
+
+@test "shader declarations check alongside SLA code"() {
+    if meaning() != 42 {
+        panic(51101);
+    };
+}

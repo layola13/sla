@@ -1,0 +1,83 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/pin.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_pinning_stability_score = vtable { call = @sla__pinning_stability_score }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__pinning_stability_score() -> i32:
+L_ENTRY:
+    tmp_0 = 8
+    value = tmp_0
+    pinned = stack_alloc 16
+    EXPAND PIN_NEW pinned, value
+    pinned_ref = stack_alloc 16
+    EXPAND PIN_AS_REF pinned_ref, pinned
+    EXPAND PIN_GET_REF tmp_1, pinned
+    before = tmp_1
+    EXPAND PIN_GET_REF tmp_2, pinned_ref
+    after = tmp_2
+    tmp_3 = eq before, after
+    stable = tmp_3
+    tmp_4 = 1
+    tmp_5 = eq stable, tmp_4
+    !tmp_4
+    br tmp_5 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_5
+    tmp_6 = 1
+    tmp_7 = add value, tmp_6
+    !tmp_6
+    !before
+    !after
+    !stable
+    return tmp_7
+
+L_ELSE_1:
+    !tmp_5
+    !before
+    !after
+    !stable
+    return value
+
+
+@main() -> i32:
+L_ENTRY:
+    tmp_9 = call @sla__pinning_stability_score()
+    result = tmp_9
+    tmp_10 = call @sa_fmt_u64(result, 10)
+    tmp_11 = call @sa_fmt_buffer_data(tmp_10)
+    tmp_12 = call @sa_fmt_buffer_len(tmp_10)
+    tmp_13 = tmp_11
+    call @sa_print_bytes(&tmp_13, tmp_12)
+    call @sa_fmt_buffer_free(^tmp_10)
+    !tmp_13
+    !tmp_12
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 132 132_pinning_and_unpin"():
+L_TEST_ENTRY_3:
+    tmp_14 = call @sla__pinning_stability_score()
+    got = tmp_14
+    tmp_15 = 9
+    tmp_16 = ne got, tmp_15
+    !tmp_15
+    br tmp_16 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_16
+    panic(132)
+
+L_ELSE_5:
+    !tmp_16
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !got
+    return
+

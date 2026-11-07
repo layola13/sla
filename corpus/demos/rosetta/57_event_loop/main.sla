@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+enum Event {
+    Tick(i32),
+    Reset,
+    TickAfterReset(i32),
+}
+
+fn run_loop(events: [Event; 4]) -> i32 {
+    let acc = 0;
+    for index in 0..4 {
+        let event = events[index];
+        match event {
+            Event::Tick(value) => {
+                acc = acc + value;
+            },
+            Event::Reset => {
+                acc = 0;
+            },
+            Event::TickAfterReset(value) => {
+                acc = acc + value;
+            },
+        };
+    }
+    return acc;
+}
+
+fn main() -> i32 {
+    let events = [Event::Tick(2), Event::Tick(3), Event::Reset, Event::TickAfterReset(4)];
+    let acc = run_loop(events);
+    println("{}", acc);
+    return acc;
+}
+
+@test "rosetta 057 event loop"() {
+    if main() != 4 {
+        panic(57);
+    };
+}

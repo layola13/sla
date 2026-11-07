@@ -1,0 +1,58 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 大小 Schröder 桥恒等 S(n)=2s(n)：S(6)=1806，S(7)=8558，S(8)=41586（桥大端三锁）。
+// 意对标 769_duel_sschro（对峙版互补；桥恒等大端复算）。
+
+fn sch(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 2; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k < ii {
+            s = s + t[k] * t[ii - 1 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn ssho(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 1; };
+    let ii = 2;
+    while ii <= n {
+        t[ii] = ((6 * ii - 3) * t[ii - 1] - (ii - 2) * t[ii - 2]) / (ii + 1);
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", sch(6), sch(7), sch(8));
+    return 0;
+}
+
+@test "basic 774 schro bridge"() {
+    if sch(6) != 2 * ssho(6) { panic(77401); };
+    if sch(7) != 2 * ssho(7) { panic(77402); };
+    if sch(8) != 2 * ssho(8) { panic(77403); };
+    if sch(5) != 2 * ssho(5) { panic(77404); };
+}

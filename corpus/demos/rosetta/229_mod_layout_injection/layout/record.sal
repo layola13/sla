@@ -1,0 +1,3 @@
+#def Record_SIZE = 8
+#def Record_lo = +0
+#def Record_hi = +4

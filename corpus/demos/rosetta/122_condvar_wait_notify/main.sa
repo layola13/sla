@@ -1,0 +1,245 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/result.sa"
+@import "sa_std/sync/mutex.sa"
+@import "sa_std/thread.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@import "sa_std/core/result.sa"
+@const SLA_THREAD_VT_0 = vtable { call = @sla_thread_worker_0 }
+
+@ffi_wrapper sla_thread_spawn_0(*slot: ptr):
+L_ENTRY:
+    worker_vt = &SLA_THREAD_VT_0
+    worker_fn = load worker_vt+0 as ptr
+    worker_raw = *worker_fn
+    worker_safe = assume_safe worker_raw
+    EXPAND THREAD_SPAWN handle, *worker_safe, *slot
+    store slot+0, handle as i32
+    !handle
+    !worker_safe
+    !worker_raw
+    !worker_fn
+    !worker_vt
+    !slot
+    return
+
+@sla_thread_worker_0(&slot: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load slot+16 as ptr
+    tmp_1 = call @sla__notify_ready(^tmp_0)
+    store slot+8, tmp_1 as i32
+    !slot
+    return tmp_1
+
+@const SLA_FNPTR_VT_notify_ready = vtable { call = @sla__notify_ready }
+@const SLA_FNPTR_VT_condvar_wait_result = vtable { call = @sla__condvar_wait_result }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__notify_ready(^shared: ptr) -> i32:
+L_ENTRY:
+    EXPAND ARC_GET tmp_2, shared
+    EXPAND MUTEX_LOCK tmp_2
+    tmp_3 = ptr_add tmp_2, Mutex_data
+    EXPAND RESULT_NEW_OK tmp_4, tmp_3
+    !tmp_3
+    tmp_6 = load tmp_4+0 as u64
+    tmp_7 = eq tmp_6, 0
+    br tmp_7 -> L_RESULT_UNWRAP_OK_0, L_RESULT_UNWRAP_ERR_1
+
+L_RESULT_UNWRAP_OK_0:
+    !tmp_7
+    tmp_5 = load tmp_4+8 as ptr
+    !tmp_6
+    jmp L_RESULT_UNWRAP_END_2
+
+L_RESULT_UNWRAP_ERR_1:
+    !tmp_7
+    panic(17)
+    tmp_5 = 0
+    !tmp_6
+    jmp L_RESULT_UNWRAP_END_2
+
+L_RESULT_UNWRAP_END_2:
+    !tmp_4
+    ready = tmp_5
+    tmp_8 = 4
+    store ready+0, tmp_8 as i32
+    !tmp_8
+    tmp_9 = 0
+    EXPAND MUTEX_UNLOCK tmp_2
+    !tmp_2
+    !ready
+    !shared
+    return tmp_9
+
+@sla__condvar_wait_result() -> i32:
+L_ENTRY:
+    tmp_10 = 0
+    EXPAND MUTEX_NEW_I32 tmp_11, tmp_10
+    !tmp_10
+    EXPAND ARC_NEW tmp_12, tmp_11
+    !tmp_11
+    pair = tmp_12
+    tmp_13 = add pair, 0
+    EXPAND ARC_CLONE tmp_13
+    notifier = tmp_13
+    tmp_14 = alloc 24
+    store tmp_14+0, 0 as i32
+    store tmp_14+8, 0 as i32
+    store tmp_14+16, notifier as ptr
+    ^notifier
+    call @sla_thread_spawn_0(*tmp_14)
+    handle = tmp_14
+    tmp_15 = load handle+0 as i32
+    tmp_16 = eq tmp_15, -1
+    br tmp_16 -> L_THREAD_JOIN_INLINE_3, L_THREAD_JOIN_PTHREAD_4
+
+L_THREAD_JOIN_INLINE_3:
+    !tmp_16
+    tmp_20 = load handle+8 as i32
+    tmp_19 = alloc 24
+    tmp_21 = 0
+    store tmp_19+0, tmp_21 as u64
+    store tmp_19+8, tmp_20 as i32
+    store tmp_19+16, tmp_21 as u64
+    !tmp_21
+    !tmp_20
+    jmp L_THREAD_JOIN_END_7
+
+L_THREAD_JOIN_PTHREAD_4:
+    !tmp_16
+    EXPAND THREAD_JOIN_STATUS tmp_17, tmp_15, *handle
+    EXPAND THREAD_DROP tmp_15
+    tmp_18 = eq tmp_17, 0
+    br tmp_18 -> L_THREAD_JOIN_OK_5, L_THREAD_JOIN_ERR_6
+
+L_THREAD_JOIN_OK_5:
+    !tmp_18
+    tmp_22 = load handle+8 as i32
+    tmp_19 = alloc 24
+    tmp_23 = 0
+    store tmp_19+0, tmp_23 as u64
+    store tmp_19+8, tmp_22 as i32
+    store tmp_19+16, tmp_23 as u64
+    !tmp_23
+    !tmp_22
+    !tmp_17
+    jmp L_THREAD_JOIN_END_7
+
+L_THREAD_JOIN_ERR_6:
+    !tmp_18
+    tmp_24 = add tmp_17, 0
+    tmp_19 = alloc 24
+    tmp_25 = 1
+    tmp_26 = 0
+    store tmp_19+0, tmp_25 as u64
+    store tmp_19+8, tmp_26 as i32
+    store tmp_19+16, tmp_24 as i64
+    !tmp_26
+    !tmp_25
+    !tmp_24
+    !tmp_17
+    jmp L_THREAD_JOIN_END_7
+
+L_THREAD_JOIN_END_7:
+    !tmp_15
+    tmp_28 = load tmp_19+0 as u64
+    tmp_29 = eq tmp_28, 0
+    br tmp_29 -> L_RESULT_UNWRAP_OK_8, L_RESULT_UNWRAP_ERR_9
+
+L_RESULT_UNWRAP_OK_8:
+    !tmp_29
+    tmp_27 = load tmp_19+8 as i32
+    !tmp_28
+    jmp L_RESULT_UNWRAP_END_10
+
+L_RESULT_UNWRAP_ERR_9:
+    !tmp_29
+    panic(17)
+    tmp_27 = 0
+    !tmp_28
+    jmp L_RESULT_UNWRAP_END_10
+
+L_RESULT_UNWRAP_END_10:
+    !tmp_19
+    !tmp_27
+    EXPAND ARC_GET tmp_30, pair
+    EXPAND MUTEX_LOCK tmp_30
+    tmp_31 = ptr_add tmp_30, Mutex_data
+    EXPAND RESULT_NEW_OK tmp_32, tmp_31
+    !tmp_31
+    tmp_34 = load tmp_32+0 as u64
+    tmp_35 = eq tmp_34, 0
+    br tmp_35 -> L_RESULT_UNWRAP_OK_11, L_RESULT_UNWRAP_ERR_12
+
+L_RESULT_UNWRAP_OK_11:
+    !tmp_35
+    tmp_33 = load tmp_32+8 as ptr
+    !tmp_34
+    jmp L_RESULT_UNWRAP_END_13
+
+L_RESULT_UNWRAP_ERR_12:
+    !tmp_35
+    panic(17)
+    tmp_33 = 0
+    !tmp_34
+    jmp L_RESULT_UNWRAP_END_13
+
+L_RESULT_UNWRAP_END_13:
+    !tmp_32
+    ready = tmp_33
+    tmp_36 = load ready+0 as i32
+    tmp_37 = 4
+    tmp_38 = eq tmp_36, tmp_37
+    !tmp_36
+    !tmp_37
+    br tmp_38 -> L_THEN_14, L_ELSE_15
+
+L_THEN_14:
+    !tmp_38
+    tmp_39 = load ready+0 as i32
+    EXPAND MUTEX_UNLOCK tmp_30
+    !tmp_30
+    !ready
+    !pair
+    return tmp_39
+
+L_ELSE_15:
+    !tmp_38
+    tmp_40 = 0
+    EXPAND MUTEX_UNLOCK tmp_30
+    !tmp_30
+    !ready
+    !pair
+    return tmp_40
+
+
+@main() -> i32:
+L_ENTRY:
+    tmp_42 = call @sla__condvar_wait_result()
+    result = add tmp_42, 0
+    !tmp_42
+    tmp_43 = call @sa_fmt_u64(result, 10)
+    tmp_44 = call @sa_fmt_buffer_data(tmp_43)
+    tmp_45 = call @sa_fmt_buffer_len(tmp_43)
+    tmp_46 = tmp_44
+    call @sa_print_bytes(&tmp_46, tmp_45)
+    call @sa_fmt_buffer_free(^tmp_43)
+    !tmp_46
+    !tmp_45
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 122 122_condvar_wait_notify"():
+L_TEST_ENTRY_17:
+    return
+

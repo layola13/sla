@@ -1,0 +1,192 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@import "sa_std/core/option.sa"
+@const SLA_FNPTR_VT_if_let_chain_sum = vtable { call = @sla__if_let_chain_sum }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__if_let_chain_sum() -> i32:
+L_ENTRY:
+    tmp_0 = 2
+    EXPAND OPTION_NEW_SOME tmp_1, tmp_0
+    !tmp_0
+    left = tmp_1
+    tmp_2 = 3
+    EXPAND OPTION_NEW_SOME tmp_3, tmp_2
+    !tmp_2
+    middle = tmp_3
+    tmp_4 = 4
+    EXPAND OPTION_NEW_SOME tmp_5, tmp_4
+    !tmp_4
+    right = tmp_5
+    tmp_6 = alloc 8
+    EXPAND OPTION_IS_SOME tmp_7, left
+    br tmp_7 -> L_IF_LET_NEXT_3, L_IF_LET_FAIL_4
+
+L_IF_LET_FAIL_4:
+    !tmp_7
+    jmp L_IF_LET_ELSE_1
+
+L_IF_LET_NEXT_3:
+    !tmp_7
+    EXPAND OPTION_GET tmp_8, left
+    EXPAND OPTION_IS_SOME tmp_9, middle
+    br tmp_9 -> L_IF_LET_NEXT_5, L_IF_LET_FAIL_6
+
+L_IF_LET_FAIL_6:
+    !tmp_9
+    !tmp_8
+    jmp L_IF_LET_ELSE_1
+
+L_IF_LET_NEXT_5:
+    !tmp_9
+    EXPAND OPTION_GET tmp_10, middle
+    EXPAND OPTION_IS_SOME tmp_11, right
+    br tmp_11 -> L_IF_LET_THEN_0, L_IF_LET_FAIL_7
+
+L_IF_LET_FAIL_7:
+    !tmp_11
+    !tmp_8
+    !tmp_10
+    jmp L_IF_LET_ELSE_1
+
+L_IF_LET_THEN_0:
+    !tmp_11
+    EXPAND OPTION_GET tmp_12, right
+    tmp_13 = add tmp_8, tmp_10
+    tmp_14 = add tmp_13, tmp_12
+    !tmp_13
+    store tmp_6+0, tmp_14 as i64
+    !tmp_14
+    !tmp_8
+    !tmp_10
+    !tmp_12
+    jmp L_IF_LET_MERGE_2
+
+L_IF_LET_ELSE_1:
+    tmp_15 = 0
+    store tmp_6+0, tmp_15 as i64
+    !tmp_15
+    jmp L_IF_LET_MERGE_2
+
+L_IF_LET_MERGE_2:
+    tmp_16 = load tmp_6+0 as i64
+    !tmp_6
+    result = tmp_16
+    !middle
+    !right
+    !left
+    return result
+
+@main() -> i32:
+L_ENTRY:
+    tmp_17 = 2
+    EXPAND OPTION_NEW_SOME tmp_18, tmp_17
+    !tmp_17
+    left = tmp_18
+    tmp_19 = 3
+    EXPAND OPTION_NEW_SOME tmp_20, tmp_19
+    !tmp_19
+    middle = tmp_20
+    tmp_21 = 4
+    EXPAND OPTION_NEW_SOME tmp_22, tmp_21
+    !tmp_21
+    right = tmp_22
+    tmp_23 = alloc 8
+    EXPAND OPTION_IS_SOME tmp_24, left
+    br tmp_24 -> L_IF_LET_NEXT_11, L_IF_LET_FAIL_12
+
+L_IF_LET_FAIL_12:
+    !tmp_24
+    jmp L_IF_LET_ELSE_9
+
+L_IF_LET_NEXT_11:
+    !tmp_24
+    EXPAND OPTION_GET tmp_25, left
+    EXPAND OPTION_IS_SOME tmp_26, middle
+    br tmp_26 -> L_IF_LET_NEXT_13, L_IF_LET_FAIL_14
+
+L_IF_LET_FAIL_14:
+    !tmp_26
+    !tmp_25
+    jmp L_IF_LET_ELSE_9
+
+L_IF_LET_NEXT_13:
+    !tmp_26
+    EXPAND OPTION_GET tmp_27, middle
+    EXPAND OPTION_IS_SOME tmp_28, right
+    br tmp_28 -> L_IF_LET_THEN_8, L_IF_LET_FAIL_15
+
+L_IF_LET_FAIL_15:
+    !tmp_28
+    !tmp_25
+    !tmp_27
+    jmp L_IF_LET_ELSE_9
+
+L_IF_LET_THEN_8:
+    !tmp_28
+    EXPAND OPTION_GET tmp_29, right
+    tmp_30 = add tmp_25, tmp_27
+    tmp_31 = add tmp_30, tmp_29
+    !tmp_30
+    store tmp_23+0, tmp_31 as i64
+    !tmp_31
+    !tmp_25
+    !tmp_27
+    !tmp_29
+    jmp L_IF_LET_MERGE_10
+
+L_IF_LET_ELSE_9:
+    tmp_32 = 0
+    store tmp_23+0, tmp_32 as i64
+    !tmp_32
+    jmp L_IF_LET_MERGE_10
+
+L_IF_LET_MERGE_10:
+    tmp_33 = load tmp_23+0 as i64
+    !tmp_23
+    result = tmp_33
+    tmp_34 = call @sa_fmt_u64(result, 10)
+    tmp_35 = call @sa_fmt_buffer_data(tmp_34)
+    tmp_36 = call @sa_fmt_buffer_len(tmp_34)
+    tmp_37 = tmp_35
+    call @sa_print_bytes(&tmp_37, tmp_36)
+    call @sa_fmt_buffer_free(^tmp_34)
+    !tmp_37
+    !tmp_36
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    !middle
+    !right
+    !left
+    return result
+
+@test "rosetta 104 104_if_let_chains"():
+L_TEST_ENTRY_16:
+    tmp_38 = call @sla__if_let_chain_sum()
+    got = tmp_38
+    tmp_39 = 9
+    tmp_40 = ne got, tmp_39
+    !tmp_39
+    br tmp_40 -> L_THEN_17, L_ELSE_18
+
+L_THEN_17:
+    !tmp_40
+    panic(104)
+
+L_ELSE_18:
+    !tmp_40
+    jmp L_MERGE_19
+
+L_MERGE_19:
+    !got
+    return
+

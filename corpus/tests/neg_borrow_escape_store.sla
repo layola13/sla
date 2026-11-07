@@ -1,0 +1,23 @@
+// expect: BorrowEscape
+// A view must not be stored into a struct field (it would outlive
+// the owner's borrow region).
+@import "sa_std/fs.sai"
+
+struct FsReadBuffer {
+    raw: u64,
+}
+
+struct Holder {
+    data: &[u8],
+}
+
+fn sla_fs_read_buffer_data(buffer: &FsReadBuffer) -> &[u8][buffer] {
+    return __slice_view(sa_fs_read_buffer_data(buffer.raw), sa_fs_read_buffer_len(buffer.raw));
+}
+
+fn bad() -> u64 {
+    let owner = FsReadBuffer { raw: 7 };
+    let view = sla_fs_read_buffer_data(&owner);
+    let h = Holder { data: view };
+    return h.data.len();
+}

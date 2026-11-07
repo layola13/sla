@@ -1,0 +1,11 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_target_specific_dependency_count() -> i32 {
+    let linux_dependency = 1;
+    let wasm_dependency = 1;
+    return linux_dependency + wasm_dependency;
+}
+
+fn main() -> i32 { let linux_dependency = 1; let wasm_dependency = 1; let result = linux_dependency + wasm_dependency; println("{}", result); return result; }
+@test "rosetta 214 pkg target specific deps"() { let got = pkg_target_specific_dependency_count(); if got != 2 { panic(214); }; }

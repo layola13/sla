@@ -1,0 +1,22 @@
+@import "guest/guest_entry.sal"
+@import "guest/../host/host_imports.sai"
+
+@ffi_wrapper wasm_guest_gate(*frame: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow frame
+    tag = load view+WasmHostFrame_tag as i32
+    status = load view+WasmHostFrame_status as i32
+    value = add tag, status
+    !status
+    !tag
+    !view
+    return value
+
+@export wasm_guest_entry() -> i32:
+L_ENTRY:
+    frame = alloc WasmHostFrame_SIZE
+    store frame+WasmHostFrame_tag, 291 as i32
+    store frame+WasmHostFrame_status, 0 as i32
+    value = call @wasm_guest_gate(*frame)
+    !frame
+    return value

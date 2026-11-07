@@ -1,0 +1,7 @@
+// expect: DesugarFailed
+// neg: defer of an immediately-invoked closure (callee shape cannot be cloned by the defer desugarer)
+fn main() -> i32 {
+    defer (|x: i32| x + 1)(3);
+    if true { return 1; };
+    return 0;
+}

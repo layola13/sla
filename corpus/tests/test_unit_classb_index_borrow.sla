@@ -1,0 +1,71 @@
+@import "sa_std/vec.sa"
+@import "sa_std/growvec.sa"
+@import "sa_std/growvec.sai"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+
+// CLASS-B defect regression (segment 1b): an indexed borrow taken
+// right after a push read the NEXT element (borrow of element 64
+// yielded element 65's fields; value reads of the same index were
+// correct). The borrow address computation used the post-push slot.
+// Oracle: borrows read their own element; a write through a Vec
+// borrow lands on that same element (also the inline-POD LEA check
+// of segment 3c).
+// Probe origin: goose-bench pg18/pg19.
+// NOTE: the Vec test runs before the GrowVec test because the SAB
+// backend's module-level register liveness accounting (name-keyed,
+// function-global) spuriously reports a live register at function
+// exit for the reverse order since the segment-3 codegen reshaped
+// register counts; the reverse-order file is banked as the repro
+// for that SAB verifier candidate (probes/borrow_order_growvec_first.sla).
+
+struct CbItem { key: i32, val: i32 }
+
+fn cb_item(k: i32, v: i32) -> CbItem {
+    return CbItem { key: k, val: v };
+}
+
+@test "classb vec index borrow reads and writes own element"() {
+    let v: Vec<CbItem> = Vec::new();
+    let i: u64 = 0;
+    while i < 128 {
+        v.push(cb_item(100 + i as i32, 200 + i as i32));
+        i = i + 1;
+    }
+    {
+        let b: &CbItem = &v[64];
+        if b.key != 164 { panic(211); };
+        if b.val != 264 { panic(212); };
+    }
+    v[64].val = 999;
+    if v[64].val != 999 { panic(213); };
+    if v[63].val != 263 { panic(214); };
+    if v[65].val != 265 { panic(215); };
+    let b2: &CbItem = &v[64];
+    if b2.val != 999 { panic(216); };
+    b2.val = 1000;
+    if v[64].val != 1000 { panic(217); };
+    if v[63].val != 263 { panic(218); };
+}
+
+@test "classb growvec index borrow reads own element"() {
+    let g: GrowVec<CbItem> = GrowVec::with_max(1000);
+    let marks: Vec<&CbItem> = Vec::new();
+    let i: u64 = 0;
+    while i < 1000 {
+        g.push(cb_item(100 + i as i32, 200 + i as i32));
+        if i % 64 == 0 {
+            marks.push(&g[i]);
+        };
+        i = i + 1;
+    }
+    if len(marks) != 16 { panic(201); };
+    if marks[0].key != 100 { panic(202); };
+    if marks[0].val != 200 { panic(203); };
+    if marks[1].key != 164 { panic(204); };
+    if marks[1].val != 264 { panic(205); };
+    if marks[15].key != 1060 { panic(206); };
+    if marks[15].val != 1160 { panic(207); };
+    if g[64].val != 264 { panic(208); };
+}
+

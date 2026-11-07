@@ -1,0 +1,161 @@
+// D5: terminal PTY — the CXU terminalPty kernel distilled.
+// sa_pty_* (sa_std, term.sai): spawn a child on a pty slave, drive the
+// master: poll/read/write, winsize + resize, kill, try_wait.
+@import "sa_std/term.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/io/print.sai"
+@import "byteseq.sa"
+@import "append.sa"
+@import "argvfill.sa"
+
+struct PtyAcc {
+    bytes: [u8; 1024],
+    len: u64,
+}
+
+fn acc_is(acc: &PtyAcc, n: u64, lit_ptr: ptr, lit_len: u64) -> bool {
+    let slot = [0u64; 1];
+    BYTES_EQ(&slot, &acc.bytes, n, lit_ptr, lit_len);
+    return slot[0] == 1;
+}
+
+// Reads until acc.len reaches target, the pty hangs up / reaches EOF,
+// or the round budget runs out.
+fn pump(h: u64, acc: &PtyAcc, target: u64) -> void {
+    let chunk = [0u8; 256];
+    let rounds: u64 = 0;
+    let finished: bool = false;
+    while rounds < 300 {
+        rounds = rounds + 1;
+        if finished == true {
+            rounds = 1000;
+        };
+        if acc.len >= target {
+            finished = true;
+        };
+        if finished == false {
+            let events: u32 = 0;
+            let prc = sa_pty_poll(h, 100, &events);
+            if prc != 0 {
+                finished = true;
+            };
+            if events != 0 {
+                let n: u64 = 0;
+                let rrc = sa_pty_read(h, &chunk, 256, &n);
+                if rrc != 0 || n == 0 {
+                    finished = true;
+                };
+                if n > 0 {
+                    APPEND_BYTES(&acc.bytes, acc.len, &chunk, n);
+                    acc.len = acc.len + n;
+                };
+            };
+        };
+    }
+}
+
+fn wait_status(h: u64) -> i32 {
+    let rounds: u64 = 0;
+    while rounds < 300 {
+        rounds = rounds + 1;
+        let done: u32 = 0;
+        let status: i32 = 0;
+        let rc = sa_pty_try_wait(h, &done, &status);
+        if rc == 0 && done == 1 {
+            return status;
+        };
+        let events: u32 = 0;
+        sa_pty_poll(h, 50, &events);
+    }
+    return 999;
+}
+
+fn main() -> i32 {
+    // Case 1: /bin/echo on a pty; output gains \r\n from the line discipline.
+    let acc1 = PtyAcc { bytes: [0u8; 1024], len: 0 };
+    let argv1 = [0u64; 4];
+    ARGV_FILL2(&argv1, STR_PTR("/bin/echo"), STR_LEN("/bin/echo"), STR_PTR("pty-hello"), STR_LEN("pty-hello"));
+    let h1: u64 = 0;
+    if sa_pty_spawn(STR_PTR("/bin/echo"), STR_LEN("/bin/echo"), &argv1, 2, 80, 24, &h1) != 0 {
+        return 2;
+    };
+    pump(h1, &acc1, 1024);
+    if acc1.len != 11 {
+        return 3;
+    };
+    if acc_is(&acc1, acc1.len, STR_PTR("pty-hello\r\n"), STR_LEN("pty-hello\r\n")) == false {
+        return 4;
+    };
+    if wait_status(h1) != 0 {
+        return 5;
+    };
+    if sa_pty_close(h1) != 0 {
+        return 6;
+    };
+
+    // Case 2: initial winsize reaches the child (stty reports rows cols).
+    let acc2 = PtyAcc { bytes: [0u8; 1024], len: 0 };
+    let argv2 = [0u64; 6];
+    ARGV_FILL3(&argv2, STR_PTR("/bin/sh"), STR_LEN("/bin/sh"), STR_PTR("-c"), STR_LEN("-c"), STR_PTR("stty size"), STR_LEN("stty size"));
+    let h2: u64 = 0;
+    if sa_pty_spawn(STR_PTR("/bin/sh"), STR_LEN("/bin/sh"), &argv2, 3, 111, 33, &h2) != 0 {
+        return 12;
+    };
+    pump(h2, &acc2, 1024);
+    if acc2.len != 8 {
+        return 13;
+    };
+    if acc_is(&acc2, acc2.len, STR_PTR("33 111\r\n"), STR_LEN("33 111\r\n")) == false {
+        return 14;
+    };
+    if wait_status(h2) != 0 {
+        return 15;
+    };
+    if sa_pty_close(h2) != 0 {
+        return 16;
+    };
+
+    // Case 3: interactive cat — resize, winsize readback, write/echo, kill.
+    let acc3 = PtyAcc { bytes: [0u8; 1024], len: 0 };
+    let argv3 = [0u64; 2];
+    ARGV_FILL1(&argv3, STR_PTR("/bin/cat"), STR_LEN("/bin/cat"));
+    let h3: u64 = 0;
+    if sa_pty_spawn(STR_PTR("/bin/cat"), STR_LEN("/bin/cat"), &argv3, 1, 80, 24, &h3) != 0 {
+        return 22;
+    };
+    if sa_pty_resize(h3, 100, 40) != 0 {
+        return 23;
+    };
+    let got_cols: u16 = 0;
+    let got_rows: u16 = 0;
+    if sa_pty_winsize(h3, &got_cols, &got_rows) != 0 {
+        return 24;
+    };
+    if got_cols != 100 || got_rows != 40 {
+        return 25;
+    };
+    let written: u64 = 0;
+    if sa_pty_write(h3, STR_PTR("hello\n"), STR_LEN("hello\n"), &written) != 0 || written != 6 {
+        return 26;
+    };
+    pump(h3, &acc3, 7);
+    if acc3.len < 7 {
+        return 27;
+    };
+    if acc_is(&acc3, 7, STR_PTR("hello\r\n"), STR_LEN("hello\r\n")) == false {
+        return 28;
+    };
+    if sa_pty_kill(h3, 9) != 0 {
+        return 29;
+    };
+    if wait_status(h3) != 137 {
+        return 30;
+    };
+    if sa_pty_close(h3) != 0 {
+        return 31;
+    };
+
+    println("d5 pty ok");
+    return 0;
+}

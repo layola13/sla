@@ -1,0 +1,68 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/option.sa"
+
+fn main() -> i32 {
+    let value = Some(5);
+    let result = match value {
+        Some(x) if x > 3 => {
+            x
+        },
+        Some(_) => {
+            0
+        },
+        None => {
+            -1
+        },
+    };
+    println("{}", result);
+    return 0;
+};
+
+@test "rosetta 030 manual guard branch"() {
+    let value = Some(5);
+    let result = match value {
+        Some(x) if x > 3 => {
+            x
+        },
+        Some(_) => {
+            0
+        },
+        None => {
+            -1
+        },
+    };
+    if result != 5 {
+        panic(30);
+    };
+    let low_value = Some(2);
+    let low_result = match low_value {
+        Some(x) if x > 3 => {
+            x
+        },
+        Some(_) => {
+            0
+        },
+        None => {
+            -1
+        },
+    };
+    if low_result != 0 {
+        panic(31);
+    };
+    let none_value: Option<i32> = None;
+    let none_result = match none_value {
+        Some(x) if x > 3 => {
+            x
+        },
+        Some(_) => {
+            0
+        },
+        None => {
+            -1
+        },
+    };
+    if none_result != -1 {
+        panic(32);
+    };
+};

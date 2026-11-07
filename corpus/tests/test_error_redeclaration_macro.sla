@@ -1,0 +1,13 @@
+// expect: Redeclaration
+macro repeated_macro(value) {
+    let result = value + 1;
+}
+
+macro repeated_macro(value) {
+    let result = value + 2;
+}
+
+fn use_macro() -> int {
+    return 1;
+}
+

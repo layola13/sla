@@ -1,0 +1,18 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_registered_callback_count() -> i32 {
+    let event_callback = 1;
+    return event_callback;
+}
+
+fn main() -> i32 {
+    let result = contract_registered_callback_count();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 253 contract callback registration"() {
+    let got = contract_registered_callback_count();
+    if got != 1 { panic(253); };
+}

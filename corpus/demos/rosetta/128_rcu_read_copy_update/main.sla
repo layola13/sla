@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/arc.sa"
+
+fn rcu_snapshot_total() -> i32 {
+    let old_snapshot = Arc::new(1);
+    let reader_seen = *old_snapshot;
+    let old_value = *old_snapshot;
+    let next_value = old_value + 1;
+    let new_snapshot = Arc::new(next_value);
+    let updater_seen = *new_snapshot;
+    return reader_seen + updater_seen;
+}
+
+fn main() -> i32 {
+    let old_snapshot = Arc::new(1);
+    let reader_seen = *old_snapshot;
+    let old_value = *old_snapshot;
+    let next_value = old_value + 1;
+    let new_snapshot = Arc::new(next_value);
+    let updater_seen = *new_snapshot;
+    let result = reader_seen + updater_seen;
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 128 128_rcu_read_copy_update"() {
+    let got = rcu_snapshot_total();
+    if got != 3 {
+        panic(128);
+    };
+};

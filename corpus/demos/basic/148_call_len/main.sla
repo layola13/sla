@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 898_chain_call_len：调用结果直接取长（2）。
+// 返回 `: ptr` 字符串再 `len()` 双后端正常；返回未注解 `String`
+// 则落入缺口 #15（TypeMismatch），此处只用 `: ptr` 标注。
+
+fn get() -> ptr {
+    return "hi";
+}
+
+fn main() -> i32 {
+    println("{}", len(get()));
+    return 0;
+}
+
+@test "basic 148 call len"() {
+    if len(get()) != 2 { panic(14801); };
+    if !str_eq(get(), "hi") { panic(14802); };
+}

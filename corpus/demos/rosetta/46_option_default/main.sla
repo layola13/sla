@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+
+fn choose(opt: Option<i32>, fallback: i32) -> i32 {
+    opt.unwrap_or(fallback)
+}
+
+fn main() -> i32 {
+    let value = choose(Some(9), 1);
+    println("{}", value);
+    return 0;
+}
+
+@test "rosetta 046 option default"() {
+    let value = choose(Some(9), 1);
+    if value != 9 {
+        panic(46);
+    };
+}

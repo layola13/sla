@@ -1,0 +1,270 @@
+@import "sa_std/vec.sa"
+
+struct VecPoint {
+    x: i32,
+    y: i32,
+}
+
+struct VecHolder {
+    values: Vec<i32>,
+}
+
+struct VecStructHolder {
+    values: Vec<VecPoint>,
+}
+
+struct VecMidiTrack {
+    program: u8,
+    channel: u8,
+    group: u8,
+}
+
+struct VecMidiHolder {
+    tracks: Vec<VecMidiTrack>,
+}
+
+struct VecMusicTrack {
+    is_drum: bool,
+    instr: i64,
+    channel: i64,
+    group: i64,
+}
+
+struct VecHookSpan {
+    start: u64,
+    end: u64,
+}
+
+struct VecHookNote {
+    hook_span: VecHookSpan,
+    pitch: i64,
+}
+
+struct VecHookTrack {
+    hook_span: VecHookSpan,
+}
+
+struct VecHookIr {
+    notes: Vec<VecHookNote>,
+    tracks: Vec<VecHookTrack>,
+}
+
+fn vec_point_less(left: &VecPoint, right: &VecPoint) -> bool {
+    if left.x < right.x { return true; };
+    if left.x > right.x { return false; };
+    return left.y < right.y;
+}
+
+fn vec_hook_span_is_ident(source: &Vec<u8>, span: &VecHookSpan) -> bool {
+    if len(source) == 0 {
+        return false;
+    };
+    return span.end >= span.start;
+}
+
+fn vec_hook_push_note(out: &Vec<u8>, source: &Vec<u8>, span: &VecHookSpan) -> u64 {
+    if len(out) != 0 {
+        return 1000;
+    };
+    if len(source) == 0 {
+        return 2000;
+    };
+    return span.end - span.start;
+}
+
+fn vec_hook_source_aware_group(ir: &VecHookIr, source: &Vec<u8>, chord_i: i64, t: i64, use_source_names: bool) -> u64 {
+    let out: Vec<u8> = Vec::new();
+    let chord_note = ir.notes[chord_i];
+    let total: u64 = 0;
+    if use_source_names == true {
+        let track_hook = ir.tracks[t].hook_span;
+        if vec_hook_span_is_ident(source, &chord_note.hook_span) == true {
+            if chord_note.hook_span.start != track_hook.start {
+                total = total + 10;
+            };
+            if chord_note.hook_span.end != track_hook.end {
+                total = total + 20;
+            };
+            total = total + vec_hook_push_note(&out, source, &chord_note.hook_span);
+        };
+    };
+    return total + chord_note.pitch as u64;
+}
+
+fn vec_hook_source_aware_loop_group(ir: &VecHookIr, source: &Vec<u8>, use_source_names: bool) -> u64 {
+    let out: Vec<u8> = Vec::new();
+    let chord_i: i64 = 0;
+    let total: u64 = 0;
+    while chord_i < 1 {
+        let chord_note = ir.notes[chord_i];
+        if use_source_names == true {
+            let track_hook = ir.tracks[0].hook_span;
+            if vec_hook_span_is_ident(source, &chord_note.hook_span) == true {
+                if chord_note.hook_span.start != track_hook.start {
+                    total = total + 10;
+                };
+                if chord_note.hook_span.end != track_hook.end {
+                    total = total + 20;
+                };
+                total = total + vec_hook_push_note(&out, source, &chord_note.hook_span);
+            };
+        };
+        total = total + chord_note.pitch as u64;
+        chord_i = chord_i + 1;
+    }
+    if use_source_names == false {
+        let chord_note = ir.notes[0];
+        total = total + chord_note.pitch as u64;
+    };
+    return total;
+}
+
+@test "vec index assignment updates scalar slot"() {
+    let values: Vec<i32> = Vec::new();
+    values.push(10);
+    values.push(20);
+    values[0] = 30;
+    if values[0] != 30 { panic(9100); };
+    if values[1] != 20 { panic(9101); };
+}
+
+@test "vec index assignment updates struct slot"() {
+    let values: Vec<VecPoint> = Vec::new();
+    values.push(VecPoint { x: 1, y: 2 });
+    values.push(VecPoint { x: 3, y: 4 });
+    values[1] = VecPoint { x: 7, y: 9 };
+    let a = values[0];
+    let b = values[1];
+    if a.x != 1 { panic(9110); };
+    if a.y != 2 { panic(9111); };
+    if b.x != 7 { panic(9112); };
+    if b.y != 9 { panic(9113); };
+}
+
+@test "vec field index read and write in loop"() {
+    let values: Vec<i32> = Vec::new();
+    values.push(1);
+    values.push(2);
+    values.push(3);
+    let holder = VecHolder { values: values };
+    let i: i64 = 0;
+    let total: i32 = 0;
+    while i < 3 {
+        total = total + holder.values[i];
+        i = i + 1;
+    }
+    holder.values[1] = 7;
+    if total != 6 { panic(9120); };
+    if holder.values[1] != 7 { panic(9121); };
+}
+
+@test "vec field push releases receiver temporary"() {
+    let values: Vec<VecPoint> = Vec::new();
+    let holder = VecStructHolder { values: values };
+    let i: i32 = 0;
+    while i < 2 {
+        if i >= 0 {
+            holder.values.push(VecPoint { x: i, y: i + 1 });
+        };
+        i = i + 1;
+    }
+    if len(holder.values) != 2 { panic(9130); };
+    if holder.values[1].y != 2 { panic(9131); };
+}
+
+fn vec_struct_holder_sum(holder: &VecStructHolder) -> i32 {
+    let i: i64 = 0;
+    let total: i32 = 0;
+    while i < len(holder.values) as i64 {
+        let point = holder.values[i];
+        total = total + point.x;
+        i = i + 1;
+    }
+    return total;
+}
+
+fn vec_midi_project_track(holder: &VecMidiHolder, i: i64) -> VecMusicTrack {
+    let track = holder.tracks[i];
+    return VecMusicTrack {
+        is_drum: track.channel == 9,
+        instr: track.program as i64,
+        channel: track.channel as i64,
+        group: track.group as i64,
+    };
+}
+
+@test "borrowed vec struct field index read in loop"() {
+    let values: Vec<VecPoint> = Vec::new();
+    values.push(VecPoint { x: 4, y: 1 });
+    values.push(VecPoint { x: 6, y: 2 });
+    let holder = VecStructHolder { values: values };
+    if vec_struct_holder_sum(&holder) != 10 { panic(9140); };
+}
+
+@test "vec element local survives repeated scalar field reads"() {
+    let tracks: Vec<VecMidiTrack> = Vec::new();
+    tracks.push(VecMidiTrack { program: 42, channel: 9, group: 3 });
+    let holder = VecMidiHolder { tracks: tracks };
+    let got = vec_midi_project_track(&holder, 0);
+    if got.is_drum != true { panic(9150); };
+    if got.instr != 42 { panic(9151); };
+    if got.channel != 9 { panic(9152); };
+    if got.group != 3 { panic(9153); };
+}
+
+@test "vec element nested span borrow keeps branch state"() {
+    let notes: Vec<VecHookNote> = Vec::new();
+    notes.push(VecHookNote {
+        hook_span: VecHookSpan { start: 3, end: 9 },
+        pitch: 64,
+    });
+    let tracks: Vec<VecHookTrack> = Vec::new();
+    tracks.push(VecHookTrack {
+        hook_span: VecHookSpan { start: 3, end: 8 },
+    });
+    let ir = VecHookIr { notes: notes, tracks: tracks };
+    let source: Vec<u8> = Vec::new();
+    source.push(65);
+
+    if vec_hook_source_aware_group(&ir, &source, 0, 0, true) != 90 {
+        panic(9154);
+    };
+    if vec_hook_source_aware_group(&ir, &source, 0, 0, false) != 64 {
+        panic(9155);
+    };
+    if vec_hook_source_aware_loop_group(&ir, &source, true) != 90 {
+        panic(9156);
+    };
+    if vec_hook_source_aware_loop_group(&ir, &source, false) != 128 {
+        panic(9157);
+    };
+}
+
+@test "vec struct dynamic index borrow and swap"() {
+    let values: Vec<VecPoint> = Vec::new();
+    values.push(VecPoint { x: 9, y: 0 });
+    values.push(VecPoint { x: 4, y: 1 });
+    values.push(VecPoint { x: 7, y: 2 });
+
+    let i: u64 = 0;
+    while i < len(values) {
+        let best = i;
+        let j = i + 1;
+        while j < len(values) {
+            if vec_point_less(&values[j], &values[best]) == true {
+                best = j;
+            };
+            j = j + 1;
+        }
+        if best != i {
+            let tmp = values[i];
+            values[i] = values[best];
+            values[best] = tmp;
+        };
+        i = i + 1;
+    }
+
+    if values[0].x != 4 { panic(9160); };
+    if values[1].x != 7 { panic(9161); };
+    if values[2].x != 9 { panic(9162); };
+}

@@ -1,0 +1,34 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+// Batch1 R5 regression minim (LOOP-SA-RESID probe_minim_ident, ident
+// form): single async fn, while loop, sole await =
+// future::defer_ready(0). Discriminates the R5 release-retire defect:
+// with a release-form retire of the FUTURE_NEW state operand the state
+// block is dropped at wrap time and poll never sees READY (guard
+// 7701); the result check is 7702. Stock fails this file only at the
+// verifier layer (MemoryLeak on the undisposed operand); the forget
+// form passes both layers.
+async fn spin_tag(n: i32, tag: i32) -> i32 {
+    let i: i32 = 0;
+    while i < n {
+        let tick: i32 = future::defer_ready(0).await;
+        i = i + 1 + tick;
+    }
+    return tag;
+}
+
+@test "async loop defer_ready minim"() {
+    let s = spin_tag(3, 42);
+    let t = task::new(s);
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 100000 {
+            panic(7701);
+        };
+    }
+    if task::result(t) != 42 {
+        panic(7702);
+    };
+}

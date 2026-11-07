@@ -1,0 +1,8 @@
+@import "profiles/portable/detail/seed.sa"
+
+@export portable_value() -> i32:
+L_ENTRY:
+    seed = call @portable_seed()
+    value = add seed, 100
+    !seed
+    return value

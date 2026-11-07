@@ -1,0 +1,24 @@
+@import "sa_std/redis.sla"
+
+// BISECT B: hand-built aggregate + count/kind/int/is_null/pair
+// accessors (no by-value child extraction, no child_bulk).
+fn reg3_bytes(text: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return redis_push_lit(v, text, n);
+}
+
+@test "bisect b aggregate scalar accessors"() {
+    let items: Vec<RedisValue> = Vec::new();
+    items.push(redis_int_value(42));
+    items.push(redis_bulk_value(reg3_bytes(STR_PTR("foo"), STR_LEN("foo"))));
+    items.push(redis_null_value());
+    let agg = redis_empty_value();
+    agg.kind = SA_REDIS_KIND_ARRAY;
+    agg.items = items;
+    if redis_value_child_count(&agg) != 3 { panic(210); };
+    if redis_value_child_kind(&agg, 0) != SA_REDIS_KIND_INTEGER { panic(211); };
+    if redis_value_child_int(&agg, 0) != 42 { panic(212); };
+    if redis_value_child_is_null(&agg, 2) == false { panic(214); };
+    if redis_value_child_is_null(&agg, 0) { panic(215); };
+    if redis_value_pair_count(&agg) != 1 { panic(216); };
+}

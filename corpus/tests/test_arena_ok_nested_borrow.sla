@@ -1,0 +1,15 @@
+// F2-A C1 corpus (positive): nested blocks may freely BORROW
+// outer roots for reads; only owned cross-domain moves are
+// rejected (design 3, borrow in/out v1 conservative caliber).
+fn ok_nested_borrow() -> i32 {
+    arena {
+        let a: Vec<String> = Vec::new();
+        a.push(format("x"));
+        arena {
+            let n = len(a);
+            if n != 1 { return 1; };
+        }
+        if len(a) != 1 { return 2; };
+    }
+    return 0;
+}

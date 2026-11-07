@@ -1,0 +1,5 @@
+@export link_target(slot: i32) -> i32:
+L_ENTRY:
+    value = add slot, 1
+    !slot
+    return value

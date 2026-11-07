@@ -1,0 +1,19 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 2x2 行列式（ad-bc=-2）。
+// 意对标 tsgosa 143_mat_add 的行列式版（19 为加法/转置版）。
+
+fn det2(a: int, b: int, c: int, d: int) -> int {
+    return a * d - b * c;
+}
+
+fn main() -> i32 {
+    println("{}", det2(1, 2, 3, 4));
+    return 0;
+}
+
+@test "basic 326 mat det"() {
+    if det2(1, 2, 3, 4) != -2 { panic(32601); };
+    if det2(2, 0, 0, 3) != 6 { panic(32602); };
+}

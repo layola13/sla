@@ -1,0 +1,30 @@
+@import "sa_std/future.sa"
+@import "sa_std/pin.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/time.sla"
+
+async fn delayed_ready_value() -> i32 {
+    thread::sleep(Duration::from_millis(0));
+    return 7;
+}
+
+fn block_ready(future: future<i32>) -> i32 {
+    let boxed = Box::new(future);
+    let future_ref = *boxed;
+    let pinned = stack_alloc();
+    PIN_MUT_NEW(pinned, future_ref);
+    let poll = FUTURE_READY_POLL_STATE(PIN_MUT_GET_MUT(pinned));
+    let ready = POLL_IS_READY(poll);
+    if ready != true {
+        panic(9301);
+    };
+    let value: i32 = POLL_VALUE(poll);
+    return value;
+}
+
+@test "async block_on direct ready future"() {
+    let got = block_ready(delayed_ready_value());
+    if got != 7 {
+        panic(9302);
+    };
+}

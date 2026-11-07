@@ -1,0 +1,62 @@
+@import "sa_std/string.sa"
+
+// DEF-R8-FIX (face 2): the associated constructor forms
+// (Option::Some / Result::Ok / Result::Err) lowered through the
+// std-surface constructor rules on the SAB backend and released the
+// payload register unconditionally after the macro stored it into
+// the fresh enum object. The bare forms were fixed by DEF-3; the
+// associated forms were not (the SA-text backend routes both forms
+// through the DEF-3 helper, so this gap was SAB-only). A non-Copy
+// payload is consumed by the store, never released: releasing it
+// freed the payload while the enum still owned it.
+
+fn some_assoc_temp() -> Option<String> {
+    return Option::Some(format("assoc {}", 11));
+}
+
+fn ok_assoc_temp() -> Result<String, i32> {
+    return Result::Ok(format("assoc ok {}", 12));
+}
+
+fn err_assoc_temp() -> Result<i32, String> {
+    return Result::Err(format("assoc err {}", 13));
+}
+
+fn some_assoc_vec() -> Option<Vec<i32>> {
+    let v: Vec<i32> = Vec::new();
+    v.push(3);
+    v.push(4);
+    return Option::Some(v);
+}
+
+@test "def_r8 option some associated of temp string survives"() {
+    let o = some_assoc_temp();
+    match o {
+        Some(s) => { if !str_eq(s, "assoc 11") { panic(2501); }; },
+        None => { panic(2502); },
+    };
+}
+
+@test "def_r8 result ok associated of temp string survives"() {
+    let r = ok_assoc_temp();
+    match r {
+        Ok(s) => { if !str_eq(s, "assoc ok 12") { panic(2503); }; },
+        Err(e) => { panic(2504); },
+    };
+}
+
+@test "def_r8 result err associated of temp string survives"() {
+    let r = err_assoc_temp();
+    match r {
+        Ok(v) => { panic(2505); },
+        Err(s) => { if !str_eq(s, "assoc err 13") { panic(2506); }; },
+    };
+}
+
+@test "def_r8 option some associated of vec survives"() {
+    let o = some_assoc_vec();
+    match o {
+        Some(v) => { if v.len() != 2 { panic(2507); }; },
+        None => { panic(2508); },
+    };
+}

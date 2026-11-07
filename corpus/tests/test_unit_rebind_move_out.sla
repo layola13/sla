@@ -1,0 +1,110 @@
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+// Follow-up line (item 2): generalized rebind move-out. A by-value
+// Vec argument whose binding is wholly reassigned later in the same
+// block, before any read, is dead at the call: both codegens move
+// out of the binding instead of deep-cloning it (REG-BR-6 claimed
+// only the self-assignment tail form `x = f(x, ..)`). The liveness
+// proof is lowering_rules.rebindMoveOutProven; the emission
+// assertions (clone present/absent per shape) live in
+// plugin_tests.zig ("generalized rebind move-out drops the clone",
+// "... text backend ..."). The control shapes pin the boundary: a
+// genuine later read keeps the clone.
+
+fn fur_sinkv(v: Vec<u8>) -> u64 {
+    return len(v);
+}
+
+fn fur_appv(v: Vec<u8>, b: u8) -> Vec<u8> {
+    v.push(b);
+    return v;
+}
+
+fn fur_makev() -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    return out;
+}
+
+fn fur_touchv(v: &Vec<u8>) -> u64 {
+    return len(v);
+}
+
+@test "let-value call then rebind fresh"() {
+    let buf: Vec<u8> = Vec::new();
+    buf.push(1);
+    let n: u64 = fur_sinkv(buf);
+    if n != 1 {
+        panic(7201);
+    };
+    buf = fur_makev();
+    buf.push(2);
+    if fur_touchv(&buf) != 1 {
+        panic(7202);
+    };
+    if buf[0] != 2 {
+        panic(7203);
+    };
+}
+
+@test "let-value call then rebind from other name"() {
+    let buf: Vec<u8> = Vec::new();
+    let two: Vec<u8> = fur_appv(buf, 65);
+    buf = two;
+    if fur_touchv(&buf) != 1 {
+        panic(7204);
+    };
+    if buf[0] != 65 {
+        panic(7205);
+    };
+}
+
+@test "nested call then rebind"() {
+    let buf: Vec<u8> = Vec::new();
+    buf.push(7);
+    let n: u64 = fur_sinkv(buf) + 1;
+    if n != 2 {
+        panic(7206);
+    };
+    buf = fur_makev();
+    if fur_touchv(&buf) != 0 {
+        panic(7207);
+    };
+}
+
+@test "consuming call then rebind in loop"() {
+    let buf: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    let total: u64 = 0;
+    while i < 4 {
+        total = total + fur_sinkv(buf);
+        buf = fur_makev();
+        buf.push(9);
+        i = i + 1;
+    }
+    if total != 3 {
+        panic(7208);
+    };
+    if fur_touchv(&buf) != 1 {
+        panic(7209);
+    };
+}
+
+@test "later by-value read keeps first clone"() {
+    let buf: Vec<u8> = Vec::new();
+    buf.push(3);
+    let n: u64 = fur_sinkv(buf);
+    if n != 1 {
+        panic(7210);
+    };
+    let m: u64 = fur_sinkv(buf);
+    if m != 1 {
+        panic(7211);
+    };
+    buf = fur_makev();
+    buf.push(9);
+    let k: u64 = fur_sinkv(buf);
+    if k != 1 {
+        panic(7212);
+    };
+}

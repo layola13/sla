@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 279_f64_loop：f64 作循环计数（n=3，m=7）。
+// SLA `for i in 0..N` 为整数区间，浮点步进用 `while` 显式累加
+//（与 90_f64_cmp 的 f64 比较口径一致）。
+
+fn main() -> i32 {
+    let n = 0;
+    let i: f64 = 0.0;
+    while i < 3.0 {
+        i = i + 1.0;
+        n = n + 1;
+    }
+    let m = 0;
+    let j: f64 = 0.0;
+    while j < 3.5 {
+        j = j + 0.5;
+        m = m + 1;
+    }
+    println("{},{}", n, m);
+    return 0;
+}
+
+@test "basic 108 f64 loop"() {
+    let n = 0;
+    let i: f64 = 0.0;
+    while i < 3.0 {
+        i = i + 1.0;
+        n = n + 1;
+    }
+    if n != 3 { panic(10801); };
+    let m = 0;
+    let j: f64 = 0.0;
+    while j < 3.5 {
+        j = j + 0.5;
+        m = m + 1;
+    }
+    if m != 7 { panic(10802); };
+}

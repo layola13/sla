@@ -1,0 +1,22 @@
+struct SpawnConfig {
+    x: i32,
+    y: i32,
+    layer: i32,
+    visible: bool,
+}
+
+fn move_to_next_layer(config: SpawnConfig) -> SpawnConfig {
+    return SpawnConfig {
+        layer: config.layer + 1,
+        ..config
+    };
+}
+
+@test "struct update preserves fields not explicitly replaced"() {
+    let base = SpawnConfig { x: 8, y: 13, layer: 2, visible: true };
+    let next = move_to_next_layer(base);
+    if next.x != 8 { panic(34100); };
+    if next.y != 13 { panic(34101); };
+    if next.layer != 3 { panic(34102); };
+    if next.visible != true { panic(34103); };
+}

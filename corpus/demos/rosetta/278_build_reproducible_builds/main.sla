@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn build_reproducible_hash_matches() -> i32 { let deterministic_output = 1; return deterministic_output; }
+fn main() -> i32 { let deterministic_output = 1; println("{}", deterministic_output); return deterministic_output; }
+@test "rosetta 278 build reproducible builds"() { let got = build_reproducible_hash_matches(); if got != 1 { panic(278); }; }

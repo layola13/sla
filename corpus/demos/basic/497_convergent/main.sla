@@ -1,0 +1,55 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 收敛子（415/93 的二阶收敛子为 58/13）。
+// 意对标 496 连分数的渐近版（496 互补）。
+
+fn conv_num(num: int, den: int, k: int) -> int {
+    let p0 = 0;
+    let p1 = 1;
+    let n = num;
+    let d = den;
+    let i = 0;
+    while i <= k {
+        let a = n / d;
+        let p2 = a * p1 + p0;
+        p0 = p1;
+        p1 = p2;
+        let t = n % d;
+        n = d;
+        d = t;
+        i = i + 1;
+    }
+    return p1;
+}
+
+fn conv_den(num: int, den: int, k: int) -> int {
+    let q0 = 1;
+    let q1 = 0;
+    let n = num;
+    let d = den;
+    let i = 0;
+    while i <= k {
+        let a = n / d;
+        let q2 = a * q1 + q0;
+        q0 = q1;
+        q1 = q2;
+        let t = n % d;
+        n = d;
+        d = t;
+        i = i + 1;
+    }
+    return q1;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", conv_num(415, 93, 2), conv_den(415, 93, 2), conv_num(415, 93, 0), conv_den(415, 93, 0));
+    return 0;
+}
+
+@test "basic 497 convergent"() {
+    if conv_num(415, 93, 2) != 58 { panic(49701); };
+    if conv_den(415, 93, 2) != 13 { panic(49702); };
+    if conv_num(415, 93, 0) != 4 { panic(49703); };
+    if conv_den(415, 93, 0) != 1 { panic(49704); };
+}

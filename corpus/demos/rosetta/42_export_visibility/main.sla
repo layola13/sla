@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+pub fn exported_value() -> i32 {
+    7
+}
+
+fn internal_value() -> i32 {
+    5
+}
+
+fn main() -> i32 {
+    let left = exported_value();
+    let right = internal_value();
+    let total = left + right;
+    println("{}", total);
+    return 0;
+}
+
+@test "rosetta 042 export visibility"() {
+    let left = exported_value();
+    let right = internal_value();
+    let total = left + right;
+    if total != 12 {
+        panic(42);
+    };
+}

@@ -1,0 +1,8 @@
+@import "src/metadata/index.sa"
+
+@src_package_value() -> i32:
+L_ENTRY:
+    metadata = call @metadata_package_value()
+    value = add 200, metadata
+    !metadata
+    return value

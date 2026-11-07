@@ -1,0 +1,30 @@
+// Sla native async/await smoke tests.
+
+async fn step_one() -> int {
+    return 1;
+}
+
+async fn run_async() -> int {
+    let value = step_one().await;
+    return value + 1;
+}
+
+fn await_from_sync() -> int {
+    let result = run_async().await;
+    return result;
+}
+
+@test "async await ready future"() {
+    let result = await_from_sync();
+    if result != 2 {
+        panic(1);
+    };
+}
+
+@test "explicit future type parses"() {
+    let future: future<int> = step_one();
+    let result = future.await;
+    if result != 1 {
+        panic(2);
+    };
+}

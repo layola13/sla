@@ -1,0 +1,12 @@
+@ffi_wrapper record_mix(*raw: ptr) -> i32:
+L_ENTRY:
+    view = assume_borrow raw
+    safe = assume_safe raw
+    lo = load safe+Record_lo as i32
+    hi = load safe+Record_hi as i32
+    total = add lo, hi
+    !lo
+    !hi
+    !view
+    !safe
+    return total

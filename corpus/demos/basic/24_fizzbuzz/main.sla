@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 191_fizz20：20 以内 3/5 倍数计数 = 9。
+
+fn fizzbuzz_count(limit: i32) -> i32 {
+    let n: i32 = 0;
+    for i in 1..(limit + 1) {
+        if i % 3 == 0 || i % 5 == 0 {
+            n = n + 1;
+        };
+    }
+    return n;
+}
+
+fn main() -> i32 {
+    println("{}", fizzbuzz_count(20));
+    return 0;
+}
+
+@test "basic 24 fizzbuzz count"() {
+    if fizzbuzz_count(20) != 9 { panic(2401); };
+    if fizzbuzz_count(1) != 0 { panic(2402); };
+    if fizzbuzz_count(5) != 2 { panic(2403); };
+}

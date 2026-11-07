@@ -1,0 +1,59 @@
+// Regression (async cluster 4, AWAIT-EXTRACT): `.await` on a
+// state-machine future inside a SYNC fn must poll the future until
+// Ready and return its value. The buggy lowering gated the busy-poll
+// branch on the enclosing fn being async, so a sync fn fell through
+// to the ready-state fast path and returned the future's inner state
+// pointer read as a ready-state value (typing probes F/F2: completed
+// with the wrong value; F3 is the control that passed both ways).
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn live_across_f() -> i32 {
+    let x = 40;
+    let v = future::defer_ready(2).await;
+    return x + v;
+}
+
+fn drive_f() -> i32 {
+    let result = live_across_f().await;
+    return result;
+}
+
+@test "await-extract sync fn awaits state machine value"() {
+    if drive_f() != 42 {
+        panic(401);
+    };
+}
+
+async fn v_only() -> i32 {
+    let v = future::defer_ready(2).await;
+    return v;
+}
+
+fn drive_f2() -> i32 {
+    let result = v_only().await;
+    return result;
+}
+
+@test "await-extract sync fn awaits awaited value only"() {
+    if drive_f2() != 2 {
+        panic(411);
+    };
+}
+
+async fn x_only() -> i32 {
+    let x = 40;
+    let v = future::defer_ready(2).await;
+    return x;
+}
+
+fn drive_f3() -> i32 {
+    let result = x_only().await;
+    return result;
+}
+
+@test "await-extract sync fn awaits capture only control"() {
+    if drive_f3() != 40 {
+        panic(421);
+    };
+}

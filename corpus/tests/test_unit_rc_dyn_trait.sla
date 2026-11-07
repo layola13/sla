@@ -1,0 +1,51 @@
+@import "sa_std/core/box.sa"
+@import "sa_std/core/rc.sa"
+@import "sa_std/core/trait_object.sa"
+
+trait Identified {
+    fn get_id(&self) -> int;
+}
+
+struct TypeA {
+    id: int,
+}
+
+struct TypeB {
+    id: int,
+    extra: int,
+}
+
+impl Identified for TypeA {
+    fn get_id(&self) -> int {
+        return self.id;
+    }
+}
+
+impl Identified for TypeB {
+    fn get_id(&self) -> int {
+        return self.id + self.extra;
+    }
+}
+
+@test "rc dyn trait borrowed dispatch"() {
+    let obj: Rc<dyn Identified> = Rc::new(TypeA { id: 42 });
+    let borrowed: &dyn Identified = &*obj;
+    if borrowed.get_id() != 42 {
+        panic(1);
+    };
+}
+
+@test "rc dyn trait direct dispatch"() {
+    let obj: Rc<dyn Identified> = Rc::new(TypeB { id: 20, extra: 2 });
+    if obj.get_id() != 22 {
+        panic(2);
+    };
+}
+
+@test "box dyn trait borrowed dispatch"() {
+    let obj: Box<dyn Identified> = Box::new(TypeA { id: 7 });
+    let borrowed: &dyn Identified = &*obj;
+    if borrowed.get_id() != 7 {
+        panic(3);
+    };
+}

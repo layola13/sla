@@ -1,0 +1,38 @@
+enum EnvelopeKind {
+    Primary,
+    Secondary,
+}
+
+struct EnvelopeWithKind {
+    kind: EnvelopeKind,
+    code: u8,
+}
+
+fn envelope_kind_code(^kind: EnvelopeKind) -> u8 {
+    match kind {
+        EnvelopeKind::Primary => { return 1; },
+        EnvelopeKind::Secondary => { return 2; },
+    };
+}
+
+fn secondary_kind() -> EnvelopeKind {
+    return EnvelopeKind::Secondary;
+}
+
+fn envelope_with_literal_kind() -> EnvelopeWithKind {
+    return EnvelopeWithKind { kind: EnvelopeKind::Primary, code: 7 };
+}
+
+fn envelope_with_call_kind() -> EnvelopeWithKind {
+    return EnvelopeWithKind { kind: secondary_kind(), code: 9 };
+}
+
+@test "direct sab stores enum literal and call results in struct fields"() {
+    let literal = envelope_with_literal_kind();
+    if envelope_kind_code(^literal.kind) != 1 { panic(52701); };
+    if literal.code != 7 { panic(52702); };
+
+    let called = envelope_with_call_kind();
+    if envelope_kind_code(^called.kind) != 2 { panic(52703); };
+    if called.code != 9 { panic(52704); };
+}

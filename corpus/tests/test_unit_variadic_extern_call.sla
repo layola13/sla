@@ -1,0 +1,55 @@
+// Extern variadic batch, Face A (declare + call).
+//
+// Baseline behaviour: every spelling of `...` is a SyntaxError, so this
+// file fails on the pristine tree before the batch and passes after.
+//
+// The assertions are on snprintf's return value AND on the exact bytes
+// it wrote, so a missing C default argument promotion (i16 read as int,
+// f32 read as double) fails loudly instead of printing garbage.
+
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+@import "import_fixtures/variadic_libc.sai"
+
+extern "C" {
+    fn sprintf(buf: ptr, fmt: ptr, ...) -> i32;
+}
+
+@test "variadic snprintf via sai decl with promotions"() {
+    let buf = stack_alloc(64);
+    let small: i16 = -7;
+    let ratio: f32 = 0.5;
+    let n = unsafe { snprintf(buf, 64, STR_PTR("%d|%f|%s\0"), small, ratio, STR_PTR("ok\0")) };
+    if n != 14 {
+        panic(7101);
+    };
+    if unsafe { memcmp(buf, STR_PTR("-7|0.500000|ok\0"), 15) } != 0 {
+        panic(7102);
+    };
+}
+
+@test "variadic printf via sai decl returns char count"() {
+    let n = unsafe { printf(STR_PTR("va %d %s\n\0"), 42, STR_PTR("ok\0")) };
+    if n != 9 {
+        panic(7103);
+    };
+}
+
+@test "variadic sprintf via extern block decl"() {
+    let buf = stack_alloc(64);
+    let byte_val: u8 = 200;
+    let n = unsafe { sprintf(buf, STR_PTR("%u:%lld\0"), byte_val, -5000000000) };
+    if n != 15 {
+        panic(7104);
+    };
+    if unsafe { memcmp(buf, STR_PTR("200:-5000000000\0"), 16) } != 0 {
+        panic(7105);
+    };
+}
+
+@test "variadic call with no trailing args"() {
+    let n = unsafe { printf(STR_PTR("va plain\n\0")) };
+    if n != 9 {
+        panic(7106);
+    };
+}

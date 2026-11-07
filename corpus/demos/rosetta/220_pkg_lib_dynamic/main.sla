@@ -1,0 +1,11 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_dynamic_library_outputs() -> i32 {
+    let static_lib = 1;
+    let dynamic_lib = 1;
+    return static_lib + dynamic_lib;
+}
+
+fn main() -> i32 { let static_lib = 1; let dynamic_lib = 1; let result = static_lib + dynamic_lib; println("{}", result); return result; }
+@test "rosetta 220 pkg lib dynamic"() { let got = pkg_dynamic_library_outputs(); if got != 2 { panic(220); }; }

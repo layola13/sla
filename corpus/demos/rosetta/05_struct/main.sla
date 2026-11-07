@@ -1,0 +1,26 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn create_point(x: i32, y: i32) -> Point {
+    Point { x: x, y: y }
+}
+
+fn main() -> i32 {
+    let point = create_point(10, 20);
+    println("({},{})", point.x, point.y);
+    return 0;
+};
+
+@test "rosetta 005 05_struct"() {
+    let point = create_point(10, 20);
+    let x = point.x;
+    let y = point.y;
+    if x + y != 30 {
+        panic(5);
+    };
+};

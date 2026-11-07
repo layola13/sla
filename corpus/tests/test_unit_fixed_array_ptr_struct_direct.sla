@@ -1,0 +1,31 @@
+// Minimal shape of sla_ts runtime.sla RuntimeArgs for direct SAB:
+// fixed array of ptr fields initialized with string/pointer literals.
+
+struct FixedArrayPtrArgs {
+    count: i32,
+    values: [ptr; 4],
+}
+
+fn fixed_array_ptr_args_empty() -> FixedArrayPtrArgs {
+    return FixedArrayPtrArgs {
+        count: 0,
+        values: ["", "", "", ""],
+    };
+}
+
+fn fixed_array_ptr_args_with1(a0: ptr) -> FixedArrayPtrArgs {
+    return FixedArrayPtrArgs {
+        count: 1,
+        values: [a0, "", "", ""],
+    };
+}
+
+@test "fixed array ptr struct empty"() {
+    let empty = fixed_array_ptr_args_empty();
+    if empty.count != 0 { panic(52901); };
+}
+
+@test "fixed array ptr struct with1 count"() {
+    let args = fixed_array_ptr_args_with1("hello");
+    if args.count != 1 { panic(52902); };
+}

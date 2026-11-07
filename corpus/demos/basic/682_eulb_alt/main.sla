@@ -1,0 +1,51 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Eulerian-B 交错和 B(n,m)=sum (-1)^k C(n+1,k)(2(m-k)+1)^n（B(3,1)=23，B(4,1)=76，B(5,2)=1682）。
+// 意对标 676_eulb（建表版互补；685 做三向收束）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn pwr(b: int, e: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < e {
+        r = r * b;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn eba(n: int, m: int) -> int {
+    let s = 0;
+    let k = 0;
+    while k <= m {
+        let term = binom_mul(n + 1, k) * pwr(2 * (m - k) + 1, n);
+        if k % 2 == 0 { s = s + term; } else { s = s - term; };
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", eba(3, 1), eba(4, 1), eba(5, 2));
+    return 0;
+}
+
+@test "basic 682 eulb alt"() {
+    if eba(3, 1) != 23 { panic(68201); };
+    if eba(4, 1) != 76 { panic(68202); };
+    if eba(5, 2) != 1682 { panic(68203); };
+    if eba(2, 1) != 6 { panic(68204); };
+}

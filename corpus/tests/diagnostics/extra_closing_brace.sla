@@ -1,0 +1,8 @@
+fn ok() -> i32 {
+    return 1;
+}
+}
+
+fn later() -> i32 {
+    return 2;
+}

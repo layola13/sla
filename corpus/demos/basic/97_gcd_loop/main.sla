@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 134_gcd_loop：内联循环版辗转相除（`gcd(48,18)=6`）。
+// 与 51/80（函数版）互补，此处为 main 内直写循环。
+
+fn main() -> i32 {
+    let a = 48;
+    let b = 18;
+    while b != 0 {
+        let t = a % b;
+        a = b;
+        b = t;
+    }
+    println("{}", a);
+    return 0;
+}
+
+@test "basic 97 gcd loop"() {
+    let a = 48;
+    let b = 18;
+    while b != 0 {
+        let t = a % b;
+        a = b;
+        b = t;
+    }
+    if a != 6 { panic(9701); };
+}

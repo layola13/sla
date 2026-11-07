@@ -1,0 +1,31 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Pell 数（P(6)=70，P(4)=12）。
+// 意对标 442 Lucas 的二倍递推版（442 互补）。
+
+fn pell(n: int) -> int {
+    if n == 0 { return 0; };
+    if n == 1 { return 1; };
+    let a = 0;
+    let b = 1;
+    let i = 1;
+    while i < n {
+        let t = 2 * b + a;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    return b;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", pell(6), pell(4), pell(2));
+    return 0;
+}
+
+@test "basic 443 pell"() {
+    if pell(6) != 70 { panic(44301); };
+    if pell(4) != 12 { panic(44302); };
+    if pell(2) != 2 { panic(44303); };
+}

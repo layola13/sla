@@ -1,0 +1,43 @@
+struct Item {
+    x: i32,
+    y: i32,
+}
+
+struct QueryPV {
+    len: i64,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+}
+
+impl QueryPV {
+    fn iter_len(&self) -> i64 {
+        return self.len;
+    }
+
+    fn iter_at(&self, index: i64) -> Item {
+        let first: i64 = 0;
+        if index == first {
+            return Item { x: self.x0, y: self.y0 };
+        };
+        return Item { x: self.x1, y: self.y1 };
+    }
+}
+
+fn query_sum(query: QueryPV) -> i32 {
+    let total: i32 = 0;
+    for item in query {
+        total = total + item.x;
+    }
+    return total;
+}
+
+@test "for in uses iterable protocol methods"() {
+    let query = QueryPV { len: 2, x0: 1, y0: 2, x1: 3, y1: 4 };
+    let got = query_sum(query);
+    let expected: i32 = 4;
+    if got != expected {
+        panic(1201);
+    };
+}

@@ -1,0 +1,66 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_eco_crypto_simd_lanes = vtable { call = @sla__eco_crypto_simd_lanes }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__eco_crypto_simd_lanes() -> i32:
+L_ENTRY:
+    tmp_0 = 1
+    lane0 = tmp_0
+    tmp_1 = 1
+    lane1 = tmp_1
+    tmp_2 = 1
+    lane2 = tmp_2
+    tmp_3 = 1
+    lane3 = tmp_3
+    tmp_4 = add lane0, lane1
+    tmp_5 = add tmp_4, lane2
+    !tmp_4
+    tmp_6 = add tmp_5, lane3
+    !tmp_5
+    !lane0
+    !lane1
+    !lane3
+    !lane2
+    return tmp_6
+
+@main() -> i32:
+L_ENTRY:
+    tmp_7 = call @sla__eco_crypto_simd_lanes()
+    result = tmp_7
+    tmp_8 = call @sa_fmt_u64(result, 10)
+    tmp_9 = call @sa_fmt_buffer_data(tmp_8)
+    tmp_10 = call @sa_fmt_buffer_len(tmp_8)
+    tmp_11 = tmp_9
+    call @sa_print_bytes(&tmp_11, tmp_10)
+    call @sa_fmt_buffer_free(^tmp_8)
+    !tmp_11
+    !tmp_10
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 298 eco cryptography simd"():
+L_TEST_ENTRY_0:
+    tmp_12 = call @sla__eco_crypto_simd_lanes()
+    got = tmp_12
+    tmp_13 = 4
+    tmp_14 = ne got, tmp_13
+    !tmp_13
+    br tmp_14 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_14
+    panic(298)
+
+L_ELSE_2:
+    !tmp_14
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

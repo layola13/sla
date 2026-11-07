@@ -1,0 +1,102 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_actor_mailbox_sum = vtable { call = @sla__actor_mailbox_sum }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__actor_mailbox_sum() -> i32:
+L_ENTRY:
+    EXPAND VEC_NEW tmp_0
+    tmp_1 = 1
+    EXPAND VEC_PUSH tmp_0, tmp_1, 8
+    !tmp_1
+    tmp_2 = 2
+    EXPAND VEC_PUSH tmp_0, tmp_2, 8
+    !tmp_2
+    tmp_3 = 3
+    EXPAND VEC_PUSH tmp_0, tmp_3, 8
+    !tmp_3
+    inbox = tmp_0
+    tmp_4 = call @sa_vec_len(&inbox)
+    tmp_5 = load inbox+Vec_ptr as ptr
+    tmp_6 = stack_alloc 8
+    store tmp_6+0, 0 as i32
+    tmp_7 = stack_alloc 8
+    store tmp_7+0, 0 as u64
+    jmp L_VEC_SUM_HEAD_0
+
+L_VEC_SUM_HEAD_0:
+    tmp_8 = load tmp_7+0 as u64
+    tmp_9 = ult tmp_8, tmp_4
+    br tmp_9 -> L_VEC_SUM_BODY_1, L_VEC_SUM_END_2
+
+L_VEC_SUM_BODY_1:
+    !tmp_9
+    tmp_10 = load tmp_6+0 as i32
+    tmp_11 = mul tmp_8, 8
+    tmp_12 = ptr_add tmp_5, tmp_11
+    tmp_13 = load tmp_12+0 as i32
+    tmp_14 = add tmp_10, tmp_13
+    store tmp_6+0, tmp_14 as i32
+    !tmp_11
+    !tmp_12
+    !tmp_13
+    !tmp_10
+    !tmp_14
+    tmp_15 = add tmp_8, 1
+    store tmp_7+0, tmp_15 as u64
+    !tmp_15
+    !tmp_8
+    jmp L_VEC_SUM_HEAD_0
+
+L_VEC_SUM_END_2:
+    !tmp_9
+    !tmp_4
+    !tmp_5
+    tmp_16 = load tmp_6+0 as i32
+    sum = tmp_16
+    !inbox
+    return sum
+
+@main() -> i32:
+L_ENTRY:
+    tmp_17 = call @sla__actor_mailbox_sum()
+    sum = tmp_17
+    tmp_18 = call @sa_fmt_u64(sum, 10)
+    tmp_19 = call @sa_fmt_buffer_data(tmp_18)
+    tmp_20 = call @sa_fmt_buffer_len(tmp_18)
+    tmp_21 = tmp_19
+    call @sa_print_bytes(&tmp_21, tmp_20)
+    call @sa_fmt_buffer_free(^tmp_18)
+    !tmp_21
+    !tmp_20
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_22 = 0
+    !sum
+    return tmp_22
+
+@test "rosetta 066 66_actor_mailbox"():
+L_TEST_ENTRY_3:
+    tmp_23 = call @sla__actor_mailbox_sum()
+    got = tmp_23
+    tmp_24 = 6
+    tmp_25 = ne got, tmp_24
+    !tmp_24
+    br tmp_25 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_25
+    panic(66)
+
+L_ELSE_5:
+    !tmp_25
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !got
+    return
+

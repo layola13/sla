@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Legendre 符号（(2|7)=1，(3|7)=-1 以 6 表之，(7|7)=0）。
+// 意对标 405 欧拉准则的符号版（405 互补；504 做对峙，505 做三向）。
+
+fn powmod(base: int, exp: int, m: int) -> int {
+    let r = 1;
+    let b = base % m;
+    let e = exp;
+    while e > 0 {
+        if e % 2 == 1 { r = r * b % m; };
+        b = b * b % m;
+        e = e / 2;
+    }
+    return r;
+}
+
+fn legendre(a: int, p: int) -> int {
+    return powmod(a % p, (p - 1) / 2, p);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", legendre(2, 7), legendre(3, 7), legendre(7, 7));
+    return 0;
+}
+
+@test "basic 499 legendre"() {
+    if legendre(2, 7) != 1 { panic(49901); };
+    if legendre(3, 7) != 6 { panic(49902); };
+    if legendre(7, 7) != 0 { panic(49903); };
+}

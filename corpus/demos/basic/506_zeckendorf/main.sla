@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Zeckendorf 项数（100=89+8+3，共 3 项）。
+// 意对标 237 斐波那契的贪心版（237 互补；507 做编码）。
+
+fn largest_fib_le(m: int) -> int {
+    let a = 1;
+    let b = 2;
+    if m == 1 { return 1; };
+    while b <= m {
+        let t = a + b;
+        a = b;
+        b = t;
+    }
+    return a;
+}
+
+fn zeck_terms(n: int) -> int {
+    let c = 0;
+    let m = n;
+    while m > 0 {
+        m = m - largest_fib_le(m);
+        c = c + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", zeck_terms(100), zeck_terms(10), zeck_terms(1));
+    return 0;
+}
+
+@test "basic 506 zeckendorf"() {
+    if zeck_terms(100) != 3 { panic(50601); };
+    if zeck_terms(10) != 2 { panic(50602); };
+    if zeck_terms(1) != 1 { panic(50603); };
+}

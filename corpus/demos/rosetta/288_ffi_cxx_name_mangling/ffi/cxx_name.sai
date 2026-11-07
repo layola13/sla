@@ -1,0 +1,1 @@
+@extern cxx_name_probe(tag: i32) -> i32

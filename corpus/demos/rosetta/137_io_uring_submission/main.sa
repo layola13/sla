@@ -1,0 +1,79 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_io_uring_submission_count = vtable { call = @sla__io_uring_submission_count }
+@const SLA_FNPTR_VT_submit_io = vtable { call = @sla__submit_io }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__io_uring_submission_count() -> i32:
+L_ENTRY:
+    tmp_0 = 2
+    queue_depth = tmp_0
+    tmp_1 = 0
+    tmp_2 = call @sla__submit_io(queue_depth, tmp_1)
+    !tmp_1
+    submitted = tmp_2
+    tmp_3 = call @sla__submit_io(queue_depth, submitted)
+    !queue_depth
+    !submitted
+    return tmp_3
+
+@sla__submit_io(depth: i32, used: i32) -> i32:
+L_ENTRY:
+    tmp_4 = slt used, depth
+    br tmp_4 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_4
+    tmp_5 = 1
+    tmp_6 = add used, tmp_5
+    !tmp_5
+    !depth
+    !used
+    return tmp_6
+
+L_ELSE_1:
+    !tmp_4
+    !depth
+    return used
+
+
+@main() -> i32:
+L_ENTRY:
+    tmp_8 = call @sla__io_uring_submission_count()
+    result = tmp_8
+    tmp_9 = call @sa_fmt_u64(result, 10)
+    tmp_10 = call @sa_fmt_buffer_data(tmp_9)
+    tmp_11 = call @sa_fmt_buffer_len(tmp_9)
+    tmp_12 = tmp_10
+    call @sa_print_bytes(&tmp_12, tmp_11)
+    call @sa_fmt_buffer_free(^tmp_9)
+    !tmp_12
+    !tmp_11
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 137 137_io_uring_submission"():
+L_TEST_ENTRY_3:
+    tmp_13 = call @sla__io_uring_submission_count()
+    got = tmp_13
+    tmp_14 = 2
+    tmp_15 = ne got, tmp_14
+    !tmp_14
+    br tmp_15 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_15
+    panic(137)
+
+L_ELSE_5:
+    !tmp_15
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !got
+    return
+

@@ -1,0 +1,7 @@
+@import "import_fixtures/wildcard/*.sla"
+
+@test "wildcard sla import exposes imported declarations"() {
+    let p = WildPoint { x: 2, y: 5 };
+    if wild_point_sum(p) != 7 { panic(7200); };
+    if wild_value() != 7 { panic(7201); };
+}

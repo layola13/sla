@@ -1,0 +1,51 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+
+// DEF-SAB-GAPS regression: SAB ops are width-less 64-bit register
+// ops, so a typed load of a signed narrow element (i8/i16/i32) must
+// be canonicalized to sign-extended form -- every other producer
+// (arithmetic, params, constants) already is. Before the fix, the
+// loaded bits stayed zero-extended and `v[0] != 0 - 2` compared
+// unequal on the SAB backend only (the SA-text backend's ops carry
+// the element width). Store side was always byte-correct (checked
+// via PTR_BYTE_AT); unsigned and 64-bit elements were unaffected.
+
+@test "sabgaps vec i32 index negative"() {
+    let v: Vec<i32> = Vec::new();
+    v.push(0 - 2);
+    v.push(70000);
+    if v[0] != 0 - 2 { panic(111); };
+    if v[1] != 70000 { panic(112); };
+}
+
+@test "sabgaps vec i16 index negative"() {
+    let v: Vec<i16> = Vec::new();
+    v.push(0 - 2);
+    if v[0] != 0 - 2 { panic(113); };
+}
+
+@test "sabgaps vec i8 index negative"() {
+    let v: Vec<i8> = Vec::new();
+    v.push(0 - 2);
+    if v[0] != 0 - 2 { panic(114); };
+}
+
+@test "sabgaps vec i64 index negative control"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(0 - 2);
+    if v[0] != 0 - 2 { panic(115); };
+}
+
+@test "sabgaps vec u32 index high bit control"() {
+    let v: Vec<u32> = Vec::new();
+    v.push(4294967294);
+    if v[0] != 4294967294 { panic(116); };
+}
+
+@test "sabgaps vec i32 push store bytes control"() {
+    let v: Vec<i32> = Vec::new();
+    v.push(0 - 2);
+    let buf: ptr = VEC_AS_PTR(v);
+    if PTR_BYTE_AT(buf, 0) != 254 { panic(117); };
+    if PTR_BYTE_AT(buf, 4) != 255 { panic(118); };
+}

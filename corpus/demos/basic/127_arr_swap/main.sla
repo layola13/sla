@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 547_swap：函数内交换（2,1）。
+// 定长数组作函数形参为调用者可见的可变引用（探针：`do_swap` 后主调方
+// 读到交换结果，与值语义预期相反，此处按实际语义断言）。
+
+fn do_swap(a: [i32; 2]) -> i32 {
+    let t = a[0];
+    a[0] = a[1];
+    a[1] = t;
+    return 0;
+}
+
+fn main() -> i32 {
+    let a: [i32; 2] = [1, 2];
+    do_swap(a);
+    println("{},{}", a[0], a[1]);
+    return 0;
+}
+
+@test "basic 127 arr swap"() {
+    let a: [i32; 2] = [1, 2];
+    do_swap(a);
+    if a[0] != 2 { panic(12701); };
+    if a[1] != 1 { panic(12702); };
+}

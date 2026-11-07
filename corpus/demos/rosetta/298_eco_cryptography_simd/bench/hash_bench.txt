@@ -1,0 +1,2 @@
+input = synthetic-64-bytes
+rounds = 298

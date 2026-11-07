@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1264_minmax_sum 的函数版（10；134 为分支体版，此处为三元体版）。
+// 三元表达式函数体（06/185 口径）+ 组合调用。
+
+fn min2(a: int, b: int) -> int {
+    return if a < b { a } else { b };
+}
+
+fn max2(a: int, b: int) -> int {
+    return if a > b { a } else { b };
+}
+
+fn main() -> i32 {
+    println("{}", min2(3, 7) + max2(3, 7));
+    return 0;
+}
+
+@test "basic 242 minmax fn"() {
+    if min2(3, 7) + max2(3, 7) != 10 { panic(24201); };
+    if min2(7, 7) + max2(7, 7) != 14 { panic(24202); };
+}

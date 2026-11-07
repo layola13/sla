@@ -1,0 +1,33 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// while vs for 求和对峙（04×05：55=55）。
+// 双实现一致性锁定（单实现见 04/05；最经典的对峙，收束本系列）。
+
+fn sum_while(n: int) -> int {
+    let t = 0;
+    let i = 1;
+    while i <= n {
+        t = t + i;
+        i = i + 1;
+    }
+    return t;
+}
+
+fn sum_for(n: int) -> int {
+    let t = 0;
+    for i in 1..(n + 1) {
+        t = t + i;
+    }
+    return t;
+}
+
+fn main() -> i32 {
+    println("{}", sum_while(10));
+    return 0;
+}
+
+@test "basic 305 duel sum"() {
+    if sum_while(10) != sum_for(10) { panic(30501); };
+    if sum_for(10) != 55 { panic(30502); };
+}

@@ -1,0 +1,9 @@
+prefix=/usr
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: demo-284-pkg-config
+Description: pkg-config bridge for demo 284
+Version: 0.1.0
+Libs: -ldemo284
+Cflags: -I${includedir}

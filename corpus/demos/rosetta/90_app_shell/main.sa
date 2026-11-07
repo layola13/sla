@@ -1,0 +1,126 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_dispatch = vtable { call = @sla__dispatch }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__dispatch(command: ptr, config_loaded: u8) -> i32:
+L_ENTRY:
+    tmp_0 = 1
+    tmp_1 = eq config_loaded, tmp_0
+    !tmp_0
+    br tmp_1 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_1
+    @const SLA_STR_0 = utf8:"sync"
+    tmp_3 = 4
+    tmp_2 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_2, &SLA_STR_0, tmp_3
+    !tmp_3
+    EXPAND STR_EQ tmp_4, command, tmp_2
+    tmp_5 = 1
+    tmp_6 = eq tmp_4, tmp_5
+    !tmp_4
+    !tmp_5
+    br tmp_6 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_6
+    tmp_7 = 0
+    !config_loaded
+    !command
+    return tmp_7
+
+L_ELSE_4:
+    !tmp_6
+    @const SLA_STR_1 = utf8:"status"
+    tmp_9 = 6
+    tmp_8 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_8, &SLA_STR_1, tmp_9
+    !tmp_9
+    EXPAND STR_EQ tmp_10, command, tmp_8
+    tmp_11 = 1
+    tmp_12 = eq tmp_10, tmp_11
+    !tmp_10
+    !tmp_11
+    br tmp_12 -> L_THEN_6, L_ELSE_7
+
+L_THEN_6:
+    !tmp_12
+    tmp_13 = 1
+    !config_loaded
+    !command
+    return tmp_13
+
+L_ELSE_7:
+    !tmp_12
+    tmp_14 = 64
+    !config_loaded
+    !command
+    return tmp_14
+
+
+
+L_ELSE_1:
+    !tmp_1
+    tmp_17 = 64
+    !config_loaded
+    !command
+    return tmp_17
+
+
+@main() -> i32:
+L_ENTRY:
+    @const SLA_STR_2 = utf8:"sync"
+    tmp_20 = 4
+    tmp_19 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_19, &SLA_STR_2, tmp_20
+    !tmp_20
+    tmp_21 = 1
+    tmp_22 = call @sla__dispatch(tmp_19, tmp_21)
+    !tmp_21
+    code = tmp_22
+    tmp_23 = call @sa_fmt_u64(code, 10)
+    tmp_24 = call @sa_fmt_buffer_data(tmp_23)
+    tmp_25 = call @sa_fmt_buffer_len(tmp_23)
+    tmp_26 = tmp_24
+    call @sa_print_bytes(&tmp_26, tmp_25)
+    call @sa_fmt_buffer_free(^tmp_23)
+    !tmp_26
+    !tmp_25
+    @const SLA_STR_3 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_3, 1)
+    return code
+
+@test "rosetta 090 90_app_shell"():
+L_TEST_ENTRY_9:
+    @const SLA_STR_4 = utf8:"sync"
+    tmp_28 = 4
+    tmp_27 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_27, &SLA_STR_4, tmp_28
+    !tmp_28
+    tmp_29 = 1
+    tmp_30 = call @sla__dispatch(tmp_27, tmp_29)
+    !tmp_29
+    got = tmp_30
+    tmp_31 = 0
+    tmp_32 = ne got, tmp_31
+    !tmp_31
+    br tmp_32 -> L_THEN_10, L_ELSE_11
+
+L_THEN_10:
+    !tmp_32
+    panic(90)
+
+L_ELSE_11:
+    !tmp_32
+    jmp L_MERGE_12
+
+L_MERGE_12:
+    !got
+    return
+

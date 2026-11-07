@@ -1,0 +1,34 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Padovan 数（P(10)=12；P(n)=P(n-2)+P(n-3)，初值 1,1,1）。
+// 意对标 448 Tribonacci 的跳阶版（448 互补）。
+
+fn padovan(n: int) -> int {
+    if n == 0 { return 1; };
+    if n == 1 { return 1; };
+    if n == 2 { return 1; };
+    let a = 1;
+    let b = 1;
+    let c = 1;
+    let i = 2;
+    while i < n {
+        let t = a + b;
+        a = b;
+        b = c;
+        c = t;
+        i = i + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", padovan(10), padovan(7), padovan(3));
+    return 0;
+}
+
+@test "basic 449 padovan"() {
+    if padovan(10) != 12 { panic(44901); };
+    if padovan(7) != 5 { panic(44902); };
+    if padovan(3) != 2 { panic(44903); };
+}

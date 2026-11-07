@@ -1,0 +1,89 @@
+struct TraitDispatchItem {
+    value: i32,
+}
+
+trait TraitDispatchScore {
+    fn score(&self) -> i32;
+}
+
+impl TraitDispatchScore for TraitDispatchItem {
+    fn score(&self) -> i32 {
+        return self.value + 10;
+    }
+}
+
+impl TraitDispatchItem {
+    fn new(value: i32) -> Self {
+        return Self { value: value };
+    }
+
+    fn score(self) -> i32 {
+        return self.value + 100;
+    }
+}
+
+trait TraitDispatchParent {
+    fn parent_value(&self) -> i32;
+}
+
+trait TraitDispatchChild: TraitDispatchParent {
+    fn child_value(&self) -> i32;
+}
+
+struct TraitDispatchNode {
+    base: i32,
+}
+
+impl TraitDispatchParent for TraitDispatchNode {
+    fn parent_value(&self) -> i32 {
+        return self.base + 1;
+    }
+}
+
+impl TraitDispatchChild for TraitDispatchNode {
+    fn child_value(&self) -> i32 {
+        return self.base + 2;
+    }
+}
+
+trait TraitDispatchFactory {
+    fn build(left: i32, right: i32) -> Self;
+}
+
+struct TraitDispatchPair {
+    left: i32,
+    right: i32,
+}
+
+impl TraitDispatchFactory for TraitDispatchPair {
+    fn build(left: i32, right: i32) -> Self {
+        return Self { left: left, right: right };
+    }
+}
+
+impl TraitDispatchPair {
+    fn sum(self) -> i32 {
+        return self.left + self.right;
+    }
+}
+
+@test "trait and inherent methods keep separate dispatch"() {
+    let item = TraitDispatchItem::new(5);
+    if item.score() != 105 { panic(18301); };
+    if TraitDispatchScore::score(&item) != 15 { panic(18302); };
+}
+
+@test "trait method dot call falls back to static trait impl"() {
+    let node = TraitDispatchNode { base: 20 };
+    if node.child_value() != 22 { panic(18303); };
+}
+
+@test "supertrait dispatch resolves through child impl"() {
+    let node = TraitDispatchNode { base: 30 };
+    if TraitDispatchParent::parent_value(&node) != 31 { panic(18304); };
+}
+
+@test "trait associated function can be called through implementing type"() {
+    let pair = TraitDispatchPair::build(8, 13);
+    if pair.sum() != 21 { panic(18305); };
+}

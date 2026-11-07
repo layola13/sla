@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 二项式奇偶（Lucas：C(n,k) 奇 ⟺ (k&n)==k）。
+// 意对标 350 二项式的奇偶版（350 互补；& 加括号避 145 优先级坑）。
+
+fn binom_odd(n: int, k: int) -> int {
+    if (k & n) == k { return 1; };
+    return 0;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", binom_odd(5, 2), binom_odd(3, 1), binom_odd(4, 2), binom_odd(5, 0));
+    return 0;
+}
+
+@test "basic 393 binom odd"() {
+    if binom_odd(5, 2) != 0 { panic(39301); };
+    if binom_odd(3, 1) != 1 { panic(39302); };
+    if binom_odd(4, 2) != 0 { panic(39303); };
+    if binom_odd(5, 0) != 1 { panic(39304); };
+}

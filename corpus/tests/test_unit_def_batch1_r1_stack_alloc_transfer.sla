@@ -1,0 +1,37 @@
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+@import "sa_std/core/slice.sa"
+
+// DEF-BATCH1-R1 regression (face T1): a string literal binding is backed by
+// a stack_alloc register; passing it to STR_PTR/STR_LEN macro arguments
+// materializes the binding into an assigned-value slot. The text codegen
+// must not emit a move-consume (^tmp) of the stack_alloc-backed register:
+// the macro reads the pointer out of the slot afterwards, so consuming the
+// backing register is a StackEscape false positive on a correct program.
+fn ptr_len_roundtrip(data: ptr, len_value: int) -> int {
+    return len_value;
+}
+
+@test "batch1 r1 t1 literal binding macro args"() {
+    let text = "abc";
+    let len_value = ptr_len_roundtrip(STR_PTR(text), STR_LEN(text));
+    if len_value != 3 { panic(701); };
+}
+
+// DEF-BATCH1-R1 regression (face T2): a &Slice parameter is rebuilt as a
+// stack_alloc-backed Slice value; handing it to a macro (SLICE_GET) must
+// pass the slot address / loaded pointer, not move-consume the rebuilt
+// parameter register.
+fn sl_byte(sl: &Slice<u8>, off: u64) -> u8 {
+    let b: u8 = 0;
+    SLICE_GET(b, sl, off);
+    return b;
+}
+
+@test "batch1 r1 t2 slice param macro arg"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(65);
+    v.push(66);
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    if sl_byte(&sl, 1) != 66 { panic(801); };
+}

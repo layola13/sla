@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn eco_wasm_host_import_count() -> i32 { let log_import = 1; let clock_import = 1; return log_import + clock_import; }
+fn main() -> i32 { let log_import = 1; let clock_import = 1; let result = log_import + clock_import; println("{}", result); return result; }
+@test "rosetta 291 eco wasm host imports"() { let got = eco_wasm_host_import_count(); if got != 2 { panic(291); }; }

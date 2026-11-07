@@ -1,0 +1,1489 @@
+// Smoke wave 1: register-2 externs in sa_std/net.sai (std_ families).
+// All chains are loopback-only: 127.0.0.1 listeners with ephemeral
+// ports, unix sockets under smoke1_net/. Panic codes 59xxx.
+@import "sla_std/wrap/net.sla"
+@import "sla_std/wrap/fs.sla"
+@import "sla_std/wrap/process.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+fn s1_listen(code: i32) -> u64 {
+    let lh = [0u64; 4];
+    let port = [0u64; 4];
+    let rc = sla_std_net_tcp_listen(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 0, &lh[0], &port[0]);
+    if rc != 0 { panic(code); };
+    if lh[0] == 0 { panic(code + 1); };
+    if port[0] == 0 { panic(code + 2); };
+    return lh[0];
+}
+
+fn s1_port_of_listener(lh: u64, code: i32) -> u64 {
+    let addr = [0u64; 4];
+    let rc = sla_std_net_tcp_listener_local_addr(lh, &addr[0]);
+    if rc != 0 { panic(code); };
+    return (sla_net_addr_port(addr[0]) as u64);
+}
+
+// Each test below builds its pair inline: listen on 127.0.0.1:0,
+// connect a client, accept on the listener. The three handles live in
+// the test's own cells.
+
+@test "smoke1 sa_std_net_tcp_accept"() {
+    let lh = s1_listen(59010);
+    let port = s1_port_of_listener(lh, 59011);
+    let cli = [0u64; 4];
+    let rc = sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    if rc != 0 { panic(59012); };
+    let srv = [0u64; 4];
+    let rc2 = sla_std_net_tcp_accept(lh, &srv[0]);
+    if rc2 != 0 { panic(59013); };
+    if srv[0] == 0 { panic(59014); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_accept_addr"() {
+    let lh = s1_listen(59020);
+    let port = s1_port_of_listener(lh, 59021);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    let addr = [0u64; 4];
+    let rc = sla_std_net_tcp_accept_addr(lh, &srv[0], &addr[0]);
+    if rc != 0 { panic(59022); };
+    if srv[0] == 0 { panic(59023); };
+    // Accepted addr port == client local port.
+    let laddr = [0u64; 4];
+    sla_std_net_tcp_stream_local_addr(cli[0], &laddr[0]);
+    if (sla_net_addr_port(addr[0]) as u64) != (sla_net_addr_port(laddr[0]) as u64) { panic(59024); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_listener_local_addr"() {
+    let lh = [0u64; 4];
+    let port = [0u64; 4];
+    let rc = sla_std_net_tcp_listen(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 0, &lh[0], &port[0]);
+    if rc != 0 { panic(59030); };
+    let addr = [0u64; 4];
+    let rc2 = sla_std_net_tcp_listener_local_addr(lh[0], &addr[0]);
+    if rc2 != 0 { panic(59031); };
+    if (sla_net_addr_port(addr[0]) as u64) != port[0] { panic(59032); };
+    sla_std_close(lh[0]);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_write"() {
+    let lh = s1_listen(59040);
+    let port = s1_port_of_listener(lh, 59041);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let wr = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_write(cli[0], STR_PTR("hello"), STR_LEN("hello"), &wr[0]);
+    if rc != 0 { panic(59042); };
+    if wr[0] != 5 { panic(59043); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    sla_std_net_tcp_stream_read(srv[0], &buf[0], 64, &rd[0]);
+    if rd[0] != 5 { panic(59044); };
+    if buf[0] != 104 { panic(59045); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_read"() {
+    let lh = s1_listen(59050);
+    let port = s1_port_of_listener(lh, 59051);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let wr = [0u64; 4];
+    sla_std_net_tcp_stream_write(cli[0], STR_PTR("ping"), STR_LEN("ping"), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_read(srv[0], &buf[0], 64, &rd[0]);
+    if rc != 0 { panic(59052); };
+    if rd[0] != 4 { panic(59053); };
+    if buf[0] != 112 { panic(59054); };
+    if buf[3] != 103 { panic(59055); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_peek"() {
+    let lh = s1_listen(59060);
+    let port = s1_port_of_listener(lh, 59061);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let wr = [0u64; 4];
+    sla_std_net_tcp_stream_write(cli[0], STR_PTR("ping"), STR_LEN("ping"), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_peek(srv[0], &buf[0], 64, &rd[0]);
+    if rc != 0 { panic(59062); };
+    if rd[0] != 4 { panic(59063); };
+    if buf[0] != 112 { panic(59064); };
+    // Peek must not consume: a following read returns the same bytes.
+    let rc2 = sla_std_net_tcp_stream_read(srv[0], &buf[0], 64, &rd[0]);
+    if rc2 != 0 { panic(59065); };
+    if rd[0] != 4 { panic(59066); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_read_vectored"() {
+    let lh = s1_listen(59070);
+    let port = s1_port_of_listener(lh, 59071);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let wr = [0u64; 4];
+    sla_std_net_tcp_stream_write(cli[0], STR_PTR("ping"), STR_LEN("ping"), &wr[0]);
+    let b1 = [0u8; 2];
+    let b2 = [0u8; 2];
+    let iovs = [0u64; 4];
+    let p1: u64 = 0;
+    let s1bp1: ptr = PTR_BYTE_ADD(&b1, 0);
+    PTR_ADDR(p1, s1bp1);
+    iovs[0] = p1;
+    iovs[1] = 2;
+    let p2: u64 = 0;
+    let s1bp2: ptr = PTR_BYTE_ADD(&b2, 0);
+    PTR_ADDR(p2, s1bp2);
+    iovs[2] = p2;
+    iovs[3] = 2;
+    let rd = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_read_vectored(srv[0], &iovs[0], 2, &rd[0]);
+    if rc != 0 { panic(59072); };
+    if rd[0] != 4 { panic(59073); };
+    if b1[0] != 112 { panic(59074); };
+    if b2[1] != 103 { panic(59075); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_write_vectored"() {
+    let lh = s1_listen(59080);
+    let port = s1_port_of_listener(lh, 59081);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let iovs = [0u64; 4];
+    let p1: u64 = 0;
+    PTR_ADDR(p1, STR_PTR("po"));
+    iovs[0] = p1;
+    iovs[1] = 2;
+    let p2: u64 = 0;
+    PTR_ADDR(p2, STR_PTR("ng"));
+    iovs[2] = p2;
+    iovs[3] = 2;
+    let wr = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_write_vectored(cli[0], &iovs[0], 2, &wr[0]);
+    if rc != 0 { panic(59082); };
+    if wr[0] != 4 { panic(59083); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    sla_std_net_tcp_stream_read(srv[0], &buf[0], 64, &rd[0]);
+    if rd[0] != 4 { panic(59084); };
+    if buf[0] != 112 { panic(59085); };
+    if buf[3] != 103 { panic(59086); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_set_read_timeout"() {
+    let lh = s1_listen(59090);
+    let port = s1_port_of_listener(lh, 59091);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let rc = sla_std_net_tcp_stream_set_read_timeout(srv[0], 2000000000);
+    if rc != 0 { panic(59092); };
+    let out = [0u64; 4];
+    sla_std_net_tcp_stream_read_timeout(srv[0], &out[0]);
+    if out[0] == 0 { panic(59093); };
+    if out[0] > 2000000000 { panic(59094); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_read_timeout"() {
+    let lh = s1_listen(59100);
+    let port = s1_port_of_listener(lh, 59101);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    sla_std_net_tcp_stream_set_read_timeout(srv[0], 3000000000);
+    let out = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_read_timeout(srv[0], &out[0]);
+    if rc != 0 { panic(59102); };
+    if out[0] == 0 { panic(59103); };
+    if out[0] > 3000000000 { panic(59104); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_set_write_timeout"() {
+    let lh = s1_listen(59110);
+    let port = s1_port_of_listener(lh, 59111);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let rc = sla_std_net_tcp_stream_set_write_timeout(srv[0], 2000000000);
+    if rc != 0 { panic(59112); };
+    let out = [0u64; 4];
+    sla_std_net_tcp_stream_write_timeout(srv[0], &out[0]);
+    if out[0] == 0 { panic(59113); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_write_timeout"() {
+    let lh = s1_listen(59120);
+    let port = s1_port_of_listener(lh, 59121);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    sla_std_net_tcp_stream_set_write_timeout(srv[0], 3000000000);
+    let out = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_write_timeout(srv[0], &out[0]);
+    if rc != 0 { panic(59122); };
+    if out[0] == 0 { panic(59123); };
+    if out[0] > 3000000000 { panic(59124); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_set_nonblocking"() {
+    let lh = s1_listen(59130);
+    let port = s1_port_of_listener(lh, 59131);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let rc = sla_std_net_tcp_stream_set_nonblocking(srv[0], 1);
+    if rc != 0 { panic(59132); };
+    // Nonblocking read with no data pending must fail, not hang.
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc2 = sla_std_net_tcp_stream_read(srv[0], &buf[0], 64, &rd[0]);
+    if rc2 == 0 { panic(59133); };
+    let rc3 = sla_std_net_tcp_stream_set_nonblocking(srv[0], 0);
+    if rc3 != 0 { panic(59134); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_set_linger"() {
+    let lh = s1_listen(59140);
+    let port = s1_port_of_listener(lh, 59141);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let rc = sla_std_net_tcp_stream_set_linger(srv[0], 1, 2000000000);
+    if rc != 0 { panic(59142); };
+    let en = [0u64; 4];
+    let to = [0u64; 4];
+    sla_std_net_tcp_stream_linger(srv[0], &en[0], &to[0]);
+    if en[0] != 1 { panic(59143); };
+    if to[0] == 0 { panic(59144); };
+    if to[0] > 2000000000 { panic(59145); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_linger"() {
+    let lh = s1_listen(59150);
+    let port = s1_port_of_listener(lh, 59151);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    sla_std_net_tcp_stream_set_linger(srv[0], 1, 3000000000);
+    let en = [0u64; 4];
+    let to = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_linger(srv[0], &en[0], &to[0]);
+    if rc != 0 { panic(59152); };
+    if en[0] != 1 { panic(59153); };
+    if to[0] == 0 { panic(59154); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_set_nodelay"() {
+    let lh = s1_listen(59160);
+    let port = s1_port_of_listener(lh, 59161);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let rc = sla_std_net_tcp_stream_set_nodelay(srv[0], 1);
+    if rc != 0 { panic(59162); };
+    let out = [0u64; 4];
+    sla_std_net_tcp_stream_nodelay(srv[0], &out[0]);
+    if out[0] != 1 { panic(59163); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_nodelay"() {
+    let lh = s1_listen(59170);
+    let port = s1_port_of_listener(lh, 59171);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    sla_std_net_tcp_stream_set_nodelay(srv[0], 1);
+    let out = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_nodelay(srv[0], &out[0]);
+    if rc != 0 { panic(59172); };
+    if out[0] != 1 { panic(59173); };
+    sla_std_net_tcp_stream_set_nodelay(srv[0], 0);
+    sla_std_net_tcp_stream_nodelay(srv[0], &out[0]);
+    if out[0] != 0 { panic(59174); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_set_quickack"() {
+    let lh = s1_listen(59180);
+    let port = s1_port_of_listener(lh, 59181);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let rc = sla_std_net_tcp_stream_set_quickack(srv[0], 1);
+    if rc != 0 { panic(59182); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_quickack"() {
+    let lh = s1_listen(59190);
+    let port = s1_port_of_listener(lh, 59191);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    sla_std_net_tcp_stream_set_quickack(srv[0], 1);
+    let out = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_quickack(srv[0], &out[0]);
+    if rc != 0 { panic(59192); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_set_deferaccept"() {
+    let lh = s1_listen(59200);
+    let port = s1_port_of_listener(lh, 59201);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let rc = sla_std_net_tcp_stream_set_deferaccept(srv[0], 5);
+    if rc != 0 { panic(59202); };
+    let out = [0u64; 4];
+    sla_std_net_tcp_stream_deferaccept(srv[0], &out[0]);
+    // TCP_DEFER_ACCEPT readback is kernel-quantized (seconds are
+    // converted to retransmission units); engaged means nonzero.
+    if out[0] == 0 { panic(59203); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_deferaccept"() {
+    let lh = s1_listen(59210);
+    let port = s1_port_of_listener(lh, 59211);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    sla_std_net_tcp_stream_set_deferaccept(srv[0], 7);
+    let out = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_deferaccept(srv[0], &out[0]);
+    if rc != 0 { panic(59212); };
+    if out[0] != 7 { panic(59213); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_set_ttl"() {
+    let lh = s1_listen(59220);
+    let port = s1_port_of_listener(lh, 59221);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let rc = sla_std_net_tcp_stream_set_ttl(srv[0], 33);
+    if rc != 0 { panic(59222); };
+    let out = [0u64; 4];
+    sla_std_net_tcp_stream_ttl(srv[0], &out[0]);
+    if out[0] != 33 { panic(59223); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_ttl"() {
+    let lh = s1_listen(59230);
+    let port = s1_port_of_listener(lh, 59231);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    sla_std_net_tcp_stream_set_ttl(srv[0], 44);
+    let out = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_ttl(srv[0], &out[0]);
+    if rc != 0 { panic(59232); };
+    if out[0] != 44 { panic(59233); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_set_recv_buffer_size"() {
+    let lh = s1_listen(59240);
+    let port = s1_port_of_listener(lh, 59241);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let rc = sla_std_net_tcp_stream_set_recv_buffer_size(srv[0], 65536);
+    if rc != 0 { panic(59242); };
+    let out = [0u64; 4];
+    sla_std_net_tcp_stream_recv_buffer_size(srv[0], &out[0]);
+    if out[0] < 65536 { panic(59243); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_recv_buffer_size"() {
+    let lh = s1_listen(59250);
+    let port = s1_port_of_listener(lh, 59251);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    sla_std_net_tcp_stream_set_recv_buffer_size(srv[0], 32768);
+    let out = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_recv_buffer_size(srv[0], &out[0]);
+    if rc != 0 { panic(59252); };
+    if out[0] < 32768 { panic(59253); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_set_send_buffer_size"() {
+    let lh = s1_listen(59260);
+    let port = s1_port_of_listener(lh, 59261);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let rc = sla_std_net_tcp_stream_set_send_buffer_size(srv[0], 65536);
+    if rc != 0 { panic(59262); };
+    let out = [0u64; 4];
+    sla_std_net_tcp_stream_send_buffer_size(srv[0], &out[0]);
+    if out[0] < 65536 { panic(59263); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_send_buffer_size"() {
+    let lh = s1_listen(59270);
+    let port = s1_port_of_listener(lh, 59271);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    sla_std_net_tcp_stream_set_send_buffer_size(srv[0], 32768);
+    let out = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_send_buffer_size(srv[0], &out[0]);
+    if rc != 0 { panic(59272); };
+    if out[0] < 32768 { panic(59273); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_take_error"() {
+    let lh = s1_listen(59280);
+    let port = s1_port_of_listener(lh, 59281);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let out = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_take_error(srv[0], &out[0]);
+    if rc != 0 { panic(59282); };
+    if out[0] != 0 { panic(59283); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_peer_addr"() {
+    let lh = s1_listen(59290);
+    let port = s1_port_of_listener(lh, 59291);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let paddr = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_peer_addr(srv[0], &paddr[0]);
+    if rc != 0 { panic(59292); };
+    let laddr = [0u64; 4];
+    sla_std_net_tcp_stream_local_addr(cli[0], &laddr[0]);
+    if (sla_net_addr_port(paddr[0]) as u64) != (sla_net_addr_port(laddr[0]) as u64) { panic(59293); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_local_addr"() {
+    let lh = s1_listen(59300);
+    let port = s1_port_of_listener(lh, 59301);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let addr = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_local_addr(srv[0], &addr[0]);
+    if rc != 0 { panic(59302); };
+    if (sla_net_addr_port(addr[0]) as u64) != port { panic(59303); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_try_clone"() {
+    let lh = s1_listen(59310);
+    let port = s1_port_of_listener(lh, 59311);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let clone = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_try_clone(cli[0], &clone[0]);
+    if rc != 0 { panic(59312); };
+    if clone[0] == 0 { panic(59313); };
+    let wr = [0u64; 4];
+    sla_std_net_tcp_stream_write(clone[0], STR_PTR("via"), STR_LEN("via"), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    sla_std_net_tcp_stream_read(srv[0], &buf[0], 64, &rd[0]);
+    if rd[0] != 3 { panic(59314); };
+    sla_std_close(clone[0]);
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_set_keepalive"() {
+    let lh = s1_listen(59320);
+    let port = s1_port_of_listener(lh, 59321);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let rc = sla_std_net_tcp_stream_set_keepalive(srv[0], 1);
+    if rc != 0 { panic(59322); };
+    let out = [0u64; 4];
+    sla_std_net_tcp_stream_keepalive(srv[0], &out[0]);
+    if out[0] != 1 { panic(59323); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_keepalive"() {
+    let lh = s1_listen(59330);
+    let port = s1_port_of_listener(lh, 59331);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    sla_std_net_tcp_stream_set_keepalive(srv[0], 1);
+    let out = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_keepalive(srv[0], &out[0]);
+    if rc != 0 { panic(59332); };
+    if out[0] != 1 { panic(59333); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_set_keepalive_params"() {
+    let lh = s1_listen(59340);
+    let port = s1_port_of_listener(lh, 59341);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    sla_std_net_tcp_stream_set_keepalive(srv[0], 1);
+    let rc = sla_std_net_tcp_stream_set_keepalive_params(srv[0], 60, 10, 5);
+    if rc != 0 { panic(59342); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_stream_send_file"() {
+    sla_fs_mkdir_p(STR_PTR("smoke1_net"), STR_LEN("smoke1_net"));
+    sla_fs_write_file(STR_PTR("smoke1_net/sendfile.txt"), STR_LEN("smoke1_net/sendfile.txt"), STR_PTR("sendfile!"), STR_LEN("sendfile!"));
+    let fcell = [0u64; 4];
+    let frc = sla_std_fs_open_read(STR_PTR("smoke1_net/sendfile.txt"), STR_LEN("smoke1_net/sendfile.txt"), &fcell[0]);
+    if frc != 0 { panic(59350); };
+    let lh = s1_listen(59351);
+    let port = s1_port_of_listener(lh, 59352);
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_tcp_accept(lh, &srv[0]);
+    let sent = [0u64; 4];
+    let next = [0u64; 4];
+    let rc = sla_std_net_tcp_stream_send_file(srv[0], fcell[0], 0, 9, &sent[0], &next[0]);
+    if rc != 0 { panic(59353); };
+    if sent[0] != 9 { panic(59354); };
+    if next[0] != 9 { panic(59355); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    sla_std_net_tcp_stream_read(cli[0], &buf[0], 64, &rd[0]);
+    if rd[0] != 9 { panic(59356); };
+    if buf[0] != 115 { panic(59357); };
+    if buf[8] != 33 { panic(59358); };
+    sla_std_close(fcell[0]);
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_listener_set_nonblocking"() {
+    let lh = s1_listen(59360);
+    let rc = sla_std_net_tcp_listener_set_nonblocking(lh, 1);
+    if rc != 0 { panic(59361); };
+    let rc2 = sla_std_net_tcp_listener_set_nonblocking(lh, 0);
+    if rc2 != 0 { panic(59362); };
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_listener_set_ttl"() {
+    let lh = s1_listen(59370);
+    let rc = sla_std_net_tcp_listener_set_ttl(lh, 33);
+    if rc != 0 { panic(59371); };
+    let out = [0u64; 4];
+    sla_std_net_tcp_listener_ttl(lh, &out[0]);
+    if out[0] != 33 { panic(59372); };
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_listener_ttl"() {
+    let lh = s1_listen(59380);
+    sla_std_net_tcp_listener_set_ttl(lh, 44);
+    let out = [0u64; 4];
+    let rc = sla_std_net_tcp_listener_ttl(lh, &out[0]);
+    if rc != 0 { panic(59381); };
+    if out[0] != 44 { panic(59382); };
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_listener_take_error"() {
+    let lh = s1_listen(59390);
+    let out = [0u64; 4];
+    let rc = sla_std_net_tcp_listener_take_error(lh, &out[0]);
+    if rc != 0 { panic(59391); };
+    if out[0] != 0 { panic(59392); };
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_listener_try_clone"() {
+    let lh = s1_listen(59400);
+    let port = s1_port_of_listener(lh, 59401);
+    let clone = [0u64; 4];
+    let rc = sla_std_net_tcp_listener_try_clone(lh, &clone[0]);
+    if rc != 0 { panic(59402); };
+    if clone[0] == 0 { panic(59403); };
+    let cli = [0u64; 4];
+    sla_std_net_tcp_connect(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u32), &cli[0]);
+    let srv = [0u64; 4];
+    let rc2 = sla_std_net_tcp_accept(clone[0], &srv[0]);
+    if rc2 != 0 { panic(59404); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(clone[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_listener_set_reuseaddr"() {
+    let lh = s1_listen(59410);
+    let rc = sla_std_net_tcp_listener_set_reuseaddr(lh, 0);
+    if rc != 0 { panic(59411); };
+    let rc2 = sla_std_net_tcp_listener_set_reuseaddr(lh, 1);
+    if rc2 != 0 { panic(59412); };
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_tcp_listener_set_reuseport"() {
+    let lh = s1_listen(59420);
+    let rc = sla_std_net_tcp_listener_set_reuseport(lh, 0);
+    if rc != 0 { panic(59421); };
+    let rc2 = sla_std_net_tcp_listener_set_reuseport(lh, 1);
+    if rc2 != 0 { panic(59422); };
+    sla_std_close(lh);
+}
+
+
+@test "smoke1 sa_std_net_tcp_listener_only_v6"() {
+    let lh = [0u64; 4];
+    let port = [0u64; 4];
+    let rc = sla_std_net_tcp_listen(STR_PTR("::1"), STR_LEN("::1"), 0, &lh[0], &port[0]);
+    if rc != 0 { panic(59440); };
+    let out = [0u64; 4];
+    let rc2 = sla_std_net_tcp_listener_only_v6(lh[0], &out[0]);
+    if rc2 != 0 { panic(59441); };
+    // This runtime creates inet6 listeners with V6ONLY already on.
+    if out[0] != 1 { panic(59442); };
+    sla_std_close(lh[0]);
+}
+
+fn s1_udp(code: i32) -> u64 {
+    let cell = [0u64; 4];
+    let rc = sla_std_net_udp_bind(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), 0, &cell[0]);
+    if rc != 0 { panic(code); };
+    if cell[0] == 0 { panic(code + 1); };
+    return cell[0];
+}
+
+fn s1_udp_port(sock: u64, code: i32) -> u64 {
+    let addr = [0u64; 4];
+    let rc = sla_std_net_udp_local_addr(sock, &addr[0]);
+    if rc != 0 { panic(code); };
+    return (sla_net_addr_port(addr[0]) as u64);
+}
+
+@test "smoke1 sa_std_net_udp_local_addr"() {
+    let a = s1_udp(59450);
+    let addr = [0u64; 4];
+    let rc = sla_std_net_udp_local_addr(a, &addr[0]);
+    if rc != 0 { panic(59451); };
+    if sla_net_addr_port(addr[0]) == 0 { panic(59452); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_connect"() {
+    let a = s1_udp(59460);
+    let b = s1_udp(59461);
+    let bport = s1_udp_port(b, 59462);
+    let rc = sla_std_net_udp_connect(a, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (bport as u32));
+    if rc != 0 { panic(59463); };
+    let paddr = [0u64; 4];
+    sla_std_net_udp_peer_addr(a, &paddr[0]);
+    if (sla_net_addr_port(paddr[0]) as u64) != bport { panic(59464); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_connect_addr"() {
+    let a = s1_udp(59470);
+    let b = s1_udp(59471);
+    let bport = s1_udp_port(b, 59472);
+    let addr = [0u64; 4];
+    sla_std_net_to_socket_addr_first(STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (bport as u32), &addr[0]);
+    let rc = sla_std_net_udp_connect_addr(a, addr[0]);
+    if rc != 0 { panic(59473); };
+    let paddr = [0u64; 4];
+    sla_std_net_udp_peer_addr(a, &paddr[0]);
+    if (sla_net_addr_port(paddr[0]) as u64) != bport { panic(59474); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_peer_addr"() {
+    let a = s1_udp(59480);
+    let b = s1_udp(59481);
+    let bport = s1_udp_port(b, 59482);
+    sla_std_net_udp_connect(a, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (bport as u32));
+    let paddr = [0u64; 4];
+    let rc = sla_std_net_udp_peer_addr(a, &paddr[0]);
+    if rc != 0 { panic(59483); };
+    if (sla_net_addr_port(paddr[0]) as u64) != bport { panic(59484); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_send"() {
+    let a = s1_udp(59490);
+    let b = s1_udp(59491);
+    let bport = s1_udp_port(b, 59492);
+    sla_std_net_udp_connect(a, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (bport as u32));
+    let wr = [0u64; 4];
+    let rc = sla_std_net_udp_send(a, STR_PTR("xy"), STR_LEN("xy"), &wr[0]);
+    if rc != 0 { panic(59493); };
+    if wr[0] != 2 { panic(59494); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    sla_std_net_udp_recv(b, &buf[0], 64, &rd[0]);
+    if rd[0] != 2 { panic(59495); };
+    if buf[0] != 120 { panic(59496); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_recv"() {
+    let a = s1_udp(59500);
+    let b = s1_udp(59501);
+    let aport = s1_udp_port(a, 59502);
+    sla_std_net_udp_connect(b, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u32));
+    let wr = [0u64; 4];
+    sla_std_net_udp_send(b, STR_PTR("zz"), STR_LEN("zz"), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc = sla_std_net_udp_recv(a, &buf[0], 64, &rd[0]);
+    if rc != 0 { panic(59503); };
+    if rd[0] != 2 { panic(59504); };
+    if buf[1] != 122 { panic(59505); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_peek"() {
+    let a = s1_udp(59510);
+    let b = s1_udp(59511);
+    let aport = s1_udp_port(a, 59512);
+    sla_std_net_udp_connect(b, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u32));
+    let wr = [0u64; 4];
+    sla_std_net_udp_send(b, STR_PTR("pk"), STR_LEN("pk"), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc = sla_std_net_udp_peek(a, &buf[0], 64, &rd[0]);
+    if rc != 0 { panic(59513); };
+    if rd[0] != 2 { panic(59514); };
+    let rc2 = sla_std_net_udp_recv(a, &buf[0], 64, &rd[0]);
+    if rc2 != 0 { panic(59515); };
+    if rd[0] != 2 { panic(59516); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_send_to"() {
+    let a = s1_udp(59520);
+    let b = s1_udp(59521);
+    let bport = s1_udp_port(b, 59522);
+    let wr = [0u64; 4];
+    let rc = sla_std_net_udp_send_to(a, STR_PTR("to"), STR_LEN("to"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (bport as u32), &wr[0]);
+    if rc != 0 { panic(59523); };
+    if wr[0] != 2 { panic(59524); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let from = [0u64; 4];
+    sla_std_net_udp_recv_from(b, &buf[0], 64, &rd[0], &from[0]);
+    if rd[0] != 2 { panic(59525); };
+    if buf[0] != 116 { panic(59526); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+
+@test "smoke1 sa_std_net_udp_recv_from"() {
+    let a = s1_udp(59540);
+    let b = s1_udp(59541);
+    let aport = s1_udp_port(a, 59542);
+    let bport = s1_udp_port(b, 59543);
+    let wr = [0u64; 4];
+    sla_std_net_udp_send_to(b, STR_PTR("rf"), STR_LEN("rf"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u32), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let from = [0u64; 4];
+    let rc = sla_std_net_udp_recv_from(a, &buf[0], 64, &rd[0], &from[0]);
+    if rc != 0 { panic(59544); };
+    if rd[0] != 2 { panic(59545); };
+    if (sla_net_addr_port(from[0]) as u64) != bport { panic(59546); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_peek_from"() {
+    let a = s1_udp(59550);
+    let b = s1_udp(59551);
+    let aport = s1_udp_port(a, 59552);
+    let bport = s1_udp_port(b, 59553);
+    let wr = [0u64; 4];
+    sla_std_net_udp_send_to(b, STR_PTR("pf"), STR_LEN("pf"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u32), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let from = [0u64; 4];
+    let rc = sla_std_net_udp_peek_from(a, &buf[0], 64, &rd[0], &from[0]);
+    if rc != 0 { panic(59554); };
+    if rd[0] != 2 { panic(59555); };
+    if (sla_net_addr_port(from[0]) as u64) != bport { panic(59556); };
+    let rd2 = [0u64; 4];
+    let from2 = [0u64; 4];
+    sla_std_net_udp_recv_from(a, &buf[0], 64, &rd2[0], &from2[0]);
+    if rd2[0] != 2 { panic(59557); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_send_to_vectored"() {
+    let a = s1_udp(59560);
+    let b = s1_udp(59561);
+    let bport = s1_udp_port(b, 59562);
+    let iovs = [0u64; 4];
+    let p1: u64 = 0;
+    PTR_ADDR(p1, STR_PTR("po"));
+    iovs[0] = p1;
+    iovs[1] = 2;
+    let p2: u64 = 0;
+    PTR_ADDR(p2, STR_PTR("ng"));
+    iovs[2] = p2;
+    iovs[3] = 2;
+    let wr = [0u64; 4];
+    let rc = sla_std_net_udp_send_to_vectored(a, &iovs[0], 2, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (bport as u32), &wr[0]);
+    if rc != 0 { panic(59563); };
+    if wr[0] != 4 { panic(59564); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    sla_std_net_udp_recv(b, &buf[0], 64, &rd[0]);
+    if rd[0] != 4 { panic(59565); };
+    if buf[3] != 103 { panic(59566); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_send_vectored"() {
+    let a = s1_udp(59570);
+    let b = s1_udp(59571);
+    let bport = s1_udp_port(b, 59572);
+    sla_std_net_udp_connect(a, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (bport as u32));
+    let iovs = [0u64; 4];
+    let p1: u64 = 0;
+    PTR_ADDR(p1, STR_PTR("ve"));
+    iovs[0] = p1;
+    iovs[1] = 2;
+    let p2: u64 = 0;
+    PTR_ADDR(p2, STR_PTR("ct"));
+    iovs[2] = p2;
+    iovs[3] = 2;
+    let wr = [0u64; 4];
+    let rc = sla_std_net_udp_send_vectored(a, &iovs[0], 2, &wr[0]);
+    if rc != 0 { panic(59573); };
+    if wr[0] != 4 { panic(59574); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    sla_std_net_udp_recv(b, &buf[0], 64, &rd[0]);
+    if rd[0] != 4 { panic(59575); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_recv_from_vectored"() {
+    let a = s1_udp(59580);
+    let b = s1_udp(59581);
+    let aport = s1_udp_port(a, 59582);
+    let bport = s1_udp_port(b, 59583);
+    let wr = [0u64; 4];
+    sla_std_net_udp_send_to(b, STR_PTR("vec!"), STR_LEN("vec!"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u32), &wr[0]);
+    let b1 = [0u8; 2];
+    let b2 = [0u8; 2];
+    let iovs = [0u64; 4];
+    let p1: u64 = 0;
+    let s1bp3: ptr = PTR_BYTE_ADD(&b1, 0);
+    PTR_ADDR(p1, s1bp3);
+    iovs[0] = p1;
+    iovs[1] = 2;
+    let p2: u64 = 0;
+    let s1bp4: ptr = PTR_BYTE_ADD(&b2, 0);
+    PTR_ADDR(p2, s1bp4);
+    iovs[2] = p2;
+    iovs[3] = 2;
+    let rd = [0u64; 4];
+    let from = [0u64; 4];
+    let rc = sla_std_net_udp_recv_from_vectored(a, &iovs[0], 2, &rd[0], &from[0]);
+    if rc != 0 { panic(59584); };
+    if rd[0] != 4 { panic(59585); };
+    if b1[0] != 118 { panic(59586); };
+    if b2[1] != 33 { panic(59587); };
+    if (sla_net_addr_port(from[0]) as u64) != bport { panic(59588); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_recv_msg"() {
+    let a = s1_udp(59590);
+    let b = s1_udp(59591);
+    let aport = s1_udp_port(a, 59592);
+    let bport = s1_udp_port(b, 59593);
+    let wr = [0u64; 4];
+    sla_std_net_udp_send_to(b, STR_PTR("msg"), STR_LEN("msg"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u32), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let addr = [0u64; 4];
+    let dest = [0u64; 4];
+    let ifx = [0u64; 4];
+    let tstamp = [0u64; 4];
+    let mflags = [0u64; 4];
+    let rc = sla_std_net_udp_recv_msg(a, &buf[0], 64, &rd[0], &addr[0], &dest[0], &ifx[0], &tstamp[0], &mflags[0]);
+    if rc != 0 { panic(59594); };
+    if rd[0] != 3 { panic(59595); };
+    if buf[0] != 109 { panic(59596); };
+    if addr[0] == 0 { panic(59597); };
+    if (sla_net_addr_port(addr[0]) as u64) != bport { panic(59598); };
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_set_read_timeout"() {
+    let a = s1_udp(59600);
+    let rc = sla_std_net_udp_set_read_timeout(a, 2000000000);
+    if rc != 0 { panic(59601); };
+    let out = [0u64; 4];
+    sla_std_net_udp_read_timeout(a, &out[0]);
+    if out[0] == 0 { panic(59602); };
+    if out[0] > 2000000000 { panic(59603); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_read_timeout"() {
+    let a = s1_udp(59610);
+    sla_std_net_udp_set_read_timeout(a, 3000000000);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_read_timeout(a, &out[0]);
+    if rc != 0 { panic(59611); };
+    if out[0] == 0 { panic(59612); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_set_write_timeout"() {
+    let a = s1_udp(59620);
+    let rc = sla_std_net_udp_set_write_timeout(a, 2000000000);
+    if rc != 0 { panic(59621); };
+    let out = [0u64; 4];
+    sla_std_net_udp_write_timeout(a, &out[0]);
+    if out[0] == 0 { panic(59622); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_write_timeout"() {
+    let a = s1_udp(59630);
+    sla_std_net_udp_set_write_timeout(a, 3000000000);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_write_timeout(a, &out[0]);
+    if rc != 0 { panic(59631); };
+    if out[0] == 0 { panic(59632); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_set_nonblocking"() {
+    let a = s1_udp(59640);
+    let rc = sla_std_net_udp_set_nonblocking(a, 1);
+    if rc != 0 { panic(59641); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let rc2 = sla_std_net_udp_recv(a, &buf[0], 64, &rd[0]);
+    if rc2 == 0 { panic(59642); };
+    let rc3 = sla_std_net_udp_set_nonblocking(a, 0);
+    if rc3 != 0 { panic(59643); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_set_broadcast"() {
+    let a = s1_udp(59650);
+    let rc = sla_std_net_udp_set_broadcast(a, 1);
+    if rc != 0 { panic(59651); };
+    let out = [0u64; 4];
+    sla_std_net_udp_broadcast(a, &out[0]);
+    if out[0] != 1 { panic(59652); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_broadcast"() {
+    let a = s1_udp(59660);
+    sla_std_net_udp_set_broadcast(a, 1);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_broadcast(a, &out[0]);
+    if rc != 0 { panic(59661); };
+    if out[0] != 1 { panic(59662); };
+    sla_std_net_udp_set_broadcast(a, 0);
+    sla_std_net_udp_broadcast(a, &out[0]);
+    if out[0] != 0 { panic(59663); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_set_ttl"() {
+    let a = s1_udp(59670);
+    let rc = sla_std_net_udp_set_ttl(a, 33);
+    if rc != 0 { panic(59671); };
+    let out = [0u64; 4];
+    sla_std_net_udp_ttl(a, &out[0]);
+    if out[0] != 33 { panic(59672); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_ttl"() {
+    let a = s1_udp(59680);
+    sla_std_net_udp_set_ttl(a, 44);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_ttl(a, &out[0]);
+    if rc != 0 { panic(59681); };
+    if out[0] != 44 { panic(59682); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_set_multicast_loop_v4"() {
+    let a = s1_udp(59690);
+    let rc = sla_std_net_udp_set_multicast_loop_v4(a, 0);
+    if rc != 0 { panic(59691); };
+    let out = [0u64; 4];
+    sla_std_net_udp_multicast_loop_v4(a, &out[0]);
+    if out[0] != 0 { panic(59692); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_multicast_loop_v4"() {
+    let a = s1_udp(59700);
+    sla_std_net_udp_set_multicast_loop_v4(a, 0);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_multicast_loop_v4(a, &out[0]);
+    if rc != 0 { panic(59701); };
+    if out[0] != 0 { panic(59702); };
+    sla_std_net_udp_set_multicast_loop_v4(a, 1);
+    sla_std_net_udp_multicast_loop_v4(a, &out[0]);
+    if out[0] != 1 { panic(59703); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_set_multicast_ttl_v4"() {
+    let a = s1_udp(59710);
+    let rc = sla_std_net_udp_set_multicast_ttl_v4(a, 7);
+    if rc != 0 { panic(59711); };
+    let out = [0u64; 4];
+    sla_std_net_udp_multicast_ttl_v4(a, &out[0]);
+    if out[0] != 7 { panic(59712); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_multicast_ttl_v4"() {
+    let a = s1_udp(59720);
+    sla_std_net_udp_set_multicast_ttl_v4(a, 9);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_multicast_ttl_v4(a, &out[0]);
+    if rc != 0 { panic(59721); };
+    if out[0] != 9 { panic(59722); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_set_multicast_loop_v6"() {
+    let cell = [0u64; 4];
+    let rc0 = sla_std_net_udp_bind(STR_PTR("::1"), STR_LEN("::1"), 0, &cell[0]);
+    if rc0 != 0 { panic(59730); };
+    let rc = sla_std_net_udp_set_multicast_loop_v6(cell[0], 0);
+    if rc != 0 { panic(59731); };
+    let out = [0u64; 4];
+    sla_std_net_udp_multicast_loop_v6(cell[0], &out[0]);
+    if out[0] != 0 { panic(59732); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_net_udp_multicast_loop_v6"() {
+    let cell = [0u64; 4];
+    let rc0 = sla_std_net_udp_bind(STR_PTR("::1"), STR_LEN("::1"), 0, &cell[0]);
+    if rc0 != 0 { panic(59740); };
+    sla_std_net_udp_set_multicast_loop_v6(cell[0], 0);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_multicast_loop_v6(cell[0], &out[0]);
+    if rc != 0 { panic(59741); };
+    if out[0] != 0 { panic(59742); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_net_udp_set_multicast_hops_v6"() {
+    let cell = [0u64; 4];
+    let rc0 = sla_std_net_udp_bind(STR_PTR("::1"), STR_LEN("::1"), 0, &cell[0]);
+    if rc0 != 0 { panic(59750); };
+    let rc = sla_std_net_udp_set_multicast_hops_v6(cell[0], 7);
+    if rc != 0 { panic(59751); };
+    let out = [0u64; 4];
+    sla_std_net_udp_multicast_hops_v6(cell[0], &out[0]);
+    if out[0] != 7 { panic(59752); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_net_udp_multicast_hops_v6"() {
+    let cell = [0u64; 4];
+    let rc0 = sla_std_net_udp_bind(STR_PTR("::1"), STR_LEN("::1"), 0, &cell[0]);
+    if rc0 != 0 { panic(59760); };
+    sla_std_net_udp_set_multicast_hops_v6(cell[0], 9);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_multicast_hops_v6(cell[0], &out[0]);
+    if rc != 0 { panic(59761); };
+    if out[0] != 9 { panic(59762); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_net_udp_set_recv_buffer_size"() {
+    let a = s1_udp(59770);
+    let rc = sla_std_net_udp_set_recv_buffer_size(a, 65536);
+    if rc != 0 { panic(59771); };
+    let out = [0u64; 4];
+    sla_std_net_udp_recv_buffer_size(a, &out[0]);
+    if out[0] < 65536 { panic(59772); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_recv_buffer_size"() {
+    let a = s1_udp(59780);
+    sla_std_net_udp_set_recv_buffer_size(a, 32768);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_recv_buffer_size(a, &out[0]);
+    if rc != 0 { panic(59781); };
+    if out[0] < 32768 { panic(59782); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_set_send_buffer_size"() {
+    let a = s1_udp(59790);
+    let rc = sla_std_net_udp_set_send_buffer_size(a, 65536);
+    if rc != 0 { panic(59791); };
+    let out = [0u64; 4];
+    sla_std_net_udp_send_buffer_size(a, &out[0]);
+    if out[0] < 65536 { panic(59792); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_send_buffer_size"() {
+    let a = s1_udp(59800);
+    sla_std_net_udp_set_send_buffer_size(a, 32768);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_send_buffer_size(a, &out[0]);
+    if rc != 0 { panic(59801); };
+    if out[0] < 32768 { panic(59802); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_take_error"() {
+    let a = s1_udp(59810);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_take_error(a, &out[0]);
+    if rc != 0 { panic(59811); };
+    if out[0] != 0 { panic(59812); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_try_clone"() {
+    let a = s1_udp(59820);
+    let b = s1_udp(59821);
+    let bport = s1_udp_port(b, 59822);
+    let clone = [0u64; 4];
+    let rc = sla_std_net_udp_try_clone(a, &clone[0]);
+    if rc != 0 { panic(59823); };
+    if clone[0] == 0 { panic(59824); };
+    let wr = [0u64; 4];
+    sla_std_net_udp_send_to(clone[0], STR_PTR("tc"), STR_LEN("tc"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (bport as u32), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    sla_std_net_udp_recv(b, &buf[0], 64, &rd[0]);
+    if rd[0] != 2 { panic(59825); };
+    sla_std_close(clone[0]);
+    sla_std_close(a);
+    sla_std_close(b);
+}
+
+@test "smoke1 sa_std_net_udp_set_multicast_if_v4"() {
+    let a = s1_udp(59830);
+    // The extern takes a pointer to the 4 raw address bytes
+    // (sa_std.zig: constBytes(ptr, 4)); 127.0.0.1 packed LE into a
+    // u64 cell gives exactly those bytes in memory order.
+    let ifcell = [0u64; 4];
+    ifcell[0] = 16777343;
+    let rc = sla_std_net_udp_set_multicast_if_v4(a, &ifcell[0]);
+    if rc != 0 { panic(59831); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_multicast_if_v4"() {
+    let a = s1_udp(59840);
+    let ifcell = [0u64; 4];
+    ifcell[0] = 16777343;
+    sla_std_net_udp_set_multicast_if_v4(a, &ifcell[0]);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_multicast_if_v4(a, &out[0]);
+    if rc != 0 { panic(59841); };
+    if out[0] != 16777343 { panic(59842); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_join_multicast_v4"() {
+    let a = s1_udp(59850);
+    let rc = sla_std_net_udp_join_multicast_v4(a, STR_PTR("233.1.1.1"), STR_LEN("233.1.1.1"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"));
+    if rc != 0 { panic(59851); };
+    let rc2 = sla_std_net_udp_leave_multicast_v4(a, STR_PTR("233.1.1.1"), STR_LEN("233.1.1.1"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"));
+    if rc2 != 0 { panic(59852); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_leave_multicast_v4"() {
+    let a = s1_udp(59860);
+    let rc = sla_std_net_udp_join_multicast_v4(a, STR_PTR("233.1.1.2"), STR_LEN("233.1.1.2"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"));
+    if rc != 0 { panic(59861); };
+    let rc2 = sla_std_net_udp_leave_multicast_v4(a, STR_PTR("233.1.1.2"), STR_LEN("233.1.1.2"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"));
+    if rc2 != 0 { panic(59862); };
+    // Leaving twice must fail: membership is gone.
+    let rc3 = sla_std_net_udp_leave_multicast_v4(a, STR_PTR("233.1.1.2"), STR_LEN("233.1.1.2"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"));
+    if rc3 == 0 { panic(59863); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_join_multicast_v6"() {
+    let cell = [0u64; 4];
+    let rc0 = sla_std_net_udp_bind(STR_PTR("::1"), STR_LEN("::1"), 0, &cell[0]);
+    if rc0 != 0 { panic(59870); };
+    let rc = sla_std_net_udp_join_multicast_v6(cell[0], STR_PTR("ff02::1"), STR_LEN("ff02::1"), 1);
+    if rc != 0 { panic(59871); };
+    let rc2 = sla_std_net_udp_leave_multicast_v6(cell[0], STR_PTR("ff02::1"), STR_LEN("ff02::1"), 1);
+    if rc2 != 0 { panic(59872); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_net_udp_leave_multicast_v6"() {
+    let cell = [0u64; 4];
+    let rc0 = sla_std_net_udp_bind(STR_PTR("::1"), STR_LEN("::1"), 0, &cell[0]);
+    if rc0 != 0 { panic(59880); };
+    let rc = sla_std_net_udp_join_multicast_v6(cell[0], STR_PTR("ff02::2"), STR_LEN("ff02::2"), 1);
+    if rc != 0 { panic(59881); };
+    let rc2 = sla_std_net_udp_leave_multicast_v6(cell[0], STR_PTR("ff02::2"), STR_LEN("ff02::2"), 1);
+    if rc2 != 0 { panic(59882); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_net_udp_set_multicast_if_v6"() {
+    let cell = [0u64; 4];
+    let rc0 = sla_std_net_udp_bind(STR_PTR("::1"), STR_LEN("::1"), 0, &cell[0]);
+    if rc0 != 0 { panic(59890); };
+    let rc = sla_std_net_udp_set_multicast_if_v6(cell[0], 1);
+    if rc != 0 { panic(59891); };
+    let out = [0u64; 4];
+    sla_std_net_udp_multicast_if_v6(cell[0], &out[0]);
+    if out[0] != 1 { panic(59892); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_net_udp_multicast_if_v6"() {
+    let cell = [0u64; 4];
+    let rc0 = sla_std_net_udp_bind(STR_PTR("::1"), STR_LEN("::1"), 0, &cell[0]);
+    if rc0 != 0 { panic(59900); };
+    sla_std_net_udp_set_multicast_if_v6(cell[0], 1);
+    let out = [0u64; 4];
+    let rc = sla_std_net_udp_multicast_if_v6(cell[0], &out[0]);
+    if rc != 0 { panic(59901); };
+    if out[0] != 1 { panic(59902); };
+    sla_std_close(cell[0]);
+}
+
+@test "smoke1 sa_std_net_socket_setsockopt_int"() {
+    let a = s1_udp(59910);
+    let rc = sla_std_net_socket_setsockopt_int(a, 1, 8, 65536);
+    if rc != 0 { panic(59911); };
+    let out = [0u64; 4];
+    sla_std_net_socket_getsockopt_int(a, 1, 8, &out[0]);
+    if out[0] < 65536 { panic(59912); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_socket_getsockopt_int"() {
+    let a = s1_udp(59920);
+    sla_std_net_socket_setsockopt_int(a, 1, 7, 32768);
+    let out = [0u64; 4];
+    let rc = sla_std_net_socket_getsockopt_int(a, 1, 7, &out[0]);
+    if rc != 0 { panic(59921); };
+    if out[0] < 32768 { panic(59922); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_socket_setsockopt"() {
+    let a = s1_udp(59930);
+    let val = [0u8; 4];
+    val[0] = 0;
+    val[1] = 0;
+    val[2] = 1;
+    val[3] = 0;
+    let vbp: ptr = PTR_BYTE_ADD(&val, 0);
+    let rc = sla_std_net_socket_setsockopt(a, 1, 8, vbp, 4);
+    if rc != 0 { panic(59931); };
+    let out = [0u64; 4];
+    sla_std_net_socket_getsockopt_int(a, 1, 8, &out[0]);
+    if out[0] < 65536 { panic(59932); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_socket_getsockopt"() {
+    let a = s1_udp(59940);
+    sla_std_net_socket_setsockopt_int(a, 1, 8, 65536);
+    let buf = [0u8; 8];
+    let olen = [0u64; 4];
+    let rc = sla_std_net_socket_getsockopt(a, 1, 8, &buf[0], 8, &olen[0]);
+    if rc != 0 { panic(59941); };
+    if olen[0] != 4 { panic(59942); };
+    // Kernel doubles SO_RCVBUF on readback: 65536 -> 131072,
+    // whose LE bytes are 00 00 02 00.
+    if buf[2] != 2 { panic(59943); };
+    sla_std_close(a);
+}
+
+@test "smoke1 sa_std_net_udp_recv_multi"() {
+    let a = s1_udp(59950);
+    let b = s1_udp(59951);
+    let aport = s1_udp_port(a, 59952);
+    let wr = [0u64; 4];
+    sla_std_net_udp_send_to(b, STR_PTR("one"), STR_LEN("one"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u32), &wr[0]);
+    sla_std_net_udp_send_to(b, STR_PTR("two!"), STR_LEN("two!"), STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (aport as u32), &wr[0]);
+    let big = [0u8; 1024];
+    let slot = [0u64; 4];
+    let bp: u64 = 0;
+    let s1bp5: ptr = PTR_BYTE_ADD(&big, 0);
+    PTR_ADDR(bp, s1bp5);
+    slot[0] = bp;
+    let count = [0u64; 4];
+    let lens = [0u64; 4];
+    let addrs = [0u64; 4];
+    let rc = sla_std_net_udp_recv_multi(a, &slot[0], 1024, 64, 2, &count[0], &lens[0], &addrs[0]);
+    if rc != 0 { panic(59953); };
+    if count[0] != 2 { panic(59954); };
+    let total = lens[0] + lens[1];
+    if total != 7 { panic(59955); };
+    sla_std_close(a);
+    sla_std_close(b);
+}

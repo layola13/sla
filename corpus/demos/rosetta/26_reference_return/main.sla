@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn choose_left(&left: i32, &_right: i32) -> &i32 {
+    left
+}
+
+fn main() -> i32 {
+    let left: i32 = 9;
+    let right: i32 = 4;
+    let chosen = choose_left(&left, &right);
+    println("{}", chosen);
+    return 0;
+};
+
+@test "rosetta 026 reference return"() {
+    let left: i32 = 9;
+    let right: i32 = 4;
+    let chosen = choose_left(&left, &right);
+    let value = *chosen;
+    if value != 9 {
+        panic(26);
+    };
+};

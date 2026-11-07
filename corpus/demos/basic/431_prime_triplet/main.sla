@@ -1,0 +1,52 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 素数三元组（(p,p+2,p+6)/(p,p+4,p+6) 全素；<=20 有 4 组）。
+// 意对标 430 四元组的三元版（430 互补）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn is_triplet_a(p: int) -> int {
+    if is_prime(p) != 1 { return 0; };
+    if is_prime(p + 2) != 1 { return 0; };
+    if is_prime(p + 6) != 1 { return 0; };
+    return 1;
+}
+
+fn is_triplet_b(p: int) -> int {
+    if is_prime(p) != 1 { return 0; };
+    if is_prime(p + 4) != 1 { return 0; };
+    if is_prime(p + 6) != 1 { return 0; };
+    return 1;
+}
+
+fn triplet_count(limit: int) -> int {
+    let c = 0;
+    let k = 2;
+    while k + 6 <= limit {
+        if is_triplet_a(k) == 1 { c = c + 1; };
+        if is_triplet_b(k) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{}", triplet_count(20), triplet_count(50));
+    return 0;
+}
+
+@test "basic 431 prime triplet"() {
+    if triplet_count(20) != 4 { panic(43101); };
+    if triplet_count(50) != 7 { panic(43102); };
+}

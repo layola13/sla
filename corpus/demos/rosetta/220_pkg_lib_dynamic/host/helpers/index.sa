@@ -1,0 +1,6 @@
+@import "host/helpers/host.sal"
+
+@host_wrapper_bonus() -> i32:
+L_ENTRY:
+    value = add HOST_WRAPPER_BONUS, 0
+    return value

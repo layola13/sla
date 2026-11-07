@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1026_catch_arith 的 `-or` 半（192 为基础版：3,9,1）。
+// `unwrap_or` + `is_err`（192 覆盖 `is_ok/unwrap`）。
+
+fn div(a: i32, b: i32) -> Result<int, int> {
+    if b == 0 { return Err(0 - 1); };
+    return Ok(a / b);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", div(7, 2).unwrap_or(9), div(7, 0).unwrap_or(9), if div(7, 0).is_err() { 1 } else { 0 });
+    return 0;
+}
+
+@test "basic 267 result or"() {
+    if div(7, 2).unwrap_or(9) != 3 { panic(26701); };
+    if div(7, 0).unwrap_or(9) != 9 { panic(26702); };
+    if !div(7, 0).is_err() { panic(26703); };
+    if div(7, 2).is_err() { panic(26704); };
+}

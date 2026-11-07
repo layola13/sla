@@ -1,0 +1,8 @@
+@import "src/helpers/index.sa"
+
+@src_package_value() -> i32:
+L_ENTRY:
+    helper = call @src_helper_value()
+    value = add 200, helper
+    !helper
+    return value

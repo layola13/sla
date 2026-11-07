@@ -1,0 +1,20 @@
+// J-5 (independent_check_hooks, Jev slasl_macro_ruling j5):
+// `@check_hook macro_param_audit;` attaches the read-only audit
+// hook. This file passes because every parameter of every macro is
+// referenced in its body (the leading `out` parameter counts as
+// referenced by being assigned). On the pre-J-5 baseline the
+// `@check_hook` declaration itself is a parse error.
+
+@check_hook macro_param_audit;
+
+macro add_into(out: i64, x: i64, y: i64) {
+    out = x + y;
+}
+
+@test "check hook passes when every macro parameter is used"() {
+    let r: i64 = 0;
+    add_into(r, 20, 22);
+    if r != 42 {
+        panic(61101);
+    };
+}

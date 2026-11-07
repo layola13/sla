@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn mod_shadowing_diagnostic_count() -> i32 { let duplicate_name_rejected = 1; return duplicate_name_rejected; }
+fn main() -> i32 { let result = mod_shadowing_diagnostic_count(); println("{}", result); return result; }
+@test "rosetta 227 mod shadowing prevention"() { let got = mod_shadowing_diagnostic_count(); if got != 1 { panic(227); }; }

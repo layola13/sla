@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Stern 双原子数列（stern(10)=3，stern(9)=4）。
+// 意对标 237 斐波那契的位折半版（237 互补）。
+
+fn stern(n: int) -> int {
+    if n == 0 { return 0; };
+    if n == 1 { return 1; };
+    if n % 2 == 0 { return stern(n / 2); };
+    return stern(n / 2) + stern(n / 2 + 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", stern(10), stern(9), stern(7));
+    return 0;
+}
+
+@test "basic 483 stern"() {
+    if stern(10) != 3 { panic(48301); };
+    if stern(9) != 4 { panic(48302); };
+    if stern(7) != 3 { panic(48303); };
+}

@@ -1,0 +1,9 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: a channel endpoint carries cross-goroutine
+// queues; it can never be an arena root (design 2.2).
+fn neg_chan() -> i32 {
+    arena {
+        let ch: Chan<u64> = Chan::new(0);
+    }
+    return 0;
+}

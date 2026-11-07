@@ -1,0 +1,538 @@
+// smoke-wave2: http_client websocket chains (v1 + v2 + unix is in probe F
+// disposition) and the SSE family. Peers are SLA websocket echo servers
+// (goroutines, unique ports); the SSE peer is a v2 streaming response.
+@import "sla_std/wrap/http_server.sla"
+@import "sla_std/wrap/http_client.sla"
+@import "sla_std/wrap/fs.sla"
+@import "sla_std/wrap/time.sla"
+@import "sa_std/task.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+fn s2_mem_eq(p: ptr, n: u64, q: ptr, m: u64) -> bool {
+    if n != m { return false; };
+    let i: u64 = 0;
+    while i < n {
+        let a: ptr = PTR_BYTE_ADD(p, i);
+        let b: ptr = PTR_BYTE_ADD(q, i);
+        if PTR_READ_U8(a) != PTR_READ_U8(b) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn s2_contains(p: ptr, n: u64, q: ptr, m: u64) -> bool {
+    if m == 0 { return true; };
+    if n < m { return false; };
+    let i: u64 = 0;
+    while i + m <= n {
+        let base: ptr = PTR_BYTE_ADD(p, i);
+        if s2_mem_eq(base, m, q, m) { return true; };
+        i = i + 1;
+    }
+    return false;
+}
+
+// v1 ws echo peer (single packed arg: port | code<<24).
+fn s2_ws_echo1(arg: u64) -> void {
+    let port: u64 = arg & 65535;
+    let code: i32 = (arg >> 24) as i32;
+    let sc = [0u64; 4];
+    if sla_http_server_new(&sc[0]) != 0 { panic(code); };
+    let srv = (sc[0] as ptr);
+    if sla_http_server_start(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u16)) != 0 { panic(code + 1); };
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(code + 2); };
+    let req = (aq[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_server_websocket_upgrade(req, &wc[0]) != 0 { panic(code + 3); };
+    let ws = (wc[0] as ptr);
+    let op = [0u64; 4];
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_server_websocket_read(ws, 4096, &op[0], &dp[0], &dl[0]) != 0 { panic(code + 4); };
+    if sla_http_server_websocket_write(ws, (op[0] as u8), (dp[0] as ptr), dl[0]) != 0 { panic(code + 5); };
+    sla_http_server_websocket_free(ws);
+    sla_http_server_free(srv);
+}
+
+// v2 ws echo peer (single packed arg: port | code<<24).
+fn s2_ws_echo2(arg: u64) -> void {
+    let port: u64 = arg & 65535;
+    let code: i32 = (arg >> 24) as i32;
+    let sc = [0u64; 4];
+    if sla_http_server_new_v2(&sc[0]) != 0 { panic(code); };
+    let srv = (sc[0] as ptr);
+    if sla_http_server_start_v2(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u16)) != 0 { panic(code + 1); };
+    let aq = [0u64; 4];
+    if sla_http_server_accept_v2(srv, 30000, &aq[0]) != 0 { panic(code + 2); };
+    let req = (aq[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_server_websocket_upgrade_v2(req, &wc[0]) != 0 { panic(code + 3); };
+    let ws = (wc[0] as ptr);
+    let op = [0u64; 4];
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_server_websocket_read_v2(ws, 4096, &op[0], &dp[0], &dl[0]) != 0 { panic(code + 4); };
+    let wr = [0u64; 4];
+    if sla_http_server_websocket_write_v2(ws, (op[0] as u8), (dp[0] as ptr), dl[0], &wr[0]) != 0 { panic(code + 5); };
+    let rc2 = sla_http_server_websocket_read_v2(ws, 4096, &op[0], &dp[0], &dl[0]);
+    sla_http_server_websocket_free_v2(ws);
+    sla_http_server_free_v2(srv);
+}
+
+// v1 ws echo peer that stays for the client's close frame.
+fn s2_ws_echo1_stay(arg: u64) -> void {
+    let port: u64 = arg & 65535;
+    let code: i32 = (arg >> 24) as i32;
+    let sc = [0u64; 4];
+    if sla_http_server_new(&sc[0]) != 0 { panic(code); };
+    let srv = (sc[0] as ptr);
+    if sla_http_server_start(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u16)) != 0 { panic(code + 1); };
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(code + 2); };
+    let req = (aq[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_server_websocket_upgrade(req, &wc[0]) != 0 { panic(code + 3); };
+    let ws = (wc[0] as ptr);
+    let op = [0u64; 4];
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_server_websocket_read(ws, 4096, &op[0], &dp[0], &dl[0]) != 0 { panic(code + 4); };
+    if sla_http_server_websocket_write(ws, (op[0] as u8), (dp[0] as ptr), dl[0]) != 0 { panic(code + 5); };
+    let rc2 = sla_http_server_websocket_read(ws, 4096, &op[0], &dp[0], &dl[0]);
+    sla_http_server_websocket_free(ws);
+    sla_http_server_free(srv);
+}
+
+fn s2_ws_url(port: u64, ob: ptr) -> u64 {
+    let pre = "ws://127.0.0.1:";
+    let pp: ptr = STR_PTR(pre);
+    let pl: u64 = STR_LEN(pre);
+    let n: u64 = 0;
+    let i: u64 = 0;
+    while i < pl {
+        let s: ptr = PTR_BYTE_ADD(pp, i);
+        let d: ptr = PTR_BYTE_ADD(ob, n);
+        PTR_WRITE_U8(d, PTR_READ_U8(s));
+        n = n + 1;
+        i = i + 1;
+    }
+    let digits = [0u8; 8];
+    let dp0: ptr = PTR_BYTE_ADD(&digits, 0);
+    let v: u64 = port;
+    let nd: u64 = 0;
+    while v > 0 {
+        let d: ptr = PTR_BYTE_ADD(dp0, nd);
+        PTR_WRITE_U8(d, (48 + ((v % 10) as u8)));
+        nd = nd + 1;
+        v = v / 10;
+    }
+    let k: u64 = nd;
+    while k > 0 {
+        k = k - 1;
+        let s: ptr = PTR_BYTE_ADD(dp0, k);
+        let d: ptr = PTR_BYTE_ADD(ob, n);
+        PTR_WRITE_U8(d, PTR_READ_U8(s));
+        n = n + 1;
+    }
+    let suf = "/ws";
+    let sp: ptr = STR_PTR(suf);
+    let sl: u64 = STR_LEN(suf);
+    let j: u64 = 0;
+    while j < sl {
+        let s: ptr = PTR_BYTE_ADD(sp, j);
+        let d: ptr = PTR_BYTE_ADD(ob, n);
+        PTR_WRITE_U8(d, PTR_READ_U8(s));
+        n = n + 1;
+        j = j + 1;
+    }
+    return n;
+}
+
+// ---------------- v1 client websocket ----------------
+// REMOVED from this green file: sa_http_client_websocket_connect,
+// sa_http_websocket_read, sa_http_websocket_write and
+// sa_http_websocket_free are blocked by W2-DEF-WS-V1-CLIENT-DEAD
+// (connect succeeds but the v1 handle transmits nothing and reads
+// error out; wire-level evidence in probes I/I2, see WAVE2_REPORT).
+
+// ---------------- v2 client websocket ----------------
+
+@test "smoke2 sa_http_client_websocket_connect_v2"() {
+    let h = go s2_ws_echo1(24803 + 65860 * 16777216);
+    let ub = [0u8; 64];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_ws_url(24803, ubp);
+    sla_time_sleep_ms(100);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65870); };
+    let client = (cl[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_client_websocket_connect_v2(client, ubp, ulen, 10000, &wc[0]) != 0 { panic(65871); };
+    if wc[0] == 0 { panic(65872); };
+    let ws = (wc[0] as ptr);
+    let wr = [0u64; 4];
+    if sla_http_websocket_write_v2(ws, 1, STR_PTR("v2-ws"), STR_LEN("v2-ws"), &wr[0]) != 0 { panic(65873); };
+    let ev = [0u64; 4];
+    if sla_http_websocket_poll_v2(ws, 1, 5000, &ev[0]) != 0 { panic(65874); };
+    let op = [0u64; 4];
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_websocket_read_v2(ws, 4096, &op[0], &dp[0], &dl[0]) != 0 { panic(65875); };
+    if !s2_mem_eq((dp[0] as ptr), dl[0], STR_PTR("v2-ws"), STR_LEN("v2-ws")) { panic(65876); };
+    sla_http_websocket_close_v2(ws, 1000, STR_PTR(""), 0);
+    sla_http_websocket_free_v2(ws);
+    sla_http_client_free(client);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_websocket_connect_v2"() {
+    let h = go s2_ws_echo1(24804 + 65880 * 16777216);
+    let ub = [0u8; 64];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_ws_url(24804, ubp);
+    sla_time_sleep_ms(100);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65890); };
+    let client = (cl[0] as ptr);
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_v2(client, 1, ubp, ulen, &rq[0]) != 0 { panic(65891); };
+    let req = (rq[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_client_req_websocket_connect_v2(req, 10000, &wc[0]) != 0 { panic(65892); };
+    if wc[0] == 0 { panic(65893); };
+    let ws = (wc[0] as ptr);
+    let wr = [0u64; 4];
+    if sla_http_websocket_write_v2(ws, 1, STR_PTR("req-ws"), STR_LEN("req-ws"), &wr[0]) != 0 { panic(65894); };
+    let ev = [0u64; 4];
+    if sla_http_websocket_poll_v2(ws, 1, 5000, &ev[0]) != 0 { panic(65895); };
+    let op = [0u64; 4];
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_websocket_read_v2(ws, 4096, &op[0], &dp[0], &dl[0]) != 0 { panic(65896); };
+    if !s2_mem_eq((dp[0] as ptr), dl[0], STR_PTR("req-ws"), STR_LEN("req-ws")) { panic(65897); };
+    sla_http_websocket_close_v2(ws, 1000, STR_PTR(""), 0);
+    sla_http_websocket_free_v2(ws);
+    sla_http_client_req_free(req);
+    sla_http_client_free(client);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_websocket_poll_v2"() {
+    let h = go s2_ws_echo1(24805 + 65900 * 16777216);
+    let ub = [0u8; 64];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_ws_url(24805, ubp);
+    sla_time_sleep_ms(100);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65910); };
+    let client = (cl[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_client_websocket_connect_v2(client, ubp, ulen, 10000, &wc[0]) != 0 { panic(65911); };
+    let ws = (wc[0] as ptr);
+    // Idle: per the std contract (sa_http_client.zig websocketPoll),
+    // a poll that times out with no events returns a non-ok timeout
+    // status, not ok+0. Pin both facts.
+    let ev = [0u64; 4];
+    if sla_http_websocket_poll_v2(ws, 1, 300, &ev[0]) == 0 { panic(65912); };
+    if ev[0] != 0 { panic(65913); };
+    let wr = [0u64; 4];
+    if sla_http_websocket_write_v2(ws, 1, STR_PTR("poll-ws"), STR_LEN("poll-ws"), &wr[0]) != 0 { panic(65914); };
+    if sla_http_websocket_poll_v2(ws, 1, 5000, &ev[0]) != 0 { panic(65915); };
+    if ev[0] == 0 { panic(65916); };
+    let op = [0u64; 4];
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_websocket_read_v2(ws, 4096, &op[0], &dp[0], &dl[0]) != 0 { panic(65917); };
+    sla_http_websocket_close_v2(ws, 1000, STR_PTR(""), 0);
+    sla_http_websocket_free_v2(ws);
+    sla_http_client_free(client);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_websocket_write_v2"() {
+    let h = go s2_ws_echo1(24806 + 65920 * 16777216);
+    let ub = [0u8; 64];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_ws_url(24806, ubp);
+    sla_time_sleep_ms(100);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65930); };
+    let client = (cl[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_client_websocket_connect_v2(client, ubp, ulen, 10000, &wc[0]) != 0 { panic(65931); };
+    let ws = (wc[0] as ptr);
+    let wr = [0u64; 4];
+    if sla_http_websocket_write_v2(ws, 1, STR_PTR("write-v2"), STR_LEN("write-v2"), &wr[0]) != 0 { panic(65932); };
+    if wr[0] != 8 { panic(65933); };
+    let ev = [0u64; 4];
+    if sla_http_websocket_poll_v2(ws, 1, 5000, &ev[0]) != 0 { panic(65934); };
+    let op = [0u64; 4];
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_websocket_read_v2(ws, 4096, &op[0], &dp[0], &dl[0]) != 0 { panic(65935); };
+    if !s2_mem_eq((dp[0] as ptr), dl[0], STR_PTR("write-v2"), STR_LEN("write-v2")) { panic(65936); };
+    sla_http_websocket_close_v2(ws, 1000, STR_PTR(""), 0);
+    sla_http_websocket_free_v2(ws);
+    sla_http_client_free(client);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_websocket_close_v2"() {
+    let h = go s2_ws_echo1_stay(24807 + 65940 * 16777216);
+    let ub = [0u8; 64];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_ws_url(24807, ubp);
+    sla_time_sleep_ms(100);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65950); };
+    let client = (cl[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_client_websocket_connect_v2(client, ubp, ulen, 10000, &wc[0]) != 0 { panic(65951); };
+    let ws = (wc[0] as ptr);
+    let wr = [0u64; 4];
+    if sla_http_websocket_write_v2(ws, 1, STR_PTR("c2"), STR_LEN("c2"), &wr[0]) != 0 { panic(65952); };
+    let ev = [0u64; 4];
+    if sla_http_websocket_poll_v2(ws, 1, 5000, &ev[0]) != 0 { panic(65953); };
+    let op = [0u64; 4];
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_websocket_read_v2(ws, 4096, &op[0], &dp[0], &dl[0]) != 0 { panic(65954); };
+    if sla_http_websocket_close_v2(ws, 1000, STR_PTR("done"), STR_LEN("done")) != 0 { panic(65955); };
+    sla_http_websocket_free_v2(ws);
+    sla_http_client_free(client);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_websocket_free_v2"() {
+    let h = go s2_ws_echo1_stay(24808 + 65960 * 16777216);
+    let ub = [0u8; 64];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_ws_url(24808, ubp);
+    sla_time_sleep_ms(100);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65970); };
+    let client = (cl[0] as ptr);
+    let wc = [0u64; 4];
+    if sla_http_client_websocket_connect_v2(client, ubp, ulen, 10000, &wc[0]) != 0 { panic(65971); };
+    let ws = (wc[0] as ptr);
+    let wr = [0u64; 4];
+    if sla_http_websocket_write_v2(ws, 1, STR_PTR("f2"), STR_LEN("f2"), &wr[0]) != 0 { panic(65972); };
+    let ev = [0u64; 4];
+    if sla_http_websocket_poll_v2(ws, 1, 5000, &ev[0]) != 0 { panic(65973); };
+    let op = [0u64; 4];
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_websocket_read_v2(ws, 4096, &op[0], &dp[0], &dl[0]) != 0 { panic(65974); };
+    sla_http_websocket_close_v2(ws, 1000, STR_PTR(""), 0);
+    if sla_http_websocket_free_v2(ws) != 0 { panic(65975); };
+    sla_http_client_free(client);
+    sa_task_join(h);
+}
+
+// ---------------- SSE ----------------
+
+// SSE peer (single packed arg: port | code<<24): streams two events.
+fn s2_sse_srv(arg: u64) -> void {
+    let port: u64 = arg & 65535;
+    let code: i32 = (arg >> 24) as i32;
+    let sc = [0u64; 4];
+    if sla_http_server_new_v2(&sc[0]) != 0 { panic(code); };
+    let srv = (sc[0] as ptr);
+    if sla_http_server_start_v2(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u16)) != 0 { panic(code + 1); };
+    let aq = [0u64; 4];
+    if sla_http_server_accept_v2(srv, 30000, &aq[0]) != 0 { panic(code + 2); };
+    let req = (aq[0] as ptr);
+    let rp = [0u64; 4];
+    if sla_http_server_resp_stream_new_v2(req, 200, &rp[0]) != 0 { panic(code + 3); };
+    let sresp = (rp[0] as ptr);
+    if sla_http_server_resp_stream_add_header_v2(sresp, STR_PTR("Content-Type"), STR_LEN("Content-Type"), STR_PTR("text/event-stream"), STR_LEN("text/event-stream")) != 0 { panic(code + 4); };
+    if sla_http_server_resp_stream_write_v2(sresp, STR_PTR("data: tick-1\n\n"), STR_LEN("data: tick-1\n\n"), 5000) != 0 { panic(code + 5); };
+    if sla_http_server_resp_stream_flush_v2(sresp) != 0 { panic(code + 6); };
+    sla_time_sleep_ms(100);
+    if sla_http_server_resp_stream_write_v2(sresp, STR_PTR("data: tick-2\n\n"), STR_LEN("data: tick-2\n\n"), 5000) != 0 { panic(code + 7); };
+    if sla_http_server_resp_stream_end_v2(sresp, 5000) != 0 { panic(code + 8); };
+    sla_http_server_resp_stream_free_v2(sresp);
+    sla_http_server_req_free_v2(req);
+    sla_http_server_free_v2(srv);
+}
+
+fn s2_url(port: u64, suffix: ptr, suffix_len: u64, ob: ptr) -> u64 {
+    let pre = "http://127.0.0.1:";
+    let pp: ptr = STR_PTR(pre);
+    let pl: u64 = STR_LEN(pre);
+    let n: u64 = 0;
+    let i: u64 = 0;
+    while i < pl {
+        let s: ptr = PTR_BYTE_ADD(pp, i);
+        let d: ptr = PTR_BYTE_ADD(ob, n);
+        PTR_WRITE_U8(d, PTR_READ_U8(s));
+        n = n + 1;
+        i = i + 1;
+    }
+    let digits = [0u8; 8];
+    let dp0: ptr = PTR_BYTE_ADD(&digits, 0);
+    let v: u64 = port;
+    let nd: u64 = 0;
+    while v > 0 {
+        let d: ptr = PTR_BYTE_ADD(dp0, nd);
+        PTR_WRITE_U8(d, (48 + ((v % 10) as u8)));
+        nd = nd + 1;
+        v = v / 10;
+    }
+    let k: u64 = nd;
+    while k > 0 {
+        k = k - 1;
+        let s: ptr = PTR_BYTE_ADD(dp0, k);
+        let d: ptr = PTR_BYTE_ADD(ob, n);
+        PTR_WRITE_U8(d, PTR_READ_U8(s));
+        n = n + 1;
+    }
+    let j: u64 = 0;
+    while j < suffix_len {
+        let s: ptr = PTR_BYTE_ADD(suffix, j);
+        let d: ptr = PTR_BYTE_ADD(ob, n);
+        PTR_WRITE_U8(d, PTR_READ_U8(s));
+        n = n + 1;
+        j = j + 1;
+    }
+    return n;
+}
+
+@test "smoke2 sa_http_client_sse_post"() {
+    let h = go s2_sse_srv(24810 + 66000 * 16777216);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24810, STR_PTR("/sse"), STR_LEN("/sse"), ubp);
+    sla_time_sleep_ms(100);
+    let hh = [0u64; 4];
+    if sla_http_client_sse_post(ubp, ulen, STR_PTR("{}"), STR_LEN("{}"), STR_PTR(""), 0, &hh[0]) != 0 { panic(66010); };
+    if hh[0] == 0 { panic(66011); };
+    let handle = (hh[0] as ptr);
+    // Drain so the peer can finish, then free.
+    let done = [0u64; 4];
+    let spins: u64 = 0;
+    while spins < 300 {
+        if sla_http_client_sse_poll(handle, &done[0]) != 0 { panic(66012); };
+        if done[0] == 1 { break; };
+        if done[0] == 2 { panic(66013); };
+        sla_time_sleep_ms(50);
+        spins = spins + 1;
+    }
+    if done[0] != 1 { panic(66014); };
+    sla_http_client_sse_free(handle);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_sse_poll"() {
+    let h = go s2_sse_srv(24811 + 66020 * 16777216);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24811, STR_PTR("/sse"), STR_LEN("/sse"), ubp);
+    sla_time_sleep_ms(100);
+    let hh = [0u64; 4];
+    if sla_http_client_sse_post(ubp, ulen, STR_PTR("{}"), STR_LEN("{}"), STR_PTR(""), 0, &hh[0]) != 0 { panic(66030); };
+    let handle = (hh[0] as ptr);
+    let done = [0u64; 4];
+    let spins: u64 = 0;
+    while spins < 300 {
+        if sla_http_client_sse_poll(handle, &done[0]) != 0 { panic(66031); };
+        if done[0] == 1 { break; };
+        if done[0] == 2 { panic(66032); };
+        sla_time_sleep_ms(50);
+        spins = spins + 1;
+    }
+    if done[0] != 1 { panic(66033); };
+    sla_http_client_sse_free(handle);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_sse_status"() {
+    let h = go s2_sse_srv(24812 + 66040 * 16777216);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24812, STR_PTR("/sse"), STR_LEN("/sse"), ubp);
+    sla_time_sleep_ms(100);
+    let hh = [0u64; 4];
+    if sla_http_client_sse_post(ubp, ulen, STR_PTR("{}"), STR_LEN("{}"), STR_PTR(""), 0, &hh[0]) != 0 { panic(66050); };
+    let handle = (hh[0] as ptr);
+    let done = [0u64; 4];
+    let spins: u64 = 0;
+    while spins < 300 {
+        if sla_http_client_sse_poll(handle, &done[0]) != 0 { panic(66051); };
+        if done[0] == 1 { break; };
+        if done[0] == 2 { panic(66052); };
+        sla_time_sleep_ms(50);
+        spins = spins + 1;
+    }
+    if done[0] != 1 { panic(66053); };
+    if sla_http_client_sse_status(handle) != 200 { panic(66054); };
+    sla_http_client_sse_free(handle);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_sse_read"() {
+    let h = go s2_sse_srv(24813 + 66060 * 16777216);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24813, STR_PTR("/sse"), STR_LEN("/sse"), ubp);
+    sla_time_sleep_ms(100);
+    let hh = [0u64; 4];
+    if sla_http_client_sse_post(ubp, ulen, STR_PTR("{}"), STR_LEN("{}"), STR_PTR(""), 0, &hh[0]) != 0 { panic(66070); };
+    let handle = (hh[0] as ptr);
+    let acc = [0u8; 2048];
+    let ap: ptr = PTR_BYTE_ADD(&acc, 0);
+    let total: u64 = 0;
+    let done = [0u64; 4];
+    let spins: u64 = 0;
+    while spins < 300 {
+        let big = [0u64; 256];
+        let ol = [0u64; 4];
+        if sla_http_client_sse_read(handle, &big[0], 2048, &ol[0]) != 0 { panic(66071); };
+        if ol[0] > 0 {
+            let srcp: ptr = PTR_BYTE_ADD(&big, 0);
+            let i: u64 = 0;
+            while i < ol[0] {
+                let s: ptr = PTR_BYTE_ADD(srcp, i);
+                let d: ptr = PTR_BYTE_ADD(ap, total + i);
+                PTR_WRITE_U8(d, PTR_READ_U8(s));
+                i = i + 1;
+            }
+            total = total + ol[0];
+        };
+        if sla_http_client_sse_poll(handle, &done[0]) != 0 { panic(66072); };
+        if done[0] == 2 { panic(66073); };
+        if done[0] == 1 && ol[0] == 0 { break; };
+        sla_time_sleep_ms(20);
+        spins = spins + 1;
+    }
+    if done[0] != 1 { panic(66074); };
+    if !s2_contains(ap, total, STR_PTR("tick-1"), STR_LEN("tick-1")) { panic(66075); };
+    if !s2_contains(ap, total, STR_PTR("tick-2"), STR_LEN("tick-2")) { panic(66076); };
+    sla_http_client_sse_free(handle);
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_sse_free"() {
+    let h = go s2_sse_srv(24814 + 66080 * 16777216);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24814, STR_PTR("/sse"), STR_LEN("/sse"), ubp);
+    sla_time_sleep_ms(100);
+    let hh = [0u64; 4];
+    if sla_http_client_sse_post(ubp, ulen, STR_PTR("{}"), STR_LEN("{}"), STR_PTR(""), 0, &hh[0]) != 0 { panic(66090); };
+    let handle = (hh[0] as ptr);
+    let done = [0u64; 4];
+    let spins: u64 = 0;
+    while spins < 300 {
+        if sla_http_client_sse_poll(handle, &done[0]) != 0 { panic(66091); };
+        if done[0] == 1 { break; };
+        if done[0] == 2 { panic(66092); };
+        sla_time_sleep_ms(50);
+        spins = spins + 1;
+    }
+    if done[0] != 1 { panic(66093); };
+    if sla_http_client_sse_free(handle) != 0 { panic(66094); };
+    sa_task_join(h);
+}

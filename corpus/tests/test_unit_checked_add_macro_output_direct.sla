@@ -1,0 +1,18 @@
+@import "sa_std/num.sa"
+
+fn checked_add_slot(start_tick: u64, duration_tick: u64) -> u64 {
+    let add_ok: u64 = 0;
+    let end_tick: u64 = 0;
+    NUM_U64_CHECKED_ADD(add_ok, end_tick, start_tick, duration_tick);
+    if add_ok != 1 {
+        return 0;
+    };
+    return end_tick;
+}
+
+@test "direct sab checked add macro writes scalar slot outputs"() {
+    let got = checked_add_slot(5, 7);
+    if got != 12 {
+        panic(19019);
+    };
+}

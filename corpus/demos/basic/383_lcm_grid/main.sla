@@ -1,0 +1,45 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// lcm 网格和（3×3 网格和为 28）。
+// 意对标 370 gcd 网格的 lcm 版（371 单表版互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn lcm(a: int, b: int) -> int {
+    return a / gcd(a, b) * b;
+}
+
+fn lcm_grid_sum(n: int) -> int {
+    let s = 0;
+    let i = 1;
+    while i <= n {
+        let j = 1;
+        while j <= n {
+            s = s + lcm(i, j);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{}", lcm_grid_sum(3), lcm_grid_sum(2));
+    return 0;
+}
+
+@test "basic 383 lcm grid"() {
+    if lcm_grid_sum(3) != 28 { panic(38301); };
+    if lcm_grid_sum(2) != 7 { panic(38302); };
+    if lcm_grid_sum(1) != 1 { panic(38303); };
+}

@@ -1,0 +1,94 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@const SLA_FNPTR_VT_pair_sum_i32 = vtable { call = @sla__pair_sum_i32 }
+@main() -> i32:
+L_ENTRY:
+    tmp_0 = 11
+    tmp_1 = 31
+    tmp_2 = call @sla__pair_sum_i32(tmp_0, tmp_1)
+    !tmp_0
+    !tmp_1
+    pair = tmp_2
+    tmp_3 = load pair+0 as i32
+    tmp_4 = call @sa_fmt_u64(tmp_3, 10)
+    tmp_5 = call @sa_fmt_buffer_data(tmp_4)
+    tmp_6 = call @sa_fmt_buffer_len(tmp_4)
+    tmp_7 = tmp_5
+    call @sa_print_bytes(&tmp_7, tmp_6)
+    call @sa_fmt_buffer_free(^tmp_4)
+    !tmp_7
+    !tmp_6
+    !tmp_3
+    @const SLA_STR_0 = utf8:","
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_8 = load pair+4 as i32
+    tmp_9 = call @sa_fmt_u64(tmp_8, 10)
+    tmp_10 = call @sa_fmt_buffer_data(tmp_9)
+    tmp_11 = call @sa_fmt_buffer_len(tmp_9)
+    tmp_12 = tmp_10
+    call @sa_print_bytes(&tmp_12, tmp_11)
+    call @sa_fmt_buffer_free(^tmp_9)
+    !tmp_12
+    !tmp_11
+    !tmp_8
+    @const SLA_STR_1 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_1, 1)
+    tmp_13 = 0
+    !pair
+    return tmp_13
+
+@sla__pair_sum_i32(a: i32, b: i32) -> ptr:
+L_ENTRY:
+    tmp_14 = alloc 8
+    store tmp_14+0, a as i32
+    store tmp_14+4, b as i32
+    return tmp_14
+
+@test "rosetta 048 generic pair"():
+L_TEST_ENTRY_0:
+    tmp_15 = 11
+    tmp_16 = 31
+    tmp_17 = call @sla__pair_sum_i32(tmp_15, tmp_16)
+    !tmp_15
+    !tmp_16
+    pair = tmp_17
+    tmp_18 = load pair+0 as i32
+    tmp_19 = 11
+    tmp_20 = ne tmp_18, tmp_19
+    !tmp_18
+    !tmp_19
+    br tmp_20 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_20
+    panic(48)
+
+L_ELSE_2:
+    !tmp_20
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    tmp_23 = load pair+4 as i32
+    tmp_24 = 31
+    tmp_25 = ne tmp_23, tmp_24
+    !tmp_23
+    !tmp_24
+    br tmp_25 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_25
+    panic(148)
+
+L_ELSE_5:
+    !tmp_25
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    !pair
+    return
+

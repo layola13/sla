@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/box.sa"
+
+fn box_into_raw_value() -> i32 {
+    let boxed = Box::new(9);
+    let raw = Box::into_raw(boxed);
+    let value = unsafe { *raw };
+    return value;
+}
+
+fn main() -> i32 {
+    let boxed = Box::new(9);
+    let raw = Box::into_raw(boxed);
+    let result = unsafe { *raw };
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 153 153_box_into_raw"() {
+    let got = box_into_raw_value();
+    if got != 9 {
+        panic(153);
+    };
+}

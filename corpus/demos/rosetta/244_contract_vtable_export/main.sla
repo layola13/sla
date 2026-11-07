@@ -1,0 +1,21 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn contract_vtable_exported_slots() -> i32 {
+    let init_slot = 1;
+    let run_slot = 1;
+    return init_slot + run_slot;
+}
+
+fn main() -> i32 {
+    let init_slot = 1;
+    let run_slot = 1;
+    let result = init_slot + run_slot;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 244 contract vtable export"() {
+    let got = contract_vtable_exported_slots();
+    if got != 2 { panic(244); };
+}

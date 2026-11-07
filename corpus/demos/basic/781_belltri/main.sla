@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Bell Aitken 三角 T(n,0)=T(n-1,n-1)（B(8)=4140，B(9)=21147，B(10)=115975）。
+// 意对标 776_bell9（递推版互补；785 做三向收束）。
+
+fn bt(n: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        t[mm * w] = t[(mm - 1) * w + mm - 1];
+        let nn = 1;
+        while nn <= mm {
+            t[mm * w + nn] = t[mm * w + nn - 1] + t[(mm - 1) * w + nn - 1];
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", bt(8), bt(9), bt(10));
+    return 0;
+}
+
+@test "basic 781 belltri"() {
+    if bt(8) != 4140 { panic(78101); };
+    if bt(9) != 21147 { panic(78102); };
+    if bt(10) != 115975 { panic(78103); };
+    if bt(7) != 877 { panic(78104); };
+}

@@ -1,0 +1,931 @@
+@import "sa_std/tree_sitter.sai"
+@import "sa_std/fs.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/io/print.sai"
+@import "byteseq.sa"
+@import "append.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_type_is = vtable { call = @sla__type_is }
+@const SLA_FNPTR_VT_acc_is = vtable { call = @sla__acc_is }
+@const SLA_FNPTR_VT_harvest_decl = vtable { call = @sla__harvest_decl }
+@const SLA_FNPTR_VT_harvest = vtable { call = @sla__harvest }
+@const SLA_FNPTR_VT_collect_functions = vtable { call = @sla__collect_functions }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__type_is(node: u64, lit: ptr, lit_len: u64) -> u8:
+L_ENTRY:
+    buf = alloc 64
+    tmp_0 = 0
+    tmp_1 = tmp_0 as u8
+    EXPAND SLA_ARRAY_FILL_U8 buf, tmp_1, 64
+    tmp_2 = 0
+    len = stack_alloc 8
+    store len+0, tmp_2 as u64
+    !tmp_2
+    tmp_3 = ptr_add buf, 0
+    tmp_4 = 64
+    tmp_5 = ptr_add len, 0
+    tmp_6 = call @sa_ts_node_type(node, &tmp_3, tmp_4, &tmp_5)
+    !tmp_3
+    !tmp_4
+    !tmp_5
+    tmp_7 = 0
+    tmp_8 = ne tmp_6, tmp_7
+    !tmp_6
+    !tmp_7
+    br tmp_8 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_8
+    tmp_9 = 0
+    !buf
+    !node
+    !lit_len
+    !lit
+    return tmp_9
+
+L_ELSE_1:
+    !tmp_8
+    jmp L_MERGE_2
+
+L_MERGE_2:
+    slot = alloc 8
+    tmp_11 = 0
+    tmp_12 = tmp_11 as u64
+    store slot+0, tmp_12 as u64
+    tmp_13 = ptr_add slot, 0
+    tmp_14 = ptr_add buf, 0
+    tmp_15 = load len+0 as u64
+    EXPAND BYTES_EQ tmp_13, tmp_14, tmp_15, lit, lit_len
+    !tmp_13
+    !tmp_14
+    !tmp_15
+    tmp_16 = 0
+    tmp_17 = mul tmp_16, 8
+    tmp_18 = ptr_add slot, tmp_17
+    !tmp_17
+    !tmp_16
+    tmp_19 = load tmp_18+0 as u64
+    !tmp_18
+    tmp_20 = 1
+    tmp_21 = eq tmp_19, tmp_20
+    !tmp_19
+    !tmp_20
+    !buf
+    !slot
+    !node
+    !lit_len
+    !lit
+    return tmp_21
+
+@sla__acc_is(&acc: ptr, lit: ptr, lit_len: u64) -> u8:
+L_ENTRY:
+    slot = alloc 8
+    tmp_22 = 0
+    tmp_23 = tmp_22 as u64
+    store slot+0, tmp_23 as u64
+    tmp_24 = ptr_add slot, 0
+    tmp_25 = ptr_add acc, 0
+    tmp_26 = load tmp_25+0 as ptr
+    !tmp_25
+    tmp_27 = load acc+512 as u64
+    EXPAND BYTES_EQ tmp_24, tmp_26, tmp_27, lit, lit_len
+    !tmp_24
+    !tmp_26
+    !tmp_27
+    tmp_28 = 0
+    tmp_29 = mul tmp_28, 8
+    tmp_30 = ptr_add slot, tmp_29
+    !tmp_29
+    !tmp_28
+    tmp_31 = load tmp_30+0 as u64
+    !tmp_30
+    tmp_32 = 1
+    tmp_33 = eq tmp_31, tmp_32
+    !tmp_31
+    !tmp_32
+    !slot
+    !lit_len
+    !lit
+    !acc
+    return tmp_33
+
+@sla__harvest_decl(decl: u64, &acc: ptr) -> u64:
+L_ENTRY:
+    tmp_34 = acc
+    acc = stack_alloc 8
+    store acc+0, tmp_34 as ptr
+    tmp_35 = 0
+    name_node = stack_alloc 8
+    store name_node+0, tmp_35 as u64
+    !tmp_35
+    @const SLA_STR_0 = utf8:"name\0"
+    tmp_38 = 4
+    tmp_37 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_37, &SLA_STR_0, tmp_38
+    !tmp_38
+    EXPAND STR_PTR tmp_36, tmp_37
+    @const SLA_STR_1 = utf8:"name\0"
+    tmp_41 = 4
+    tmp_40 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_40, &SLA_STR_1, tmp_41
+    !tmp_41
+    EXPAND STR_LEN tmp_39, tmp_40
+    tmp_42 = ptr_add name_node, 0
+    tmp_43 = call @sa_ts_node_child_by_field(decl, &tmp_36, tmp_39, &tmp_42)
+    !tmp_36
+    !tmp_39
+    !tmp_42
+    tmp_44 = 0
+    tmp_45 = eq tmp_43, tmp_44
+    !tmp_43
+    !tmp_44
+    tmp_46 = load name_node+0 as u64
+    tmp_47 = 0
+    tmp_48 = ne tmp_46, tmp_47
+    !tmp_47
+    tmp_49 = and tmp_45, tmp_48
+    !tmp_45
+    !tmp_48
+    br tmp_49 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_49
+    tbuf = alloc 128
+    tmp_50 = 0
+    tmp_51 = tmp_50 as u8
+    EXPAND SLA_ARRAY_FILL_U8 tbuf, tmp_51, 128
+    tmp_52 = 0
+    tlen = stack_alloc 8
+    store tlen+0, tmp_52 as u64
+    !tmp_52
+    tmp_53 = 0
+    ok = add tmp_53, 0
+    !tmp_53
+    tmp_54 = load name_node+0 as u64
+    tmp_55 = ptr_add tbuf, 0
+    tmp_56 = 128
+    tmp_57 = ptr_add tlen, 0
+    tmp_58 = call @sa_ts_node_text(tmp_54, &tmp_55, tmp_56, &tmp_57)
+    !tmp_54
+    !tmp_55
+    !tmp_56
+    !tmp_57
+    tmp_59 = 0
+    tmp_60 = eq tmp_58, tmp_59
+    !tmp_58
+    !tmp_59
+    br tmp_60 -> L_THEN_6, L_ELSE_7
+
+L_THEN_6:
+    !tmp_60
+    tmp_61 = load acc+0 as ptr
+    tmp_62 = ptr_add tmp_61, 0
+    tmp_63 = load tmp_62+0 as ptr
+    !tmp_62
+    tmp_64 = load acc+0 as ptr
+    tmp_65 = load tmp_64+512 as u64
+    !tmp_64
+    tmp_66 = ptr_add tbuf, 0
+    tmp_67 = load tlen+0 as u64
+    EXPAND APPEND_BYTES tmp_63, tmp_65, tmp_66, tmp_67
+    !tmp_63
+    !tmp_61
+    !tmp_65
+    !tmp_66
+    !tmp_67
+    tmp_68 = load acc+0 as ptr
+    tmp_69 = load acc+0 as ptr
+    tmp_70 = load tmp_69+512 as u64
+    !tmp_69
+    tmp_71 = load tlen+0 as u64
+    tmp_72 = add tmp_70, tmp_71
+    !tmp_70
+    store tmp_68+512, tmp_72 as u64
+    !tmp_68
+    !tmp_72
+    tmp_73 = load acc+0 as ptr
+    tmp_74 = load tmp_73+0 as ptr
+    !tmp_73
+    tmp_75 = load acc+0 as ptr
+    tmp_76 = load tmp_75+512 as u64
+    !tmp_75
+    tmp_77 = mul tmp_76, 1
+    tmp_78 = ptr_add tmp_74, tmp_77
+    !tmp_77
+    !tmp_76
+    tmp_79 = 10
+    store tmp_78+0, tmp_79 as u8
+    !tmp_78
+    !tmp_74
+    !tmp_79
+    tmp_80 = load acc+0 as ptr
+    tmp_81 = load acc+0 as ptr
+    tmp_82 = load tmp_81+512 as u64
+    !tmp_81
+    tmp_83 = 1
+    tmp_84 = add tmp_82, tmp_83
+    !tmp_82
+    !tmp_83
+    store tmp_80+512, tmp_84 as u64
+    !tmp_80
+    !tmp_84
+    tmp_85 = 1
+    !ok
+    ok = tmp_85
+    jmp L_MERGE_8
+
+L_ELSE_7:
+    !tmp_60
+    jmp L_MERGE_8
+
+L_MERGE_8:
+    tmp_87 = load name_node+0 as u64
+    tmp_88 = call @sa_ts_node_free(^tmp_87)
+    !tmp_88
+    !tbuf
+    !decl
+    return ok
+
+L_ELSE_4:
+    !tmp_49
+    jmp L_MERGE_5
+
+L_MERGE_5:
+    tmp_90 = 0
+    !decl
+    return tmp_90
+
+@sla__harvest(child: u64, &acc: ptr) -> u64:
+L_ENTRY:
+    @const SLA_STR_2 = utf8:"function_declaration\0"
+    tmp_93 = 20
+    tmp_92 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_92, &SLA_STR_2, tmp_93
+    !tmp_93
+    EXPAND STR_PTR tmp_91, tmp_92
+    @const SLA_STR_3 = utf8:"function_declaration\0"
+    tmp_96 = 20
+    tmp_95 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_95, &SLA_STR_3, tmp_96
+    !tmp_96
+    EXPAND STR_LEN tmp_94, tmp_95
+    tmp_97 = call @sla__type_is(child, tmp_91, tmp_94)
+    !tmp_91
+    !tmp_94
+    br tmp_97 -> L_THEN_9, L_ELSE_10
+
+L_THEN_9:
+    !tmp_97
+    tmp_98 = call @sla__harvest_decl(child, &acc)
+    !child
+    !acc
+    return tmp_98
+
+L_ELSE_10:
+    !tmp_97
+    jmp L_MERGE_11
+
+L_MERGE_11:
+    @const SLA_STR_4 = utf8:"export_statement\0"
+    tmp_102 = 16
+    tmp_101 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_101, &SLA_STR_4, tmp_102
+    !tmp_102
+    EXPAND STR_PTR tmp_100, tmp_101
+    @const SLA_STR_5 = utf8:"export_statement\0"
+    tmp_105 = 16
+    tmp_104 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_104, &SLA_STR_5, tmp_105
+    !tmp_105
+    EXPAND STR_LEN tmp_103, tmp_104
+    tmp_106 = call @sla__type_is(child, tmp_100, tmp_103)
+    !tmp_100
+    !tmp_103
+    br tmp_106 -> L_THEN_12, L_ELSE_13
+
+L_THEN_12:
+    !tmp_106
+    tmp_107 = 0
+    inner = stack_alloc 8
+    store inner+0, tmp_107 as u64
+    !tmp_107
+    tmp_108 = 0
+    tmp_109 = 1
+    tmp_110 = ptr_add inner, 0
+    tmp_111 = call @sa_ts_node_child(child, tmp_108, tmp_109, &tmp_110)
+    !tmp_108
+    !tmp_109
+    !tmp_110
+    tmp_112 = 0
+    tmp_113 = eq tmp_111, tmp_112
+    !tmp_111
+    !tmp_112
+    tmp_114 = load inner+0 as u64
+    tmp_115 = 0
+    tmp_116 = ne tmp_114, tmp_115
+    !tmp_115
+    tmp_117 = and tmp_113, tmp_116
+    !tmp_113
+    !tmp_116
+    br tmp_117 -> L_THEN_15, L_ELSE_16
+
+L_THEN_15:
+    !tmp_117
+    tmp_118 = 0
+    r = add tmp_118, 0
+    !tmp_118
+    tmp_119 = load inner+0 as u64
+    @const SLA_STR_6 = utf8:"function_declaration\0"
+    tmp_122 = 20
+    tmp_121 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_121, &SLA_STR_6, tmp_122
+    !tmp_122
+    EXPAND STR_PTR tmp_120, tmp_121
+    @const SLA_STR_7 = utf8:"function_declaration\0"
+    tmp_125 = 20
+    tmp_124 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_124, &SLA_STR_7, tmp_125
+    !tmp_125
+    EXPAND STR_LEN tmp_123, tmp_124
+    tmp_126 = call @sla__type_is(tmp_119, tmp_120, tmp_123)
+    !tmp_119
+    !tmp_120
+    !tmp_123
+    br tmp_126 -> L_THEN_18, L_ELSE_19
+
+L_THEN_18:
+    !tmp_126
+    tmp_127 = load inner+0 as u64
+    tmp_128 = call @sla__harvest_decl(tmp_127, &acc)
+    !tmp_127
+    !r
+    r = tmp_128
+    jmp L_MERGE_20
+
+L_ELSE_19:
+    !tmp_126
+    jmp L_MERGE_20
+
+L_MERGE_20:
+    tmp_130 = load inner+0 as u64
+    tmp_131 = call @sa_ts_node_free(^tmp_130)
+    !tmp_131
+    !child
+    !acc
+    return r
+
+L_ELSE_16:
+    !tmp_117
+    jmp L_MERGE_17
+
+L_MERGE_17:
+    jmp L_MERGE_14
+
+L_ELSE_13:
+    !tmp_106
+    jmp L_MERGE_14
+
+L_MERGE_14:
+    tmp_134 = 0
+    !child
+    !acc
+    return tmp_134
+
+@sla__collect_functions(root: u64, &acc: ptr) -> u64:
+L_ENTRY:
+    tmp_135 = 0
+    found = add tmp_135, 0
+    !tmp_135
+    tmp_136 = 0
+    total = stack_alloc 4
+    store total+0, tmp_136 as u32
+    !tmp_136
+    tmp_137 = ptr_add total, 0
+    tmp_138 = call @sa_ts_node_named_child_count(root, &tmp_137)
+    !tmp_137
+    tmp_139 = 0
+    tmp_140 = ne tmp_138, tmp_139
+    !tmp_138
+    !tmp_139
+    br tmp_140 -> L_THEN_21, L_ELSE_22
+
+L_THEN_21:
+    !tmp_140
+    tmp_141 = 0
+    !found
+    !root
+    !acc
+    return tmp_141
+
+L_ELSE_22:
+    !tmp_140
+    jmp L_MERGE_23
+
+L_MERGE_23:
+    tmp_143 = 0
+    i = add tmp_143, 0
+    !tmp_143
+    jmp L_WHILE_HEAD_24
+
+L_WHILE_HEAD_24:
+    tmp_144 = load total+0 as u32
+    tmp_145 = ult i, tmp_144
+    br tmp_145 -> L_WHILE_BODY_25, L_WHILE_COND_FALSE_26
+
+L_WHILE_BODY_25:
+    !tmp_145
+    tmp_146 = 1
+    tmp_147 = add i, tmp_146
+    !tmp_146
+    !i
+    i = tmp_147
+    tmp_148 = 0
+    child = stack_alloc 8
+    store child+0, tmp_148 as u64
+    !tmp_148
+    tmp_149 = 1
+    tmp_150 = sub i, tmp_149
+    !tmp_149
+    tmp_151 = 1
+    tmp_152 = ptr_add child, 0
+    tmp_153 = call @sa_ts_node_child(root, tmp_150, tmp_151, &tmp_152)
+    !tmp_150
+    !tmp_151
+    !tmp_152
+    tmp_154 = 0
+    tmp_155 = eq tmp_153, tmp_154
+    !tmp_153
+    !tmp_154
+    tmp_156 = load child+0 as u64
+    tmp_157 = 0
+    tmp_158 = ne tmp_156, tmp_157
+    !tmp_157
+    tmp_159 = and tmp_155, tmp_158
+    !tmp_155
+    !tmp_158
+    br tmp_159 -> L_THEN_28, L_ELSE_29
+
+L_THEN_28:
+    !tmp_159
+    tmp_160 = load child+0 as u64
+    tmp_161 = call @sla__harvest(tmp_160, &acc)
+    !tmp_160
+    tmp_162 = add found, tmp_161
+    !tmp_161
+    !found
+    found = tmp_162
+    tmp_163 = load child+0 as u64
+    tmp_164 = call @sa_ts_node_free(^tmp_163)
+    !tmp_164
+    jmp L_MERGE_30
+
+L_ELSE_29:
+    !tmp_159
+    jmp L_MERGE_30
+
+L_MERGE_30:
+    jmp L_WHILE_HEAD_24
+
+L_WHILE_COND_FALSE_26:
+    !tmp_145
+    jmp L_WHILE_EXIT_27
+
+L_WHILE_EXIT_27:
+    !i
+    !root
+    !acc
+    return found
+
+@main() -> i32:
+L_ENTRY:
+    tmp_166 = call @sa_ts_available()
+    tmp_167 = 1
+    tmp_168 = ne tmp_166, tmp_167
+    !tmp_166
+    !tmp_167
+    br tmp_168 -> L_THEN_31, L_ELSE_32
+
+L_THEN_31:
+    !tmp_168
+    tmp_169 = 2
+    return tmp_169
+
+L_ELSE_32:
+    !tmp_168
+    jmp L_MERGE_33
+
+L_MERGE_33:
+    tmp_171 = 0
+    total = stack_alloc 8
+    store total+0, tmp_171 as u64
+    !tmp_171
+    @const SLA_STR_8 = utf8:"sample.ts\0"
+    tmp_174 = 9
+    tmp_173 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_173, &SLA_STR_8, tmp_174
+    !tmp_174
+    EXPAND STR_PTR tmp_172, tmp_173
+    @const SLA_STR_9 = utf8:"sample.ts\0"
+    tmp_177 = 9
+    tmp_176 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_176, &SLA_STR_9, tmp_177
+    !tmp_177
+    EXPAND STR_LEN tmp_175, tmp_176
+    tmp_178 = ptr_add total, 0
+    tmp_179 = call @sa_std_fs_len(&tmp_172, tmp_175, &tmp_178)
+    !tmp_172
+    !tmp_175
+    !tmp_178
+    tmp_180 = 0
+    tmp_181 = ne tmp_179, tmp_180
+    !tmp_179
+    !tmp_180
+    br tmp_181 -> L_THEN_34, L_ELSE_35
+
+L_THEN_34:
+    !tmp_181
+    tmp_182 = 3
+    return tmp_182
+
+L_ELSE_35:
+    !tmp_181
+    jmp L_MERGE_36
+
+L_MERGE_36:
+    tmp_184 = 0
+    fh = stack_alloc 8
+    store fh+0, tmp_184 as u64
+    !tmp_184
+    @const SLA_STR_10 = utf8:"sample.ts\0"
+    tmp_187 = 9
+    tmp_186 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_186, &SLA_STR_10, tmp_187
+    !tmp_187
+    EXPAND STR_PTR tmp_185, tmp_186
+    @const SLA_STR_11 = utf8:"sample.ts\0"
+    tmp_190 = 9
+    tmp_189 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_189, &SLA_STR_11, tmp_190
+    !tmp_190
+    EXPAND STR_LEN tmp_188, tmp_189
+    tmp_191 = ptr_add fh, 0
+    tmp_192 = call @sa_std_fs_open_read(&tmp_185, tmp_188, &tmp_191)
+    !tmp_185
+    !tmp_188
+    !tmp_191
+    tmp_193 = 0
+    tmp_194 = ne tmp_192, tmp_193
+    !tmp_192
+    !tmp_193
+    br tmp_194 -> L_THEN_37, L_ELSE_38
+
+L_THEN_37:
+    !tmp_194
+    tmp_195 = 4
+    return tmp_195
+
+L_ELSE_38:
+    !tmp_194
+    jmp L_MERGE_39
+
+L_MERGE_39:
+    src = alloc 8192
+    tmp_197 = 0
+    tmp_198 = tmp_197 as u8
+    EXPAND SLA_ARRAY_FILL_U8 src, tmp_198, 8192
+    tmp_199 = 0
+    read_n = stack_alloc 8
+    store read_n+0, tmp_199 as u64
+    !tmp_199
+    tmp_200 = load fh+0 as u64
+    tmp_201 = ptr_add src, 0
+    tmp_202 = 8192
+    tmp_203 = ptr_add read_n, 0
+    tmp_204 = call @sa_std_fs_file_read(tmp_200, &tmp_201, tmp_202, &tmp_203)
+    !tmp_200
+    !tmp_201
+    !tmp_202
+    !tmp_203
+    tmp_205 = 0
+    tmp_206 = ne tmp_204, tmp_205
+    !tmp_204
+    !tmp_205
+    br tmp_206 -> L_THEN_40, L_ELSE_41
+
+L_THEN_40:
+    !tmp_206
+    tmp_207 = 5
+    !src
+    return tmp_207
+
+L_ELSE_41:
+    !tmp_206
+    jmp L_MERGE_42
+
+L_MERGE_42:
+    tmp_209 = load fh+0 as u64
+    tmp_210 = call @sa_fs_file_close(tmp_209)
+    !tmp_209
+    !tmp_210
+    tmp_211 = load read_n+0 as u64
+    tmp_212 = load total+0 as u64
+    tmp_213 = ne tmp_211, tmp_212
+    br tmp_213 -> L_THEN_43, L_ELSE_44
+
+L_THEN_43:
+    !tmp_213
+    tmp_214 = 6
+    !src
+    return tmp_214
+
+L_ELSE_44:
+    !tmp_213
+    jmp L_MERGE_45
+
+L_MERGE_45:
+    tmp_216 = 0
+    parser = stack_alloc 8
+    store parser+0, tmp_216 as u64
+    !tmp_216
+    tmp_217 = ptr_add parser, 0
+    tmp_218 = call @sa_ts_parser_new(&tmp_217)
+    !tmp_217
+    tmp_219 = 0
+    tmp_220 = ne tmp_218, tmp_219
+    !tmp_218
+    !tmp_219
+    br tmp_220 -> L_THEN_46, L_ELSE_47
+
+L_THEN_46:
+    !tmp_220
+    tmp_221 = 7
+    !src
+    return tmp_221
+
+L_ELSE_47:
+    !tmp_220
+    jmp L_MERGE_48
+
+L_MERGE_48:
+    tmp_223 = load parser+0 as u64
+    @const SLA_STR_12 = utf8:"typescript\0"
+    tmp_226 = 10
+    tmp_225 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_225, &SLA_STR_12, tmp_226
+    !tmp_226
+    EXPAND STR_PTR tmp_224, tmp_225
+    @const SLA_STR_13 = utf8:"typescript\0"
+    tmp_229 = 10
+    tmp_228 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_228, &SLA_STR_13, tmp_229
+    !tmp_229
+    EXPAND STR_LEN tmp_227, tmp_228
+    tmp_230 = call @sa_ts_parser_set_language(tmp_223, &tmp_224, tmp_227)
+    !tmp_223
+    !tmp_224
+    !tmp_227
+    tmp_231 = 0
+    tmp_232 = ne tmp_230, tmp_231
+    !tmp_230
+    !tmp_231
+    br tmp_232 -> L_THEN_49, L_ELSE_50
+
+L_THEN_49:
+    !tmp_232
+    tmp_233 = 8
+    !src
+    return tmp_233
+
+L_ELSE_50:
+    !tmp_232
+    jmp L_MERGE_51
+
+L_MERGE_51:
+    tmp_235 = 0
+    tree = stack_alloc 8
+    store tree+0, tmp_235 as u64
+    !tmp_235
+    tmp_236 = load parser+0 as u64
+    tmp_237 = ptr_add src, 0
+    tmp_238 = load read_n+0 as u64
+    tmp_239 = ptr_add tree, 0
+    tmp_240 = call @sa_ts_parse(tmp_236, &tmp_237, tmp_238, &tmp_239)
+    !tmp_236
+    !tmp_237
+    !tmp_238
+    !tmp_239
+    tmp_241 = 0
+    tmp_242 = ne tmp_240, tmp_241
+    !tmp_240
+    !tmp_241
+    br tmp_242 -> L_THEN_52, L_ELSE_53
+
+L_THEN_52:
+    !tmp_242
+    tmp_243 = 9
+    !src
+    return tmp_243
+
+L_ELSE_53:
+    !tmp_242
+    jmp L_MERGE_54
+
+L_MERGE_54:
+    sbuf = alloc 8192
+    tmp_245 = 0
+    tmp_246 = tmp_245 as u8
+    EXPAND SLA_ARRAY_FILL_U8 sbuf, tmp_246, 8192
+    tmp_247 = 0
+    slen = stack_alloc 8
+    store slen+0, tmp_247 as u64
+    !tmp_247
+    tmp_248 = load tree+0 as u64
+    tmp_249 = ptr_add sbuf, 0
+    tmp_250 = 8192
+    tmp_251 = ptr_add slen, 0
+    tmp_252 = call @sa_ts_tree_sexp(tmp_248, &tmp_249, tmp_250, &tmp_251)
+    !tmp_248
+    !tmp_249
+    !tmp_250
+    !tmp_251
+    tmp_253 = 0
+    tmp_254 = ne tmp_252, tmp_253
+    !tmp_252
+    !tmp_253
+    br tmp_254 -> L_THEN_55, L_ELSE_56
+
+L_THEN_55:
+    !tmp_254
+    tmp_255 = 10
+    !src
+    !sbuf
+    return tmp_255
+
+L_ELSE_56:
+    !tmp_254
+    jmp L_MERGE_57
+
+L_MERGE_57:
+    tmp_257 = 0
+    root = stack_alloc 8
+    store root+0, tmp_257 as u64
+    !tmp_257
+    tmp_258 = load tree+0 as u64
+    tmp_259 = ptr_add root, 0
+    tmp_260 = call @sa_ts_tree_root(tmp_258, &tmp_259)
+    !tmp_258
+    !tmp_259
+    tmp_261 = 0
+    tmp_262 = ne tmp_260, tmp_261
+    !tmp_260
+    !tmp_261
+    br tmp_262 -> L_THEN_58, L_ELSE_59
+
+L_THEN_58:
+    !tmp_262
+    tmp_263 = 11
+    !src
+    !sbuf
+    return tmp_263
+
+L_ELSE_59:
+    !tmp_262
+    jmp L_MERGE_60
+
+L_MERGE_60:
+    tmp_265 = load root+0 as u64
+    @const SLA_STR_14 = utf8:"program\0"
+    tmp_268 = 7
+    tmp_267 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_267, &SLA_STR_14, tmp_268
+    !tmp_268
+    EXPAND STR_PTR tmp_266, tmp_267
+    @const SLA_STR_15 = utf8:"program\0"
+    tmp_271 = 7
+    tmp_270 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_270, &SLA_STR_15, tmp_271
+    !tmp_271
+    EXPAND STR_LEN tmp_269, tmp_270
+    tmp_272 = call @sla__type_is(tmp_265, tmp_266, tmp_269)
+    !tmp_265
+    !tmp_266
+    !tmp_269
+    tmp_273 = 0
+    tmp_274 = eq tmp_272, tmp_273
+    !tmp_272
+    !tmp_273
+    br tmp_274 -> L_THEN_61, L_ELSE_62
+
+L_THEN_61:
+    !tmp_274
+    tmp_275 = 12
+    !src
+    !sbuf
+    return tmp_275
+
+L_ELSE_62:
+    !tmp_274
+    jmp L_MERGE_63
+
+L_MERGE_63:
+    acc = alloc 520
+    tmp_277 = alloc 512
+    tmp_278 = 0
+    tmp_279 = tmp_278 as u8
+    EXPAND SLA_ARRAY_FILL_U8 tmp_277, tmp_279, 512
+    store acc+0, ^tmp_277 as ptr
+    tmp_280 = 0
+    store acc+512, tmp_280 as u64
+    !tmp_280
+    tmp_281 = load root+0 as u64
+    tmp_282 = ptr_add acc, 0
+    tmp_283 = call @sla__collect_functions(tmp_281, &tmp_282)
+    !tmp_281
+    !tmp_282
+    found = add tmp_283, 0
+    !tmp_283
+    tmp_284 = 2
+    tmp_285 = ne found, tmp_284
+    !tmp_284
+    br tmp_285 -> L_THEN_64, L_ELSE_65
+
+L_THEN_64:
+    !tmp_285
+    tmp_286 = 13
+    !found
+    !src
+    !acc
+    !sbuf
+    return tmp_286
+
+L_ELSE_65:
+    !tmp_285
+    jmp L_MERGE_66
+
+L_MERGE_66:
+    tmp_288 = ptr_add acc, 0
+    @const SLA_STR_16 = utf8:"add\ngreet\n\0"
+    tmp_291 = 10
+    tmp_290 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_290, &SLA_STR_16, tmp_291
+    !tmp_291
+    EXPAND STR_PTR tmp_289, tmp_290
+    @const SLA_STR_17 = utf8:"add\ngreet\n\0"
+    tmp_294 = 10
+    tmp_293 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_293, &SLA_STR_17, tmp_294
+    !tmp_294
+    EXPAND STR_LEN tmp_292, tmp_293
+    tmp_295 = call @sla__acc_is(&tmp_288, tmp_289, tmp_292)
+    !tmp_288
+    !tmp_289
+    !tmp_292
+    tmp_296 = 0
+    tmp_297 = eq tmp_295, tmp_296
+    !tmp_295
+    !tmp_296
+    br tmp_297 -> L_THEN_67, L_ELSE_68
+
+L_THEN_67:
+    !tmp_297
+    tmp_298 = 14
+    !found
+    !src
+    !acc
+    !sbuf
+    return tmp_298
+
+L_ELSE_68:
+    !tmp_297
+    jmp L_MERGE_69
+
+L_MERGE_69:
+    tmp_300 = load root+0 as u64
+    tmp_301 = call @sa_ts_node_free(^tmp_300)
+    !tmp_301
+    tmp_302 = load tree+0 as u64
+    tmp_303 = call @sa_ts_tree_free(^tmp_302)
+    !tmp_303
+    tmp_304 = load parser+0 as u64
+    tmp_305 = call @sa_ts_parser_free(^tmp_304)
+    !tmp_305
+    @const SLA_STR_18 = utf8:"d7 code graph ok"
+    call @sa_print_bytes(&SLA_STR_18, 16)
+    @const SLA_STR_19 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_19, 1)
+    tmp_306 = 0
+    !found
+    !src
+    !acc
+    !sbuf
+    return tmp_306
+

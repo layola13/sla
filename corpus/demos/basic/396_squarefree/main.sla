@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 无平方因子判定与计数（<=20 有 13 个；387 的存在版）。
+// 意对标 387 莫比乌斯零值版的计数版（387 互补）。
+
+fn is_squarefree(n: int) -> int {
+    if n < 1 { return 0; };
+    let d = 2;
+    while d * d <= n {
+        if n % (d * d) == 0 { return 0; };
+        d = d + 1;
+    }
+    return 1;
+}
+
+fn squarefree_count(limit: int) -> int {
+    let c = 0;
+    let k = 1;
+    while k <= limit {
+        if is_squarefree(k) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", is_squarefree(6), is_squarefree(12), is_squarefree(30), squarefree_count(20));
+    return 0;
+}
+
+@test "basic 396 squarefree"() {
+    if is_squarefree(6) != 1 { panic(39601); };
+    if is_squarefree(12) != 0 { panic(39602); };
+    if is_squarefree(30) != 1 { panic(39603); };
+    if is_squarefree(18) != 0 { panic(39604); };
+    if squarefree_count(20) != 13 { panic(39605); };
+}

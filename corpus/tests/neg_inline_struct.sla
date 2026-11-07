@@ -1,0 +1,4 @@
+// expect: InlineStructNotAllowed
+// neg: inline prefix on a struct declaration
+inline struct S { a: i32 }
+fn main() -> i32 { return 0; }

@@ -1,0 +1,50 @@
+// Extern variadic batch, Face B (define with VaList).
+//
+// An exported extern "C" definition may end its parameter list with a
+// VaList parameter (`args: ...`). The body reads the promoted trailing
+// arguments through the typed va_next_* builtins. Reading is the
+// caller's protocol responsibility, exactly as in C/Rust: the tests
+// always pass precisely the arguments the callee reads.
+//
+// Baseline behaviour: the spelling is a SyntaxError on the pristine
+// tree; after the batch the values read back must match exactly.
+
+extern "C" fn va_sum3(fixed: i32, args: ...) -> i64 {
+    let a = va_next_i32(args);
+    let b = va_next_i32(args);
+    let c = va_next_i32(args);
+    return fixed as i64 + a as i64 + b as i64 + c as i64;
+}
+
+extern "C" fn va_mix(tag: i32, args: ...) -> f64 {
+    let wide = va_next_i64(args);
+    let frac = va_next_f64(args);
+    let small = va_next_i32(args);
+    return wide as f64 + frac + small as f64 + tag as f64;
+}
+
+extern "C" fn va_first_ptr(tag: i32, args: ...) -> ptr {
+    return va_next_ptr(args);
+}
+
+@test "variadic definition sums promoted i32 args"() {
+    let total = unsafe { va_sum3(100, 10, 20, 12) };
+    if total != 142 {
+        panic(7201);
+    };
+}
+
+@test "variadic definition reads i64 f64 i32 in order"() {
+    let v = unsafe { va_mix(1, 10000000000, 0.25, -2) };
+    if v != 10000000000.25 - 2.0 + 1.0 {
+        panic(7202);
+    };
+}
+
+@test "variadic definition returns pointer arg"() {
+    let cell = stack_alloc(8);
+    let got = unsafe { va_first_ptr(0, cell) };
+    if got != cell {
+        panic(7203);
+    };
+}

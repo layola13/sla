@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Lah 列纵深 L(7,2)=15120，L(8,2)=141120，L(9,2)=1451520（第二列上行链）。
+// 意对标 836_lah9（单格版互补；843 做列对峙）。
+
+fn lah(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + (mm + nn - 1) * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", lah(7, 2), lah(8, 2), lah(9, 2));
+    return 0;
+}
+
+@test "basic 842 lah col29"() {
+    if lah(7, 2) != 15120 { panic(84201); };
+    if lah(8, 2) != 141120 { panic(84202); };
+    if lah(9, 2) != 1451520 { panic(84203); };
+    if lah(9, 3) != 1693440 { panic(84204); };
+}

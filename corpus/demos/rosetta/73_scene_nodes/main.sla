@@ -1,0 +1,35 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct SceneNode {
+    visible: bool,
+    weight: i32,
+}
+
+fn visible_weight(nodes: [SceneNode; 3]) -> i32 {
+    let total = 0;
+    for node in nodes {
+        if node.visible == true {
+            let weight = node.weight;
+            total = total + weight;
+        };
+    }
+    return total;
+}
+
+fn main() -> i32 {
+    let nodes = [
+        SceneNode { visible: true, weight: 4 },
+        SceneNode { visible: false, weight: 5 },
+        SceneNode { visible: true, weight: 6 },
+    ];
+    let total = visible_weight(nodes);
+    println("{}", total);
+    return total;
+}
+
+@test "rosetta 073 73_scene_nodes"() {
+    if main() != 10 {
+        panic(73);
+    };
+}

@@ -1,0 +1,21 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+fn poll_pending_task_once() -> bool {
+    let fut = future::pending::<i32>();
+    let task = task::new(fut);
+    let ready = task::poll(task);
+    if ready == true {
+        return false;
+    };
+    if task::is_ready(task) == true {
+        return false;
+    };
+    return true;
+}
+
+@test "future pending task poll runtime"() {
+    if poll_pending_task_once() != true {
+        panic(9101);
+    };
+}

@@ -1,0 +1,144 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/result.sa"
+@import "sa_std/sync/mutex.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@import "sa_std/core/result.sa"
+@const SLA_FNPTR_VT_inspect = vtable { call = @sla__inspect }
+@const SLA_FNPTR_VT_raii_guard_total = vtable { call = @sla__raii_guard_total }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__inspect(&counter: ptr, skip: u8) -> i32:
+L_ENTRY:
+    EXPAND MUTEX_LOCK counter
+    tmp_0 = ptr_add counter, Mutex_data
+    EXPAND RESULT_NEW_OK tmp_1, tmp_0
+    !tmp_0
+    tmp_3 = load tmp_1+0 as u64
+    tmp_4 = eq tmp_3, 0
+    br tmp_4 -> L_RESULT_UNWRAP_OK_0, L_RESULT_UNWRAP_ERR_1
+
+L_RESULT_UNWRAP_OK_0:
+    !tmp_4
+    tmp_2 = load tmp_1+8 as ptr
+    !tmp_3
+    jmp L_RESULT_UNWRAP_END_2
+
+L_RESULT_UNWRAP_ERR_1:
+    !tmp_4
+    panic(17)
+    tmp_2 = 0
+    !tmp_3
+    jmp L_RESULT_UNWRAP_END_2
+
+L_RESULT_UNWRAP_END_2:
+    !tmp_1
+    guard = tmp_2
+    tmp_5 = or skip, 0
+    br tmp_5 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_5
+    tmp_6 = load guard+0 as i32
+    value = add tmp_6, 0
+    !tmp_6
+    EXPAND MUTEX_UNLOCK counter
+    !guard
+    !skip
+    return value
+
+L_ELSE_4:
+    !tmp_5
+    jmp L_MERGE_5
+
+L_MERGE_5:
+    tmp_8 = load guard+0 as i32
+    current = add tmp_8, 0
+    !tmp_8
+    tmp_9 = 3
+    tmp_10 = add current, tmp_9
+    !tmp_9
+    updated = add tmp_10, 0
+    !tmp_10
+    store guard+0, updated as i32
+    EXPAND MUTEX_UNLOCK counter
+    !guard
+    !current
+    !skip
+    return updated
+
+@sla__raii_guard_total() -> i32:
+L_ENTRY:
+    tmp_11 = 0
+    EXPAND MUTEX_NEW_I32 tmp_12, tmp_11
+    !tmp_11
+    counter = tmp_12
+    tmp_13 = ptr_add counter, 0
+    tmp_14 = 1
+    tmp_15 = call @sla__inspect(&tmp_13, tmp_14)
+    !tmp_13
+    !tmp_14
+    first = add tmp_15, 0
+    !tmp_15
+    tmp_16 = ptr_add counter, 0
+    tmp_17 = 0
+    tmp_18 = call @sla__inspect(&tmp_16, tmp_17)
+    !tmp_16
+    !tmp_17
+    second = add tmp_18, 0
+    !tmp_18
+    tmp_19 = add first, second
+    !first
+    !counter
+    !second
+    return tmp_19
+
+@main() -> i32:
+L_ENTRY:
+    tmp_20 = 0
+    EXPAND MUTEX_NEW_I32 tmp_21, tmp_20
+    !tmp_20
+    counter = tmp_21
+    tmp_22 = ptr_add counter, 0
+    tmp_23 = 1
+    tmp_24 = call @sla__inspect(&tmp_22, tmp_23)
+    !tmp_22
+    !tmp_23
+    first = add tmp_24, 0
+    !tmp_24
+    tmp_25 = ptr_add counter, 0
+    tmp_26 = 0
+    tmp_27 = call @sla__inspect(&tmp_25, tmp_26)
+    !tmp_25
+    !tmp_26
+    second = add tmp_27, 0
+    !tmp_27
+    tmp_28 = add first, second
+    result = add tmp_28, 0
+    !tmp_28
+    tmp_29 = call @sa_fmt_u64(result, 10)
+    tmp_30 = call @sa_fmt_buffer_data(tmp_29)
+    tmp_31 = call @sa_fmt_buffer_len(tmp_29)
+    tmp_32 = tmp_30
+    call @sa_print_bytes(&tmp_32, tmp_31)
+    call @sa_fmt_buffer_free(^tmp_29)
+    !tmp_32
+    !tmp_31
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    !first
+    !counter
+    !second
+    return result
+
+@test "rosetta 102 102_raii_guard"():
+L_TEST_ENTRY_6:
+    return
+

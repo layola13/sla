@@ -1,0 +1,11 @@
+@import "bin/alpha/index.sa"
+@import "bin/beta/index.sa"
+
+@bins_total() -> i32:
+L_ENTRY:
+    alpha = call @alpha_bin_value()
+    beta = call @beta_bin_value()
+    value = add alpha, beta
+    !alpha
+    !beta
+    return value

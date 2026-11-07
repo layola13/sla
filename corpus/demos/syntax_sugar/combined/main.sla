@@ -1,0 +1,46 @@
+@import "sla_std/cmp.sla"
+@import "../using_module_import/score_math.sla"
+
+mod entity_math {
+    pub fn add_delta(value: i32, delta: i32) -> i32 {
+        return value + delta;
+    }
+}
+
+using entity_math;
+using score_math;
+
+@derive(ord)
+struct DemoEntity {
+    id: i64,
+    generation: i64,
+}
+
+struct Transform2d {
+    x: i32,
+    y: i32,
+    layer: i32,
+}
+
+fn move_right(transform: Transform2d, dx: i32) -> Transform2d {
+    return Transform2d {
+        x: transform.x.add_delta(dx),
+        ..transform
+    };
+}
+
+@test "using struct update and spaceship compose"() {
+    let original = Transform2d { x: 10, y: 20, layer: 3 };
+    let moved = move_right(original, 7);
+    if moved.x != 17 { panic(34300); };
+    if moved.y != 20 { panic(34301); };
+    if moved.layer != 3 { panic(34302); };
+    let chained = moved.x.add_bonus(5).double();
+    if chained != 44 { panic(34305); };
+
+    let first = DemoEntity { id: 4, generation: 1 };
+    let second = DemoEntity { id: 4, generation: 2 };
+    let order = first <=> second;
+    if order.is_lt() != true { panic(34303); };
+    if order.then(Ordering::greater()).is_lt() != true { panic(34304); };
+}

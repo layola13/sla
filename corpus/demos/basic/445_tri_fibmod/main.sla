@@ -1,0 +1,58 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 模斐波那契三向对峙（循环 vs 递归 vs Pisano 约化：(10,7) 皆得 6）。
+// 意对标 444 双边版的三向版（439 互补）。
+
+fn fm_loop(n: int, m: int) -> int {
+    if n == 0 { return 0; };
+    let a = 0;
+    let b = 1;
+    let i = 1;
+    while i <= n {
+        let t = (a + b) % m;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    return a;
+}
+
+fn fm_rec(n: int, m: int) -> int {
+    if n == 0 { return 0; };
+    if n == 1 { return 1 % m; };
+    return (fm_rec(n - 1, m) + fm_rec(n - 2, m)) % m;
+}
+
+fn pisano(m: int) -> int {
+    let a = 0;
+    let b = 1;
+    let k = 1;
+    while k <= 6 * m {
+        let t = (a + b) % m;
+        a = b;
+        b = t;
+        if a == 0 {
+            if b == 1 { return k; };
+        };
+        k = k + 1;
+    }
+    return 0;
+}
+
+fn fm_red(n: int, m: int) -> int {
+    return fm_loop(n % pisano(m), m);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", fm_loop(10, 7), fm_rec(10, 7), fm_red(10, 7));
+    return 0;
+}
+
+@test "basic 445 tri fibmod"() {
+    if fm_loop(10, 7) != 6 { panic(44501); };
+    if fm_rec(10, 7) != 6 { panic(44502); };
+    if fm_red(10, 7) != 6 { panic(44503); };
+    if fm_loop(10, 7) != fm_rec(10, 7) { panic(44504); };
+    if fm_rec(10, 7) != fm_red(10, 7) { panic(44505); };
+}

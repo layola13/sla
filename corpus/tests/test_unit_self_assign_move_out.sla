@@ -1,0 +1,127 @@
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+// REG-BR-6 (quadratic-append junction): self-assignment through a
+// by-value call, `x = f(x, ..)`, must move the old value out to the
+// callee instead of deep-cloning it, in every block shape. The
+// addressable forms (the binding's address is taken by a borrow call)
+// previously trapped the SA referee with UseAfterMove 1009 on the SA
+// text backend when the self-assignment sat inside a branch or match
+// arm - the sa_std dns.sla `dns_build_query` shape: the current-block
+// liveness scan saw no later use inside the arm, so no clone was
+// emitted, the call moved the slot, and the assignment then stored
+// through the consumed slot.
+
+fn regbr6_appv(v: Vec<u8>, b: u8) -> Vec<u8> {
+    v.push(b);
+    return v;
+}
+
+fn regbr6_touchv(v: &Vec<u8>) -> u64 {
+    return len(v);
+}
+
+fn regbr6_wrap(s: String) -> String {
+    return format("[{}]", s);
+}
+
+fn regbr6_touchs(s: &String) -> u64 {
+    return len(s);
+}
+
+@test "self-assign accumulation straight line"() {
+    let buf: Vec<u8> = Vec::new();
+    buf = regbr6_appv(buf, 65);
+    buf = regbr6_appv(buf, 66);
+    if len(buf) != 2 {
+        panic(6701);
+    };
+    if buf[0] != 65 {
+        panic(6702);
+    };
+    if buf[1] != 66 {
+        panic(6703);
+    };
+}
+
+@test "self-assign accumulation in a loop"() {
+    let buf: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < 4 {
+        buf = regbr6_appv(buf, 65);
+        i = i + 1;
+    }
+    if len(buf) != 4 {
+        panic(6704);
+    };
+    if buf[3] != 65 {
+        panic(6705);
+    };
+}
+
+@test "addressable self-assign inside if branch"() {
+    let buf: Vec<u8> = Vec::new();
+    let t0: u64 = regbr6_touchv(&buf);
+    if t0 != 0 {
+        panic(6706);
+    };
+    let c: bool = true;
+    if c {
+        buf = regbr6_appv(buf, 65);
+    };
+    let n: u64 = regbr6_touchv(&buf);
+    if n != 1 {
+        panic(6707);
+    };
+    if buf[0] != 65 {
+        panic(6708);
+    };
+}
+
+@test "addressable self-assign inside match arm"() {
+    let buf: Vec<u8> = Vec::new();
+    let t0: u64 = regbr6_touchv(&buf);
+    if t0 != 0 {
+        panic(6709);
+    };
+    let r: Result<u64, i32> = Ok(7);
+    match r {
+        Ok(v) => {
+            buf = regbr6_appv(buf, 65);
+        },
+        Err(e) => {
+            panic(6710);
+        },
+    };
+    let n: u64 = regbr6_touchv(&buf);
+    if n != 1 {
+        panic(6711);
+    };
+    if buf[0] != 65 {
+        panic(6712);
+    };
+}
+
+@test "string self-assign inside match arm"() {
+    let s: String = format("a");
+    let t0: u64 = regbr6_touchs(&s);
+    if t0 != 1 {
+        panic(6713);
+    };
+    let r: Result<u64, i32> = Ok(7);
+    match r {
+        Ok(v) => {
+            s = regbr6_wrap(s);
+        },
+        Err(e) => {
+            panic(6714);
+        },
+    };
+    let n: u64 = regbr6_touchs(&s);
+    if n != 3 {
+        panic(6715);
+    };
+    if !str_eq(&s, "[a]") {
+        panic(6716);
+    };
+}

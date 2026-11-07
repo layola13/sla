@@ -1,0 +1,32 @@
+// DEF-12 legal control B: semantically identical to the
+// param-forward repro, except the two field-element reads are bound
+// to locals before the call. This form was always accepted, which is
+// what makes the repro's rejection an accounting artifact rather
+// than a semantic distinction. Must pass `sla check` on baseline
+// and fixed trees alike (RC=0 both).
+
+struct Doc {
+    soff: Vec<u64>,
+    slen: Vec<u64>,
+    pool: Vec<u8>,
+}
+
+fn pool_byte(doc: &Doc, off: u64) -> u8 {
+    return doc.pool[off];
+}
+
+fn span_eq(doc: &Doc, off: u64, len: u64, tp: ptr, tn: u64) -> bool {
+    if len != tn { return false; };
+    let i: u64 = 0;
+    while i < len {
+        if pool_byte(doc, off + i) != 0 { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn str_eq_local(doc: &Doc, node: i64, tp: ptr, tn: u64) -> bool {
+    let off: u64 = doc.soff[node as u64];
+    let len: u64 = doc.slen[node as u64];
+    return span_eq(doc, off, len, tp, tn);
+}

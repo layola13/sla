@@ -1,0 +1,11 @@
+// Negative: a call whose argument types match no member is rejected
+// with the actual argument types and the full candidate list. Judge
+// with a standalone `sla check` (exit 1, message names `(bool)` and
+// both candidates); never via the test runner.
+
+fn pick(x: i32) -> i32 { return 1; }
+fn pick(x: f64) -> i32 { return 2; }
+
+fn main() -> i32 {
+    return pick(true);
+}

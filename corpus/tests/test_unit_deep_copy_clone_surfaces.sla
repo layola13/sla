@@ -1,0 +1,38 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/fmt.sai"
+
+// DEF-deep-copy: the explicit `.clone()` surface for Vec/GrowVec/
+// String receivers (deep; handle elements are cloned too — the
+// element-deep shapes are covered by the line's text-route probes
+// because the SAB backend has pre-existing gaps for nested-container
+// detectors: pristine Vec<Vec<u8>> already segfaults at scope-exit
+// drop, and Vec<Struct> index-push is UnsupportedSabDirectFeature
+// without any clone involved).
+
+@test "deep copy vec clone is independent"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(200 as u8);
+    let w: Vec<u8> = v.clone();
+    w.push(201 as u8);
+    if v.len() != 1 { panic(2941); };
+    if w.len() != 2 { panic(2942); };
+}
+
+@test "deep copy growvec clone is independent"() {
+    let v: GrowVec<u8> = GrowVec::new();
+    v.push(200 as u8);
+    let w: GrowVec<u8> = v.clone();
+    w.push(201 as u8);
+    if v.len() != 1 { panic(2943); };
+    if w.len() != 2 { panic(2944); };
+}
+
+@test "deep copy string clone is independent"() {
+    let s: String = format("hello");
+    let t: String = s.clone();
+    t = format("a much longer replacement string");
+    if s.len() != 5 { panic(2945); };
+    if t.len() != 32 { panic(2946); };
+}

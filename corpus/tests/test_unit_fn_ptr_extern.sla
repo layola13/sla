@@ -1,0 +1,109 @@
+// Regression: fn-pointer-to-extern materialization.
+//
+// An SLA fn value's bits are the address of its SLA_FNPTR_VT_<fn>
+// vtable (data); the callable machine address is vtable slot 0.
+// Passing an fn value to a raw extern by-value `ptr` parameter must
+// materialize that slot-0 address. Before the fix, both backends
+// passed the vtable bits themselves and the spawned thread jumped
+// into data (signal 11); the `fn as ptr` / `fn as u64` casts were
+// rejected by the checker as non-numeric casts.
+//
+// Covered shapes: bare fn name, fn-typed local, fn-typed wrapper
+// parameter forwarding, and the cast forms. The assertions are
+// behavioral (a counter cell bumped by the spawned OS thread), so a
+// materialization that yields anything but the true code address
+// fails loudly.
+//
+// Why detached + polling instead of pthread_join: in the current
+// sa_std/host, the registry-handle pthread_join path crashes in
+// libc when joining (independent of fn pointers — join takes no fn
+// argument; thread::spawn joins through sa_thread_raw_pthread_join
+// instead). Detached spawn plus a bounded poll on the counter cell
+// (throttled by sa_time_sleep_ms) is deterministic: the test only
+// passes once every spawned worker has actually run.
+//
+// Boundary (see the Zig-side tests): closure literals have no
+// callable trampoline address and are rejected by the checker for
+// extern pointer parameters, never silently miscompiled.
+
+@import "sa_std/thread.sai"
+@import "sa_std/globals.sai"
+@import "sa_std/string.sa"
+@import "sa_std/time.sai"
+
+fn fp_ext_cell(name: ptr, name_len: u64) -> u64 {
+    let v: u64 = 0;
+    let rc: i32 = sa_global_u64_get(name, name_len, &v);
+    if rc != 0 { return 0; };
+    return v;
+}
+
+fn fp_ext_wait(name: ptr, name_len: u64, want: u64) -> bool {
+    let i: i32 = 0;
+    while i < 400 {
+        if fp_ext_cell(name, name_len) == want { return true; };
+        if sa_time_sleep_ms(5) != 0 { return false; };
+        i = i + 1;
+    }
+    return fp_ext_cell(name, name_len) == want;
+}
+
+fn fp_ext_worker_a(arg: ptr) {
+    let out: u64 = 0;
+    let rc: i32 = sa_global_u64_add(STR_PTR("fnptr.ext.a"), STR_LEN("fnptr.ext.a"), 1, &out);
+}
+
+fn fp_ext_worker_b(arg: ptr) {
+    let out: u64 = 0;
+    let rc: i32 = sa_global_u64_add(STR_PTR("fnptr.ext.b"), STR_LEN("fnptr.ext.b"), 1, &out);
+}
+
+fn fp_ext_worker_c(arg: ptr) {
+    let out: u64 = 0;
+    let rc: i32 = sa_global_u64_add(STR_PTR("fnptr.ext.c"), STR_LEN("fnptr.ext.c"), 1, &out);
+}
+
+fn fp_ext_worker_d(arg: ptr) {
+    let out: u64 = 0;
+    let rc: i32 = sa_global_u64_add(STR_PTR("fnptr.ext.d"), STR_LEN("fnptr.ext.d"), 1, &out);
+}
+
+fn fp_ext_spawn_via(f: fn(ptr), arg: &u64) -> i32 {
+    return pthread_spawn_detached(f, arg);
+}
+
+@test "fn name passed directly to extern ptr param"() {
+    if sa_global_u64_set(STR_PTR("fnptr.ext.a"), STR_LEN("fnptr.ext.a"), 0) != 0 { panic(6101); };
+    let dummy: u64 = 0;
+    let i: i32 = 0;
+    while i < 8 {
+        if pthread_spawn_detached(fp_ext_worker_a, &dummy) != 0 { panic(6102); };
+        i = i + 1;
+    }
+    if !fp_ext_wait(STR_PTR("fnptr.ext.a"), STR_LEN("fnptr.ext.a"), 8) { panic(6103); };
+}
+
+@test "fn value via local passed to extern ptr param"() {
+    if sa_global_u64_set(STR_PTR("fnptr.ext.b"), STR_LEN("fnptr.ext.b"), 0) != 0 { panic(6111); };
+    let f: fn(ptr) = fp_ext_worker_b;
+    let dummy: u64 = 0;
+    if pthread_spawn_detached(f, &dummy) != 0 { panic(6112); };
+    if !fp_ext_wait(STR_PTR("fnptr.ext.b"), STR_LEN("fnptr.ext.b"), 1) { panic(6113); };
+}
+
+@test "fn value forwarded through wrapper param to extern"() {
+    if sa_global_u64_set(STR_PTR("fnptr.ext.c"), STR_LEN("fnptr.ext.c"), 0) != 0 { panic(6121); };
+    let dummy: u64 = 0;
+    if fp_ext_spawn_via(fp_ext_worker_c, &dummy) != 0 { panic(6122); };
+    if !fp_ext_wait(STR_PTR("fnptr.ext.c"), STR_LEN("fnptr.ext.c"), 1) { panic(6123); };
+}
+
+@test "fn cast to ptr and u64 for extern use"() {
+    if sa_global_u64_set(STR_PTR("fnptr.ext.d"), STR_LEN("fnptr.ext.d"), 0) != 0 { panic(6131); };
+    let dummy: u64 = 0;
+    let p: ptr = fp_ext_worker_d as ptr;
+    let bits: u64 = fp_ext_worker_d as u64;
+    if bits == 0 { panic(6132); };
+    if pthread_spawn_detached(p, &dummy) != 0 { panic(6133); };
+    if !fp_ext_wait(STR_PTR("fnptr.ext.d"), STR_LEN("fnptr.ext.d"), 1) { panic(6134); };
+}

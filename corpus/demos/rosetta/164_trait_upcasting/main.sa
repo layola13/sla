@@ -1,0 +1,115 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/trait_object.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@import "sa_std/core/trait_object.sa"
+@const VT_Item_A = vtable { a = @sla__Item_a }
+@const VT_Item_B = vtable { a = @sla__Item_a, b = @sla__Item_b }
+@const SLA_FNPTR_VT_sum_a = vtable { call = @sla__sum_a }
+@const SLA_FNPTR_VT_sum_b = vtable { call = @sla__sum_b }
+@const SLA_FNPTR_VT_upcast_and_sum = vtable { call = @sla__upcast_and_sum }
+@const SLA_FNPTR_VT_trait_upcast_total = vtable { call = @sla__trait_upcast_total }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__Item_a(&self: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load self+0 as i32
+    return tmp_0
+
+@sla__Item_b(&self: ptr) -> i32:
+L_ENTRY:
+    tmp_1 = load self+0 as i32
+    tmp_2 = 1
+    tmp_3 = add tmp_1, tmp_2
+    !tmp_1
+    !tmp_2
+    return tmp_3
+
+@sla__sum_a(&item: ptr) -> i32:
+L_ENTRY:
+    EXPAND DYN_CALL tmp_4, item, 0
+    return tmp_4
+
+@sla__sum_b(&item: ptr) -> i32:
+L_ENTRY:
+    EXPAND DYN_CALL tmp_5, item, 0
+    EXPAND DYN_CALL tmp_6, item, 8
+    tmp_7 = add tmp_5, tmp_6
+    !tmp_5
+    !tmp_6
+    return tmp_7
+
+@sla__upcast_and_sum(&item: ptr) -> i32:
+L_ENTRY:
+    tmp_8 = call @sla__sum_a(&item)
+    EXPAND DYN_CALL tmp_9, item, 8
+    tmp_10 = add tmp_8, tmp_9
+    !tmp_8
+    !tmp_9
+    return tmp_10
+
+@sla__trait_upcast_total() -> i32:
+L_ENTRY:
+    item = alloc 4
+    tmp_11 = 5
+    store item+0, tmp_11 as i32
+    tmp_12 = alloc Dyn_SIZE
+    store tmp_12+Dyn_data, item as ptr
+    store tmp_12+Dyn_vtable, &VT_Item_B as ptr
+    tmp_13 = call @sla__upcast_and_sum(&tmp_12)
+    !tmp_12
+    tmp_14 = alloc Dyn_SIZE
+    store tmp_14+Dyn_data, item as ptr
+    store tmp_14+Dyn_vtable, &VT_Item_B as ptr
+    tmp_15 = call @sla__sum_b(&tmp_14)
+    !tmp_14
+    tmp_16 = add tmp_13, tmp_15
+    !tmp_13
+    !tmp_15
+    !item
+    return tmp_16
+
+@main() -> i32:
+L_ENTRY:
+    tmp_17 = call @sla__trait_upcast_total()
+    result = tmp_17
+    tmp_18 = call @sa_fmt_u64(result, 10)
+    tmp_19 = call @sa_fmt_buffer_data(tmp_18)
+    tmp_20 = call @sa_fmt_buffer_len(tmp_18)
+    tmp_21 = tmp_19
+    call @sa_print_bytes(&tmp_21, tmp_20)
+    call @sa_fmt_buffer_free(^tmp_18)
+    !tmp_21
+    !tmp_20
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 164 164_trait_upcasting"():
+L_TEST_ENTRY_0:
+    tmp_22 = call @sla__trait_upcast_total()
+    got = tmp_22
+    tmp_23 = 22
+    tmp_24 = ne got, tmp_23
+    !tmp_23
+    br tmp_24 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_24
+    panic(164)
+
+L_ELSE_2:
+    !tmp_24
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

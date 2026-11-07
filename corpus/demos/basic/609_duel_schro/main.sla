@@ -1,0 +1,53 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Schroder 双实现对峙：迭代建表 vs 递归（n=3：22 对 22；n=4：90 对 90）。
+// 意对标 606_schroder × 递归版（两源单实现见各源；286 系对峙体例）。
+
+fn sch(n: int) -> int {
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    if n >= 1 { t[1] = 2; };
+    let ii = 2;
+    while ii <= n {
+        let s = t[ii - 1];
+        let k = 0;
+        while k < ii {
+            s = s + t[k] * t[ii - 1 - k];
+            k = k + 1;
+        }
+        t[ii] = s;
+        ii = ii + 1;
+    }
+    return t[n];
+}
+
+fn rsch(n: int) -> int {
+    if n == 0 { return 1; };
+    if n == 1 { return 2; };
+    let s = rsch(n - 1);
+    let k = 0;
+    while k < n {
+        s = s + rsch(k) * rsch(n - 1 - k);
+        k = k + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", sch(3), rsch(3), sch(4), rsch(4));
+    return 0;
+}
+
+@test "basic 609 duel schro"() {
+    if sch(3) != 22 { panic(60901); };
+    if rsch(3) != 22 { panic(60902); };
+    if sch(4) != 90 { panic(60903); };
+    if rsch(4) != 90 { panic(60904); };
+}

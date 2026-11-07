@@ -1,0 +1,46 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 384_strcmp：字符串关系比较（-1,1,0,-1,1）。
+// 缺口 #18：字符串关系比较的临时量在 `@test` 体内直接求值会泄漏
+//（SAB 报 MemoryLeak trap；绑定左值在 exe 中亦失真），此处将每次比较
+// 包进无参 helper fn（字面量比较 + `str_eq`，探针已验证双后端）；
+
+fn c1() -> i32 {
+    if "ab" < "abc" { return -1; };
+    return 9;
+}
+
+fn c2() -> i32 {
+    if "abc" > "ab" { return 1; };
+    return 9;
+}
+
+fn c3() -> i32 {
+    if "ab" < "ab" { return 9; };
+    return 0;
+}
+
+fn c4() -> i32 {
+    if "x" < "y" { return -1; };
+    return 9;
+}
+
+fn c5() -> i32 {
+    if "y" > "x" { return 1; };
+    return 9;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{},{}", c1(), c2(), c3(), c4(), c5());
+    return 0;
+}
+
+@test "basic 122 strcmp lit"() {
+    if c1() != -1 { panic(12201); };
+    if c2() != 1 { panic(12202); };
+    if c3() != 0 { panic(12203); };
+    if c4() != -1 { panic(12204); };
+    if c5() != 1 { panic(12205); };
+    if !str_eq("ab", "ab") { panic(12206); };
+}

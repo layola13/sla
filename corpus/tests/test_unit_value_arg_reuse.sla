@@ -1,0 +1,81 @@
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+// REG-BR-6: value-argument reuse forms that must keep compiling and
+// running after the checker started consuming plain by-value arguments
+// of owned types (see tests/test_error_use_after_move_call.sla for the
+// rejected form):
+//  - a String reused after passing an explicit copy to the earlier call;
+//  - a Vec passed by value twice (the emitters preserve the source by
+//    cloning it when a later use exists, so the binding stays live);
+//  - a shallow-copy struct passed by value twice (both emitters copy it
+//    at the call boundary, so the source binding stays live);
+//  - a String binding that is live again after a whole-variable
+//    reassignment following the move.
+
+fn regbr6_read_string(s: String) -> u64 {
+    return len(s);
+}
+
+fn regbr6_read_vec(v: Vec<u8>) -> u64 {
+    return len(v);
+}
+
+struct RegBr6Pair {
+    a: i64,
+    b: i64,
+}
+
+fn regbr6_read_pair(p: RegBr6Pair) -> i64 {
+    return p.a + p.b;
+}
+
+@test "string reuse via explicit copy on the earlier call"() {
+    let x: String = format("abc");
+    let n0: u64 = regbr6_read_string(format("{}", x));
+    let n1: u64 = regbr6_read_string(x);
+    if n0 != 3 {
+        panic(6601);
+    };
+    if n1 != 3 {
+        panic(6602);
+    };
+}
+
+@test "vec reuse after by-value calls"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(7);
+    let n0: u64 = regbr6_read_vec(v);
+    let n1: u64 = regbr6_read_vec(v);
+    if n0 != 1 {
+        panic(6603);
+    };
+    if n1 != 1 {
+        panic(6604);
+    };
+}
+
+@test "shallow-copy struct reuse after by-value calls"() {
+    let p = RegBr6Pair { a: 20, b: 22 };
+    let s0: i64 = regbr6_read_pair(p);
+    let s1: i64 = regbr6_read_pair(p);
+    if s0 != 42 {
+        panic(6605);
+    };
+    if s1 != 42 {
+        panic(6606);
+    };
+}
+
+@test "moved string binding is live again after reassignment"() {
+    let x: String = format("abc");
+    let n0: u64 = regbr6_read_string(x);
+    x = format("de");
+    let n1: u64 = regbr6_read_string(x);
+    if n0 != 3 {
+        panic(6607);
+    };
+    if n1 != 2 {
+        panic(6608);
+    };
+}

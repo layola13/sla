@@ -1,0 +1,4 @@
+@export major_value(handle: ptr) -> i32:
+L_ENTRY:
+    value = add 247, 0
+    return value

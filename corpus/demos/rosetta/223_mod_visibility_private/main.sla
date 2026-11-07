@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn mod_private_helper_count() -> i32 { let private_helper = 1; return private_helper; }
+fn main() -> i32 { let private_helper = 1; println("{}", private_helper); return private_helper; }
+@test "rosetta 223 mod visibility private"() { let got = mod_private_helper_count(); if got != 1 { panic(223); }; }

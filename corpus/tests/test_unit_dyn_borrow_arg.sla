@@ -1,0 +1,27 @@
+@import "sa_std/core/trait_object.sa"
+
+trait Draw {
+    fn draw(&self) -> i32;
+}
+
+struct Sprite {
+    id: i32,
+}
+
+impl Draw for Sprite {
+    fn draw(&self) -> i32 {
+        return self.id + 5;
+    }
+}
+
+fn render(&item: dyn Draw) -> i32 {
+    return item.draw();
+}
+
+@test "concrete value coerces to borrowed dyn argument"() {
+    let sprite = Sprite { id: 37 };
+    let score = render(&sprite);
+    if score != 42 {
+        panic(42101);
+    };
+}

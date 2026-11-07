@@ -1,0 +1,69 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Sylvester 埃及和（1/2+1/3+1/7+1/43=1805/1806）。
+// 意对标 457 Sylvester 的倒数版（457 互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn sylv(n: int) -> int {
+    if n == 0 { return 2; };
+    let s = 2;
+    let i = 0;
+    while i < n {
+        s = s * s - s + 1;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn sylv_egypt_num(n: int) -> int {
+    let num = 0;
+    let den = 1;
+    let i = 0;
+    while i < n {
+        let u = sylv(i);
+        num = num * u + den;
+        den = den * u;
+        let g = gcd(num, den);
+        num = num / g;
+        den = den / g;
+        i = i + 1;
+    }
+    return num;
+}
+
+fn sylv_egypt_den(n: int) -> int {
+    let num = 0;
+    let den = 1;
+    let i = 0;
+    while i < n {
+        let u = sylv(i);
+        num = num * u + den;
+        den = den * u;
+        let g = gcd(num, den);
+        num = num / g;
+        den = den / g;
+        i = i + 1;
+    }
+    return den;
+}
+
+fn main() -> i32 {
+    println("{},{}", sylv_egypt_num(4), sylv_egypt_den(4));
+    return 0;
+}
+
+@test "basic 477 sylv egypt"() {
+    if sylv_egypt_num(4) != 1805 { panic(47701); };
+    if sylv_egypt_den(4) != 1806 { panic(47702); };
+}

@@ -1,0 +1,5 @@
+@export prelude_seed() -> i32:
+L_ENTRY:
+    value = add 30, 0
+    !value
+    return 30

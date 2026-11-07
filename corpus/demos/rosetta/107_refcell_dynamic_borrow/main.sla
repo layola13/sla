@@ -1,0 +1,38 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/refcell.sa"
+
+fn refcell_borrow_sum() -> i32 {
+    let value = RefCell::new(7);
+    let first = 0;
+    {
+        let borrowed = value.borrow();
+        first = *borrowed;
+    }
+    *value.borrow_mut() = 9;
+    let second_ref = value.borrow();
+    let second = *second_ref;
+    return first + second;
+}
+
+fn main() -> i32 {
+    let value = RefCell::new(7);
+    let first = 0;
+    {
+        let borrowed = value.borrow();
+        first = *borrowed;
+        println("{}", first);
+    }
+    *value.borrow_mut() = 9;
+    let second_ref = value.borrow();
+    let second = *second_ref;
+    println("{}", second);
+    return first + second;
+}
+
+@test "rosetta 107 107_refcell_dynamic_borrow"() {
+    let got = refcell_borrow_sum();
+    if got != 16 {
+        panic(107);
+    };
+};

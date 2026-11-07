@@ -1,0 +1,9 @@
+// DEF-E0 fixture: extension module in its own file; it does not own
+// Circle, it only consumes the imported type.
+@import "using_ext_geo_types.sla"
+
+mod geo_ext {
+    pub fn diameter(c: Circle) -> i32 {
+        return c.r * 2;
+    }
+}

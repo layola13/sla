@@ -1,0 +1,5 @@
+@export inline_seed() -> i32:
+L_ENTRY:
+    value = add 37, 0
+    !value
+    return 37

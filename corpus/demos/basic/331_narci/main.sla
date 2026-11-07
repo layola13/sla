@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 水仙花数判定（153→1，154→0）。
+// 意对标 tsgosa 103_palindrome 的立方和版（234 为回文版）：数位立方和恒等。
+
+fn is_narci(n: int) -> int {
+    let s = 0;
+    let m = n;
+    while m > 0 {
+        let d = m % 10;
+        s = s + d * d * d;
+        m = m / 10;
+    }
+    return if s == n { 1 } else { 0 };
+}
+
+fn main() -> i32 {
+    println("{},{}", is_narci(153), is_narci(154));
+    return 0;
+}
+
+@test "basic 331 narci"() {
+    if is_narci(153) != 1 { panic(33101); };
+    if is_narci(154) != 0 { panic(33102); };
+    if is_narci(370) != 1 { panic(33103); };
+}

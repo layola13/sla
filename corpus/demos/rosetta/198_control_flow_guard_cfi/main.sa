@@ -1,0 +1,61 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_guarded_target = vtable { call = @sla__guarded_target }
+@const SLA_FNPTR_VT_cfi_guarded_call_result = vtable { call = @sla__cfi_guarded_call_result }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__guarded_target(x: i32) -> i32:
+L_ENTRY:
+    tmp_0 = 1
+    tmp_1 = add x, tmp_0
+    !tmp_0
+    !x
+    return tmp_1
+
+@sla__cfi_guarded_call_result() -> i32:
+L_ENTRY:
+    tmp_2 = 1
+    tmp_3 = call @sla__guarded_target(tmp_2)
+    !tmp_2
+    return tmp_3
+
+@main() -> i32:
+L_ENTRY:
+    tmp_4 = call @sla__cfi_guarded_call_result()
+    result = tmp_4
+    tmp_5 = call @sa_fmt_u64(result, 10)
+    tmp_6 = call @sa_fmt_buffer_data(tmp_5)
+    tmp_7 = call @sa_fmt_buffer_len(tmp_5)
+    tmp_8 = tmp_6
+    call @sa_print_bytes(&tmp_8, tmp_7)
+    call @sa_fmt_buffer_free(^tmp_5)
+    !tmp_8
+    !tmp_7
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 198 198_control_flow_guard_cfi"():
+L_TEST_ENTRY_0:
+    tmp_9 = call @sla__cfi_guarded_call_result()
+    got = tmp_9
+    tmp_10 = 2
+    tmp_11 = ne got, tmp_10
+    !tmp_10
+    br tmp_11 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_11
+    panic(198)
+
+L_ELSE_2:
+    !tmp_11
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !got
+    return
+

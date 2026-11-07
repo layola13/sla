@@ -1,0 +1,15 @@
+struct EmptyExitPayload {
+    value: i64,
+}
+
+fn empty_void_borrow(value: &EmptyExitPayload) -> void {
+}
+
+fn empty_void_owned(value: EmptyExitPayload) -> void {
+}
+
+@test "empty void exit preserves caller managed parameters"() {
+    let borrowed = EmptyExitPayload { value: 139 };
+    empty_void_borrow(&borrowed);
+    empty_void_owned(EmptyExitPayload { value: 149 });
+}

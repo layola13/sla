@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 懒人厨师数（n 刀最多块数：(n²+n+2)/2；5 刀 16 块）。
+// 意对标 330 等差版的二次版（330 互补；460 做对峙）。
+
+fn lazy(n: int) -> int {
+    return (n * n + n + 2) / 2;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", lazy(5), lazy(10), lazy(0));
+    return 0;
+}
+
+@test "basic 458 lazy"() {
+    if lazy(5) != 16 { panic(45801); };
+    if lazy(10) != 56 { panic(45802); };
+    if lazy(0) != 1 { panic(45803); };
+}

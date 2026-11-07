@@ -1,0 +1,60 @@
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+
+async fn await_defer_ready_branchy_capture() -> i32 {
+    let bump = 2;
+    let value = future::defer_ready(40).await;
+    return if value > 0 { value + bump } else { bump };
+}
+
+async fn await_local_defer_ready_branchy_capture() -> i32 {
+    let bump = 2;
+    let delayed = future::defer_ready(40);
+    let value = delayed.await;
+    return if value > 0 { value + bump } else { bump };
+}
+
+fn direct_branchy_resumes_on_second_poll() -> i32 {
+    let fut = await_defer_ready_branchy_capture();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9881);
+    };
+    if task::is_ready(task) != false {
+        panic(9882);
+    };
+    if task::poll(task) != true {
+        panic(9883);
+    };
+    if task::is_ready(task) != true {
+        panic(9884);
+    };
+    return task::result(task);
+}
+
+fn local_branchy_resumes_on_second_poll() -> i32 {
+    let fut = await_local_defer_ready_branchy_capture();
+    let task = task::new(fut);
+    if task::poll(task) != false {
+        panic(9891);
+    };
+    if task::is_ready(task) != false {
+        panic(9892);
+    };
+    if task::poll(task) != true {
+        panic(9893);
+    };
+    if task::is_ready(task) != true {
+        panic(9894);
+    };
+    return task::result(task);
+}
+
+@test "async defer ready branch expression resumes"() {
+    if direct_branchy_resumes_on_second_poll() != 42 {
+        panic(9885);
+    };
+    if local_branchy_resumes_on_second_poll() != 42 {
+        panic(9895);
+    };
+}

@@ -1,0 +1,13 @@
+@import "sa_std/fmt.sai"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/waker.sa"
+
+fn main() -> i32 {
+    let data: ptr = PTR_NULL();
+    let raw = RAW_WAKER_NEW(data, data);
+    if true {
+        let _w = WAKER_FROM_RAW(raw);
+    };
+    println!("{}", 1);
+    return 0;
+};

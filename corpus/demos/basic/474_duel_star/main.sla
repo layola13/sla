@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 星形数双实现对峙（闭式 vs 十二倍三角累加：S(4)=73 双边）。
+// 意对标 473 五边形对峙的星形版（472 互补）。
+
+fn star_form(n: int) -> int {
+    return 6 * n * (n - 1) + 1;
+}
+
+fn tri(n: int) -> int {
+    return n * (n + 1) / 2;
+}
+
+fn star_loop(n: int) -> int {
+    if n <= 1 { return 1; };
+    return 1 + 12 * tri(n - 1);
+}
+
+fn main() -> i32 {
+    println("{},{}", star_form(4), star_loop(4));
+    return 0;
+}
+
+@test "basic 474 duel star"() {
+    if star_form(4) != 73 { panic(47401); };
+    if star_loop(4) != 73 { panic(47402); };
+    if star_form(4) != star_loop(4) { panic(47403); };
+    if star_loop(3) != 37 { panic(47404); };
+}

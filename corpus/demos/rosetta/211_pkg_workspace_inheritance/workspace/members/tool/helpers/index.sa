@@ -1,0 +1,7 @@
+@import "workspace/members/tool/helpers/tool.sal"
+
+@tool_helper_value(base: i32) -> i32:
+L_ENTRY:
+    value = add base, TOOL_BIAS
+    !base
+    return value

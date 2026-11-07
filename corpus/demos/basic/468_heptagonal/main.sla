@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 七边形数（Hep(n)=n(5n-3)/2：Hep(5)=55）。
+// 意对标 467 六边形的七边版（467 互补）。
+
+fn hept(n: int) -> int {
+    return n * (5 * n - 3) / 2;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", hept(5), hept(4), hept(1));
+    return 0;
+}
+
+@test "basic 468 heptagonal"() {
+    if hept(5) != 55 { panic(46801); };
+    if hept(4) != 34 { panic(46802); };
+    if hept(1) != 1 { panic(46803); };
+}

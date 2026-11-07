@@ -1,0 +1,27 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1048_for_dec：步长 3 倒数求和（22）。
+// SLA `for` 为无步长整数区间（`.step()` 不可解析），步长循环用
+// `while` 表达（与 50/61 的 while 口径一致）。
+
+fn main() -> i32 {
+    let t = 0;
+    let i = 10;
+    while i > 0 {
+        t = t + i;
+        i = i - 3;
+    }
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 158 step3 down"() {
+    let t = 0;
+    let i = 10;
+    while i > 0 {
+        t = t + i;
+        i = i - 3;
+    }
+    if t != 22 { panic(15801); };
+}

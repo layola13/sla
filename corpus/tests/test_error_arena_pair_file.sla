@@ -1,0 +1,13 @@
+// expect: ArenaUnsafe
+// F2-A C1 corpus: generic substitution is a closure edge -
+// Pair<File> reaches File through the type parameter.
+struct Pair<T> { a: T, b: T }
+
+fn id_pair_file(x: Pair<File>) -> Pair<File> { return x; }
+
+fn neg_pair_file(p: Pair<File>) -> i32 {
+    arena {
+        let q = id_pair_file(p);
+    }
+    return 0;
+}

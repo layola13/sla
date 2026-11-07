@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 113_chainwrite：嵌套结构体字段写（10+2=12）。
+// 与 79（嵌套读）互补，此处覆盖嵌套写路径（探针已验证 `q.p.x = 10` 可用）。
+
+struct Pt {
+    x: i32,
+    y: i32,
+}
+
+struct Wrap {
+    p: Pt,
+}
+
+fn main() -> i32 {
+    let inner = Pt { x: 1, y: 2 };
+    let q = Wrap { p: inner };
+    q.p.x = 10;
+    println("{}", q.p.x + q.p.y);
+    return 0;
+}
+
+@test "basic 87 chainwrite"() {
+    let inner = Pt { x: 1, y: 2 };
+    let q = Wrap { p: inner };
+    q.p.x = 10;
+    if q.p.x + q.p.y != 12 { panic(8701); };
+}

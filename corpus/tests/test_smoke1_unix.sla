@@ -1,0 +1,402 @@
+// Smoke wave 1: register-2 externs in sa_std/net.sai (unix families).
+// Sockets live under smoke1_unix/ in the run cwd. Stream I/O on unix
+// stream handles goes through the tcp stream wrappers (same handle
+// family). Panic codes 61xxx.
+@import "sla_std/wrap/net.sla"
+@import "sla_std/wrap/fs.sla"
+@import "sla_std/wrap/process.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+fn s1_mkdir() {
+    sla_fs_mkdir_p(STR_PTR("smoke1_unix"), STR_LEN("smoke1_unix"));
+}
+
+fn s1_unix_listen(path: ptr, path_len: u64, code: i32) -> u64 {
+    let lh = [0u64; 4];
+    let rc = sla_std_net_unix_listen(path, path_len, &lh[0]);
+    if rc != 0 { panic(code); };
+    if lh[0] == 0 { panic(code + 1); };
+    return lh[0];
+}
+
+@test "smoke1 sa_std_net_unix_accept"() {
+    s1_mkdir();
+    let lh = s1_unix_listen(STR_PTR("smoke1_unix/a.sock"), STR_LEN("smoke1_unix/a.sock"), 61010);
+    let cli = [0u64; 4];
+    let rc = sla_std_net_unix_connect(STR_PTR("smoke1_unix/a.sock"), STR_LEN("smoke1_unix/a.sock"), &cli[0]);
+    if rc != 0 { panic(61011); };
+    let srv = [0u64; 4];
+    let rc2 = sla_std_net_unix_accept(lh, &srv[0]);
+    if rc2 != 0 { panic(61012); };
+    if srv[0] == 0 { panic(61013); };
+    let wr = [0u64; 4];
+    sla_std_net_tcp_stream_write(cli[0], STR_PTR("ux"), STR_LEN("ux"), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    sla_std_net_tcp_stream_read(srv[0], &buf[0], 64, &rd[0]);
+    if rd[0] != 2 { panic(61014); };
+    if buf[0] != 117 { panic(61015); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_unix_accept_addr"() {
+    s1_mkdir();
+    let lh = s1_unix_listen(STR_PTR("smoke1_unix/b.sock"), STR_LEN("smoke1_unix/b.sock"), 61020);
+    let cli = [0u64; 4];
+    sla_std_net_unix_connect(STR_PTR("smoke1_unix/b.sock"), STR_LEN("smoke1_unix/b.sock"), &cli[0]);
+    let srv = [0u64; 4];
+    let addr = [0u64; 4];
+    let rc = sla_std_net_unix_accept_addr(lh, &srv[0], &addr[0]);
+    if rc != 0 { panic(61021); };
+    if srv[0] == 0 { panic(61022); };
+    if addr[0] == 0 { panic(61023); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_unix_listener_local_addr"() {
+    s1_mkdir();
+    let lh = s1_unix_listen(STR_PTR("smoke1_unix/c.sock"), STR_LEN("smoke1_unix/c.sock"), 61030);
+    let addr = [0u64; 4];
+    let rc = sla_std_net_unix_listener_local_addr(lh, &addr[0]);
+    if rc != 0 { panic(61031); };
+    if sla_net_unix_addr_path_len(addr[0]) != STR_LEN("smoke1_unix/c.sock") { panic(61032); };
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_unix_listener_try_clone"() {
+    s1_mkdir();
+    let lh = s1_unix_listen(STR_PTR("smoke1_unix/d.sock"), STR_LEN("smoke1_unix/d.sock"), 61040);
+    let clone = [0u64; 4];
+    let rc = sla_std_net_unix_listener_try_clone(lh, &clone[0]);
+    if rc != 0 { panic(61041); };
+    if clone[0] == 0 { panic(61042); };
+    let cli = [0u64; 4];
+    sla_std_net_unix_connect(STR_PTR("smoke1_unix/d.sock"), STR_LEN("smoke1_unix/d.sock"), &cli[0]);
+    let srv = [0u64; 4];
+    let rc2 = sla_std_net_unix_accept(clone[0], &srv[0]);
+    if rc2 != 0 { panic(61043); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(clone[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_unix_stream_local_addr"() {
+    s1_mkdir();
+    let lh = s1_unix_listen(STR_PTR("smoke1_unix/e.sock"), STR_LEN("smoke1_unix/e.sock"), 61050);
+    let cli = [0u64; 4];
+    sla_std_net_unix_connect(STR_PTR("smoke1_unix/e.sock"), STR_LEN("smoke1_unix/e.sock"), &cli[0]);
+    let srv = [0u64; 4];
+    sla_std_net_unix_accept(lh, &srv[0]);
+    let addr = [0u64; 4];
+    let rc = sla_std_net_unix_stream_local_addr(srv[0], &addr[0]);
+    if rc != 0 { panic(61051); };
+    if sla_net_unix_addr_path_len(addr[0]) != STR_LEN("smoke1_unix/e.sock") { panic(61052); };
+    sla_std_close(srv[0]);
+    sla_std_close(cli[0]);
+    sla_std_close(lh);
+}
+
+@test "smoke1 sa_std_net_unix_stream_peer_addr"() {
+    s1_mkdir();
+    let l = [0u64; 4];
+    let r = [0u64; 4];
+    sla_std_net_unix_pair(&l[0], &r[0]);
+    let addr = [0u64; 4];
+    let rc = sla_std_net_unix_stream_peer_addr(l[0], &addr[0]);
+    if rc != 0 { panic(61060); };
+    if addr[0] == 0 { panic(61061); };
+    sla_std_close(l[0]);
+    sla_std_close(r[0]);
+}
+
+@test "smoke1 sa_std_net_unix_stream_try_clone"() {
+    s1_mkdir();
+    let l = [0u64; 4];
+    let r = [0u64; 4];
+    sla_std_net_unix_pair(&l[0], &r[0]);
+    let clone = [0u64; 4];
+    let rc = sla_std_net_unix_stream_try_clone(l[0], &clone[0]);
+    if rc != 0 { panic(61070); };
+    if clone[0] == 0 { panic(61071); };
+    let wr = [0u64; 4];
+    sla_std_net_tcp_stream_write(clone[0], STR_PTR("cl"), STR_LEN("cl"), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    sla_std_net_tcp_stream_read(r[0], &buf[0], 64, &rd[0]);
+    if rd[0] != 2 { panic(61072); };
+    sla_std_close(clone[0]);
+    sla_std_close(l[0]);
+    sla_std_close(r[0]);
+}
+
+@test "smoke1 sa_std_net_unix_stream_set_passcred"() {
+    s1_mkdir();
+    let l = [0u64; 4];
+    let r = [0u64; 4];
+    sla_std_net_unix_pair(&l[0], &r[0]);
+    let rc = sla_std_net_unix_stream_set_passcred(l[0], 1);
+    if rc != 0 { panic(61080); };
+    let out = [0u64; 4];
+    sla_std_net_unix_stream_passcred(l[0], &out[0]);
+    if out[0] != 1 { panic(61081); };
+    sla_std_close(l[0]);
+    sla_std_close(r[0]);
+}
+
+@test "smoke1 sa_std_net_unix_stream_passcred"() {
+    s1_mkdir();
+    let l = [0u64; 4];
+    let r = [0u64; 4];
+    sla_std_net_unix_pair(&l[0], &r[0]);
+    sla_std_net_unix_stream_set_passcred(l[0], 1);
+    let out = [0u64; 4];
+    let rc = sla_std_net_unix_stream_passcred(l[0], &out[0]);
+    if rc != 0 { panic(61090); };
+    if out[0] != 1 { panic(61091); };
+    sla_std_close(l[0]);
+    sla_std_close(r[0]);
+}
+
+@test "smoke1 sa_std_net_unix_stream_set_mark"() {
+    s1_mkdir();
+    let l = [0u64; 4];
+    let r = [0u64; 4];
+    sla_std_net_unix_pair(&l[0], &r[0]);
+    let rc = sla_std_net_unix_stream_set_mark(l[0], 1234);
+    if rc != 0 { panic(61100); };
+    sla_std_close(l[0]);
+    sla_std_close(r[0]);
+}
+
+@test "smoke1 sa_std_net_unix_stream_peer_cred"() {
+    s1_mkdir();
+    let l = [0u64; 4];
+    let r = [0u64; 4];
+    sla_std_net_unix_pair(&l[0], &r[0]);
+    sla_std_net_unix_stream_set_passcred(l[0], 1);
+    let pid = [0u64; 4];
+    let uid = [0u64; 4];
+    let gid = [0u64; 4];
+    let rc = sla_std_net_unix_stream_peer_cred(r[0], &pid[0], &uid[0], &gid[0]);
+    if rc != 0 { panic(61110); };
+    if pid[0] != sla_std_process_id() { panic(61111); };
+    if uid[0] != sla_std_process_user_id() { panic(61112); };
+    sla_std_close(l[0]);
+    sla_std_close(r[0]);
+}
+
+@test "smoke1 sa_std_net_unix_datagram_send_to"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/da.sock"), STR_LEN("smoke1_unix/da.sock"), &a[0]);
+    let b = [0u64; 4];
+    let brc = sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/db.sock"), STR_LEN("smoke1_unix/db.sock"), &b[0]);
+    if brc != 0 { panic(61120); };
+    let wr = [0u64; 4];
+    let rc = sla_std_net_unix_datagram_send_to(a[0], STR_PTR("dg"), STR_LEN("dg"), STR_PTR("smoke1_unix/db.sock"), STR_LEN("smoke1_unix/db.sock"), &wr[0]);
+    if rc != 0 { panic(61121); };
+    if wr[0] != 2 { panic(61122); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let from = [0u64; 4];
+    sla_std_net_unix_datagram_recv_from(b[0], &buf[0], 64, &rd[0], &from[0]);
+    if rd[0] != 2 { panic(61123); };
+    if buf[0] != 100 { panic(61124); };
+    sla_std_close(a[0]);
+    sla_std_close(b[0]);
+}
+
+@test "smoke1 sa_std_net_unix_datagram_send_to_addr"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dc.sock"), STR_LEN("smoke1_unix/dc.sock"), &a[0]);
+    let b = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dd.sock"), STR_LEN("smoke1_unix/dd.sock"), &b[0]);
+    let addr = [0u64; 4];
+    sla_std_net_unix_addr_from_pathname(STR_PTR("smoke1_unix/dd.sock"), STR_LEN("smoke1_unix/dd.sock"), &addr[0]);
+    let wr = [0u64; 4];
+    let rc = sla_std_net_unix_datagram_send_to_addr(a[0], STR_PTR("da"), STR_LEN("da"), addr[0], &wr[0]);
+    if rc != 0 { panic(61130); };
+    if wr[0] != 2 { panic(61131); };
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let fromx = [0u64; 4];
+    sla_std_net_unix_datagram_recv_from(b[0], &buf[0], 64, &rd[0], &fromx[0]);
+    if rd[0] != 2 { panic(61132); };
+    sla_std_close(a[0]);
+    sla_std_close(b[0]);
+}
+
+
+@test "smoke1 sa_std_net_unix_datagram_recv_from"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dg.sock"), STR_LEN("smoke1_unix/dg.sock"), &a[0]);
+    let b = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dh.sock"), STR_LEN("smoke1_unix/dh.sock"), &b[0]);
+    let wr = [0u64; 4];
+    sla_std_net_unix_datagram_send_to(a[0], STR_PTR("rf"), STR_LEN("rf"), STR_PTR("smoke1_unix/dh.sock"), STR_LEN("smoke1_unix/dh.sock"), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let from = [0u64; 4];
+    let rc = sla_std_net_unix_datagram_recv_from(b[0], &buf[0], 64, &rd[0], &from[0]);
+    if rc != 0 { panic(61150); };
+    if rd[0] != 2 { panic(61151); };
+    if sla_net_unix_addr_path_len(from[0]) != STR_LEN("smoke1_unix/dg.sock") { panic(61152); };
+    sla_std_close(a[0]);
+    sla_std_close(b[0]);
+}
+
+@test "smoke1 sa_std_net_unix_datagram_peek_from"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/di.sock"), STR_LEN("smoke1_unix/di.sock"), &a[0]);
+    let b = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dj.sock"), STR_LEN("smoke1_unix/dj.sock"), &b[0]);
+    let wr = [0u64; 4];
+    sla_std_net_unix_datagram_send_to(a[0], STR_PTR("pf"), STR_LEN("pf"), STR_PTR("smoke1_unix/dj.sock"), STR_LEN("smoke1_unix/dj.sock"), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let from = [0u64; 4];
+    let rc = sla_std_net_unix_datagram_peek_from(b[0], &buf[0], 64, &rd[0], &from[0]);
+    if rc != 0 { panic(61160); };
+    if rd[0] != 2 { panic(61161); };
+    let rd2 = [0u64; 4];
+    let from2 = [0u64; 4];
+    sla_std_net_unix_datagram_recv_from(b[0], &buf[0], 64, &rd2[0], &from2[0]);
+    if rd2[0] != 2 { panic(61162); };
+    sla_std_close(a[0]);
+    sla_std_close(b[0]);
+}
+
+@test "smoke1 sa_std_net_unix_datagram_connect"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dk.sock"), STR_LEN("smoke1_unix/dk.sock"), &a[0]);
+    let b = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dl.sock"), STR_LEN("smoke1_unix/dl.sock"), &b[0]);
+    let rc = sla_std_net_unix_datagram_connect(a[0], STR_PTR("smoke1_unix/dl.sock"), STR_LEN("smoke1_unix/dl.sock"));
+    if rc != 0 { panic(61170); };
+    let paddr = [0u64; 4];
+    sla_std_net_unix_datagram_peer_addr(a[0], &paddr[0]);
+    if sla_net_unix_addr_path_len(paddr[0]) != STR_LEN("smoke1_unix/dl.sock") { panic(61171); };
+    sla_std_close(a[0]);
+    sla_std_close(b[0]);
+}
+
+@test "smoke1 sa_std_net_unix_datagram_connect_addr"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dm.sock"), STR_LEN("smoke1_unix/dm.sock"), &a[0]);
+    let b = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dn.sock"), STR_LEN("smoke1_unix/dn.sock"), &b[0]);
+    let addr = [0u64; 4];
+    sla_std_net_unix_addr_from_pathname(STR_PTR("smoke1_unix/dn.sock"), STR_LEN("smoke1_unix/dn.sock"), &addr[0]);
+    let rc = sla_std_net_unix_datagram_connect_addr(a[0], addr[0]);
+    if rc != 0 { panic(61180); };
+    sla_std_close(a[0]);
+    sla_std_close(b[0]);
+}
+
+@test "smoke1 sa_std_net_unix_datagram_local_addr"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/do.sock"), STR_LEN("smoke1_unix/do.sock"), &a[0]);
+    let addr = [0u64; 4];
+    let rc = sla_std_net_unix_datagram_local_addr(a[0], &addr[0]);
+    if rc != 0 { panic(61190); };
+    if sla_net_unix_addr_path_len(addr[0]) != STR_LEN("smoke1_unix/do.sock") { panic(61191); };
+    sla_std_close(a[0]);
+}
+
+@test "smoke1 sa_std_net_unix_datagram_peer_addr"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dp.sock"), STR_LEN("smoke1_unix/dp.sock"), &a[0]);
+    let b = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dq.sock"), STR_LEN("smoke1_unix/dq.sock"), &b[0]);
+    sla_std_net_unix_datagram_connect(a[0], STR_PTR("smoke1_unix/dq.sock"), STR_LEN("smoke1_unix/dq.sock"));
+    let addr = [0u64; 4];
+    let rc = sla_std_net_unix_datagram_peer_addr(a[0], &addr[0]);
+    if rc != 0 { panic(61200); };
+    if sla_net_unix_addr_path_len(addr[0]) != STR_LEN("smoke1_unix/dq.sock") { panic(61201); };
+    sla_std_close(a[0]);
+    sla_std_close(b[0]);
+}
+
+@test "smoke1 sa_std_net_unix_datagram_try_clone"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dr.sock"), STR_LEN("smoke1_unix/dr.sock"), &a[0]);
+    let b = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/ds.sock"), STR_LEN("smoke1_unix/ds.sock"), &b[0]);
+    let clone = [0u64; 4];
+    let rc = sla_std_net_unix_datagram_try_clone(a[0], &clone[0]);
+    if rc != 0 { panic(61210); };
+    if clone[0] == 0 { panic(61211); };
+    let wr = [0u64; 4];
+    sla_std_net_unix_datagram_send_to(clone[0], STR_PTR("tc"), STR_LEN("tc"), STR_PTR("smoke1_unix/ds.sock"), STR_LEN("smoke1_unix/ds.sock"), &wr[0]);
+    let buf = [0u8; 64];
+    let rd = [0u64; 4];
+    let fromx = [0u64; 4];
+    sla_std_net_unix_datagram_recv_from(b[0], &buf[0], 64, &rd[0], &fromx[0]);
+    if rd[0] != 2 { panic(61212); };
+    sla_std_close(clone[0]);
+    sla_std_close(a[0]);
+    sla_std_close(b[0]);
+}
+
+@test "smoke1 sa_std_net_unix_datagram_set_passcred"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dt.sock"), STR_LEN("smoke1_unix/dt.sock"), &a[0]);
+    let rc = sla_std_net_unix_datagram_set_passcred(a[0], 1);
+    if rc != 0 { panic(61220); };
+    let out = [0u64; 4];
+    sla_std_net_unix_datagram_passcred(a[0], &out[0]);
+    if out[0] != 1 { panic(61221); };
+    sla_std_close(a[0]);
+}
+
+@test "smoke1 sa_std_net_unix_datagram_passcred"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/du.sock"), STR_LEN("smoke1_unix/du.sock"), &a[0]);
+    sla_std_net_unix_datagram_set_passcred(a[0], 1);
+    let out = [0u64; 4];
+    let rc = sla_std_net_unix_datagram_passcred(a[0], &out[0]);
+    if rc != 0 { panic(61230); };
+    if out[0] != 1 { panic(61231); };
+    sla_std_close(a[0]);
+}
+
+@test "smoke1 sa_std_net_unix_datagram_set_mark"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dv.sock"), STR_LEN("smoke1_unix/dv.sock"), &a[0]);
+    let rc = sla_std_net_unix_datagram_set_mark(a[0], 1234);
+    if rc != 0 { panic(61240); };
+    sla_std_close(a[0]);
+}
+
+
+@test "smoke1 sa_std_net_unix_datagram_shutdown"() {
+    s1_mkdir();
+    let a = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dy.sock"), STR_LEN("smoke1_unix/dy.sock"), &a[0]);
+    let b = [0u64; 4];
+    sla_std_net_unix_datagram_bind(STR_PTR("smoke1_unix/dz.sock"), STR_LEN("smoke1_unix/dz.sock"), &b[0]);
+    let rc = sla_std_net_unix_datagram_shutdown(a[0], 1);
+    if rc != 0 { panic(61260); };
+    let wr = [0u64; 4];
+    let rc2 = sla_std_net_unix_datagram_send_to(a[0], STR_PTR("no"), STR_LEN("no"), STR_PTR("smoke1_unix/dz.sock"), STR_LEN("smoke1_unix/dz.sock"), &wr[0]);
+    if rc2 == 0 { panic(61261); };
+    sla_std_close(a[0]);
+    sla_std_close(b[0]);
+}

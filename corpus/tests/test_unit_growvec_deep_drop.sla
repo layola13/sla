@@ -1,0 +1,11 @@
+@import "sa_std/vec.sa"
+@import "sa_std/growvec.sa"
+
+// F1 deep-drop parity: deep-dropping a GrowVec<Row> must walk exactly
+// len elements and drop each boxed element's fields, mirroring
+// test_unit_deep_drop_vec_struct_elems.sla (the Vec oracle). Survival
+// plus exact lens after post-drop allocation churn is the oracle.
+struct GRow { name: Vec<u8>, n: u64, data: Vec<u8>, rows: Vec<Vec<u8>> }
+fn gbytes_of(seed: u8, n: u64) -> Vec<u8> { let v: Vec<u8> = Vec::new(); let i: u64 = 0; while i < n { v.push(seed + (i % 7) as u8); i = i + 1; } return v; }
+fn gmake_row(k: u64) -> GRow { let inner: Vec<Vec<u8>> = Vec::new(); let r: u64 = 0; while r < 3 { inner.push(gbytes_of(40 + (k % 9) as u8, 24)); r = r + 1; } return GRow { name: gbytes_of(97, 16), n: k, data: gbytes_of(65, 32), rows: inner }; }
+@test "deep drop growvec of struct elements"() { let v: GrowVec<GRow> = GrowVec::new(); let i: u64 = 0; while i < 64 { v.push(gmake_row(i)); i = i + 1; } if len(v) != 64 { panic(1); }; v = GrowVec::new(); if len(v) != 0 { panic(2); }; let w: GrowVec<GRow> = GrowVec::new(); let k: u64 = 0; while k < 64 { w.push(gmake_row(1000 + k)); k = k + 1; } if len(w) != 64 { panic(3); }; w = GrowVec::new(); if len(w) != 0 { panic(4); }; println("SURVIVED"); }

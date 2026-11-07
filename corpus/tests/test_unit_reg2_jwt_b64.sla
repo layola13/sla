@@ -1,0 +1,112 @@
+@import "sa_std/jwt.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Coverage shard 2: jwt base64url + token assembly entries from
+// sa_std/jwt.sla (registry "declared, never probed"). base64url is
+// the unpadded URL-safe alphabet (RFC 7515); the signing-input
+// expectation is the canonical jwt.io header/claims pair.
+
+fn vb(p: ptr, n: u64) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(PTR_BYTE_AT(p, i));
+        i = i + 1;
+    }
+    return v;
+}
+
+fn vec_byte(v: &Vec<u8>, i: u64) -> u8 {
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let b: u8 = 0;
+    SLICE_GET(b, sl, i);
+    return b;
+}
+
+fn expect_vec(v: &Vec<u8>, want: ptr, want_len: u64, code: i32) {
+    if len(v) != want_len { panic(code); };
+    let i: u64 = 0;
+    while i < want_len {
+        if vec_byte(v, i) != PTR_BYTE_AT(want, i) { panic(code); };
+        i = i + 1;
+    }
+}
+
+@test "reg2 jwt_b64_encode"() {
+    match jwt_b64_encode(vb(STR_PTR("hello"), 5)) {
+        Ok(enc) => { expect_vec(&enc, STR_PTR("aGVsbG8"), 7, 24801); },
+        Err(e) => { panic(24802); },
+    };
+    match jwt_b64_encode(Vec::new()) {
+        Ok(enc) => { if len(enc) != 0 { panic(24803); }; },
+        Err(e) => { panic(24804); },
+    };
+    // URL-safe alphabet: 0xFB 0xFF -> "-_8" (never "+/8").
+    let raw: Vec<u8> = Vec::new();
+    raw.push(251);
+    raw.push(255);
+    match jwt_b64_encode(raw) {
+        Ok(enc) => { expect_vec(&enc, STR_PTR("-_8"), 3, 24805); },
+        Err(e) => { panic(24806); },
+    };
+}
+
+@test "reg2 jwt_b64_decode"() {
+    match jwt_b64_decode(vb(STR_PTR("aGVsbG8"), 7)) {
+        Ok(dec) => { expect_vec(&dec, STR_PTR("hello"), 5, 24807); },
+        Err(e) => { panic(24808); },
+    };
+    match jwt_b64_decode(vb(STR_PTR("-_8"), 3)) {
+        Ok(dec) => {
+            if len(dec) != 2 { panic(24809); };
+            if vec_byte(&dec, 0) != 251 || vec_byte(&dec, 1) != 255 { panic(24810); };
+        },
+        Err(e) => { panic(24811); },
+    };
+    match jwt_b64_decode(vb(STR_PTR("a!b"), 3)) {
+        Ok(dec) => { panic(24812); },
+        Err(e) => { if e != -201 { panic(24813); }; }, // SA_JWT_ERR_FORMAT
+    };
+}
+
+@test "reg2 jwt_b64_decode_sig"() {
+    // base64url of bytes 0..31 (a 32-byte signature shape).
+    match jwt_b64_decode_sig(vb(STR_PTR("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"), 43)) {
+        Ok(dec) => {
+            if len(dec) != 32 { panic(24814); };
+            let i: u64 = 0;
+            while i < 32 {
+                if vec_byte(&dec, i) != (i as u8) { panic(24815); };
+                i = i + 1;
+            }
+        },
+        Err(e) => { panic(24816); },
+    };
+    match jwt_b64_decode_sig(vb(STR_PTR("aGVsbG8"), 7)) {
+        Ok(dec) => { expect_vec(&dec, STR_PTR("hello"), 5, 24817); },
+        Err(e) => { panic(24818); },
+    };
+}
+
+@test "reg2 jwt_dot"() {
+    let d = jwt_dot();
+    if len(d) != 1 { panic(24819); };
+    if vec_byte(&d, 0) != 46 { panic(24820); };
+}
+
+@test "reg2 jwt_join_input"() {
+    let joined = jwt_join_input(vb(STR_PTR("abc"), 3), vb(STR_PTR("def"), 3));
+    expect_vec(&joined, STR_PTR("abc.def"), 7, 24821);
+    let half = jwt_join_input(Vec::new(), vb(STR_PTR("x"), 1));
+    expect_vec(&half, STR_PTR(".x"), 2, 24822);
+}
+
+// "reg2 jwt_signing_input" lives in
+// test_unit_reg2_jwt_signing_input.sla (split out in round 4: it
+// traps MemoryLeak at @test exit on the text backend and would abort
+// this file's run).
+
+// "reg2 jwt_build_token" lives in test_unit_reg2_jwt_build_token.sla
+// (split out in round 3: it traps MemoryLeak at @test exit on the
+// text backend and would abort this file's run).

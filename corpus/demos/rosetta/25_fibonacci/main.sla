@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn fib(n: i32) -> i32 {
+    if n <= 1 {
+        n
+    } else {
+        let left = fib(n - 1);
+        let right = fib(n - 2);
+        left + right
+    }
+}
+
+fn main() -> i32 {
+    let value = fib(8);
+    println("{}", value);
+    return 0;
+};
+
+@test "rosetta 025 fibonacci"() {
+    let value = fib(8);
+    if value != 21 {
+        panic(25);
+    };
+};

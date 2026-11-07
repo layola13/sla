@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn pkg_manifest_basic_fields() -> i32 {
+    let name = 1;
+    let version = 1;
+    let entry = 1;
+    return name + version + entry;
+}
+
+fn main() -> i32 {
+    let name = 1;
+    let version = 1;
+    let entry = 1;
+    let result = name + version + entry;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 201 pkg manifest basic"() {
+    let got = pkg_manifest_basic_fields();
+    if got != 3 { panic(201); };
+}

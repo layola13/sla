@@ -1,0 +1,61 @@
+fn ternary_pick_i32(cond: bool) -> i32 {
+    let value: i32 = cond ? 1 : 2;
+    return value;
+}
+
+fn ternary_return_i32(cond: bool) -> i32 {
+    return cond ? 3 : 4;
+}
+
+fn ternary_assigns_var(cond: bool) -> i32 {
+    var x: i32;
+    x = cond ? 8 : 9;
+    return x;
+}
+
+fn ternary_nested_assigns_var(a: bool, b: bool) -> i32 {
+    var x: i32;
+    if a {
+        x = b ? 11 : 12;
+    } else {
+        x = b ? 13 : 14;
+    };
+    return x;
+}
+
+fn ternary_pick_bool(cond: bool) -> bool {
+    return cond ? true : false;
+}
+
+fn ternary_pick_f64(cond: bool) -> f64 {
+    return cond ? 1.5 : 2.5;
+}
+
+fn ternary_statement_branch(cond: bool) -> i32 {
+    let x: i32 = 0;
+    if cond {
+        x = 21;
+    } else {
+        x = 22;
+    };
+    return x;
+}
+
+@test "ternary can be used as expression and statement"() {
+    if ternary_pick_i32(true) != 1 { panic(27600); };
+    if ternary_pick_i32(false) != 2 { panic(27601); };
+    if ternary_return_i32(true) != 3 { panic(27602); };
+    if ternary_return_i32(false) != 4 { panic(27603); };
+    if ternary_assigns_var(true) != 8 { panic(27604); };
+    if ternary_assigns_var(false) != 9 { panic(27605); };
+    if ternary_nested_assigns_var(true, true) != 11 { panic(27606); };
+    if ternary_nested_assigns_var(true, false) != 12 { panic(27607); };
+    if ternary_nested_assigns_var(false, true) != 13 { panic(27608); };
+    if ternary_nested_assigns_var(false, false) != 14 { panic(27609); };
+    if ternary_pick_bool(true) != true { panic(27610); };
+    if ternary_pick_bool(false) { panic(27611); };
+    if ternary_pick_f64(true) != 1.5 { panic(27612); };
+    if ternary_pick_f64(false) != 2.5 { panic(27613); };
+    if ternary_statement_branch(true) != 21 { panic(27614); };
+    if ternary_statement_branch(false) != 22 { panic(27615); };
+}

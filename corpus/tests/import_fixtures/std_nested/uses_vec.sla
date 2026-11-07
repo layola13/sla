@@ -1,0 +1,8 @@
+@import "sa_std/vec.sa"
+
+fn imported_vec_sum() -> i32 {
+    let values: Vec<i32> = Vec::new();
+    values.push(2);
+    values.push(3);
+    return values[0] + values[1];
+}

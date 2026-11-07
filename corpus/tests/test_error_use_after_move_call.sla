@@ -1,0 +1,28 @@
+// expect: UseAfterMove
+@import "sa_std/string.sa"
+
+// REG-BR-6: passing the same owned String local as a plain by-value
+// argument to two calls moves it on the first call (a by-value argument
+// transfers ownership). The checker must reject the second use with a
+// language-level UseAfterMove diagnostic naming the variable, the first
+// consuming call, and the explicit-copy fix. Before the fix this pattern
+// passed the checker and leaked the SA referee's raw UseAfterMove 1009
+// trap (register name only, no variable, no remedy).
+
+fn regbr6_borrow_only(s: String) {
+    let n: u64 = len(s);
+    if n == 999999 {
+        panic(5399);
+    };
+}
+
+fn bad_use_after_move_call() {
+    let x: String = format("abc");
+    regbr6_borrow_only(x);
+    regbr6_borrow_only(x);
+}
+
+fn main() -> i32 {
+    bad_use_after_move_call();
+    return 0;
+}

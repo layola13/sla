@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn eco_lsp_message_kinds() -> i32 { let request = 1; let response = 1; return request + response; }
+fn main() -> i32 { let request = 1; let response = 1; let result = request + response; println("{}", result); return result; }
+@test "rosetta 299 eco language server protocol"() { let got = eco_lsp_message_kinds(); if got != 2 { panic(299); }; }

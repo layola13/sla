@@ -1,0 +1,396 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/future.sa"
+@import "sa_std/core/waker.sa"
+@import "sa_std/pin.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/time.sa"
+@import "sa_std/core/result.sa"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@import "sa_std/core/result.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/core/future.sa"
+@import "sa_std/core/task.sa"
+@const SLA_READY_FUTURE_VT = vtable { poll = @sla_future_ready_poll }
+@const SLA_DEFER_READY_FUTURE_VT = vtable { poll = @sla_future_defer_ready_poll }
+@const SLA_JOIN2_FUTURE_VT = vtable { poll = @sla_future_join2_poll }
+@const SLA_SELECT2_FUTURE_VT = vtable { poll = @sla_future_select2_poll }
+
+@sla_future_ready_poll(&data_slot: ptr, &ctx_slot: ptr, &out_poll_slot: ptr):
+L_ENTRY:
+    EXPAND FUTURE_READY_SET_POLL_STATE out_poll_slot, data_slot
+    return
+
+@sla_future_defer_ready_poll(&data_slot: ptr, &ctx_slot: ptr, &out_poll_slot: ptr):
+L_ENTRY:
+    defer_ready_stage = load data_slot+0 as u64
+    defer_ready_is_initial = eq defer_ready_stage, 0
+    br defer_ready_is_initial -> L_DEFER_READY_PENDING, L_DEFER_READY_CHECK_READY
+L_DEFER_READY_PENDING:
+    store data_slot+0, 1 as u64
+    EXPAND POLL_SET_PENDING out_poll_slot
+    jmp L_DEFER_READY_DONE
+L_DEFER_READY_CHECK_READY:
+    defer_ready_is_ready = eq defer_ready_stage, 1
+    br defer_ready_is_ready -> L_DEFER_READY_READY, L_DEFER_READY_EMPTY
+L_DEFER_READY_READY:
+    defer_ready_value = load data_slot+8 as u64
+    store data_slot+0, 2 as u64
+    EXPAND POLL_SET_READY out_poll_slot, defer_ready_value
+    !defer_ready_value
+    !defer_ready_is_ready
+    jmp L_DEFER_READY_DONE
+L_DEFER_READY_EMPTY:
+    EXPAND POLL_SET_PENDING out_poll_slot
+    !defer_ready_is_ready
+L_DEFER_READY_DONE:
+    !defer_ready_is_initial
+    !defer_ready_stage
+    return
+
+@sla_future_join2_poll(&data_slot: ptr, &ctx_slot: ptr, &out_poll_slot: ptr):
+L_ENTRY:
+    EXPAND FUTURE_JOIN2_STATE_POLL join2_poll_tmp, data_slot, ctx_slot
+    join2_poll_tag = load join2_poll_tmp+Poll_tag as u64
+    join2_poll_value = load join2_poll_tmp+Poll_value as u64
+    store out_poll_slot+Poll_tag, join2_poll_tag as u64
+    store out_poll_slot+Poll_value, join2_poll_value as u64
+    !join2_poll_value
+    !join2_poll_tag
+    !join2_poll_tmp
+    return
+
+@sla_future_select2_poll(&data_slot: ptr, &ctx_slot: ptr, &out_poll_slot: ptr):
+L_ENTRY:
+    EXPAND FUTURE_SELECT2_STATE_POLL select2_poll_tmp, data_slot, ctx_slot
+    select2_poll_tag = load select2_poll_tmp+Poll_tag as u64
+    select2_poll_value = load select2_poll_tmp+Poll_value as u64
+    store out_poll_slot+Poll_tag, select2_poll_tag as u64
+    store out_poll_slot+Poll_value, select2_poll_value as u64
+    !select2_poll_value
+    !select2_poll_tag
+    !select2_poll_tmp
+    return
+
+@const SLA_FNPTR_VT_thread_sleep = vtable { call = @sla__thread_sleep }
+@const SLA_FNPTR_VT_unix_now_millis = vtable { call = @sla__unix_now_millis }
+@const SLA_FNPTR_VT_sleep_for_millis = vtable { call = @sla__sleep_for_millis }
+@const SLA_FNPTR_VT_instant_now_ns = vtable { call = @sla__instant_now_ns }
+@const SLA_FNPTR_VT_elapsed_millis_since_ns = vtable { call = @sla__elapsed_millis_since_ns }
+@const SLA_FNPTR_VT_duration_millis = vtable { call = @sla__duration_millis }
+@const SLA_FNPTR_VT_step_one_after_delay = vtable { call = @sla__step_one_after_delay }
+@const SLA_FNPTR_VT_run = vtable { call = @sla__run }
+@const SLA_FNPTR_VT_block_on = vtable { call = @sla__block_on }
+@const SLA_FNPTR_VT_async_run_value = vtable { call = @sla__async_run_value }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__Duration_from_millis(ms: u64) -> ptr:
+L_ENTRY:
+    EXPAND TIME_DURATION_FROM_MILLIS tmp_0, ms
+    ns = tmp_0
+    tmp_1 = alloc 8
+    store tmp_1+0, ns as u64
+    !ms
+    return tmp_1
+
+@sla__Duration_as_millis(self: ptr) -> u64:
+L_ENTRY:
+    tmp_3 = load self+0 as u64
+    EXPAND TIME_DURATION_AS_MILLIS tmp_2, tmp_3
+    !tmp_3
+    ms = tmp_2
+    !self
+    return ms
+
+@sla__Instant_now() -> ptr:
+L_ENTRY:
+    EXPAND TIME_NOW_NS tmp_4
+    ns = tmp_4
+    tmp_5 = alloc 8
+    store tmp_5+0, ns as u64
+    return tmp_5
+
+@sla__Instant_from_raw_ns(ns: u64) -> ptr:
+L_ENTRY:
+    tmp_6 = alloc 8
+    store tmp_6+0, ns as u64
+    return tmp_6
+
+@sla__Instant_raw_ns(self: ptr) -> u64:
+L_ENTRY:
+    tmp_7 = load self+0 as u64
+    !self
+    return tmp_7
+
+@sla__Instant_elapsed(self: ptr) -> ptr:
+L_ENTRY:
+    tmp_9 = load self+0 as u64
+    EXPAND TIME_INSTANT_ELAPSED tmp_8, tmp_9
+    !tmp_9
+    ns = tmp_8
+    tmp_10 = alloc 8
+    store tmp_10+0, ns as u64
+    !self
+    return tmp_10
+
+@sla__SystemTime_now() -> ptr:
+L_ENTRY:
+    EXPAND TIME_NOW_UNIX_MS tmp_11
+    ms = tmp_11
+    tmp_12 = alloc 8
+    store tmp_12+0, ms as u64
+    return tmp_12
+
+@sla__SystemTime_unix_epoch() -> ptr:
+L_ENTRY:
+    tmp_13 = alloc 8
+    tmp_14 = 0
+    store tmp_13+0, tmp_14 as u64
+    !tmp_14
+    return tmp_13
+
+@sla__SystemTime_duration_since(self: ptr, earlier: ptr) -> ptr:
+L_ENTRY:
+    tmp_15 = load self+0 as u64
+    tmp_16 = load earlier+0 as u64
+    tmp_17 = sub tmp_15, tmp_16
+    !tmp_15
+    !tmp_16
+    elapsed_ms = tmp_17
+    EXPAND TIME_DURATION_FROM_MILLIS tmp_18, elapsed_ms
+    ns = tmp_18
+    tmp_19 = alloc 8
+    store tmp_19+0, ns as u64
+    EXPAND RESULT_NEW_OK tmp_20, tmp_19
+    !tmp_19
+    !elapsed_ms
+    !self
+    !earlier
+    return tmp_20
+
+@sla__thread_sleep(duration: ptr):
+L_ENTRY:
+    tmp_21 = load duration+0 as u64
+    EXPAND TIME_THREAD_SLEEP_NS tmp_21
+    !tmp_21
+    return
+
+@sla__unix_now_millis() -> u64:
+L_ENTRY:
+    tmp_22 = call @sla__SystemTime_now()
+    tmp_23 = call @sla__SystemTime_unix_epoch()
+    tmp_24 = call @sla__SystemTime_duration_since(tmp_22, tmp_23)
+    !tmp_22
+    !tmp_23
+    EXPAND RESULT_UNWRAP tmp_25, tmp_24
+    !tmp_24
+    tmp_26 = call @sla__Duration_as_millis(tmp_25)
+    !tmp_25
+    return tmp_26
+
+@sla__sleep_for_millis(delay_ms: u64):
+L_ENTRY:
+    tmp_27 = call @sla__Duration_from_millis(delay_ms)
+    call @sla__thread_sleep(tmp_27)
+    !tmp_27
+    return
+
+@sla__instant_now_ns() -> u64:
+L_ENTRY:
+    tmp_28 = call @sla__Instant_now()
+    started = tmp_28
+    tmp_29 = call @sla__Instant_raw_ns(started)
+    return tmp_29
+
+@sla__elapsed_millis_since_ns(started_ns: u64) -> u64:
+L_ENTRY:
+    tmp_30 = call @sla__Instant_from_raw_ns(started_ns)
+    started = tmp_30
+    tmp_31 = call @sla__Instant_elapsed(started)
+    tmp_32 = call @sla__Duration_as_millis(tmp_31)
+    !tmp_31
+    !started_ns
+    return tmp_32
+
+@sla__duration_millis(ms: u64) -> u64:
+L_ENTRY:
+    tmp_33 = call @sla__Duration_from_millis(ms)
+    tmp_34 = call @sla__Duration_as_millis(tmp_33)
+    !tmp_33
+    return tmp_34
+
+@sla__step_one_after_delay(delay_ms: u64) -> ptr:
+L_ENTRY:
+    tmp_35 = call @sla__unix_now_millis()
+    unix_before = tmp_35
+    call @sla__sleep_for_millis(delay_ms)
+    tmp_36 = call @sla__unix_now_millis()
+    unix_after = tmp_36
+    tmp_37 = slt unix_after, unix_before
+    br tmp_37 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_37
+    panic(91)
+
+L_ELSE_1:
+    !tmp_37
+    jmp L_MERGE_2
+
+L_MERGE_2:
+    tmp_40 = 1
+    EXPAND FUTURE_READY_STATE_NEW tmp_41, tmp_40
+    !unix_after
+    !unix_before
+    !delay_ms
+    return tmp_41
+
+@sla__run() -> ptr:
+L_ENTRY:
+    tmp_42 = 5
+    delay_ms = tmp_42
+    tmp_43 = call @sla__instant_now_ns()
+    started_ns = tmp_43
+    tmp_44 = call @sla__step_one_after_delay(delay_ms)
+    tmp_45 = load tmp_44+ReadyFuture_state as u64
+    tmp_46 = eq tmp_45, 0
+    br tmp_46 -> L_AWAIT_PENDING_4, L_AWAIT_READY_3
+
+L_AWAIT_PENDING_4:
+    return tmp_44
+L_AWAIT_READY_3:
+    !tmp_45
+    !tmp_46
+    EXPAND FUTURE_READY_STATE_INTO_INNER tmp_47, tmp_44
+    !tmp_44
+    value = tmp_47
+    tmp_48 = call @sla__elapsed_millis_since_ns(started_ns)
+    elapsed_ms = tmp_48
+    tmp_49 = 1
+    tmp_50 = call @sla__duration_millis(tmp_49)
+    !tmp_49
+    min_elapsed_ms = tmp_50
+    tmp_51 = slt elapsed_ms, min_elapsed_ms
+    br tmp_51 -> L_THEN_5, L_ELSE_6
+
+L_THEN_5:
+    !tmp_51
+    panic(92)
+
+L_ELSE_6:
+    !tmp_51
+    jmp L_MERGE_7
+
+L_MERGE_7:
+    tmp_54 = 1
+    tmp_55 = add value, tmp_54
+    !tmp_54
+    EXPAND FUTURE_READY_STATE_NEW tmp_56, tmp_55
+    !min_elapsed_ms
+    !elapsed_ms
+    !delay_ms
+    !started_ns
+    return tmp_56
+
+@sla__block_on(future: ptr) -> i32:
+L_ENTRY:
+    EXPAND PTR_NULL tmp_57
+    data = tmp_57
+    EXPAND RAW_WAKER_NEW tmp_58, data, data
+    raw = tmp_58
+    EXPAND WAKER_FROM_RAW tmp_59, raw
+    waker = tmp_59
+    EXPAND CONTEXT_FROM_WAKER tmp_60, waker
+    context = tmp_60
+    EXPAND BOX_NEW tmp_61, future
+    boxed = tmp_61
+    tmp_62 = load boxed+0 as ptr
+    future_ref = tmp_62
+    pinned = stack_alloc 16
+    EXPAND PIN_MUT_NEW pinned, future_ref
+    EXPAND PIN_MUT_GET_MUT tmp_64, pinned
+    EXPAND FUTURE_READY_POLL_STATE tmp_63, tmp_64
+    !tmp_64
+    poll = tmp_63
+    EXPAND POLL_IS_READY tmp_65, poll
+    ready = tmp_65
+    tmp_66 = 1
+    tmp_67 = ne ready, tmp_66
+    !tmp_66
+    br tmp_67 -> L_THEN_8, L_ELSE_9
+
+L_THEN_8:
+    !tmp_67
+    EXPAND CONTEXT_WAKER tmp_68, context
+    _cx_waker = tmp_68
+    panic(93)
+
+L_ELSE_9:
+    !tmp_67
+    jmp L_MERGE_10
+
+L_MERGE_10:
+    EXPAND POLL_VALUE tmp_71, poll
+    value = tmp_71
+    !poll
+    !context
+    !waker
+    !raw
+    !ready
+    !boxed
+    !future_ref
+    !future
+    return value
+
+@sla__async_run_value() -> i32:
+L_ENTRY:
+    tmp_72 = call @sla__run()
+    tmp_73 = call @sla__block_on(tmp_72)
+    !tmp_72
+    return tmp_73
+
+@main() -> i32:
+L_ENTRY:
+    tmp_74 = call @sla__async_run_value()
+    result = tmp_74
+    tmp_75 = call @sa_fmt_u64(result, 10)
+    tmp_76 = call @sa_fmt_buffer_data(tmp_75)
+    tmp_77 = call @sa_fmt_buffer_len(tmp_75)
+    tmp_78 = tmp_76
+    call @sa_print_bytes(&tmp_78, tmp_77)
+    call @sa_fmt_buffer_free(^tmp_75)
+    !tmp_78
+    !tmp_77
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return result
+
+@test "rosetta 009 09_async_await"():
+L_TEST_ENTRY_11:
+    tmp_79 = call @sla__async_run_value()
+    got = tmp_79
+    tmp_80 = 2
+    tmp_81 = ne got, tmp_80
+    !tmp_80
+    br tmp_81 -> L_THEN_12, L_ELSE_13
+
+L_THEN_12:
+    !tmp_81
+    panic(9)
+
+L_ELSE_13:
+    !tmp_81
+    jmp L_MERGE_14
+
+L_MERGE_14:
+    !got
+    return
+

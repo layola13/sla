@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Legendre 三连值（(2|7)=1，(2|11)=p-1，(2|17)=1）。
+// 意对标 435 星座三向的剩余版（499/504 合取）。
+
+fn powmod(base: int, exp: int, m: int) -> int {
+    let r = 1;
+    let b = base % m;
+    let e = exp;
+    while e > 0 {
+        if e % 2 == 1 { r = r * b % m; };
+        b = b * b % m;
+        e = e / 2;
+    }
+    return r;
+}
+
+fn legendre(a: int, p: int) -> int {
+    return powmod(a % p, (p - 1) / 2, p);
+}
+
+fn main() -> i32 {
+    println("{},{},{}", legendre(2, 7), legendre(2, 11), legendre(2, 17));
+    return 0;
+}
+
+@test "basic 505 tri legendre"() {
+    if legendre(2, 7) != 1 { panic(50501); };
+    if legendre(2, 11) != 10 { panic(50502); };
+    if legendre(2, 17) != 1 { panic(50503); };
+}

@@ -1,0 +1,149 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_evict_key = vtable { call = @sla__evict_key }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__evict_key(a: ptr, b: ptr, c: ptr) -> i32:
+L_ENTRY:
+    tmp_0 = load a+4 as i32
+    a_last = tmp_0
+    tmp_1 = load b+4 as i32
+    b_last = tmp_1
+    tmp_2 = load c+4 as i32
+    c_last = tmp_2
+    tmp_3 = slt a_last, b_last
+    br tmp_3 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_3
+    tmp_4 = slt a_last, c_last
+    br tmp_4 -> L_THEN_3, L_ELSE_4
+
+L_THEN_3:
+    !tmp_4
+    tmp_5 = load a+0 as i32
+    !c_last
+    !b_last
+    !a_last
+    !b
+    !a
+    !c
+    return tmp_5
+
+L_ELSE_4:
+    !tmp_4
+    tmp_6 = load c+0 as i32
+    !c_last
+    !b_last
+    !a_last
+    !b
+    !a
+    !c
+    return tmp_6
+
+
+L_ELSE_1:
+    !tmp_3
+    tmp_8 = slt b_last, c_last
+    br tmp_8 -> L_THEN_6, L_ELSE_7
+
+L_THEN_6:
+    !tmp_8
+    tmp_9 = load b+0 as i32
+    !c_last
+    !b_last
+    !a_last
+    !b
+    !a
+    !c
+    return tmp_9
+
+L_ELSE_7:
+    !tmp_8
+    tmp_10 = load c+0 as i32
+    !c_last
+    !b_last
+    !a_last
+    !b
+    !a
+    !c
+    return tmp_10
+
+
+
+@main() -> i32:
+L_ENTRY:
+    tmp_13 = alloc 8
+    tmp_14 = 10
+    store tmp_13+0, tmp_14 as i32
+    tmp_15 = 4
+    store tmp_13+4, tmp_15 as i32
+    tmp_16 = alloc 8
+    tmp_17 = 20
+    store tmp_16+0, tmp_17 as i32
+    tmp_18 = 9
+    store tmp_16+4, tmp_18 as i32
+    tmp_19 = alloc 8
+    tmp_20 = 30
+    store tmp_19+0, tmp_20 as i32
+    tmp_21 = 1
+    store tmp_19+4, tmp_21 as i32
+    tmp_22 = call @sla__evict_key(tmp_13, tmp_16, tmp_19)
+    !tmp_13
+    !tmp_16
+    !tmp_19
+    value = tmp_22
+    tmp_23 = call @sa_fmt_u64(value, 10)
+    tmp_24 = call @sa_fmt_buffer_data(tmp_23)
+    tmp_25 = call @sa_fmt_buffer_len(tmp_23)
+    tmp_26 = tmp_24
+    call @sa_print_bytes(&tmp_26, tmp_25)
+    call @sa_fmt_buffer_free(^tmp_23)
+    !tmp_26
+    !tmp_25
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    return value
+
+@test "rosetta 086 86_cache_eviction"():
+L_TEST_ENTRY_9:
+    tmp_27 = alloc 8
+    tmp_28 = 10
+    store tmp_27+0, tmp_28 as i32
+    tmp_29 = 4
+    store tmp_27+4, tmp_29 as i32
+    tmp_30 = alloc 8
+    tmp_31 = 20
+    store tmp_30+0, tmp_31 as i32
+    tmp_32 = 9
+    store tmp_30+4, tmp_32 as i32
+    tmp_33 = alloc 8
+    tmp_34 = 30
+    store tmp_33+0, tmp_34 as i32
+    tmp_35 = 1
+    store tmp_33+4, tmp_35 as i32
+    tmp_36 = call @sla__evict_key(tmp_27, tmp_30, tmp_33)
+    !tmp_27
+    !tmp_30
+    !tmp_33
+    got = tmp_36
+    tmp_37 = 30
+    tmp_38 = ne got, tmp_37
+    !tmp_37
+    br tmp_38 -> L_THEN_10, L_ELSE_11
+
+L_THEN_10:
+    !tmp_38
+    panic(86)
+
+L_ELSE_11:
+    !tmp_38
+    jmp L_MERGE_12
+
+L_MERGE_12:
+    !got
+    return
+

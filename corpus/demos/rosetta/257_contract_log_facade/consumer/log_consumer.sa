@@ -1,0 +1,16 @@
+@import "consumer/../bridge/log_bridge.sa"
+
+@const LOG_MESSAGE = utf8:"257\n"
+
+@log_consumer_value() -> i32:
+L_ENTRY:
+    value = call @log_emit(257, &LOG_MESSAGE, 4)
+    ok = eq value, 257
+    !value
+    br ok -> L_OK, L_ERR
+
+L_OK:
+    return 257
+
+L_ERR:
+    return 0

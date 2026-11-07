@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 加法持久性（199→19→10→1 共 3 步）。
+// 意对标 406 数位和的迭代版（406 互补）。
+
+fn dsum(n: int) -> int {
+    let s = 0;
+    let m = n;
+    while m > 0 {
+        s = s + m % 10;
+        m = m / 10;
+    }
+    return s;
+}
+
+fn persist(n: int) -> int {
+    let c = 0;
+    let m = n;
+    while m >= 10 {
+        m = dsum(m);
+        c = c + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", persist(199), persist(39), persist(7));
+    return 0;
+}
+
+@test "basic 408 persist"() {
+    if persist(199) != 3 { panic(40801); };
+    if persist(39) != 2 { panic(40802); };
+    if persist(7) != 0 { panic(40803); };
+}

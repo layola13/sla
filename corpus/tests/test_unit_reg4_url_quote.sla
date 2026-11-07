@@ -1,0 +1,108 @@
+@import "sa_std/url.sla"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+// Registry shard 4 coverage: url percent coding from
+// sa_std/url.sla (SAB registry class=declared, never probed,
+// zero corpus references at census 2026-11-06).
+// Entries: url_quote, url_quote_mode, url_quote_plus,
+// url_quote_segment, url_unquote, url_unquote_mode,
+// url_unquote_plus, url_decode_or_raw, url_pct_normalize.
+// Quote modes: 0 = path (keeps '/'), 1 = segment (keeps
+// sub-delims except ';' and ',', plus ':' and '@'),
+// 2 = query-plus (space becomes '+'), 3 = userinfo (keeps
+// sub-delims and ':').
+
+fn s4_eq(a: String, b: String) -> bool {
+    let pa: ptr = STR_PTR(a);
+    let pb: ptr = STR_PTR(b);
+    if len(a) != len(b) { return false; };
+    let i: u64 = 0;
+    while i < len(a) {
+        if PTR_BYTE_AT(pa, i) != PTR_BYTE_AT(pb, i) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn r4_ok(r: Result<String, i32>) -> String {
+    match r {
+        Ok(s) => { return s; },
+        Err(e) => { panic(43090); },
+    }
+}
+
+@test "reg4 url quote path mode"() {
+    if !s4_eq(url_quote(format("a b")), format("a%20b")) { panic(43001); };
+    if !s4_eq(url_quote(format("/a/b")), format("/a/b")) { panic(43002); };
+    if !s4_eq(url_quote(format("a:b")), format("a%3Ab")) { panic(43003); };
+    if !s4_eq(url_quote(format("abc-._~")), format("abc-._~")) { panic(43004); };
+}
+
+@test "reg4 url quote segment mode"() {
+    if !s4_eq(url_quote_segment(format("a/b")), format("a%2Fb")) { panic(43011); };
+    if !s4_eq(url_quote_segment(format("a:b@c")), format("a:b@c")) { panic(43012); };
+    if !s4_eq(url_quote_segment(format("a;b")), format("a%3Bb")) { panic(43013); };
+    if !s4_eq(url_quote_segment(format("a,b")), format("a%2Cb")) { panic(43014); };
+    if !s4_eq(url_quote_segment(format("a!b")), format("a!b")) { panic(43015); };
+}
+
+@test "reg4 url quote plus mode"() {
+    if !s4_eq(url_quote_plus(format("a b")), format("a+b")) { panic(43021); };
+    if !s4_eq(url_quote_plus(format("a/b")), format("a%2Fb")) { panic(43022); };
+    if !s4_eq(url_quote_plus(format("a+b")), format("a%2Bb")) { panic(43023); };
+}
+
+@test "reg4 url quote mode explicit"() {
+    if !s4_eq(url_quote_mode(format("a:b"), 3), format("a:b")) { panic(43031); };
+    if !s4_eq(url_quote_mode(format("a/b"), 3), format("a%2Fb")) { panic(43032); };
+    if !s4_eq(url_quote_mode(format("a b"), 0), format("a%20b")) { panic(43033); };
+    if !s4_eq(url_quote_mode(format("a b"), 2), format("a+b")) { panic(43034); };
+}
+
+@test "reg4 url unquote"() {
+    if !s4_eq(r4_ok(url_unquote(format("a%20b"))), format("a b")) { panic(43041); };
+    if !s4_eq(r4_ok(url_unquote(format("%41%42"))), format("AB")) { panic(43042); };
+    if !s4_eq(r4_ok(url_unquote(format("a+b"))), format("a+b")) { panic(43043); };
+    if !s4_eq(r4_ok(url_unquote(format("plain"))), format("plain")) { panic(43044); };
+}
+
+@test "reg4 url unquote plus and mode"() {
+    if !s4_eq(r4_ok(url_unquote_plus(format("a+b"))), format("a b")) { panic(43051); };
+    if !s4_eq(r4_ok(url_unquote_mode(format("a+b"), false)), format("a+b")) { panic(43052); };
+    if !s4_eq(r4_ok(url_unquote_mode(format("a+b"), true)), format("a b")) { panic(43053); };
+}
+
+@test "reg4 url unquote rejects bad escapes"() {
+    let r = url_unquote(format("%2"));
+    match r {
+        Ok(s) => { panic(43061); },
+        Err(e) => {
+            if e != 1 { panic(43062); };
+        },
+    };
+    let r2 = url_unquote(format("%zz"));
+    match r2 {
+        Ok(s) => { panic(43063); },
+        Err(e) => {
+            if e != 1 { panic(43064); };
+        },
+    }
+}
+
+@test "reg4 url decode or raw falls back on bad escapes"() {
+    if !s4_eq(url_decode_or_raw(format("%41"), false), format("A")) { panic(43071); };
+    if !s4_eq(url_decode_or_raw(format("a%2"), false), format("a%2")) { panic(43072); };
+    if !s4_eq(url_decode_or_raw(format("%zz"), false), format("%zz")) { panic(43073); };
+    if !s4_eq(url_decode_or_raw(format("a+b"), true), format("a b")) { panic(43074); };
+    if !s4_eq(url_decode_or_raw(format("a+b"), false), format("a+b")) { panic(43075); };
+}
+
+@test "reg4 url pct normalize"() {
+    // Unreserved bytes are decoded; others stay escaped, uppercased.
+    if !s4_eq(url_pct_normalize(format("%7e")), format("~")) { panic(43081); };
+    if !s4_eq(url_pct_normalize(format("%7E")), format("~")) { panic(43082); };
+    if !s4_eq(url_pct_normalize(format("%41")), format("A")) { panic(43083); };
+    if !s4_eq(url_pct_normalize(format("%2f")), format("%2F")) { panic(43084); };
+    if !s4_eq(url_pct_normalize(format("abc")), format("abc")) { panic(43085); };
+}

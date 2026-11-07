@@ -1,0 +1,59 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Catalan 差式对峙：差式 vs 商式（n=9：4862 对 4862；n=10：16796 对 16796）。
+// 意对标 861_cat_diff9 × 856_cat9（差源与商源合流）。
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn catd(n: int) -> int {
+    return binom_mul(2 * n, n) / (n + 1);
+}
+
+fn catf(n: int) -> int {
+    return binom_mul(2 * n, n) - binom_mul(2 * n, n + 1);
+}
+
+fn rat(n: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < n {
+        r = r * 2 * (2 * i + 1) / (i + 2);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn catc(n: int) -> int {
+    if n == 0 { return 1; };
+    let s = 0;
+    let i = 0;
+    while i < n {
+        s = s + catc(i) * catc(n - 1 - i);
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", catf(9), catd(9), catf(10), catd(10));
+    return 0;
+}
+
+@test "basic 862 duel catdiff9"() {
+    if catf(9) != 4862 { panic(86201); };
+    if catd(9) != 4862 { panic(86202); };
+    if catf(10) != 16796 { panic(86203); };
+    if catd(10) != 16796 { panic(86204); };
+}

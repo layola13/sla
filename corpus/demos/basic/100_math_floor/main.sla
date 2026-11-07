@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 31_math：绝对值（5）+ 向下取整（7）。
+// `abs` 用分支表达；`floor` 用 `as i32` 截断表达（探针已验证 7.9→7）。
+
+fn abs_i(x: int) -> int {
+    if x < 0 {
+        return 0 - x;
+    };
+    return x;
+}
+
+fn main() -> i32 {
+    println("{}", abs_i(0 - 5));
+    let f = 7.9;
+    println("{}", f as i32);
+    return 0;
+}
+
+@test "basic 100 math floor"() {
+    if abs_i(0 - 5) != 5 { panic(10001); };
+    let f = 7.9;
+    if (f as i32) != 7 { panic(10002); };
+}

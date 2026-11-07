@@ -1,0 +1,15 @@
+// expect: ShaderDimensionMismatch
+// J-1 negative (dimension rules, DESIGN.md 6.2): adding a vec2 to a
+// vec3 is ShaderDimensionMismatch. Judged by standalone `sla check`
+// (see plugin_tests.zig registration).
+
+@sublanguage shader;
+
+shader Bad {
+    @param a: vec2;
+    @param b: vec3;
+    var v: vec3;
+    init {
+        v = a + b;
+    }
+}

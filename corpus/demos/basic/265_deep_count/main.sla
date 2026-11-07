@@ -1,0 +1,30 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 三层区间计数（2*3*4=24）。
+// 与 146（双层）/196（裸双层）互补，此处首覆三层（224 为结构四层，此处为循环三层）。
+
+fn main() -> i32 {
+    let t = 0;
+    for i in 0..2 {
+        for j in 0..3 {
+            for k in 0..4 {
+                t = t + 1;
+            }
+        }
+    }
+    println("{}", t);
+    return 0;
+}
+
+@test "basic 265 deep count"() {
+    let t = 0;
+    for i in 0..2 {
+        for j in 0..3 {
+            for k in 0..4 {
+                t = t + 1;
+            }
+        }
+    }
+    if t != 24 { panic(26501); };
+}

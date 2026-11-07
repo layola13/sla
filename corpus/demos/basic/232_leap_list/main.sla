@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 25_leap 的表版（2000–2024 闰年数 7；25 为单点判定）。
+// 闰年谓词（25 口径）+ 区间计数（61 口径）组合。
+
+fn is_leap(y: int) -> int {
+    return if (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 { 1 } else { 0 };
+}
+
+fn main() -> i32 {
+    let leaps = 0;
+    let y = 2000;
+    while y <= 2024 {
+        if is_leap(y) == 1 { leaps = leaps + 1; };
+        y = y + 1;
+    }
+    println("{}", leaps);
+    return 0;
+}
+
+@test "basic 232 leap list"() {
+    if is_leap(2000) != 1 { panic(23201); };
+    if is_leap(1900) != 0 { panic(23202); };
+    let leaps = 0;
+    let y = 2000;
+    while y <= 2024 {
+        if is_leap(y) == 1 { leaps = leaps + 1; };
+        y = y + 1;
+    }
+    if leaps != 7 { panic(23203); };
+}

@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+trait Provider {
+    fn get(&self) -> i32;
+}
+
+struct IntProvider { val: i32 }
+
+impl Provider for IntProvider {
+    fn get(&self) -> i32 { return self.val; }
+}
+
+fn generic_associated_item_value() -> i32 {
+    let p = IntProvider { val: 42 };
+    return p.get();
+}
+fn main() -> i32 {
+    let p = IntProvider { val: 42 };
+    let result = p.get();
+    println("{}", result);
+    return result;
+}
+@test "rosetta 161 161_generic_associated_types"() { let got = generic_associated_item_value(); if got != 42 { panic(161); }; }

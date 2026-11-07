@@ -1,0 +1,51 @@
+@import "sa_std/vec.sa"
+
+struct MiniFnPtrVecHolder {
+    runs: Vec<fn(i32) -> i32>,
+    run_order_positions: Vec<i64>,
+}
+
+fn mini_fn_ptr_vec_inc(value: i32) -> i32 {
+    return value + 1;
+}
+
+fn mini_fn_ptr_vec_holder_new() -> MiniFnPtrVecHolder {
+    let runs: Vec<fn(i32) -> i32> = Vec::new();
+    let run_order_positions: Vec<i64> = Vec::new();
+    return MiniFnPtrVecHolder { runs: runs, run_order_positions: run_order_positions };
+}
+
+fn mini_fn_ptr_vec_holder_push(holder: MiniFnPtrVecHolder, run: fn(i32) -> i32) -> MiniFnPtrVecHolder {
+    let order_pos = len(holder.runs) as i64;
+    holder.runs.push(run);
+    holder.run_order_positions.push(order_pos);
+    return holder;
+}
+
+fn mini_fn_ptr_vec_holder_extend_one(parent: MiniFnPtrVecHolder, child: MiniFnPtrVecHolder) -> MiniFnPtrVecHolder {
+    if child.run_order_positions[0] != 0 { panic(52003); };
+    return mini_fn_ptr_vec_holder_push(parent, child.runs[0]);
+}
+
+fn mini_fn_ptr_vec_holder_call(holder: MiniFnPtrVecHolder, value: i32) -> i32 {
+    let run = holder.runs[0];
+    return run(value);
+}
+
+@test "parallel runner minimal struct vec fnptr"() {
+    let holder0 = mini_fn_ptr_vec_holder_new();
+    let holder1 = mini_fn_ptr_vec_holder_push(holder0, mini_fn_ptr_vec_inc);
+    if len(holder1.runs) as i64 != 1 { panic(52001); };
+    if holder1.run_order_positions[0] != 0 { panic(52002); };
+    if mini_fn_ptr_vec_holder_call(holder1, 10) != 11 { panic(52003); };
+}
+
+@test "parallel runner minimal fnptr extend one"() {
+    let parent = mini_fn_ptr_vec_holder_new();
+    let child0 = mini_fn_ptr_vec_holder_new();
+    let child1 = mini_fn_ptr_vec_holder_push(child0, mini_fn_ptr_vec_inc);
+    let out = mini_fn_ptr_vec_holder_extend_one(parent, child1);
+    if len(out.runs) as i64 != 1 { panic(52004); };
+    if out.run_order_positions[0] != 0 { panic(52005); };
+    if mini_fn_ptr_vec_holder_call(out, 20) != 21 { panic(52006); };
+}

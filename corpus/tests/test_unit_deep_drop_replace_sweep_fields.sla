@@ -1,0 +1,64 @@
+@import "sa_std/vec.sa"
+
+// DEF deep-drop crash-A regression (replace semantics, sweep
+// shape): the slaredis store sweep migrates entry fields with
+// `entries[i].field = m.field` (index+field target, owned-root
+// field read). The migration must MOVE the fields out of the
+// source entry: afterwards the source fields read back empty and
+// refilling them must not resurrect the migrated buffers (the
+// entry-side resets drop them). Pre-fix the source kept its
+// headers (panic 4701) and both sides dropped the same buffers.
+
+struct Entry {
+    hfields: Vec<Vec<u8>>,
+    hvalues: Vec<Vec<u8>>,
+    n: u64,
+}
+
+fn filled_vec(n: u64, seed: u8) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(seed + (i % 5) as u8);
+        i = i + 1;
+    }
+    return v;
+}
+
+fn sum_inner(v: &Vec<Vec<u8>>, which: u64) -> u64 {
+    let sum: u64 = 0;
+    let i: u64 = 0;
+    while i < 48 {
+        sum = sum + (v[which][i] as u64);
+        i = i + 1;
+    }
+    return sum;
+}
+
+@test "replace moves entry fields during sweep migration"() {
+    let entries: Vec<Entry> = Vec::new();
+    entries.push(Entry { hfields: Vec::new(), hvalues: Vec::new(), n: 1 });
+    entries.push(Entry { hfields: Vec::new(), hvalues: Vec::new(), n: 2 });
+    let m = Entry { hfields: Vec::new(), hvalues: Vec::new(), n: 9 };
+    m.hfields.push(filled_vec(48, 2));
+    m.hvalues.push(filled_vec(48, 3));
+    let r: u64 = 0;
+    while r < 60 {
+        entries[0].hfields = m.hfields;
+        entries[0].hvalues = m.hvalues;
+        // The source entry was moved out of.
+        if len(m.hfields) != 0 { panic(4701); };
+        if len(m.hvalues) != 0 { panic(4702); };
+        // The destination entry owns the migrated fields now.
+        if sum_inner(&entries[0].hfields, 0) != 93 + 96 { panic(4703); };
+        if sum_inner(&entries[0].hvalues, 0) != 93 + 144 { panic(4704); };
+        if entries[0].n != 1 { panic(4705); };
+        // The sweep finishes: entry-side resets drop the migrated
+        // buffers; the source entry is refilled for the next round.
+        entries[0].hfields = Vec::new();
+        entries[0].hvalues = Vec::new();
+        m.hfields.push(filled_vec(48, 2));
+        m.hvalues.push(filled_vec(48, 3));
+        r = r + 1;
+    }
+}

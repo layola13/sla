@@ -1,0 +1,11 @@
+// expect: ShaderDuplicateName
+// J-1 negative (declaration rules, DESIGN.md 6.2): one name may be
+// declared only once across a shader's qualifiers. Judged by
+// standalone `sla check` (see plugin_tests.zig registration).
+
+@sublanguage shader;
+
+shader Bad {
+    @param tint: vec4;
+    @param tint: vec4;
+}

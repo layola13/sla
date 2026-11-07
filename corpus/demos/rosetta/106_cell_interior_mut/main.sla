@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/cell.sa"
+
+fn cell_update_sum() -> i32 {
+    let value = Cell::new(10);
+    let first = value.get();
+    value.set(20);
+    let second = value.get();
+    return first + second;
+}
+
+fn main() -> i32 {
+    let value = Cell::new(10);
+    let first = value.get();
+    value.set(20);
+    let second = value.get();
+    let result = first + second;
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 106 106_cell_interior_mut"() {
+    let got = cell_update_sum();
+    if got != 30 {
+        panic(106);
+    };
+};

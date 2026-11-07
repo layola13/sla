@@ -1,0 +1,78 @@
+// DEF-FLAT regression: a function whose ONLY call sites sit inside
+// `select` case/default/timeout bodies (or a `defer` call) must stay
+// reachable. The reachability walkers used to skip `select`
+// statements entirely, so such a callee was pruned from the program;
+// its call sites then fell through codegen's "assume macro
+// expansion" path and emitted `EXPAND <fn>` lines with no matching
+// [MACRO] definition, which the SA host flattener rejects with
+// InvalidMacroInvocation (build-time ForbiddenSyntax, trap 1001).
+
+@import "sa_std/task.sai"
+
+fn flat_case_only(v: u64) -> u64 {
+    return v + 1;
+}
+
+fn flat_default_only(v: u64) -> u64 {
+    return v + 2;
+}
+
+fn flat_timeout_only(v: u64) -> u64 {
+    return v + 3;
+}
+
+fn flat_defer_only(v: u64) -> u64 {
+    return v + 4;
+}
+
+@test "select case body call stays reachable"() {
+    let a: Chan<u64> = Chan::new(1);
+    a.send(7);
+    let hit: u64 = 0;
+    select {
+        case let v = a.recv() {
+            hit = flat_case_only(v);
+        }
+        default {
+            hit = 3;
+        }
+    }
+    if hit != 8 { panic(9711); };
+    a.destroy();
+}
+
+@test "select default body call stays reachable"() {
+    let a: Chan<u64> = Chan::new(1);
+    let hit: u64 = 0;
+    select {
+        case let v = a.recv() {
+            hit = v;
+        }
+        default {
+            hit = flat_default_only(40);
+        }
+    }
+    if hit != 42 { panic(9712); };
+    a.destroy();
+}
+
+@test "select timeout body call stays reachable"() {
+    let a: Chan<u64> = Chan::new(1);
+    let hit: u64 = 0;
+    select {
+        case let v = a.recv() {
+            hit = v;
+        }
+        timeout(1000000) {
+            hit = flat_timeout_only(39);
+        }
+    }
+    if hit != 42 { panic(9713); };
+    a.destroy();
+}
+
+@test "defer call stays reachable"() {
+    defer flat_defer_only(1);
+    let hit: u64 = 5;
+    if hit != 5 { panic(9714); };
+}

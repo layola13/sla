@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/hashset.sa"
+
+// 对标 tsgosa 1104_set_has_size：首个 HashSet 端到端（1,0,2；重复插入去重）。
+// 与 #16（BTreeSet<int> 拒识）互补：哈希集合标量键正常。
+
+fn main() -> i32 {
+    let s = HashSet::new();
+    s.insert(1);
+    s.insert(2);
+    s.insert(2);
+    println("{},{},{}", if s.contains(1) { 1 } else { 0 }, if s.contains(9) { 1 } else { 0 }, len(s));
+    return 0;
+}
+
+@test "basic 268 hashset int"() {
+    let s = HashSet::new();
+    s.insert(1);
+    s.insert(2);
+    s.insert(2);
+    if !s.contains(1) { panic(26801); };
+    if s.contains(9) { panic(26802); };
+    if len(s) != 2 { panic(26803); };
+}

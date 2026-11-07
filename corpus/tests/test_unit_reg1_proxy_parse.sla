@@ -1,0 +1,190 @@
+@import "sa_std/http_proxy.sla"
+@import "sa_std/vec.sa"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/status.sla"
+
+// reg-shard1 coverage: SAB registry declared entries from
+// sa_std/http_proxy.sla, parse half: http_proxy_kind_of_scheme /
+// http_proxy_default_port / http_proxy_parse / http_proxy_kind /
+// http_proxy_port / http_proxy_has_user / http_proxy_has_password
+// / http_proxy_host / http_proxy_user / http_proxy_password /
+// http_proxy_authority / http_proxy_target_authority /
+// http_proxy_basic_auth_value.
+// Kind numbering per the module: 1=http, 2=https, 3=socks5;
+// default ports 80/443/1080. Accessors taking ProxyUrl by value
+// (host/user/password/authority) consume it, so each is fed a
+// fresh parse, mirroring the module's own ownership contract.
+
+fn reg1_seq(s: String, lit: String) -> bool {
+    let ns: u64 = len(s) as u64;
+    let nl: u64 = len(lit) as u64;
+    if ns != nl { return false; };
+    let ps: ptr = STR_PTR(s);
+    let pl: ptr = STR_PTR(lit);
+    let i: u64 = 0;
+    while i < ns {
+        if PTR_BYTE_AT(ps, i) != PTR_BYTE_AT(pl, i) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+@test "reg1 proxy kind of scheme and default port"() {
+    if http_proxy_kind_of_scheme("http") != 1 { panic(62251); };
+    if http_proxy_kind_of_scheme("https") != 2 { panic(62252); };
+    if http_proxy_kind_of_scheme("socks5") != 3 { panic(62253); };
+    if http_proxy_kind_of_scheme("HTTP") != 1 { panic(62254); };
+    if http_proxy_kind_of_scheme("Socks5") != 3 { panic(62255); };
+    if http_proxy_kind_of_scheme("ftp") != 0 { panic(62256); };
+    if http_proxy_kind_of_scheme("") != 0 { panic(62257); };
+    if http_proxy_default_port(1) != 80 { panic(62258); };
+    if http_proxy_default_port(2) != 443 { panic(62259); };
+    if http_proxy_default_port(3) != 1080 { panic(62260); };
+    if http_proxy_default_port(0) != 0 { panic(62261); };
+    if http_proxy_default_port(99) != 0 { panic(62262); };
+}
+
+@test "reg1 proxy parse basic"() {
+    let r = http_proxy_parse("http://proxy.local:3128");
+    match r {
+        Ok(p) => {
+            if http_proxy_kind(&p) != 1 { panic(62271); };
+            if http_proxy_port(&p) != 3128 { panic(62272); };
+            if http_proxy_has_user(&p) { panic(62273); };
+            if http_proxy_has_password(&p) { panic(62274); };
+            if !reg1_seq(http_proxy_host(p), "proxy.local") { panic(62275); };
+        },
+        Err(e) => { panic(62270); },
+    };
+    let r2 = http_proxy_parse("http://proxy.local");
+    match r2 {
+        Ok(p) => {
+            if http_proxy_port(&p) != 80 { panic(62276); };
+            if !reg1_seq(http_proxy_authority(p), "proxy.local:80") { panic(62277); };
+        },
+        Err(e) => { panic(62278); },
+    };
+    let r3 = http_proxy_parse("socks5://127.0.0.1");
+    match r3 {
+        Ok(p) => {
+            if http_proxy_kind(&p) != 3 { panic(62279); };
+            if http_proxy_port(&p) != 1080 { panic(62280); };
+            if !reg1_seq(http_proxy_host(p), "127.0.0.1") { panic(62281); };
+        },
+        Err(e) => { panic(62282); },
+    };
+    let r4 = http_proxy_parse("https://[::1]:8443");
+    match r4 {
+        Ok(p) => {
+            if http_proxy_kind(&p) != 2 { panic(62283); };
+            if http_proxy_port(&p) != 8443 { panic(62284); };
+            if !reg1_seq(http_proxy_authority(p), "[::1]:8443") { panic(62285); };
+        },
+        Err(e) => { panic(62286); },
+    };
+    let r5 = http_proxy_parse("https://[::1]:8443");
+    match r5 {
+        Ok(p) => {
+            if !reg1_seq(http_proxy_host(p), "::1") { panic(62287); };
+        },
+        Err(e) => { panic(62288); },
+    };
+}
+
+@test "reg1 proxy parse userinfo"() {
+    let r = http_proxy_parse("http://user:secret@proxy.local");
+    match r {
+        Ok(p) => {
+            if !http_proxy_has_user(&p) { panic(62291); };
+            if !http_proxy_has_password(&p) { panic(62292); };
+            if http_proxy_port(&p) != 80 { panic(62293); };
+            if !reg1_seq(http_proxy_user(p), "user") { panic(62294); };
+        },
+        Err(e) => { panic(62290); },
+    };
+    let r2 = http_proxy_parse("http://user:secret@proxy.local");
+    match r2 {
+        Ok(p) => {
+            if !reg1_seq(http_proxy_password(p), "secret") { panic(62295); };
+        },
+        Err(e) => { panic(62296); },
+    };
+    let r3 = http_proxy_parse("http://user@proxy.local");
+    match r3 {
+        Ok(p) => {
+            if !http_proxy_has_user(&p) { panic(62297); };
+            if http_proxy_has_password(&p) { panic(62298); };
+            if !reg1_seq(http_proxy_password(p), "") { panic(62299); };
+        },
+        Err(e) => { panic(62300); },
+    };
+    let r4 = http_proxy_parse("http://user:@proxy.local");
+    match r4 {
+        Ok(p) => {
+            if !http_proxy_has_password(&p) { panic(62301); };
+            if !reg1_seq(http_proxy_password(p), "") { panic(62302); };
+        },
+        Err(e) => { panic(62303); },
+    };
+    let r5 = http_proxy_parse("http://us%40er:p%3Ass@proxy.local");
+    match r5 {
+        Ok(p) => {
+            if !reg1_seq(http_proxy_user(p), "us@er") { panic(62304); };
+        },
+        Err(e) => { panic(62305); },
+    };
+    let r6 = http_proxy_parse("http://us%40er:p%3Ass@proxy.local");
+    match r6 {
+        Ok(p) => {
+            if !reg1_seq(http_proxy_password(p), "p:ss") { panic(62306); };
+        },
+        Err(e) => { panic(62307); },
+    };
+    let r7 = http_proxy_parse("http://proxy.local");
+    match r7 {
+        Ok(p) => {
+            if !reg1_seq(http_proxy_user(p), "") { panic(62308); };
+        },
+        Err(e) => { panic(62309); },
+    };
+}
+
+@test "reg1 proxy parse errors"() {
+    let r1 = http_proxy_parse("proxy.local:3128");
+    match r1 {
+        Ok(p) => { panic(62311); },
+        Err(e) => { if e != SA_STD_ERR_INVALID_ARGUMENT { panic(62312); }; },
+    };
+    let r2 = http_proxy_parse("ftp://proxy.local");
+    match r2 {
+        Ok(p) => { panic(62313); },
+        Err(e) => { if e != SA_STD_ERR_INVALID_ARGUMENT { panic(62314); }; },
+    };
+    let r3 = http_proxy_parse("http://proxy.local/resource");
+    match r3 {
+        Ok(p) => { panic(62315); },
+        Err(e) => { if e != SA_STD_ERR_INVALID_ARGUMENT { panic(62316); }; },
+    };
+    let r4 = http_proxy_parse("http://proxy.local/");
+    match r4 {
+        Ok(p) => {
+            if http_proxy_port(&p) != 80 { panic(62317); };
+        },
+        Err(e) => { panic(62318); },
+    };
+    let r5 = http_proxy_parse("");
+    match r5 {
+        Ok(p) => { panic(62319); },
+        Err(e) => { if e != SA_STD_ERR_INVALID_ARGUMENT { panic(62320); }; },
+    };
+}
+
+@test "reg1 proxy authority and basic auth"() {
+    if !reg1_seq(http_proxy_target_authority("example.com", 80), "example.com:80") { panic(62321); };
+    if !reg1_seq(http_proxy_target_authority("::1", 443), "[::1]:443") { panic(62322); };
+    if !reg1_seq(http_proxy_target_authority("example.com", 8080), "example.com:8080") { panic(62323); };
+    if !reg1_seq(http_proxy_basic_auth_value("user", "pass", true), "Basic dXNlcjpwYXNz") { panic(62324); };
+    if !reg1_seq(http_proxy_basic_auth_value("user", "", false), "Basic dXNlcg==") { panic(62325); };
+    if !reg1_seq(http_proxy_basic_auth_value("user", "", true), "Basic dXNlcjo=") { panic(62326); };
+}

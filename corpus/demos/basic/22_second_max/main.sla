@@ -1,0 +1,36 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 121_second_max：一遍扫描求最大/次大（m1=9, m2=9）。
+
+fn main() -> i32 {
+    let a = [5, 1, 9, 3, 9, 2];
+    let m1 = a[0];
+    let m2 = a[0];
+    for i in 1..6 {
+        if a[i] > m1 {
+            m2 = m1;
+            m1 = a[i];
+        } else if a[i] > m2 {
+            m2 = a[i];
+        };
+    }
+    println("{},{}", m1, m2);
+    return 0;
+}
+
+@test "basic 22 second max"() {
+    let a = [5, 1, 9, 3, 9, 2];
+    let m1 = a[0];
+    let m2 = a[0];
+    for i in 1..6 {
+        if a[i] > m1 {
+            m2 = m1;
+            m1 = a[i];
+        } else if a[i] > m2 {
+            m2 = a[i];
+        };
+    }
+    if m1 != 9 { panic(2201); };
+    if m2 != 9 { panic(2202); };
+}

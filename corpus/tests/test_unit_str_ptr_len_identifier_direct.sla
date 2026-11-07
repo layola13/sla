@@ -1,0 +1,12 @@
+@import "sa_std/string.sa"
+
+fn ptr_len_roundtrip(data: ptr, len_value: int) -> int {
+    return len_value;
+}
+
+@test "str ptr len identifier macro args release receiver loads"() {
+    let text = "abc";
+    let len_value = ptr_len_roundtrip(STR_PTR(text), STR_LEN(text));
+    if len_value != 3 { panic(701); };
+    if ptr_len_roundtrip("raw", 3) != 3 { panic(702); };
+}

@@ -1,0 +1,29 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 02_arith / 21_compound：优先级、整除、取余、负数。
+
+fn arith_values() -> i32 {
+    let a = 2 + 3 * 4;
+    let b = (20 - 8) / 3;
+    let c = 17 % 5;
+    let d = -(2 + 3);
+    return a + b * 10 + c * 100 + d;
+}
+
+fn main() -> i32 {
+    println("{}", 2 + 3 * 4);
+    println("{}", (20 - 8) / 3);
+    println("{}", 17 % 5);
+    println("{}", -(2 + 3));
+    return 0;
+}
+
+@test "basic 02 arith precedence"() {
+    // 14, 4, 2, -5
+    if 2 + 3 * 4 != 14 { panic(201); };
+    if (20 - 8) / 3 != 4 { panic(202); };
+    if 17 % 5 != 2 { panic(203); };
+    if -(2 + 3) != -5 { panic(204); };
+    if arith_values() != 14 + 40 + 200 - 5 { panic(205); };
+}

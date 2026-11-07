@@ -1,0 +1,24 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/option.sa"
+@import "sa_std/hashmap.sa"
+
+fn router_table_value() -> i32 {
+    let router = HashMap::new();
+    router.insert("/home", 1);
+    router.insert("/api", 2);
+    return router["/api"];
+}
+
+fn main() -> i32 {
+    let value = router_table_value();
+    println("{}", value);
+    return value;
+}
+
+@test "rosetta 063 63_router_table"() {
+    let got = router_table_value();
+    if got != 2 {
+        panic(63);
+    };
+}

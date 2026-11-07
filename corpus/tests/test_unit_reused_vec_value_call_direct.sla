@@ -1,0 +1,18 @@
+@import "sa_std/vec.sa"
+
+fn reused_vec_count(values: Vec<i32>) -> i64 {
+    return len(values) as i64;
+}
+
+fn reused_vec_value_call() -> i64 {
+    let signature: Vec<i32> = Vec::new();
+    signature.push(10);
+    signature.push(20);
+    let first = reused_vec_count(signature);
+    let second = reused_vec_count(signature);
+    return first + second;
+}
+
+@test "direct sab keeps reused vec value-call arg live"() {
+    if reused_vec_value_call() != 4 { panic(51420); };
+}

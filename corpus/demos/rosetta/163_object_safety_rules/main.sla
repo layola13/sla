@@ -1,0 +1,40 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/trait_object.sa"
+
+trait Draw {
+    fn draw(&self) -> i32;
+}
+
+struct Item {
+    value: i32,
+}
+
+impl Draw for Item {
+    fn draw(&self) -> i32 {
+        return self.value;
+    }
+}
+
+fn render(&item: dyn Draw) -> i32 {
+    return item.draw();
+}
+
+fn object_safe_draw_result() -> i32 {
+    let item = Item { value: 4 };
+    return render(&item);
+}
+
+fn main() -> i32 {
+    let item = Item { value: 4 };
+    let result = render(&item);
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 163 163_object_safety_rules"() {
+    let got = object_safe_draw_result();
+    if got != 4 {
+        panic(163);
+    };
+};

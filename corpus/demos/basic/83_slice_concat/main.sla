@@ -1,0 +1,55 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 对标 tsgosa 27_slice_concat：`slice(1,4)` 求值（3+2+4=9）+ `concat` 求值（7+10=17）。
+// SLA 暂无 `slice/concat` 方法，均用 `Vec::push` 手工拷贝表达（写法见 39/53）。
+
+fn main() -> i32 {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    a.push(4);
+    a.push(5);
+    let s: Vec<i32> = Vec::new();
+    for i in 1..4 {
+        s.push(a[i]);
+    }
+    let sl = len(s) as i32;
+    println("{}", sl + s[0] + s[2]);
+    let c: Vec<i32> = Vec::new();
+    for i in 0..5 {
+        c.push(a[i]);
+    }
+    c.push(10);
+    c.push(20);
+    let cl = len(c) as i32;
+    println("{}", cl + c[5]);
+    return 0;
+}
+
+@test "basic 83 slice concat"() {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    a.push(4);
+    a.push(5);
+    let s: Vec<i32> = Vec::new();
+    for i in 1..4 {
+        s.push(a[i]);
+    }
+    if len(s) != 3 { panic(8301); };
+    let sl = len(s) as i32;
+    if sl + s[0] + s[2] != 9 { panic(8302); };
+    let c: Vec<i32> = Vec::new();
+    for i in 0..5 {
+        c.push(a[i]);
+    }
+    c.push(10);
+    c.push(20);
+    if len(c) != 7 { panic(8303); };
+    let cl = len(c) as i32;
+    if cl + c[5] != 17 { panic(8304); };
+}

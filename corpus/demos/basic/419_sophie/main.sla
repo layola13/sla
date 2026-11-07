@@ -1,0 +1,45 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Sophie Germain 素数（p 与 2p+1 皆素：11 → 23 是；<=20 有 4 个）。
+// 意对标 366 孪生素数的倍加版（366 互补）。
+
+fn is_prime(n: int) -> int {
+    if n < 2 { return 0; };
+    if n == 2 { return 1; };
+    if n % 2 == 0 { return 0; };
+    let d = 3;
+    while d * d <= n {
+        if n % d == 0 { return 0; };
+        d = d + 2;
+    }
+    return 1;
+}
+
+fn is_sophie(p: int) -> int {
+    if is_prime(p) != 1 { return 0; };
+    if is_prime(2 * p + 1) != 1 { return 0; };
+    return 1;
+}
+
+fn sophie_count(limit: int) -> int {
+    let c = 0;
+    let k = 2;
+    while k <= limit {
+        if is_sophie(k) == 1 { c = c + 1; };
+        k = k + 1;
+    }
+    return c;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", is_sophie(11), is_sophie(7), sophie_count(20));
+    return 0;
+}
+
+@test "basic 419 sophie"() {
+    if is_sophie(11) != 1 { panic(41901); };
+    if is_sophie(7) != 0 { panic(41902); };
+    if is_sophie(5) != 1 { panic(41903); };
+    if sophie_count(20) != 4 { panic(41904); };
+}

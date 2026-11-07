@@ -1,0 +1,49 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// 左旋 k 再左旋 len-k 复原对峙（247×247：首 1 末 5）。
+// 异操作复合恒等（与 300 的同输入对峙互补，此处为逆操作对）。
+
+fn main() -> i32 {
+    let b: Vec<i32> = Vec::new();
+    b.push(1);
+    b.push(2);
+    b.push(3);
+    b.push(4);
+    b.push(5);
+    let k = 2;
+    let t: Vec<i32> = Vec::new();
+    for i in 0..len(b) {
+        t.push(b[(i + k) % len(b)]);
+    }
+    let u: Vec<i32> = Vec::new();
+    let kk = len(t) - k;
+    for i in 0..len(t) {
+        u.push(t[(i + kk) % len(t)]);
+    }
+    println("{},{}", u[0], u[4]);
+    return 0;
+}
+
+@test "basic 301 duel rotid"() {
+    let b: Vec<i32> = Vec::new();
+    b.push(1);
+    b.push(2);
+    b.push(3);
+    b.push(4);
+    b.push(5);
+    let k = 2;
+    let t: Vec<i32> = Vec::new();
+    for i in 0..len(b) {
+        t.push(b[(i + k) % len(b)]);
+    }
+    if t[0] != 3 { panic(30101); };
+    let u: Vec<i32> = Vec::new();
+    let kk = len(t) - k;
+    for i in 0..len(t) {
+        u.push(t[(i + kk) % len(t)]);
+    }
+    if u[0] != b[0] { panic(30102); };
+    if u[4] != b[4] { panic(30103); };
+}

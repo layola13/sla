@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn mod_relative_import_depth() -> i32 { let sibling_module = 1; return sibling_module; }
+fn main() -> i32 { let result = mod_relative_import_depth(); println("{}", result); return result; }
+@test "rosetta 221 mod relative import"() { let got = mod_relative_import_depth(); if got != 1 { panic(221); }; }

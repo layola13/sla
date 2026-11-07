@@ -1,0 +1,8 @@
+const TOP_LEVEL_NUMERIC_CONST: i32 = 41;
+const TOP_LEVEL_BOOL_CONST: bool = true;
+
+@test "top level numeric const codegen"() {
+    let value = TOP_LEVEL_NUMERIC_CONST + 1;
+    if value != 42 { panic(14101); };
+    if TOP_LEVEL_BOOL_CONST != true { panic(14102); };
+}

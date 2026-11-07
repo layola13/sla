@@ -1,0 +1,6 @@
+// expect: SyntaxError
+// neg: unterminated string literal must fail lexing/parsing as SyntaxError
+fn main() -> i32 {
+    let s = "unterminated;
+    return 0;
+}

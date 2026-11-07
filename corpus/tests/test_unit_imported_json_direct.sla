@@ -1,0 +1,24 @@
+@import "sa_std/string.sa"
+@import "sa_std/encoding/json.sa"
+@import "import_fixtures/pkgjson/json_helpers.sa"
+
+fn imported_json_kind(data: ptr, data_len: int) -> int {
+    let root = JSON_PARSE(data, data_len);
+    return JSON_KIND(root);
+}
+
+fn imported_json_get_type(data: ptr, data_len: int) -> int {
+    let root = JSON_PARSE(data, data_len);
+    if JSON_KIND(root) < 0 {
+        return -1;
+    };
+    let t = SLA_JSON_OBJECT_GET(root, STR_PTR("types"), STR_LEN("types"));
+    return JSON_KIND(t);
+}
+
+@test "imported json direct sab"() {
+    let kind = imported_json_kind("{}", 2);
+    if kind != 7 { panic(39021); };
+    let got = imported_json_get_type("{\"types\":\"x\"}", 13);
+    if got != 5 { panic(39022); };
+}

@@ -1,0 +1,41 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Stirling 二类第 8 行高位 S(8,2)=127，S(8,3)=966，S(8,4)=1701（同式再上一位）。
+// 意对标 696_stir27（n=7 版互补；700 做高位对峙）。
+
+fn svt(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn - 1] + nn * t[(mm - 1) * w + nn];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn main() -> i32 {
+    println("{},{},{}", svt(8, 2), svt(8, 3), svt(8, 4));
+    return 0;
+}
+
+@test "basic 698 stir28"() {
+    if svt(8, 2) != 127 { panic(69801); };
+    if svt(8, 3) != 966 { panic(69802); };
+    if svt(8, 4) != 1701 { panic(69803); };
+    if svt(8, 5) != 1050 { panic(69804); };
+}

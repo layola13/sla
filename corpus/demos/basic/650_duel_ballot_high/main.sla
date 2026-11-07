@@ -1,0 +1,61 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// Ballot 高位对峙：建表 vs 商式（(5,3)：28 对 28；(5,5)：42 对 42）。
+// 意对标 648_ballot_high × 649_duel_ballot（高位源与对峙体例合流）。
+
+fn btab(n: int, k: int) -> int {
+    let w = k + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + k {
+        t.push(0);
+        i = i + 1;
+    }
+    let a = 0;
+    while a <= n {
+        t[a * w] = 1;
+        a = a + 1;
+    }
+    let mm = 1;
+    while mm <= n {
+        let nn = 1;
+        while nn <= k {
+            if nn <= mm {
+                t[mm * w + nn] = t[(mm - 1) * w + nn] + t[mm * w + nn - 1];
+            };
+            nn = nn + 1;
+        }
+        mm = mm + 1;
+    }
+    return t[n * w + k];
+}
+
+fn binom_mul(n: int, k: int) -> int {
+    let kk = k;
+    if kk > n - kk { kk = n - kk; };
+    let r = 1;
+    let i = 0;
+    while i < kk {
+        r = r * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn bclo(n: int, k: int) -> int {
+    return (n - k + 1) * binom_mul(n + k, k) / (n + 1);
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", btab(5, 3), bclo(5, 3), btab(5, 5), bclo(5, 5));
+    return 0;
+}
+
+@test "basic 650 duel ballot high"() {
+    if btab(5, 3) != 28 { panic(65001); };
+    if bclo(5, 3) != 28 { panic(65002); };
+    if btab(5, 5) != 42 { panic(65003); };
+    if bclo(5, 5) != 42 { panic(65004); };
+}

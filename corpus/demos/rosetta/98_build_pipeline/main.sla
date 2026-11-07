@@ -1,0 +1,35 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn artifact_count(compiled: bool, tests_passed: bool, docs_built: bool, packaged: bool) -> i32 {
+    if compiled == true {
+        if tests_passed == true {
+            if packaged == true {
+                if docs_built == true {
+                    return 2;
+                } else {
+                    return 1;
+                };
+            } else {
+                return 0;
+            };
+        } else {
+            return 0;
+        };
+    } else {
+        return 0;
+    };
+}
+
+fn main() -> i32 {
+    let result = artifact_count(true, true, true, true);
+    println("{}", result);
+    return result;
+};
+
+@test "rosetta 098 98_build_pipeline"() {
+    let got = artifact_count(true, true, true, true);
+    if got != 2 {
+        panic(98);
+    };
+};

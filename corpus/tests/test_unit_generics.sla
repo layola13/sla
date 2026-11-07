@@ -1,0 +1,44 @@
+// Sla unit test framework demo - generics inside tests
+// Run with: sa sla test tests/test_unit_generics.sla
+
+struct Option<T> {
+    has_value: bool,
+    value: T
+}
+
+fn some_int(v: int) -> Option<int> {
+    let opt = Option<int> { has_value: true, value: v };
+    return opt;
+}
+
+fn none_int() -> Option<int> {
+    let opt = Option<int> { has_value: false, value: 0 };
+    return opt;
+}
+
+fn unwrap_or(opt: Option<int>, fallback: int) -> int {
+    if opt.has_value {
+        let v = opt.value;
+        return v;
+    } else {
+        return fallback;
+    };
+}
+
+// ─── @test blocks ─────────────────────────────────────────────
+
+@test "some returns value"() {
+    let opt = some_int(42);
+    let result = unwrap_or(opt, 0);
+    if result != 42 {
+        panic(1);
+    };
+}
+
+@test "none returns fallback"() {
+    let opt = none_int();
+    let result = unwrap_or(opt, 99);
+    if result != 99 {
+        panic(1);
+    };
+}

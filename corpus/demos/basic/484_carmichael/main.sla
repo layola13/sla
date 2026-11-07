@@ -1,0 +1,71 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// Carmichael 函数（λ(8)=2，λ(12)=2，λ(7)=6）。
+// 意对标 336 欧拉函数的指数版（336/399 互补）。
+
+fn gcd(a: int, b: int) -> int {
+    let x = a;
+    let y = b;
+    while y != 0 {
+        let t = x % y;
+        x = y;
+        y = t;
+    }
+    return x;
+}
+
+fn lcm(a: int, b: int) -> int {
+    return a / gcd(a, b) * b;
+}
+
+fn pow_int(base: int, exp: int) -> int {
+    let r = 1;
+    let i = 0;
+    while i < exp {
+        r = r * base;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn primepow_lambda(p: int, e: int) -> int {
+    if p == 2 {
+        if e == 1 { return 1; };
+        if e == 2 { return 2; };
+        return pow_int(2, e - 2);
+    };
+    return pow_int(p, e - 1) * (p - 1);
+}
+
+fn carmichael(n: int) -> int {
+    if n < 2 { return 1; };
+    let r = 1;
+    let m = n;
+    let d = 2;
+    while d * d <= m {
+        if m % d == 0 {
+            let e = 0;
+            while m % d == 0 {
+                m = m / d;
+                e = e + 1;
+            }
+            r = lcm(r, primepow_lambda(d, e));
+        };
+        d = d + 1;
+    }
+    if m > 1 { r = lcm(r, primepow_lambda(m, 1)); };
+    return r;
+}
+
+fn main() -> i32 {
+    println("{},{},{},{}", carmichael(8), carmichael(12), carmichael(7), carmichael(9));
+    return 0;
+}
+
+@test "basic 484 carmichael"() {
+    if carmichael(8) != 2 { panic(48401); };
+    if carmichael(12) != 2 { panic(48402); };
+    if carmichael(7) != 6 { panic(48403); };
+    if carmichael(9) != 6 { panic(48404); };
+}

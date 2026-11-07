@@ -1,0 +1,93 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+// p(10)=42 三向收束：背包 DP == 五边形递推 == 最大部行和 Σ_k P(10,k)
+//（42 对 42 对 42；三算法互锁，316 系三向体例）。
+// 意对标 536 p8 × 542 pent_extend × 544 largest（三源单实现见各源）。
+
+fn part_all(n: int) -> int {
+    let dp: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        dp.push(0);
+        i = i + 1;
+    }
+    dp[0] = 1;
+    let k = 1;
+    while k <= n {
+        let s = k;
+        while s <= n {
+            dp[s] = dp[s] + dp[s - k];
+            s = s + 1;
+        }
+        k = k + 1;
+    }
+    return dp[n];
+}
+
+fn pent_part(n: int) -> int {
+    let p: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n {
+        p.push(0);
+        i = i + 1;
+    }
+    p[0] = 1;
+    let m = 1;
+    while m <= n {
+        let acc = 0;
+        let k = 1;
+        while k * (3 * k - 1) / 2 <= m {
+            let g1 = k * (3 * k - 1) / 2;
+            let g2 = k * (3 * k + 1) / 2;
+            let sgn = 0 - 1;
+            if k % 2 == 1 { sgn = 1; };
+            acc = acc + sgn * p[m - g1];
+            if g2 <= m { acc = acc + sgn * p[m - g2]; };
+            k = k + 1;
+        }
+        p[m] = acc;
+        m = m + 1;
+    }
+    return p[n];
+}
+
+fn row_sum(n: int) -> int {
+    let w = n + 1;
+    let t: Vec<i32> = Vec::new();
+    let i = 0;
+    while i <= n * w + n {
+        t.push(0);
+        i = i + 1;
+    }
+    t[0] = 1;
+    let nn = 1;
+    while nn <= n {
+        let kk = 1;
+        while kk <= nn {
+            t[nn * w + kk] = t[(nn - 1) * w + kk - 1] + t[(nn - kk) * w + kk];
+            kk = kk + 1;
+        }
+        nn = nn + 1;
+    }
+    let s = 0;
+    let kk = 1;
+    while kk <= n {
+        s = s + t[n * w + kk];
+        kk = kk + 1;
+    }
+    return s;
+}
+
+fn main() -> i32 {
+    println("{},{},{}", part_all(10), pent_part(10), row_sum(10));
+    return 0;
+}
+
+@test "basic 545 tri p"() {
+    if part_all(10) != 42 { panic(54501); };
+    if pent_part(10) != 42 { panic(54502); };
+    if row_sum(10) != 42 { panic(54503); };
+    if row_sum(8) != 22 { panic(54504); };
+}

@@ -1,0 +1,12 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Wrapper { id: i32 }
+fn phantom_marker_id() -> i32 { let w = Wrapper { id: 7 }; return w.id; }
+fn main() -> i32 {
+    let w = Wrapper { id: 7 };
+    let result = w.id;
+    println("{}", result);
+    return result;
+}
+@test "rosetta 144 144_phantom_data_marker"() { let got = phantom_marker_id(); if got != 7 { panic(144); }; }

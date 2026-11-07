@@ -1,0 +1,44 @@
+@import "sa_std/core/box.sa"
+@import "sa_std/core/cell.sa"
+@import "sa_std/core/rc.sa"
+
+struct CellCounter {
+    value: Cell<i32>,
+}
+
+struct SmartData {
+    value: int,
+}
+
+struct RcContainer {
+    data: Rc<SmartData>,
+}
+
+struct BoxContainer {
+    data: Box<SmartData>,
+}
+
+@test "cell field method receiver releases temporary"() {
+    let counter = CellCounter { value: Cell::new(3) };
+    if counter.value.get() != 3 {
+        panic(1);
+    };
+}
+
+@test "rc field owner exits cleanly"() {
+    let container = RcContainer { data: Rc::new(SmartData { value: 42 }) };
+    let borrowed_rc: &Rc<SmartData> = &container.data;
+    let data_ref: &SmartData = &*borrowed_rc;
+    if data_ref.value != 42 {
+        panic(2);
+    };
+}
+
+@test "box field owner exits cleanly"() {
+    let container = BoxContainer { data: Box::new(SmartData { value: 99 }) };
+    let borrowed_box: &Box<SmartData> = &container.data;
+    let data_ref: &SmartData = &*borrowed_box;
+    if data_ref.value != 99 {
+        panic(3);
+    };
+}

@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+trait MyMarker {}
+
+struct Data {
+    val: i32,
+}
+
+impl MyMarker for Data {}
+
+fn process<T: MyMarker>(&item: T) -> i32 {
+    let _ = item;
+    return 42;
+}
+
+fn marker_trait_process_result() -> i32 {
+    let d = Data { val: 42 };
+    return process<Data>(&d);
+}
+
+fn main() -> i32 {
+    let d = Data { val: 42 };
+    let result = process<Data>(&d);
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 170 170_marker_traits"() {
+    let got = marker_trait_process_result();
+    if got != 42 { panic(170); };
+}

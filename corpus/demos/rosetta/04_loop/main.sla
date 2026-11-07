@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/mem.sa"
+
+fn fill_zero(arr: [u8; 4]) -> [u8; 4] {
+    arr.fill(0);
+    return arr;
+}
+
+fn zeroed_buffer_sum() -> i32 {
+    let buffer = [1u8, 2, 3, 4];
+    let zeroed = fill_zero(buffer);
+    let a = zeroed[0] as i32;
+    let b = zeroed[1] as i32;
+    let c = zeroed[2] as i32;
+    let d = zeroed[3] as i32;
+    return a + b + c + d;
+}
+
+fn main() -> i32 {
+    let buffer = [1u8, 2, 3, 4];
+    let zeroed = fill_zero(buffer);
+    println("[{},{},{},{}]", zeroed[0], zeroed[1], zeroed[2], zeroed[3]);
+    return 0;
+};
+
+@test "rosetta 004 04_loop"() {
+    let got = zeroed_buffer_sum();
+    if got != 0 {
+        panic(4);
+    };
+};

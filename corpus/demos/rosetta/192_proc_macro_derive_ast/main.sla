@@ -1,0 +1,22 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+struct Pair { left: i32, right: i32 }
+
+fn proc_macro_derive_pair_sum_surrogate() -> i32 {
+    let pair = Pair { left: 1, right: 2 };
+    let left = pair.left;
+    let right = pair.right;
+    return left + right;
+}
+
+fn main() -> i32 {
+    let result = proc_macro_derive_pair_sum_surrogate();
+    println("{}", result);
+    return result;
+}
+
+@test "rosetta 192 192_proc_macro_derive_ast"() {
+    let got = proc_macro_derive_pair_sum_surrogate();
+    if got != 3 { panic(192); };
+}

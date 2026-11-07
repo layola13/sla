@@ -1,0 +1,1063 @@
+// smoke-wave2: honest smokes for sa_std/http_client.sai remaining entries.
+// Peers are loopback echo servers started by the tests themselves
+// (goroutines on unique ports). Every test asserts return values, status
+// codes and body bytes.
+@import "sla_std/wrap/http_server.sla"
+@import "sla_std/wrap/http_client.sla"
+@import "sla_std/wrap/fs.sla"
+@import "sla_std/wrap/time.sla"
+@import "sa_std/task.sai"
+@import "sa_std/string.sa"
+@import "sa_std/ptr.sa"
+
+fn s2_mem_eq(p: ptr, n: u64, q: ptr, m: u64) -> bool {
+    if n != m { return false; };
+    let i: u64 = 0;
+    while i < n {
+        let a: ptr = PTR_BYTE_ADD(p, i);
+        let b: ptr = PTR_BYTE_ADD(q, i);
+        if PTR_READ_U8(a) != PTR_READ_U8(b) { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn s2_contains(p: ptr, n: u64, q: ptr, m: u64) -> bool {
+    if m == 0 { return true; };
+    if n < m { return false; };
+    let i: u64 = 0;
+    while i + m <= n {
+        let base: ptr = PTR_BYTE_ADD(p, i);
+        if s2_mem_eq(base, m, q, m) { return true; };
+        i = i + 1;
+    }
+    return false;
+}
+
+// Append src bytes into dst at *n; returns nothing, *n advanced via cell.
+fn s2_append(dst: ptr, ncell: ptr, src: ptr, m: u64) -> void {
+    let n: u64 = (PTR_READ_U64(ncell) as u64);
+    let i: u64 = 0;
+    while i < m {
+        let s: ptr = PTR_BYTE_ADD(src, i);
+        let d: ptr = PTR_BYTE_ADD(dst, n + i);
+        PTR_WRITE_U8(d, PTR_READ_U8(s));
+        i = i + 1;
+    }
+    PTR_WRITE_U64(ncell, n + m);
+}
+
+fn s2_append_lit(dst: ptr, ncell: ptr, lit: ptr, lit_len: u64) -> void {
+    s2_append(dst, ncell, lit, lit_len);
+}
+
+// "http://127.0.0.1:<port><suffix>" into outb; returns length.
+fn s2_url(port: u64, suffix: ptr, suffix_len: u64, ob: ptr) -> u64 {
+    let nc = [0u64; 4];
+    let ncp: ptr = PTR_BYTE_ADD(&nc, 0);
+    PTR_WRITE_U64(ncp, 0);
+    s2_append_lit(ob, ncp, STR_PTR("http://127.0.0.1:"), STR_LEN("http://127.0.0.1:"));
+    let digits = [0u8; 8];
+    let dp0: ptr = PTR_BYTE_ADD(&digits, 0);
+    let v: u64 = port;
+    let nd: u64 = 0;
+    while v > 0 {
+        let d: ptr = PTR_BYTE_ADD(dp0, nd);
+        PTR_WRITE_U8(d, (48 + ((v % 10) as u8)));
+        nd = nd + 1;
+        v = v / 10;
+    }
+    let rev = [0u8; 8];
+    let rp0: ptr = PTR_BYTE_ADD(&rev, 0);
+    let k: u64 = 0;
+    while k < nd {
+        let s: ptr = PTR_BYTE_ADD(dp0, nd - 1 - k);
+        let d: ptr = PTR_BYTE_ADD(rp0, k);
+        PTR_WRITE_U8(d, PTR_READ_U8(s));
+        k = k + 1;
+    }
+    s2_append(ob, ncp, rp0, nd);
+    s2_append(ob, ncp, suffix, suffix_len);
+    return nc[0];
+}
+
+// ---------------- v1 echo server (goroutine) ----------------
+// mode 0: body = path + "|" + request body
+// mode 1: fixed body "client-body-1"
+// mode 2: status 404, body "nf"
+// mode 3: fixed body "0123456789ABCDEF"
+// mode 4: body = Authorization header value (or "none")
+// mode 5: body = X-Req header value (or "none")
+fn s2_echo1_tail(req: ptr, srv: ptr, status: u16, ob: ptr, n: u64, code: i32) -> void {
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new(req, status, &rp[0]) != 0 { panic(code + 5); };
+    let resp = (rp[0] as ptr);
+    if sla_http_server_resp_send(resp, ob, n) != 0 { panic(code + 6); };
+    sla_http_server_resp_free(resp);
+    sla_http_server_req_free(req);
+    sla_http_server_free(srv);
+}
+
+// Split peers in the shape the text backend accepts (probe M V5):
+// at most two else-if branches plus a fall-through tail, branch-local
+// names unique per branch. The six-mode single-function form traps
+// the text backend (W2-DEF-TEXT-ECHO-USEAFTERMOVE, minim on file).
+fn s2_echo1a(arg: u64) -> void {
+    // go entry convention is a single argument: port | mode<<16 | code<<24.
+    let port: u64 = arg & 65535;
+    let mode: u64 = (arg >> 16) & 255;
+    let code: i32 = (arg >> 24) as i32;
+    let sc = [0u64; 4];
+    if sla_http_server_new(&sc[0]) != 0 { panic(code); };
+    let srv = (sc[0] as ptr);
+    if sla_http_server_start(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u16)) != 0 { panic(code + 1); };
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(code + 2); };
+    let req = (aq[0] as ptr);
+    if mode == 1 {
+        let obufA = [0u8; 1024];
+        let obA: ptr = PTR_BYTE_ADD(&obufA, 0);
+        let ncA = [0u64; 4];
+        let ncpA: ptr = PTR_BYTE_ADD(&ncA, 0);
+        PTR_WRITE_U64(ncpA, 0);
+        { let srcp: ptr = STR_PTR("client-body-1"); let cnt: u64 = STR_LEN("client-body-1"); let base: u64 = (PTR_READ_U64(ncpA) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(obA, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncpA, base + cnt); }
+        s2_echo1_tail(req, srv, 200, obA, ncA[0], code);
+        return;
+    } else if mode == 2 {
+        let obufB = [0u8; 1024];
+        let obB: ptr = PTR_BYTE_ADD(&obufB, 0);
+        let ncB = [0u64; 4];
+        let ncpB: ptr = PTR_BYTE_ADD(&ncB, 0);
+        PTR_WRITE_U64(ncpB, 0);
+        { let srcp: ptr = STR_PTR("nf"); let cnt: u64 = STR_LEN("nf"); let base: u64 = (PTR_READ_U64(ncpB) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(obB, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncpB, base + cnt); }
+        s2_echo1_tail(req, srv, 404, obB, ncB[0], code);
+        return;
+    };
+    // mode 0 (tail): body = path + "|" + request body
+    let obufT = [0u8; 1024];
+        let obT: ptr = PTR_BYTE_ADD(&obufT, 0);
+        let ncT = [0u64; 4];
+        let ncpT: ptr = PTR_BYTE_ADD(&ncT, 0);
+        PTR_WRITE_U64(ncpT, 0);
+    let pp = [0u64; 4];
+    let pl = [0u64; 4];
+    if sla_http_server_req_get_path(req, &pp[0], &pl[0]) != 0 { panic(code + 3); };
+    { let srcp: ptr = (pp[0] as ptr); let cnt: u64 = pl[0]; let base: u64 = (PTR_READ_U64(ncpT) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(obT, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncpT, base + cnt); }
+    { let srcp: ptr = STR_PTR("|"); let cnt: u64 = 1; let base: u64 = (PTR_READ_U64(ncpT) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(obT, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncpT, base + cnt); }
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_server_req_get_body(req, &dp[0], &dl[0]) != 0 { panic(code + 4); };
+    { let srcp: ptr = (dp[0] as ptr); let cnt: u64 = dl[0]; let base: u64 = (PTR_READ_U64(ncpT) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(obT, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncpT, base + cnt); }
+    s2_echo1_tail(req, srv, 200, obT, ncT[0], code);
+}
+
+fn s2_echo1b(arg: u64) -> void {
+    // go entry convention is a single argument: port | mode<<16 | code<<24.
+    let port: u64 = arg & 65535;
+    let mode: u64 = (arg >> 16) & 255;
+    let code: i32 = (arg >> 24) as i32;
+    let sc = [0u64; 4];
+    if sla_http_server_new(&sc[0]) != 0 { panic(code); };
+    let srv = (sc[0] as ptr);
+    if sla_http_server_start(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u16)) != 0 { panic(code + 1); };
+    let aq = [0u64; 4];
+    if sla_http_server_accept(srv, &aq[0]) != 0 { panic(code + 2); };
+    let req = (aq[0] as ptr);
+    if mode == 4 {
+        let obufA = [0u8; 1024];
+        let obA: ptr = PTR_BYTE_ADD(&obufA, 0);
+        let ncA = [0u64; 4];
+        let ncpA: ptr = PTR_BYTE_ADD(&ncA, 0);
+        PTR_WRITE_U64(ncpA, 0);
+        let hpA = [0u64; 4];
+        let hlA = [0u64; 4];
+        let grcA = sla_http_server_req_get_header(req, STR_PTR("Authorization"), STR_LEN("Authorization"), &hpA[0], &hlA[0]);
+        let spA: ptr = STR_PTR("none");
+        let slA: u64 = 4;
+        if grcA == 0 { spA = (hpA[0] as ptr); slA = hlA[0]; };
+        { let srcp: ptr = spA; let cnt: u64 = slA; let base: u64 = (PTR_READ_U64(ncpA) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(obA, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncpA, base + cnt); }
+        s2_echo1_tail(req, srv, 200, obA, ncA[0], code);
+        return;
+    } else if mode == 5 {
+        let obufB = [0u8; 1024];
+        let obB: ptr = PTR_BYTE_ADD(&obufB, 0);
+        let ncB = [0u64; 4];
+        let ncpB: ptr = PTR_BYTE_ADD(&ncB, 0);
+        PTR_WRITE_U64(ncpB, 0);
+        let hpB = [0u64; 4];
+        let hlB = [0u64; 4];
+        let grcB = sla_http_server_req_get_header(req, STR_PTR("X-Req"), STR_LEN("X-Req"), &hpB[0], &hlB[0]);
+        let spB: ptr = STR_PTR("none");
+        let slB: u64 = 4;
+        if grcB == 0 { spB = (hpB[0] as ptr); slB = hlB[0]; };
+        { let srcp: ptr = spB; let cnt: u64 = slB; let base: u64 = (PTR_READ_U64(ncpB) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(obB, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncpB, base + cnt); }
+        s2_echo1_tail(req, srv, 200, obB, ncB[0], code);
+        return;
+    };
+    // mode 3 (tail): fixed range body
+    let obufT = [0u8; 1024];
+        let obT: ptr = PTR_BYTE_ADD(&obufT, 0);
+        let ncT = [0u64; 4];
+        let ncpT: ptr = PTR_BYTE_ADD(&ncT, 0);
+        PTR_WRITE_U64(ncpT, 0);
+    { let srcp: ptr = STR_PTR("0123456789ABCDEF"); let cnt: u64 = STR_LEN("0123456789ABCDEF"); let base: u64 = (PTR_READ_U64(ncpT) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(obT, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncpT, base + cnt); }
+    s2_echo1_tail(req, srv, 200, obT, ncT[0], code);
+}
+
+// ---------------- v2 echo server (goroutine) ----------------
+// mode 0: body = target + "|" + request body
+// mode 1: fixed body + header X-Echo: wave2
+// mode 8: sleep 800ms, then fixed body "slow-body"
+fn s2_echo2_tail(req: ptr, srv: ptr, ob: ptr, n: u64, code: i32, with_hdr: bool, assert_send: bool) -> void {
+    let rp = [0u64; 4];
+    if sla_http_server_resp_new_v2(req, 200, &rp[0]) != 0 { panic(code + 5); };
+    let resp = (rp[0] as ptr);
+    let hrc: i32 = 0;
+    if with_hdr { hrc = sla_http_server_resp_add_header_v2(resp, STR_PTR("X-Echo"), STR_LEN("X-Echo"), STR_PTR("wave2"), STR_LEN("wave2")); };
+    if hrc != 0 { panic(code + 6); };
+    let send_rc = sla_http_server_resp_send_v2(resp, ob, n, 5000);
+    let bad_send: bool = assert_send && (send_rc != 0);
+    if bad_send { panic(code + 7); };
+    sla_http_server_resp_free_v2(resp);
+    sla_http_server_req_free_v2(req);
+    sla_http_server_free_v2(srv);
+}
+
+fn s2_echo2(arg: u64) -> void {
+    let port: u64 = arg & 65535;
+    let mode: u64 = (arg >> 16) & 255;
+    let code: i32 = (arg >> 24) as i32;
+    let sc = [0u64; 4];
+    if sla_http_server_new_v2(&sc[0]) != 0 { panic(code); };
+    let srv = (sc[0] as ptr);
+    if sla_http_server_start_v2(srv, STR_PTR("127.0.0.1"), STR_LEN("127.0.0.1"), (port as u16)) != 0 { panic(code + 1); };
+    let aq = [0u64; 4];
+    let arc = sla_http_server_accept_v2(srv, 30000, &aq[0]);
+    let tolerate: bool = (arc != 0) && (mode == 8);
+    if tolerate { sla_http_server_free_v2(srv); return; };
+    if arc != 0 { panic(code + 2); };
+    let req = (aq[0] as ptr);
+    if mode == 1 {
+        let obufA = [0u8; 1024];
+        let obA: ptr = PTR_BYTE_ADD(&obufA, 0);
+        let ncA = [0u64; 4];
+        let ncpA: ptr = PTR_BYTE_ADD(&ncA, 0);
+        PTR_WRITE_U64(ncpA, 0);
+        { let srcp: ptr = STR_PTR("client-body-1"); let cnt: u64 = STR_LEN("client-body-1"); let base: u64 = (PTR_READ_U64(ncpA) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(obA, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncpA, base + cnt); }
+        s2_echo2_tail(req, srv, obA, ncA[0], code, true, true);
+        return;
+    };
+    if mode == 8 {
+        sla_time_sleep_ms(800);
+        let obufB = [0u8; 1024];
+        let obB: ptr = PTR_BYTE_ADD(&obufB, 0);
+        let ncB = [0u64; 4];
+        let ncpB: ptr = PTR_BYTE_ADD(&ncB, 0);
+        PTR_WRITE_U64(ncpB, 0);
+        { let srcp: ptr = STR_PTR("slow-body"); let cnt: u64 = STR_LEN("slow-body"); let base: u64 = (PTR_READ_U64(ncpB) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(obB, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncpB, base + cnt); }
+        s2_echo2_tail(req, srv, obB, ncB[0], code, false, false);
+        return;
+    };
+    let outb = [0u8; 1024];
+    let ob: ptr = PTR_BYTE_ADD(&outb, 0);
+    let nc = [0u64; 4];
+    let ncp: ptr = PTR_BYTE_ADD(&nc, 0);
+    PTR_WRITE_U64(ncp, 0);
+    let tp = [0u64; 4];
+    let tl = [0u64; 4];
+    if sla_http_server_req_get_target_v2(req, &tp[0], &tl[0]) != 0 { panic(code + 3); };
+    { let srcp: ptr = (tp[0] as ptr); let cnt: u64 = tl[0]; let base: u64 = (PTR_READ_U64(ncp) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(ob, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncp, base + cnt); }
+    { let srcp: ptr = STR_PTR("|"); let cnt: u64 = 1; let base: u64 = (PTR_READ_U64(ncp) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(ob, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncp, base + cnt); }
+    let dp = [0u64; 4];
+    let dl = [0u64; 4];
+    if sla_http_server_req_get_body(req, &dp[0], &dl[0]) != 0 { panic(code + 4); };
+    { let srcp: ptr = (dp[0] as ptr); let cnt: u64 = dl[0]; let base: u64 = (PTR_READ_U64(ncp) as u64); let i: u64 = 0; while i < cnt { let s: ptr = PTR_BYTE_ADD(srcp, i); let d: ptr = PTR_BYTE_ADD(ob, base + i); PTR_WRITE_U8(d, PTR_READ_U8(s)); i = i + 1; } PTR_WRITE_U64(ncp, base + cnt); }
+    s2_echo2_tail(req, srv, ob, nc[0], code, false, true);
+}
+
+
+// Shared response-body assertion helper: body bytes equal the literal.
+fn s2_body_eq(resp: ptr, lit: ptr, lit_len: u64) -> bool {
+    let bp = [0u64; 4];
+    let bl = [0u64; 4];
+    if sla_http_client_resp_body_slice(resp, &bp[0], &bl[0]) != 0 { return false; };
+    return s2_mem_eq((bp[0] as ptr), bl[0], lit, lit_len);
+}
+
+fn s2_body_contains(resp: ptr, lit: ptr, lit_len: u64) -> bool {
+    let bp = [0u64; 4];
+    let bl = [0u64; 4];
+    if sla_http_client_resp_body_slice(resp, &bp[0], &bl[0]) != 0 { return false; };
+    return s2_contains((bp[0] as ptr), bl[0], lit, lit_len);
+}
+
+// ---------------- non-v2 client tests ----------------
+
+@test "smoke2 sa_http_client_req_new"() {
+    let h = go s2_echo1a(24600 + 0 * 65536 + 65000 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24600, STR_PTR("/echo"), STR_LEN("/echo"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65003); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65004); };
+    if rq[0] == 0 { panic(65005); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65006); };
+    let resp = (rs[0] as ptr);
+    if !s2_body_contains(resp, STR_PTR("/echo"), STR_LEN("/echo")) { panic(65007); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_new_joined"() {
+    let h = go s2_echo1a(24601 + 0 * 65536 + 65020 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24601, STR_PTR("/base/"), STR_LEN("/base/"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65023); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_joined((cl[0] as ptr), 1, ubp, ulen, STR_PTR("leaf"), STR_LEN("leaf"), 1, &rq[0]) != 0 { panic(65024); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65025); };
+    let resp = (rs[0] as ptr);
+    if !s2_body_contains(resp, STR_PTR("/base/leaf"), STR_LEN("/base/leaf")) { panic(65026); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_add_header"() {
+    let h = go s2_echo1b(24602 + 5 * 65536 + 65040 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24602, STR_PTR("/hdr"), STR_LEN("/hdr"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65043); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65044); };
+    let req = (rq[0] as ptr);
+    if sla_http_client_req_add_header(req, STR_PTR("X-Req"), STR_LEN("X-Req"), STR_PTR("hello-hdr"), STR_LEN("hello-hdr")) != 0 { panic(65045); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send(req, &rs[0]) != 0 { panic(65046); };
+    let resp = (rs[0] as ptr);
+    if !s2_body_eq(resp, STR_PTR("hello-hdr"), STR_LEN("hello-hdr")) { panic(65047); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_add_openai_auth"() {
+    let h = go s2_echo1b(24603 + 4 * 65536 + 65060 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24603, STR_PTR("/auth"), STR_LEN("/auth"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65063); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65064); };
+    let req = (rq[0] as ptr);
+    if sla_http_client_req_add_openai_auth(req, STR_PTR("sk-test-123"), STR_LEN("sk-test-123")) != 0 { panic(65065); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send(req, &rs[0]) != 0 { panic(65066); };
+    let resp = (rs[0] as ptr);
+    if !s2_body_eq(resp, STR_PTR("Bearer sk-test-123"), STR_LEN("Bearer sk-test-123")) { panic(65067); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_set_body"() {
+    let h = go s2_echo1a(24604 + 0 * 65536 + 65080 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24604, STR_PTR("/post"), STR_LEN("/post"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65083); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 2, ubp, ulen, &rq[0]) != 0 { panic(65084); };
+    let req = (rq[0] as ptr);
+    if sla_http_client_req_set_body(req, STR_PTR("post-body-9"), STR_LEN("post-body-9")) != 0 { panic(65085); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send(req, &rs[0]) != 0 { panic(65086); };
+    let resp = (rs[0] as ptr);
+    if !s2_body_contains(resp, STR_PTR("post-body-9"), STR_LEN("post-body-9")) { panic(65087); };
+    if !s2_body_contains(resp, STR_PTR("/post"), STR_LEN("/post")) { panic(65088); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_send"() {
+    let h = go s2_echo1a(24605 + 1 * 65536 + 65100 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24605, STR_PTR("/fixed"), STR_LEN("/fixed"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65103); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65104); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65105); };
+    let resp = (rs[0] as ptr);
+    if sla_http_client_resp_status(resp) != 200 { panic(65106); };
+    if !s2_body_eq(resp, STR_PTR("client-body-1"), STR_LEN("client-body-1")) { panic(65107); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_send_async"() {
+    let h = go s2_echo1a(24606 + 0 * 65536 + 65120 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24606, STR_PTR("/async"), STR_LEN("/async"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65123); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65124); };
+    let req = (rq[0] as ptr);
+    let op = [0u64; 4];
+    if sla_http_client_req_send_async(req, &op[0]) != 0 { panic(65125); };
+    let opp = (op[0] as ptr);
+    let ready = [0u64; 4];
+    let spins: u64 = 0;
+    while spins < 1000 {
+        if sla_http_client_async_poll(opp, &ready[0]) != 0 { panic(65126); };
+        if ready[0] != 0 { break; };
+        sla_time_sleep_ms(10);
+        spins = spins + 1;
+    }
+    if ready[0] == 0 { panic(65127); };
+    let rs = [0u64; 4];
+    if sla_http_client_async_take_response(opp, &rs[0]) != 0 { panic(65128); };
+    let resp = (rs[0] as ptr);
+    if sla_http_client_resp_status(resp) != 200 { panic(65129); };
+    if !s2_body_contains(resp, STR_PTR("/async"), STR_LEN("/async")) { panic(65130); };
+    if sla_http_client_async_free(opp) != 0 { panic(65131); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_async_poll"() {
+    let h = go s2_echo1a(24607 + 1 * 65536 + 65140 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24607, STR_PTR("/poll"), STR_LEN("/poll"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65143); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65144); };
+    let req = (rq[0] as ptr);
+    let op = [0u64; 4];
+    if sla_http_client_req_send_async(req, &op[0]) != 0 { panic(65145); };
+    let opp = (op[0] as ptr);
+    let ready = [0u64; 4];
+    let spins: u64 = 0;
+    while spins < 1000 {
+        if sla_http_client_async_poll(opp, &ready[0]) != 0 { panic(65146); };
+        if ready[0] != 0 { break; };
+        sla_time_sleep_ms(10);
+        spins = spins + 1;
+    }
+    if ready[0] == 0 { panic(65147); };
+    let rs = [0u64; 4];
+    if sla_http_client_async_take_response(opp, &rs[0]) != 0 { panic(65148); };
+    sla_http_client_resp_free((rs[0] as ptr));
+    sla_http_client_async_free(opp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_async_take_response"() {
+    let h = go s2_echo1a(24608 + 1 * 65536 + 65160 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24608, STR_PTR("/take"), STR_LEN("/take"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65163); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65164); };
+    let req = (rq[0] as ptr);
+    let op = [0u64; 4];
+    if sla_http_client_req_send_async(req, &op[0]) != 0 { panic(65165); };
+    let opp = (op[0] as ptr);
+    let ready = [0u64; 4];
+    let spins: u64 = 0;
+    while spins < 1000 {
+        if sla_http_client_async_poll(opp, &ready[0]) != 0 { panic(65166); };
+        if ready[0] != 0 { break; };
+        sla_time_sleep_ms(10);
+        spins = spins + 1;
+    }
+    if ready[0] == 0 { panic(65167); };
+    let rs = [0u64; 4];
+    if sla_http_client_async_take_response(opp, &rs[0]) != 0 { panic(65168); };
+    if rs[0] == 0 { panic(65169); };
+    let resp = (rs[0] as ptr);
+    if !s2_body_eq(resp, STR_PTR("client-body-1"), STR_LEN("client-body-1")) { panic(65170); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_async_free(opp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_async_free"() {
+    let h = go s2_echo1a(24609 + 1 * 65536 + 65180 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24609, STR_PTR("/afree"), STR_LEN("/afree"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65183); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65184); };
+    let req = (rq[0] as ptr);
+    let op = [0u64; 4];
+    if sla_http_client_req_send_async(req, &op[0]) != 0 { panic(65185); };
+    let opp = (op[0] as ptr);
+    let ready = [0u64; 4];
+    let spins: u64 = 0;
+    while spins < 1000 {
+        if sla_http_client_async_poll(opp, &ready[0]) != 0 { panic(65186); };
+        if ready[0] != 0 { break; };
+        sla_time_sleep_ms(10);
+        spins = spins + 1;
+    }
+    let rs = [0u64; 4];
+    if sla_http_client_async_take_response(opp, &rs[0]) != 0 { panic(65187); };
+    sla_http_client_resp_free((rs[0] as ptr));
+    if sla_http_client_async_free(opp) != 0 { panic(65188); };
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_resp_status"() {
+    let h = go s2_echo1a(24610 + 2 * 65536 + 65200 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24610, STR_PTR("/missing"), STR_LEN("/missing"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65203); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65204); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65205); };
+    let resp = (rs[0] as ptr);
+    if sla_http_client_resp_status(resp) != 404 { panic(65206); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_resp_get_header"() {
+    let h = go s2_echo2(24611 + 1 * 65536 + 65220 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24611, STR_PTR("/gh"), STR_LEN("/gh"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65223); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65224); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65225); };
+    let resp = (rs[0] as ptr);
+    let vp = [0u64; 4];
+    let vl = [0u64; 4];
+    if sla_http_client_resp_get_header(resp, STR_PTR("X-Echo"), STR_LEN("X-Echo"), &vp[0], &vl[0]) != 0 { panic(65226); };
+    if !s2_mem_eq((vp[0] as ptr), vl[0], STR_PTR("wave2"), STR_LEN("wave2")) { panic(65227); };
+    // An absent header must report an error, not an empty value.
+    if sla_http_client_resp_get_header(resp, STR_PTR("X-Absent"), STR_LEN("X-Absent"), &vp[0], &vl[0]) == 0 { panic(65228); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_resp_body_len"() {
+    let h = go s2_echo1a(24612 + 1 * 65536 + 65240 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24612, STR_PTR("/bl"), STR_LEN("/bl"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65243); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65244); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65245); };
+    let resp = (rs[0] as ptr);
+    if sla_http_client_resp_body_len(resp) != 13 { panic(65246); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_resp_body_ptr"() {
+    let h = go s2_echo1a(24613 + 1 * 65536 + 65260 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24613, STR_PTR("/bp"), STR_LEN("/bp"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65263); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65264); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65265); };
+    let resp = (rs[0] as ptr);
+    let bp: ptr = sla_http_client_resp_body_ptr(resp);
+    if !s2_mem_eq(bp, 13, STR_PTR("client-body-1"), STR_LEN("client-body-1")) { panic(65266); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_resp_body_slice"() {
+    let h = go s2_echo1a(24614 + 1 * 65536 + 65280 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24614, STR_PTR("/bs"), STR_LEN("/bs"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65283); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65284); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65285); };
+    let resp = (rs[0] as ptr);
+    let bp = [0u64; 4];
+    let bl = [0u64; 4];
+    if sla_http_client_resp_body_slice(resp, &bp[0], &bl[0]) != 0 { panic(65286); };
+    if bl[0] != 13 { panic(65287); };
+    if !s2_mem_eq((bp[0] as ptr), bl[0], STR_PTR("client-body-1"), STR_LEN("client-body-1")) { panic(65288); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_resp_body_reader"() {
+    let h = go s2_echo1b(24615 + 3 * 65536 + 65300 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24615, STR_PTR("/rd"), STR_LEN("/rd"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65303); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65304); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65305); };
+    let resp = (rs[0] as ptr);
+    let rd = [0u64; 4];
+    if sla_http_client_resp_body_reader(resp, &rd[0]) != 0 { panic(65306); };
+    if rd[0] == 0 { panic(65307); };
+    sla_http_client_body_reader_free((rd[0] as ptr));
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_resp_read_chunk"() {
+    let h = go s2_echo1b(24616 + 3 * 65536 + 65320 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24616, STR_PTR("/rc"), STR_LEN("/rc"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65323); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65324); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65325); };
+    let resp = (rs[0] as ptr);
+    let rd = [0u64; 4];
+    if sla_http_client_resp_body_reader(resp, &rd[0]) != 0 { panic(65326); };
+    let reader = (rd[0] as ptr);
+    let acc = [0u8; 64];
+    let ap: ptr = PTR_BYTE_ADD(&acc, 0);
+    let chunk = [0u8; 8];
+    let total: u64 = 0;
+    let guard: u64 = 0;
+    while guard < 10 {
+        let ol = [0u64; 4];
+        if sla_http_client_resp_read_chunk(reader, &chunk[0], 5, &ol[0]) != 0 { panic(65327); };
+        if ol[0] == 0 { break; };
+        let cp: ptr = PTR_BYTE_ADD(&chunk, 0);
+        let i: u64 = 0;
+        while i < ol[0] {
+            let s: ptr = PTR_BYTE_ADD(cp, i);
+            let d: ptr = PTR_BYTE_ADD(ap, total + i);
+            PTR_WRITE_U8(d, PTR_READ_U8(s));
+            i = i + 1;
+        }
+        total = total + ol[0];
+        guard = guard + 1;
+    }
+    if total != 16 { panic(65328); };
+    if !s2_mem_eq(ap, 16, STR_PTR("0123456789ABCDEF"), STR_LEN("0123456789ABCDEF")) { panic(65329); };
+    sla_http_client_body_reader_free(reader);
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_body_reader_free"() {
+    let h = go s2_echo1a(24617 + 1 * 65536 + 65340 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24617, STR_PTR("/brf"), STR_LEN("/brf"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65343); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65344); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65345); };
+    let resp = (rs[0] as ptr);
+    let rd = [0u64; 4];
+    if sla_http_client_resp_body_reader(resp, &rd[0]) != 0 { panic(65346); };
+    if sla_http_client_body_reader_free((rd[0] as ptr)) != 0 { panic(65347); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_resp_free"() {
+    let h = go s2_echo1a(24618 + 1 * 65536 + 65360 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24618, STR_PTR("/rf"), STR_LEN("/rf"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65363); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65364); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65365); };
+    if sla_http_client_resp_free((rs[0] as ptr)) != 0 { panic(65366); };
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_free"() {
+    let h = go s2_echo1a(24619 + 1 * 65536 + 65380 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24619, STR_PTR("/qf"), STR_LEN("/qf"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65383); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65384); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send((rq[0] as ptr), &rs[0]) != 0 { panic(65385); };
+    sla_http_client_resp_free((rs[0] as ptr));
+    if sla_http_client_req_free((rq[0] as ptr)) != 0 { panic(65386); };
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_free"() {
+    let cl = [0u64; 4];
+    if sla_http_client_new(0, &cl[0]) != 0 { panic(65400); };
+    if sla_http_client_free((cl[0] as ptr)) != 0 { panic(65401); };
+}
+
+// ---------------- v2 client tests ----------------
+
+@test "smoke2 sa_http_client_req_new_v2"() {
+    let h = go s2_echo2(24620 + 0 * 65536 + 65420 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24620, STR_PTR("/echo2?q=1"), STR_LEN("/echo2?q=1"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65423); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_v2((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65424); };
+    if rq[0] == 0 { panic(65425); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send_v2((rq[0] as ptr), &rs[0]) != 0 { panic(65426); };
+    let resp = (rs[0] as ptr);
+    if !s2_body_contains(resp, STR_PTR("/echo2?q=1"), STR_LEN("/echo2?q=1")) { panic(65427); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_add_header_v2"() {
+    let h = go s2_echo1b(24621 + 5 * 65536 + 65440 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24621, STR_PTR("/hdr2"), STR_LEN("/hdr2"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65443); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_v2((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65444); };
+    let req = (rq[0] as ptr);
+    if sla_http_client_req_add_header_v2(req, STR_PTR("X-Req"), STR_LEN("X-Req"), STR_PTR("hdr-v2"), STR_LEN("hdr-v2")) != 0 { panic(65445); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send_v2(req, &rs[0]) != 0 { panic(65446); };
+    let resp = (rs[0] as ptr);
+    if !s2_body_eq(resp, STR_PTR("hdr-v2"), STR_LEN("hdr-v2")) { panic(65447); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_set_body_v2"() {
+    let h = go s2_echo2(24622 + 0 * 65536 + 65460 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24622, STR_PTR("/post2"), STR_LEN("/post2"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65463); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_v2((cl[0] as ptr), 2, ubp, ulen, &rq[0]) != 0 { panic(65464); };
+    let req = (rq[0] as ptr);
+    if sla_http_client_req_set_body_v2(req, STR_PTR("v2-body-7"), STR_LEN("v2-body-7")) != 0 { panic(65465); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send_v2(req, &rs[0]) != 0 { panic(65466); };
+    let resp = (rs[0] as ptr);
+    if !s2_body_contains(resp, STR_PTR("v2-body-7"), STR_LEN("v2-body-7")) { panic(65467); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_set_timeout_v2"() {
+    let h = go s2_echo2(24623 + 0 * 65536 + 65480 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24623, STR_PTR("/to"), STR_LEN("/to"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65483); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_v2((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65484); };
+    let req = (rq[0] as ptr);
+    if sla_http_client_req_set_timeout_v2(req, 5000) != 0 { panic(65485); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send_v2(req, &rs[0]) != 0 { panic(65486); };
+    let resp = (rs[0] as ptr);
+    if sla_http_client_resp_status(resp) != 200 { panic(65487); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_set_max_response_bytes_v2"() {
+    let h = go s2_echo2(24624 + 1 * 65536 + 65500 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24624, STR_PTR("/cap"), STR_LEN("/cap"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65503); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_v2((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65504); };
+    let req = (rq[0] as ptr);
+    if sla_http_client_req_set_max_response_bytes_v2(req, 4) != 0 { panic(65505); };
+    // Invariant: the send must fail, or the delivered body must fit the cap.
+    let rs = [0u64; 4];
+    let src = sla_http_client_req_send_v2(req, &rs[0]);
+    if src == 0 {
+        let resp = (rs[0] as ptr);
+        if sla_http_client_resp_body_len(resp) > 4 { panic(65506); };
+        sla_http_client_resp_free(resp);
+    };
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_send_v2"() {
+    let h = go s2_echo2(24625 + 0 * 65536 + 65520 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24625, STR_PTR("/send2"), STR_LEN("/send2"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65523); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_v2((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65524); };
+    let rs = [0u64; 4];
+    if sla_http_client_req_send_v2((rq[0] as ptr), &rs[0]) != 0 { panic(65525); };
+    let resp = (rs[0] as ptr);
+    if sla_http_client_resp_status(resp) != 200 { panic(65526); };
+    if !s2_body_contains(resp, STR_PTR("/send2"), STR_LEN("/send2")) { panic(65527); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_req_free((rq[0] as ptr));
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_req_send_async_v2"() {
+    let h = go s2_echo2(24626 + 0 * 65536 + 65540 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24626, STR_PTR("/async2"), STR_LEN("/async2"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65543); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_v2((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65544); };
+    let req = (rq[0] as ptr);
+    let op = [0u64; 4];
+    if sla_http_client_req_send_async_v2(req, &op[0]) != 0 { panic(65545); };
+    if op[0] == 0 { panic(65546); };
+    let opp = (op[0] as ptr);
+    let ready = [0u64; 4];
+    if sla_http_client_async_poll_v2(opp, 10000, &ready[0]) != 0 { panic(65547); };
+    if ready[0] == 0 { panic(65548); };
+    let rs = [0u64; 4];
+    if sla_http_client_async_take_response_v2(opp, &rs[0]) != 0 { panic(65549); };
+    let resp = (rs[0] as ptr);
+    if !s2_body_contains(resp, STR_PTR("/async2"), STR_LEN("/async2")) { panic(65550); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_async_free_v2(opp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_async_poll_v2"() {
+    let h = go s2_echo2(24627 + 0 * 65536 + 65560 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24627, STR_PTR("/poll2"), STR_LEN("/poll2"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65563); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_v2((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65564); };
+    let req = (rq[0] as ptr);
+    let op = [0u64; 4];
+    if sla_http_client_req_send_async_v2(req, &op[0]) != 0 { panic(65565); };
+    let opp = (op[0] as ptr);
+    let ready = [0u64; 4];
+    if sla_http_client_async_poll_v2(opp, 10000, &ready[0]) != 0 { panic(65566); };
+    if ready[0] == 0 { panic(65567); };
+    let rs = [0u64; 4];
+    if sla_http_client_async_take_response_v2(opp, &rs[0]) != 0 { panic(65568); };
+    sla_http_client_resp_free((rs[0] as ptr));
+    sla_http_client_async_free_v2(opp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_async_take_response_v2"() {
+    let h = go s2_echo2(24628 + 0 * 65536 + 65580 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24628, STR_PTR("/take2"), STR_LEN("/take2"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65583); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_v2((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65584); };
+    let req = (rq[0] as ptr);
+    let op = [0u64; 4];
+    if sla_http_client_req_send_async_v2(req, &op[0]) != 0 { panic(65585); };
+    let opp = (op[0] as ptr);
+    let ready = [0u64; 4];
+    if sla_http_client_async_poll_v2(opp, 10000, &ready[0]) != 0 { panic(65586); };
+    let rs = [0u64; 4];
+    if sla_http_client_async_take_response_v2(opp, &rs[0]) != 0 { panic(65587); };
+    if rs[0] == 0 { panic(65588); };
+    let resp = (rs[0] as ptr);
+    if !s2_body_contains(resp, STR_PTR("/take2"), STR_LEN("/take2")) { panic(65589); };
+    sla_http_client_resp_free(resp);
+    sla_http_client_async_free_v2(opp);
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_async_cancel_v2"() {
+    // The peer delays its response by 800ms, so the cancel lands mid-flight.
+    let h = go s2_echo2(24629 + 8 * 65536 + 65600 * 16777216);
+    sla_time_sleep_ms(150);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24629, STR_PTR("/slow"), STR_LEN("/slow"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65603); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_v2((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65604); };
+    let req = (rq[0] as ptr);
+    let op = [0u64; 4];
+    if sla_http_client_req_send_async_v2(req, &op[0]) != 0 { panic(65605); };
+    let opp = (op[0] as ptr);
+    if sla_http_client_async_cancel_v2(opp) != 0 { panic(65606); };
+    if sla_http_client_async_free_v2(opp) != 0 { panic(65607); };
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}
+
+@test "smoke2 sa_http_client_async_free_v2"() {
+    let h = go s2_echo2(24630 + 0 * 65536 + 65620 * 16777216);
+    sla_time_sleep_ms(120);
+    let ub = [0u8; 128];
+    let ubp: ptr = PTR_BYTE_ADD(&ub, 0);
+    let ulen = s2_url(24630, STR_PTR("/afree2"), STR_LEN("/afree2"), ubp);
+    let cl = [0u64; 4];
+    if sla_http_client_new_v2(0, PTR_NULL(), 0, &cl[0]) != 0 { panic(65623); };
+    let rq = [0u64; 4];
+    if sla_http_client_req_new_v2((cl[0] as ptr), 1, ubp, ulen, &rq[0]) != 0 { panic(65624); };
+    let req = (rq[0] as ptr);
+    let op = [0u64; 4];
+    if sla_http_client_req_send_async_v2(req, &op[0]) != 0 { panic(65625); };
+    let opp = (op[0] as ptr);
+    let ready = [0u64; 4];
+    if sla_http_client_async_poll_v2(opp, 10000, &ready[0]) != 0 { panic(65626); };
+    let rs = [0u64; 4];
+    if sla_http_client_async_take_response_v2(opp, &rs[0]) != 0 { panic(65627); };
+    sla_http_client_resp_free((rs[0] as ptr));
+    if sla_http_client_async_free_v2(opp) != 0 { panic(65628); };
+    sla_http_client_req_free(req);
+    sla_http_client_free((cl[0] as ptr));
+    sa_task_join(h);
+}

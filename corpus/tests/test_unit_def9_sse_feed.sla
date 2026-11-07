@@ -1,0 +1,70 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+@import "sa_std/sse.sla"
+
+// DEF-9 (SSEFEED-1) registration form: sse_parser_feed over a plain
+// SSE stream on the text backend segfaulted (signal 11) for any input
+// containing one complete line; SAB passed. Root cause was in the
+// text backend's struct-literal move bookkeeping, not in sse.sla.
+fn app_lit(v: Vec<u8>, lit: ptr, n: u64) -> Vec<u8> {
+    let o: Vec<u8> = v;
+    let i: u64 = 0;
+    while i < n {
+        o.push(PTR_BYTE_AT(lit, i));
+        i = i + 1;
+    }
+    return o;
+}
+
+fn app_nl(v: Vec<u8>) -> Vec<u8> {
+    let o: Vec<u8> = v;
+    o.push(10);
+    o.push(10);
+    return o;
+}
+
+fn body() -> Vec<u8> {
+    let b: Vec<u8> = Vec::new();
+    b = app_lit(b, STR_PTR("data: {\"action\":\"success\",\"message\":\"Hello\"}"), STR_LEN("data: {\"action\":\"success\",\"message\":\"Hello\"}"));
+    b = app_nl(b);
+    b = app_lit(b, STR_PTR("data: {\"action\":\"delta\",\"message\":\"World\"}"), STR_LEN("data: {\"action\":\"delta\",\"message\":\"World\"}"));
+    b = app_nl(b);
+    b = app_lit(b, STR_PTR("data: {\"action\":\"done\",\"message\":\"Bye\"}"), STR_LEN("data: {\"action\":\"done\",\"message\":\"Bye\"}"));
+    b = app_nl(b);
+    b = app_lit(b, STR_PTR("data: [DONE]"), STR_LEN("data: [DONE]"));
+    b = app_nl(b);
+    return b;
+}
+
+@test "def9 sse feed plain stream parses"() {
+    let p = sse_parser_feed(sse_parser_new(), body());
+    let n = sse_parser_event_count(&p);
+    if n != 4 { panic(921); };
+    let ev = sse_parser_event_at(&p, 0);
+    let want: Vec<u8> = Vec::new();
+    let w = app_lit(want, STR_PTR("{\"action\":\"success\",\"message\":\"Hello\"}"), STR_LEN("{\"action\":\"success\",\"message\":\"Hello\"}"));
+    if len(ev.data) != len(w) { panic(922); };
+    let i: u64 = 0;
+    while i < len(w) {
+        if ev.data[i] != w[i] { panic(923); };
+        i = i + 1;
+    }
+}
+
+@test "def9 sse feed chunked equals whole"() {
+    let full = body();
+    let p = sse_parser_new();
+    let i: u64 = 0;
+    let n: u64 = len(full);
+    while i < n {
+        let chunk: Vec<u8> = Vec::new();
+        chunk.push(full[i]);
+        p = sse_parser_feed(p, chunk);
+        i = i + 1;
+    }
+    if sse_parser_event_count(&p) != 4 { panic(924); };
+    let ev = sse_parser_event_at(&p, 3);
+    if len(ev.data) != 6 { panic(925); };
+    if ev.data[1] != 68 { panic(926); };
+}

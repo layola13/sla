@@ -1,0 +1,16 @@
+@import "sa_std/fmt.sai"
+@import "sa_std/time.sla"
+
+async fn step_one_after_delay(delay_ms: u64) -> i32 {
+    sleep_for_millis(delay_ms);
+    return 1;
+}
+
+fn sleep_for_millis(delay_ms: u64) -> void {
+    thread::sleep(Duration::from_millis(delay_ms));
+}
+
+fn main() -> i32 {
+    println("{}", 1);
+    return 0;
+};

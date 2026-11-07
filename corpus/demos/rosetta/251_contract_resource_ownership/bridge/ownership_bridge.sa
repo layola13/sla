@@ -1,0 +1,6 @@
+@export take_ownership(handle: ptr) -> i32:
+L_ENTRY:
+    value = load handle+0 as i32
+    next = add value, 1
+    store handle+0, next as i32
+    return next

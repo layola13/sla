@@ -1,0 +1,32 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 数位和双实现对峙（循环 vs 递归：12345 皆得 15）。
+// 意对标 364 素数对峙的数位版（406 互补）。
+
+fn dsum_loop(n: int) -> int {
+    let s = 0;
+    let m = n;
+    while m > 0 {
+        s = s + m % 10;
+        m = m / 10;
+    }
+    return s;
+}
+
+fn dsum_rec(n: int) -> int {
+    if n < 10 { return n; };
+    return n % 10 + dsum_rec(n / 10);
+}
+
+fn main() -> i32 {
+    println("{},{}", dsum_loop(12345), dsum_rec(12345));
+    return 0;
+}
+
+@test "basic 411 duel dsum"() {
+    if dsum_loop(12345) != 15 { panic(41101); };
+    if dsum_rec(12345) != 15 { panic(41102); };
+    if dsum_loop(12345) != dsum_rec(12345) { panic(41103); };
+    if dsum_rec(7) != 7 { panic(41104); };
+}

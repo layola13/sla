@@ -1,0 +1,23 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 1264_minmax_sum：极值函数组合（min(3,7)+max(3,7)=10）。
+// min2/max2 单体见 134，此处覆盖组合调用。
+
+fn min2(a: int, b: int) -> int {
+    return if a < b { a } else { b };
+}
+
+fn max2(a: int, b: int) -> int {
+    return if a > b { a } else { b };
+}
+
+fn main() -> i32 {
+    println("{}", min2(3, 7) + max2(3, 7));
+    return 0;
+}
+
+@test "basic 231 minmax sum"() {
+    if min2(3, 7) + max2(3, 7) != 10 { panic(23101); };
+    if min2(7, 7) + max2(7, 7) != 14 { panic(23102); };
+}

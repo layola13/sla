@@ -1,0 +1,8 @@
+@import "bridge/deep/seed.sa"
+
+@export deep_value() -> i32:
+L_ENTRY:
+    seed = call @deep_seed()
+    value = add seed, 200
+    !seed
+    return value

@@ -1,0 +1,10 @@
+// expect: ArenaEscape
+// F2-A C1 corpus: escape route 4 - a closure capturing an
+// arena root may escape the block with the reference inside.
+fn neg_closure_capture() -> i32 {
+    arena {
+        let v: Vec<String> = Vec::new();
+        let f = |x: i32| x + (len(v) as i32);
+        return f(1);
+    }
+}
