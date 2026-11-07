@@ -297,30 +297,134 @@ fn shadowing_snapshot_is_per_binding() {
     assert_eq!(err.kind, ErrorKind::UseAfterMove);
 }
 
+// -- plain-call argument consumption (C1, ex D-C7) ---------------------
+
+fn plain_call(name: &str, args: Vec<Node>) -> Node {
+    Node::CallExpr(CallExpr {
+        func_name: name.to_string(),
+        associated_target: None,
+        generics: Vec::new(),
+        args,
+        callee: None,
+    })
+}
+
+fn h_decl() -> Node {
+    func("h", vec![param("s", string_ty())], void_ty(), vec![])
+}
+
 #[test]
-fn plain_call_does_not_consume() {
-    // D-C7: the checker does NOT consume plain by-value call
-    // arguments (DEF-5 auto-clone lives in codegen). h(s); let b = s;
-    // is therefore legal at checker level.
+fn plain_call_consumes_bare_read() {
+    // C1 (consult-dc7, six-house unanimous; supersedes the D-C7 pin):
+    // a plain by-value call argument IS consumed at checker level,
+    // so the bare read after the call — `h(s); let b = s;` — is a
+    // UseAfterMove (REG-BR-6 text), exactly like a second call.
     let (_, result) = check(vec![
-        func("h", vec![param("s", string_ty())], void_ty(), vec![]),
+        h_decl(),
         func(
             "f",
             vec![param("s", string_ty())],
             void_ty(),
             vec![
-                expr_stmt(Node::CallExpr(CallExpr {
-                    func_name: "h".to_string(),
-                    associated_target: None,
-                    generics: Vec::new(),
-                    args: vec![ident("s")],
-                    callee: None,
-                })),
+                expr_stmt(plain_call("h", vec![ident("s")])),
                 let_stmt("b", None, ident("s")),
             ],
         ),
     ]);
-    assert!(result.is_ok(), "{result:?}");
+    let err = result.expect_err("bare read after consuming call must fail");
+    assert_eq!(err.kind, ErrorKind::UseAfterMove);
+}
+
+#[test]
+fn plain_call_consumes_second_call() {
+    // The corpus-forced shape (REG-BR-6): the same owned String
+    // passed by value to a second call after the first moved it.
+    let (_, result) = check(vec![
+        h_decl(),
+        func(
+            "f",
+            vec![param("s", string_ty())],
+            void_ty(),
+            vec![
+                expr_stmt(plain_call("h", vec![ident("s")])),
+                expr_stmt(plain_call("h", vec![ident("s")])),
+            ],
+        ),
+    ]);
+    let err = result.expect_err("second call after consuming call must fail");
+    assert_eq!(err.kind, ErrorKind::UseAfterMove);
+}
+
+#[test]
+fn plain_call_consumes_compare_read() {
+    // Comparison read after the call is still a use of the consumed
+    // binding (probe matrix S2 in the R-6 line: Err under C1).
+    let (_, result) = check(vec![
+        h_decl(),
+        func(
+            "f",
+            vec![param("s", string_ty())],
+            void_ty(),
+            vec![
+                expr_stmt(plain_call("h", vec![ident("s")])),
+                expr_stmt(bin(BinaryOp::Eq, ident("s"), str_lit("x"))),
+            ],
+        ),
+    ]);
+    let err = result.expect_err("compare read after consuming call must fail");
+    assert_eq!(err.kind, ErrorKind::UseAfterMove);
+}
+
+#[test]
+fn plain_call_consumes_return_use() {
+    // `h(s); return s;` — returning the consumed binding fails too.
+    let (_, result) = check(vec![
+        h_decl(),
+        func(
+            "f",
+            vec![param("s", string_ty())],
+            string_ty(),
+            vec![
+                expr_stmt(plain_call("h", vec![ident("s")])),
+                Node::ReturnStmt(ReturnStmt {
+                    value: Some(Box::new(ident("s"))),
+                }),
+            ],
+        ),
+    ]);
+    let err = result.expect_err("return of consumed binding must fail");
+    assert_eq!(err.kind, ErrorKind::UseAfterMove);
+}
+
+#[test]
+fn read_before_call_then_error_at_call_site() {
+    // A read BEFORE the call is legal; the error lands on the call
+    // argument itself when the binding was already moved by the
+    // preceding let (V3 shape: error at the call site, proving the
+    // consumption machine fires uniformly per use site).
+    let (_, result) = check(vec![
+        h_decl(),
+        func(
+            "f",
+            vec![param("s", string_ty())],
+            void_ty(),
+            vec![
+                let_stmt("b", None, ident("s")),
+                expr_stmt(plain_call("h", vec![ident("s")])),
+            ],
+        ),
+    ]);
+    let err = result.expect_err("call of let-moved binding must fail at the call");
+    assert_eq!(err.kind, ErrorKind::UseAfterMove);
+    // The firing path is the call-argument identifier check
+    // (check_call_arg_consumption -> check_identifier), which reports
+    // the use point of the already-consumed binding; the error
+    // materializes only because the call reaches that check.
+    assert!(
+        err.message.contains("identifier `s` was already consumed"),
+        "unexpected error text: {}",
+        err.message
+    );
 }
 
 #[test]

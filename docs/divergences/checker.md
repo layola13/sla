@@ -39,22 +39,43 @@
 - 处置建议：主会话转主线缺陷登记（检查器名字键控记账类）；Zig 侧修复方向为
   快照/合并/清理三处一并改身份键控，只改一处仍会按名释放错对象。
 
-### D-C7 (b) 消费是「枚举的站点清单」，不是转移规则
-- Zig 位置：`consumeBinding` 全部调用点（grep 全量核对）——let 隐式移动
-  :2844、解构 :2913、赋值 :2983、release :3129、`^` move 表达式 :3345、
-  extern move 实参 :275、await :3620、mem::forget :3903、
-  ManuallyDrop::into_inner :3921、Box::into_raw :4068、用户宏 :5127、
-  try 传播 :5665。
-- 关键事实：**普通函数调用的按值实参在检查器层不被消费**——DEF-5 的
-  自动克隆/转移物化在 lowering/codegen（lowering_rules 的
-  `planCallArgMaterialization`）决定。于是「调用后值归谁」由两个子系统
-  按约定保持一致，检查器的账本本身回答不了这个问题；主线 DEF-5 /
-  DEF-deep-copy 家族正出在这条缝上。
-- Rust：同一枚举逐站点移植（check_stmt / check_expr / check_call 内逐处
-  标注 context 串），并以单测 `plain_call_does_not_consume` 钉住
-  「检查器不消费普通实参」这条边界，防止后续移植时顺手「补全」成转移规则。
-- 处置：保持枚举形态并在每处标注来源行号；是否升级为统一转移规则属
-  语言层裁定，不在本线权限内。
+### D-C7 (b) 消费是「枚举的站点清单」，不是转移规则 —— 已被 DEF-deep-copy / REG-BR-6 落地取代（2026-11-08 裁定 C1）
+- 历史记录（裁定前）：Zig 位置 `consumeBinding` 全部调用点（grep 全量
+  核对）——let 隐式移动 :2844、解构 :2913、赋值 :2983、release :3129、
+  `^` move 表达式 :3345、extern move 实参 :275、await :3620、
+  mem::forget :3903、ManuallyDrop::into_inner :3921、Box::into_raw
+  :4068、用户宏 :5127、try 传播 :5665。当时观察到的关键事实是：
+  **普通函数调用的按值实参在检查器层不被消费**——DEF-5 的自动克隆/
+  转移物化在 lowering/codegen（lowering_rules 的
+  `planCallArgMaterialization`）决定。Rust 当时逐站点移植同一枚举，
+  并以单测 `plain_call_does_not_consume` 钉住「检查器不消费普通实参」
+  这条边界；原处置明文「是否升级为统一转移规则属语言层裁定」。
+- 取代经过：上述普查所据的树，是深拷贝暂存批检查器侧消费**尚未落地**
+  的树——权威分歧的成因是时间差，不是两套对等主义对撞。2026-11-03
+  主会话 DEF-deep-copy 合成裁定（辖区合成：preserved 传参/push/返回/
+  字段提取由 DEF-5 落地自动真克隆等）已定深拷贝批入主线，其检查器侧
+  消费（consumeCallArgIfMoved + REG-BR-6 文本）随 R-6 线移植落地
+  （layola13/sla `7d66b464`，负例假放行 21→0/151）。D-C7 自留的语言层
+  裁定由 2026-11-08 六家咨询履行并收敛：**C1 暂存全胜，六家全票**
+  （consult-dc7，VERDICT 在主会话工作区）——文本四家全票 C1；概率票
+  三选 Jev C1 0.89 / Opus C1 0.80，五选复投 Jev C1 0.62 / Opus C1 0.72；
+  两票同向，未动用 Opus 优先规则。核心论证：`let b = s` 对非 Copy
+  类型本身即枚举清单第一位的转移点，C2 的「裸读」不是良性观察，
+  放行读而拒再传使同一转移事件有两种判读；C1 是**补全枚举**
+  （普通按值调用是「值向外流」自然类中唯一缺席的成员）而非扩张主义。
+- 现行口径（C1）：检查器层消费一切按值实参的后续使用——裸读
+  （`h(s); let b = s;`）、第二次调用、比较读、`return s` 均为
+  UseAfterMove；先读后调用时错误落在调用实参点。F5 消费门
+  （check_call_consume.rs）保持 R-6 落地形态，无回退、无收窄。原单测
+  `plain_call_does_not_consume` 已改写为 `plain_call_consumes_bare_read`
+  并补齐各后续使用形的钉死覆盖；语料侧已补「调用后裸读」负例
+  `test_error_use_after_move_call_bare_read.sla`，裸读形自此由语料
+  实证而非仅咨询裁定承载。
+- 开放问题（不阻塞 C1）：**V4**（纯观察读豁免：转移形全拒、比较/
+  索引/字段读合法）与 **V5**（Copy 型门控：仅非 Copy 型在调用点
+  消费）登记为语言层开放问题——两者在负例与原单测上的执行后果与
+  C1 完全一致，差别仅在无语料/探针实证的附加放松；若将来立项，
+  须先有探针/语料实证（观察读形、Copy 型在调用点的实际语义）再送裁。
 
 ## 诊断通道
 

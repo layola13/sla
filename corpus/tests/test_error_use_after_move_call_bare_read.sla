@@ -1,0 +1,34 @@
+// expect: UseAfterMove
+@import "sa_std/string.sa"
+
+// REG-BR-6 bare-read form (C1, consult-dc7 six-house ruling): passing
+// an owned String local as a plain by-value argument consumes it at
+// checker level, so ANY later use is UseAfterMove -- including a bare
+// read that binds it again (`let b = x;`), not only a second call.
+// The two pre-existing F5 negatives (test_error_use_after_move_call,
+// test_error_def_triage_nested_use_after_move) only exercise the
+// second-call shape; this file pins the bare-read shape in the corpus
+// so the C1 doctrine is carried by corpus evidence, not only by the
+// consultation verdict.
+
+fn regbr6_bare_read_sink(s: String) {
+    let n: u64 = len(s);
+    if n == 999999 {
+        panic(5399);
+    };
+}
+
+fn bad_use_after_move_bare_read() {
+    let x: String = format("abc");
+    regbr6_bare_read_sink(x);
+    let b = x;
+    let n: u64 = len(b);
+    if n == 999999 {
+        panic(5398);
+    };
+}
+
+fn main() -> i32 {
+    bad_use_after_move_bare_read();
+    return 0;
+}
