@@ -25,7 +25,12 @@ fn minimal_module() -> Module {
     }
 }
 
-/// Hand-derived expected bytes for `minimal_module` (75 bytes total).
+/// Hand-derived expected bytes for `minimal_module` (76 bytes
+/// total). The sig record is 17 bytes: the current-head sci
+/// `FunctionSig` carries an `is_variadic` flag byte after
+/// `should_panic`. (A stale reference tree without that field
+/// predicted 75 bytes; the Zig differential probe on the venue
+/// sci @ e82d2865 exposed the drift — see SAB-D01.)
 fn minimal_expected() -> Vec<u8> {
     let mut v = Vec::new();
     // Header: magic, major 4, minor 0, section count 4.
@@ -33,12 +38,12 @@ fn minimal_expected() -> Vec<u8> {
     v.extend_from_slice(&[4, 0, 4]);
     // Section 1 (pool): payload = count 1, len 1, "f".
     v.extend_from_slice(&[1, 3, 1, 1, b'f']);
-    // Section 2 (sigs): payload len 17 = count 1 + one 16-byte sig
+    // Section 2 (sigs): payload len 18 = count 1 + one 17-byte sig
     // record whose fields are all zero (id 0, name pool 0, kind
-    // normal, no return cap, return ty void, all flags 0, no
-    // optionals, zero params / param ids / reg ids).
-    v.extend_from_slice(&[2, 17, 1]);
-    v.extend_from_slice(&[0u8; 16]);
+    // normal, no return cap, return ty void, all flags 0 including
+    // is_variadic, no optionals, zero params / param ids / reg ids).
+    v.extend_from_slice(&[2, 18, 1]);
+    v.extend_from_slice(&[0u8; 17]);
     // Section 3 (consts): payload = count 0.
     v.extend_from_slice(&[3, 1, 0]);
     // Section 4 (instructions): payload len 39 = count 2 + inst0 (20)
@@ -58,7 +63,7 @@ fn minimal_expected() -> Vec<u8> {
 #[test]
 fn minimal_module_matches_hand_derived_bytes() {
     let bytes = encode_module(&minimal_module()).expect("encode minimal module");
-    assert_eq!(bytes.len(), 75);
+    assert_eq!(bytes.len(), 76);
     assert_eq!(bytes, minimal_expected());
 }
 

@@ -282,56 +282,96 @@ impl Checker {
         }
     }
 
+    /// Mirrors the `struct_literal` arm (type_checker.zig:3428):
+    /// the type must name a registered struct (else NotAStruct,
+    /// opaque included), the update expression must have the same
+    /// type, duplicate fields are a CompileError, unknown fields
+    /// FieldNotFound, mistyped fields TypeMismatch, unions take
+    /// exactly one field, and without an update expression every
+    /// field is required (missing -> FieldNotFound). Field VALUES
+    /// are not consumed by the checker.
     fn check_struct_literal(
         &mut self,
         lit: &sla_ast::exprs::StructLiteral,
     ) -> CheckResult<Type> {
         let ty = (*lit.ty).clone();
-        if let Some(update) = &lit.update_expr {
-            self.check_expr(update)?;
-        }
-        let struct_name = match &ty {
-            Type::UserDefined(u) => Some(u.name.clone()),
-            _ => None,
+        let name = match &ty {
+            Type::UserDefined(u) => u.name.clone(),
+            _ => {
+                return Err(Diagnostic::new(
+                    ErrorKind::NotAStruct,
+                    "NotAStruct: struct literal over a non-struct type",
+                ))
+            }
         };
-        if let Some(name) = struct_name {
-            if let Some(info) = self.structs.get(&name) {
-                let fields: Vec<(String, Type)> = info
-                    .fields
-                    .iter()
-                    .map(|(n, t)| (n.clone(), t.clone()))
-                    .collect();
-                for f in &lit.fields {
-                    let value_ty = self.check_expr(&f.value)?;
-                    match fields.iter().find(|(n, _)| n == &f.name) {
-                        Some((_, expected)) => {
-                            if !value_assignable_to(expected, &value_ty) {
-                                return Err(Diagnostic::new(
-                                    ErrorKind::TypeMismatch,
-                                    format!(
-                                        "TypeMismatch: field `{}` expects {}, actual {}",
-                                        f.name,
-                                        type_desc(expected),
-                                        type_desc(&value_ty)
-                                    ),
-                                ));
-                            }
-                        }
-                        None => {
-                            return Err(Diagnostic::new(
-                                ErrorKind::FieldNotFound,
-                                format!("FieldNotFound: `{name}` has no field `{}`", f.name),
-                            ))
-                        }
-                    }
-                }
-                return Ok(ty);
+        let info = match self.structs.get(&name) {
+            Some(info) if !info.is_opaque => info.clone(),
+            _ => {
+                return Err(Diagnostic::new(
+                    ErrorKind::NotAStruct,
+                    format!("NotAStruct: cannot construct `{name}`"),
+                ))
+            }
+        };
+        if let Some(update) = &lit.update_expr {
+            let update_ty = self.check_expr(update)?;
+            if !types_equal(&update_ty, &ty) {
+                return Err(Diagnostic::new(
+                    ErrorKind::TypeMismatch,
+                    "struct update expression type mismatch",
+                ));
             }
         }
-        // Unregistered (e.g. std) struct types: still type the field
-        // values, accept the literal at face value.
+        if info.is_union && lit.fields.len() != 1 {
+            return Err(Diagnostic::new(
+                ErrorKind::CompileError,
+                format!("Union literal must initialize exactly one field: {name}"),
+            ));
+        }
+        let mut seen: Vec<&str> = Vec::new();
         for f in &lit.fields {
-            self.check_expr(&f.value)?;
+            if seen.contains(&f.name.as_str()) {
+                return Err(Diagnostic::new(
+                    ErrorKind::CompileError,
+                    format!("Duplicate field in struct literal: {name}.{}", f.name),
+                ));
+            }
+            seen.push(f.name.as_str());
+            let value_ty = self.check_expr(&f.value)?;
+            match info.fields.iter().find(|(n, _)| n == &f.name) {
+                Some((_, expected)) => {
+                    if !value_assignable_to(expected, &value_ty) {
+                        return Err(Diagnostic::new(
+                            ErrorKind::TypeMismatch,
+                            format!(
+                                "TypeMismatch in struct literal field {name}.{}: expected {}, actual {}",
+                                f.name,
+                                type_desc(expected),
+                                type_desc(&value_ty)
+                            ),
+                        ));
+                    }
+                }
+                None => {
+                    return Err(Diagnostic::new(
+                        ErrorKind::FieldNotFound,
+                        format!(
+                            "Field not found in struct literal: {name}.{}",
+                            f.name
+                        ),
+                    ))
+                }
+            }
+        }
+        if lit.update_expr.is_none() && !info.is_union {
+            for (field_name, _) in &info.fields {
+                if !seen.contains(&field_name.as_str()) {
+                    return Err(Diagnostic::new(
+                        ErrorKind::FieldNotFound,
+                        format!("Missing field in struct literal: {name}.{field_name}"),
+                    ));
+                }
+            }
         }
         Ok(ty)
     }

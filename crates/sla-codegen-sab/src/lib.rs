@@ -43,14 +43,19 @@ pub fn generate(module: &Module) -> Result<Vec<u8>> {
 /// AST-level entry point, mirroring the Zig top-level
 /// `generate(allocator, tc, program) -> []u8`.
 ///
-/// Not yet wired: it needs sla-checker's typed program and
-/// sla-lowering's lowered form, both sibling crates still in phase 1.
-/// Until the pipeline exists this returns a loud
-/// `UnsupportedSabDirectFeature` rather than an empty or text-routed
-/// result.
+/// Not yet wired: AST-driven generation needs the checked program plus
+/// sla-lowering's facts (the `CheckInfo` surface). Until that wiring
+/// exists this returns a loud `UnsupportedSabDirectFeature` rather
+/// than an empty or text-routed result.
+///
+/// Wiring note (coordinator, 2026-11-07): the signature previously
+/// took the coordinator's placeholder `sla_lowering::Lowering`, which
+/// the lowering lane has since replaced with its real API; the stub
+/// now consumes that real surface (`&Node` + `&dyn CheckInfo`, the
+/// same shape sla-codegen-text uses). Body unchanged.
 pub fn generate_from_program(
-    _lowering: &sla_lowering::Lowering,
-    _program: &sla_ast::Program,
+    _program: &sla_ast::Node,
+    _check: &dyn sla_lowering::CheckInfo,
 ) -> Result<Vec<u8>> {
     Err(Error::UnsupportedSabDirectFeature(
         "AST -> SAB direct generation awaits the sla-lowering pipeline (phase 2)".to_string(),

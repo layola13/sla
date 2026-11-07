@@ -1,0 +1,18 @@
+# dc1_repro — checker D-C1 (name-keyed snapshot merge) live reproduction on the ORIGINAL Zig plugin
+# venue: Kaggle 2201, /content/sa_all/sa_plugin_sla @ 699f13d4, `sa sla check` (SA_PLUGIN_DEV=1 via env.sh)
+# inputs: docs/probes/dc1_{floor,control,shadow}.sla (shadow/control carry the Zig-grammar
+#         trailing `;` after the if-else statement; the form without it is a SyntaxError
+#         in the Zig parser before checking even starts)
+=== dc1_floor    (unconditional double move, no if)
+Type Check Error: failed to verify types: UseAfterMove: identifier `s` was already consumed (error.UseAfterMove)
+rc=1
+=== dc1_control  (conditional consume in then-branch, NO shadowing)
+Type Check Error: failed to verify types: UseAfterMove: identifier `s` was already consumed (error.UseAfterMove)
+rc=1
+=== dc1_shadow   (checker D-C1 minimal input: inner `s` shadows parameter `s`)
+Sla Compiler: Successfully parsed and verified syntax and types of dc1_shadow.sla.
+rc=0
+# Verdict: CONFIRMED. The only difference between control and shadow is the shadowing;
+# Zig catches the conditional use-after-move without it and misses it with it,
+# exactly as the name-keyed snapshot mechanism (type_checker.zig saveScopeStates :2712,
+# restoreScopeStates :2725, then-arm inline copy :5366) predicts.

@@ -1,0 +1,23 @@
+# abi_probe — venue sa_plugin_sla (sa_all) plugin_api.zig @sizeOf/@offsetOf, original definitions
+# captured 2026-11-07 by coordinator via docs/probes/{build.zig,abi_main.zig} on Kaggle venue 2201
+sizeof Allocator = 16
+sizeof Context = 72
+offset Context.allocator = 0
+offset Context.host_version = 16
+offset Context.log = 32
+offset Context.log_ctx = 40
+offset Context.json_mode = 68
+offset Context.broker_abi_version = 64
+offset Context.broker_call = 48
+offset Context.broker_ctx = 56
+sizeof PluginDescriptor = 64
+offset PluginDescriptor.name = 8
+offset PluginDescriptor.handle_command = 40
+offset PluginDescriptor.skills_ptr = 48
+offset PluginDescriptor.skills_len = 56
+sizeof SkillSection = 48
+sizeof HostStream = 16
+sizeof BrokerCacheLookupRequest = 64
+sizeof BrokerCacheLookupResponse = 16
+sizeof BrokerCacheStoreRequest = 64
+sizeof BrokerCacheStoreResponse = 4

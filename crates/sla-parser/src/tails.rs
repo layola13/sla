@@ -220,7 +220,10 @@ impl<'a> Parser<'a> {
             let field_name = self.expect_identifier()?;
             self.expect(Tag::Colon)?;
             let value = self.parse_expr(0)?;
-            fields.push(StructLiteralField { name: field_name, value });
+            fields.push(StructLiteralField {
+                name: field_name,
+                value: Box::new(value),
+            });
             self.eat(Tag::Comma);
         }
         Ok(Node::StructLiteral(StructLiteral {
@@ -244,7 +247,10 @@ impl<'a> Parser<'a> {
                 let field_name = self.expect_identifier()?;
                 self.expect(Tag::Colon)?;
                 let value = self.parse_expr(0)?;
-                fields.push(EnumLiteralField { name: field_name, value });
+                fields.push(EnumLiteralField {
+                    name: field_name,
+                    value: Box::new(value),
+                });
                 self.eat(Tag::Comma);
             }
         } else if self.eat(Tag::LParen) {
@@ -255,7 +261,7 @@ impl<'a> Parser<'a> {
                 let value = self.parse_expr(0)?;
                 fields.push(EnumLiteralField {
                     name: fields.len().to_string(),
-                    value,
+                    value: Box::new(value),
                 });
                 if !self.eat(Tag::Comma) {
                     self.expect(Tag::RParen)?;

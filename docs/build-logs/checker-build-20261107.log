@@ -1,0 +1,35 @@
+# sla-checker build log — Kaggle venue v2 (VPS-direct, port 2201), 2026-11-07
+# toolchain: cargo/rustc 1.99.1 (venue); command: cargo clean -p sla-checker -p sla-ast; cargo test -p sla-checker
+# source tree sha (spr.tgz at first sync): ec27c6210cfd2bd346845adcf44dcbb47b71f4476d9c75137492727d75a47786 (checker files re-synced after fixes, sha-verified by rebuild)
+   Compiling sla-ast v0.1.0 (/root/sla-plugin-rust/crates/sla-ast)
+   Compiling sla-checker v0.1.0 (/root/sla-plugin-rust/crates/sla-checker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.53s
+     Running unittests src/lib.rs (target/debug/deps/sla_checker-fdd93bb9b51d528c)
+
+running 16 tests
+test tests::branch_merge_plan_truth_table ... ok
+test tests::arith_function_passes ... ok
+test tests::extern_move_contract_consumes ... ok
+test tests::if_merge_consumes_single_branch_binding ... ok
+test tests::imported_println_in_test_block ... ok
+test tests::loop_conditional_consume_rejected ... ok
+test tests::extern_bypass_ignores_arg_types ... ok
+test tests::plain_call_does_not_consume ... ok
+test tests::macro_conditional_consume_rejected ... ok
+test tests::recursive_factorial_passes ... ok
+test tests::shadowing_snapshot_is_per_binding ... ok
+test tests::struct_literal_missing_and_duplicate_fields ... ok
+test tests::use_after_move_via_let ... ok
+test tests::var_assigned_only_in_loop_is_uninit_after ... ok
+test tests::while_sized_int_condition_rejected ... ok
+test tests::width_insensitive_let_passes ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sla_checker
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+RC=0

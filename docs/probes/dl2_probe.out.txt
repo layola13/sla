@@ -1,0 +1,26 @@
+# dl2_probe — D-L2 (lexer escape-at-EOF overshoot) measured on the ORIGINAL lexer
+# venue: Kaggle 2201, /content/sa_all/sa_plugin_sla/src/lexer.zig driven directly
+#        via docs/probes/{build.zig,dl2_main.zig}; captured 2026-11-07 by coordinator
+case string_eof_backslash: buffer_len=5
+  tok invalid loc=[0..6]
+  tok eof loc=[6..6]
+case string_eof_plain: buffer_len=4
+  tok invalid loc=[0..4]
+  tok eof loc=[4..4]
+case string_eof_escaped_pair: buffer_len=6
+  tok invalid loc=[0..6]
+  tok eof loc=[6..6]
+case template_eof_backslash: buffer_len=5
+  tok template_start loc=[0..1]
+  tok invalid loc=[1..6]
+  tok invalid loc=[6..6]   (repeats forever; the 32-token probe cap stopped it — no eof is ever produced)
+case stmt_string_eof_backslash: buffer_len=13
+  tok keyword_let loc=[0..3]
+  tok identifier loc=[4..5]
+  tok equal loc=[6..7]
+  tok invalid loc=[8..14]
+  tok eof loc=[14..14]
+# Verdict: CONFIRMED. In the trailing-single-backslash cases the invalid token's
+# loc.end == buffer.len + 1 (string branch AND nextTemplate); both controls land
+# exactly on buffer.len. Corollary: on the template path, a consumer that keeps
+# pulling tokens after the overshoot never receives eof (invalid [6..6] repeats).

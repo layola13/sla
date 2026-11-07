@@ -176,6 +176,7 @@ fn write_function_sig(out: &mut Vec<u8>, pool: &StringPool, sig: &FunctionSig) -
     out.push(sig.is_ffi_wrapper as u8);
     out.push(sig.ignored as u8);
     out.push(sig.should_panic as u8);
+    out.push(sig.is_variadic as u8);
     write_optional_pool_text(out, pool, &sig.upstream_file)?;
     write_optional_upstream_loc(out, pool, &sig.upstream_loc)?;
     write_optional_pool_text(out, pool, &sig.llvm_name)?;

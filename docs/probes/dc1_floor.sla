@@ -1,0 +1,5 @@
+fn h(t: String) {
+    let s = t;
+    let a = s;
+    let b = s;
+}

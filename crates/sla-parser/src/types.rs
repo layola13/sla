@@ -143,6 +143,10 @@ impl<'a> Parser<'a> {
         if self.peek() == Tag::StringLiteral {
             let raw = self.cur_text().to_string();
             self.advance();
+            let bytes = raw.as_bytes();
+            if bytes.len() < 2 || bytes[0] != b'"' || bytes[bytes.len() - 1] != b'"' {
+                return Err(self.err_here(ParseErrorKind::SyntaxError));
+            }
             Ok(Some(string_literal_inner(&raw).to_string()))
         } else {
             Ok(None)

@@ -293,22 +293,25 @@ impl Checker {
         result
     }
 
-    /// `while`: condition must be boolean or (legacy) integer. Body
-    /// checked exactly once — there is NO dataflow fixpoint; the
+    /// `while`: condition must be boolean or the LEGACY `integer`
+    /// primitive only — sized integers (i32, i64, ...) are rejected
+    /// by the Zig arm (type_checker.zig ~3078-3085), which accepts
+    /// exactly `.boolean, .integer`. (On the sized-int path Zig
+    /// returns a bare TypeMismatch with NO message; see D-C9.)
+    /// Body checked exactly once — there is NO dataflow fixpoint; the
     /// LoopConditionalConsume ban inside `consume_binding` is the
     /// compensating approximation (D-C4). Afterwards only
     /// previously-uninitialized bindings roll back.
     fn check_while(&mut self, cond: &Node, body: &[Node]) -> CheckResult<()> {
         let cond_ty = self.check_expr(cond)?;
-        let ok = matches!(cond_ty, Type::Primitive(Primitive::Boolean))
-            || matches!(cond_ty, Type::Primitive(p) if crate::types_util::is_integer_primitive(p));
+        let ok = matches!(
+            cond_ty,
+            Type::Primitive(Primitive::Boolean) | Type::Primitive(Primitive::Integer)
+        );
         if !ok {
             return Err(Diagnostic::new(
                 ErrorKind::TypeMismatch,
-                format!(
-                    "while condition must be boolean, actual {}",
-                    type_desc(&cond_ty)
-                ),
+                "while condition must be bool/int unless using while let",
             ));
         }
         let pre = self.scopes.save_states();

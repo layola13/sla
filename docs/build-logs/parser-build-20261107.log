@@ -1,0 +1,36 @@
+# sla-parser venue build+test log — 2026-11-07T00:57:05Z — Kaggle venue via VPS loopback :2201 (final, after warning cleanup)
+Warning: Permanently added '[127.0.0.1]:2201' (ED25519) to the list of known hosts.
+== cargo build -p sla-parser ==
+   Compiling sla-parser v0.1.0 (/root/sla-plugin-rust/crates/sla-parser)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.48s
+== cargo build --workspace ==
+   Compiling sla-oracle v0.1.0 (/root/sla-plugin-rust/crates/sla-oracle)
+   Compiling sla-plugin v0.1.0 (/root/sla-plugin-rust/crates/sla-plugin)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.12s
+== cargo test -p sla-parser ==
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fixtures.rs (target/debug/deps/fixtures-a6e94eba36c41d7b)
+
+running 12 tests
+test fixture_01_hello ... ok
+test fixture_04_while_sum ... ok
+test fixture_02_arith ... ok
+test fixture_03_if_else ... ok
+test parser_registers_imported_module_names ... ok
+test rejects_legacy_let_mut ... ok
+test fixture_07_functions ... ok
+test rejects_missing_return_semicolon ... ok
+test rejects_unterminated_block ... ok
+test rejects_uncovered_constructs_loudly ... ok
+test struct_literal_needs_known_type ... ok
+test suffixed_int_literal_becomes_cast ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sla_parser
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

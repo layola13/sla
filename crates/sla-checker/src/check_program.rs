@@ -15,7 +15,7 @@
 use crate::checker::{Checker, StructInfo};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::rules::ValueState;
-use crate::types_util::{is_internal_symbol, node_tag, value_assignable_to};
+use crate::types_util::{is_internal_symbol, value_assignable_to};
 use sla_ast::decls::{FuncDecl, Program, TestDecl, TypeAliasComponent};
 use sla_ast::node::Node;
 use sla_ast::types::Type;
@@ -319,11 +319,4 @@ pub fn expr_terminates(node: &Node) -> bool {
         Node::UnsafeExpr(u) => block_terminates(&u.body),
         _ => false,
     }
-}
-
-/// Fallback-diagnostic helper mirroring Zig's `checkStmt` wrapper
-/// (type_checker.zig:2791): kept for parity of wording where a caller
-/// needs a message for a bare kind.
-pub fn stmt_fallback_message(node: &Node) -> String {
-    format!("checkStmt failed at node tag {}", node_tag(node))
 }

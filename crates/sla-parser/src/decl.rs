@@ -20,7 +20,7 @@ use crate::types::string_literal_inner;
 /// (order is significant: `pub`, `extern`, `inline`, `async`, each at
 /// most once, exactly as in Zig).
 #[derive(Debug, Clone, Default)]
-pub(crate) struct DeclMods {
+pub struct DeclMods {
     pub is_pub: bool,
     pub is_extern: bool,
     pub abi: Option<String>,
@@ -148,11 +148,20 @@ impl<'a> Parser<'a> {
             "test" => self.parse_test_decl(),
             "import" => self.parse_import_decl(),
             "no_mangle" => {
+                // Zig order: pub, extern (+abi), inline, async, then `fn`
+                // (anything else is ExpectedDeclaration).
                 let mut mods = DeclMods { no_mangle: true, ..DeclMods::default() };
                 mods.is_pub = self.eat(Tag::KeywordPub);
+                if self.eat(Tag::KeywordExtern) {
+                    mods.is_extern = true;
+                    mods.abi = self.parse_optional_extern_abi()?;
+                }
                 mods.is_inline = self.eat(Tag::KeywordInline);
                 mods.is_async = self.eat(Tag::KeywordAsync);
-                self.expect(Tag::KeywordFn)?;
+                if self.peek() != Tag::KeywordFn {
+                    return Err(self.err_here(ParseErrorKind::ExpectedDeclaration));
+                }
+                self.advance();
                 self.parse_func_decl_rest(&mods, false)
             }
             "derive" => {
@@ -168,13 +177,14 @@ impl<'a> Parser<'a> {
                         break;
                     }
                 }
-                let is_union = if self.eat(Tag::KeywordUnion) {
-                    true
-                } else {
-                    self.expect(Tag::KeywordStruct)?;
-                    false
-                };
-                self.parse_aggregate_decl_rest(is_union, derives)
+                // Zig: an optional `pub`, then `struct` is required
+                // (unions are rejected with ExpectedDeclaration).
+                self.eat(Tag::KeywordPub);
+                if self.peek() != Tag::KeywordStruct {
+                    return Err(self.err_here(ParseErrorKind::ExpectedDeclaration));
+                }
+                self.advance();
+                self.parse_aggregate_decl_rest(false, derives)
             }
             _ => Err(self.err_here(ParseErrorKind::SyntaxError)),
         }
@@ -314,18 +324,24 @@ impl<'a> Parser<'a> {
 
     // -- import / using --------------------------------------------------------
 
-    /// Zig `parseImportDecl` after `@import`: a string-literal path or a
-    /// token-sequence path, then an optional `;`.
+    /// Zig `parseImportDeclAfterAt`: `@import "path"` or a bare
+    /// token-sequence path (no parentheses), then an optional `;`.
+    /// For `.sla` paths the module name is recorded; the Zig original
+    /// additionally prescans the imported file from disk here — that IO
+    /// layer is out of this port's scope (harness seeds the names via
+    /// `Parser::seed_known_type_names` instead; see divergences).
     pub fn parse_import_decl(&mut self) -> Result<Node, ParseError> {
-        self.expect(Tag::LParen)?;
         let path = if self.peek() == Tag::StringLiteral {
             let raw = self.cur_text().to_string();
             self.advance();
+            let bytes = raw.as_bytes();
+            if bytes.len() < 2 || bytes[0] != b'"' || bytes[bytes.len() - 1] != b'"' {
+                return Err(self.err_here(ParseErrorKind::SyntaxError));
+            }
             string_literal_inner(&raw).to_string()
         } else {
-            self.parse_path_token_sequence()
+            self.parse_path_token_sequence()?
         };
-        self.expect(Tag::RParen)?;
         self.eat(Tag::Semicolon);
         self.record_import_module_name(&path);
         Ok(Node::ImportDecl(ImportDecl { path }))
@@ -334,14 +350,15 @@ impl<'a> Parser<'a> {
     /// Zig `parseUsingDecl`.
     pub fn parse_using_decl(&mut self) -> Result<Node, ParseError> {
         self.expect(Tag::KeywordUsing)?;
-        let path = self.parse_path_token_sequence();
+        let path = self.parse_path_token_sequence()?;
         self.eat(Tag::Semicolon);
         Ok(Node::UsingDecl(UsingDecl { path }))
     }
 
-    /// Concatenated lexemes of a dotted/slashed path token sequence
-    /// (`std`, `a::b`, `a/b-c`, `*`).
-    fn parse_path_token_sequence(&mut self) -> String {
+    /// Zig `parseImportPathTokenSequence`: concatenated lexemes of the
+    /// path token set (identifier, `*`, `/`, `.`, `..`, `-`, `::`);
+    /// an empty sequence is a `SyntaxError`, as in Zig.
+    fn parse_path_token_sequence(&mut self) -> Result<String, ParseError> {
         let mut path = String::new();
         loop {
             match self.peek() {
@@ -349,6 +366,7 @@ impl<'a> Parser<'a> {
                 | Tag::Asterisk
                 | Tag::Slash
                 | Tag::Dot
+                | Tag::Range
                 | Tag::Minus
                 | Tag::DoubleColon => {
                     path.push_str(self.cur_text());
@@ -357,7 +375,10 @@ impl<'a> Parser<'a> {
                 _ => break,
             }
         }
-        path
+        if path.is_empty() {
+            return Err(self.err_here(ParseErrorKind::SyntaxError));
+        }
+        Ok(path)
     }
 
     // -- @test -----------------------------------------------------------------
@@ -380,6 +401,10 @@ impl<'a> Parser<'a> {
         }
         let raw = self.cur_text().to_string();
         self.advance();
+        let raw_bytes = raw.as_bytes();
+        if raw_bytes.len() < 2 || raw_bytes[0] != b'"' || raw_bytes[raw_bytes.len() - 1] != b'"' {
+            return Err(self.err_here(ParseErrorKind::SyntaxError));
+        }
         let name = string_literal_inner(&raw).to_string();
         self.expect(Tag::LParen)?;
         self.expect(Tag::RParen)?;

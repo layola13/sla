@@ -100,6 +100,15 @@ pub enum InstKind {
     AssumeSafe = 33,
     AssumeBorrow = 34,
     Native = 35,
+    // Appended last in the current-head sci enum (extern variadic
+    // batch + @gpu decl): SAB encodes the kind as a raw byte, so
+    // existing values must not move. A stale reference tree predating
+    // these four variants cost this port one byte per sig — see
+    // docs/divergences/sab.md, entry SAB-D01.
+    VaStart = 36,
+    VaArg = 37,
+    VaEnd = 38,
+    GpuDecl = 39,
 }
 
 /// Arithmetic / conversion operation kinds (instruction.zig `OpKind`).
@@ -329,6 +338,9 @@ pub enum FunctionKind {
     External = 2,
     Exported = 3,
     TestFunc = 4,
+    /// Appended last in current-head sci (SA @gpu kind), same
+    /// raw-byte reasoning as the InstKind tail variants.
+    Gpu = 5,
 }
 
 /// One function parameter (signature.zig `ParamSpec`).
@@ -358,6 +370,10 @@ pub struct FunctionSig {
     pub llvm_name: Option<String>,
     pub ignored: bool,
     pub should_panic: bool,
+    /// C-variadic declaration (parameter list ended with `...`).
+    /// Serialized after `should_panic`; present in current-head sci
+    /// but absent from older trees — see SAB-D01.
+    pub is_variadic: bool,
 }
 
 impl FunctionSig {
@@ -380,6 +396,7 @@ impl FunctionSig {
             llvm_name: None,
             ignored: false,
             should_panic: false,
+            is_variadic: false,
         }
     }
 }

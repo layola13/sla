@@ -129,6 +129,12 @@ impl ModuleBuilder {
             FunctionKind::External => InstKind::ExternDecl,
             FunctionKind::Exported => InstKind::ExportDecl,
             FunctionKind::TestFunc => InstKind::TestDecl,
+            // Current-head sci pairs the gpu sig kind with the
+            // gpu_decl instruction kind (both appended last in
+            // their enums); the plugin-side mapping in
+            // declInstForSig is to be re-verified against the
+            // current-head plugin tree in phase 2.
+            FunctionKind::Gpu => InstKind::GpuDecl,
         };
         let id = sig.id;
         let mut inst = Instruction::new(kind, 0, self.instructions.len() as u32);

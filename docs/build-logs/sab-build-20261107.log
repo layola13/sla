@@ -1,0 +1,54 @@
+Warning: Permanently added '[127.0.0.1]:2201' (ED25519) to the list of known hosts.
+sla-codegen-sab phase-1 build + differential log
+date: 2026-11-07T00:59:19Z
+venue: kaggle vpsdirect2 (port 2201), host d0a184d36948
+rustc: rustc 1.99.1 (58cf8f9c3 2026-10-13) / cargo cargo 1.99.1 (5f94df478 2026-08-27)
+zig: 0.17.0
+sci ground truth: /content/sa_all/sci @ e82d2865 fix(sa_std): DEF-CARDS-R8 - UNWRAP_OR default via move materialization
+
+=== cargo test -p sla-codegen-sab ===
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (target/debug/deps/sla_codegen_sab-557dfc9a45c5d21d)
+
+running 7 tests
+test leb128::tests::sleb_known_vectors ... ok
+test leb128::tests::uleb_known_vectors ... ok
+test leb128::tests::uleb_round_trip ... ok
+test literals::tests::decode_known ... ok
+test literals::tests::escape_table ... ok
+test literals::tests::decode_rejects_unknown_escape ... ok
+test literals::tests::round_trip ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/golden.rs (target/debug/deps/golden-bba09632eece3f30)
+
+running 3 tests
+test minimal_module_matches_hand_derived_bytes ... ok
+test fixture01_pool_order_and_structure ... ok
+test fixture01_encodes_with_well_formed_sections ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sla_codegen_sab
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+=== rust example emitters ===
+wrote /tmp/minimal_rust.sab (76 bytes)
+wrote /tmp/fixture01_rust.sab (427 bytes)
+
+=== zig probe (original sci encoder) ===
+wrote 76 bytes to stdout
+wrote 427 bytes to stdout
+
+=== byte comparison ===
+minimal: IDENTICAL
+fixture01: IDENTICAL
+000fb0e6fcf135fdfb286787a84dd5449cd45269b03786a264fba4d384ce84a1  /tmp/minimal_rust.sab
+000fb0e6fcf135fdfb286787a84dd5449cd45269b03786a264fba4d384ce84a1  minimal_zig.sab
+31fc5e86ff1de53bc25c106139b28bc73eb066be08503bebb629e53dec783e96  /tmp/fixture01_rust.sab
+31fc5e86ff1de53bc25c106139b28bc73eb066be08503bebb629e53dec783e96  fixture01_zig.sab

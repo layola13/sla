@@ -1,0 +1,6 @@
+fn g(t: String, flag: bool) {
+    let s = t;
+    if flag { let a = s; }
+    else { };
+    let b = s;
+}

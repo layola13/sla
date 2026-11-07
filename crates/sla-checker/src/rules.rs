@@ -189,7 +189,7 @@ fn node_consumption(node: &Node, param: &str) -> MacroParamConsumption {
         Node::IndexExpr(i) => sequence_consumption(
             node_consumption(&i.target, param),
             node_consumption(&i.index, param),
-        },
+        ),
         Node::IfExpr(i) => {
             let cond_c = node_consumption(&i.cond, param);
             let then_c = block_consumption(&i.then_block, param);

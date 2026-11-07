@@ -1,3 +1,42 @@
-//! sla-checker: type/ownership checker subset mirrored from type_checker.zig.
+//! sla-checker: type / ownership checker subset mirrored from the Zig
+//! plugin's `src/type_checker.zig` (6,098 lines) plus the pure decision
+//! rules of `src/control_flow_rules.zig` (276 lines).
+//!
+//! Slice scope (fixtures first): declaration registration, function /
+//! test body checking, expression typing, and the ownership state
+//! machine's core transitions (implicit let/assignment moves, explicit
+//! `^move`, `release`, macro and extern move contracts, await / try
+//! consumption). Diagnostics align by KIND with Zig's `TypeError`;
+//! named sub-diagnostics that Zig encodes only as message prefixes
+//! (LoopConditionalConsume, MacroConditionalConsume) are carried in
+//! `Diagnostic::marker`.
+//!
+//! Divergences from the Zig implementation are NOT silently smoothed
+//! over; they are registered in `docs/divergences/checker.md`.
+//! The headline one: Zig snapshots branch/loop binding states in a
+//! flat map keyed by NAME, conflating shadowed bindings; this crate
+//! keys snapshots by binding identity (see scope.rs and D-C1).
+//!
+//! Wiring: this crate consumes `sla_ast` (path dependency). The
+//! checker borrows the AST (`&Node`); side tables key nodes by
+//! address, mirroring Zig's `*const ast.Node` keys.
 
-pub struct Checker;
+pub mod checker;
+pub mod diag;
+pub mod rules;
+pub mod scope;
+pub mod types_util;
+
+mod check_call;
+mod check_expr;
+mod check_flow;
+mod check_program;
+mod check_stmt;
+
+#[cfg(test)]
+mod tests;
+
+pub use checker::{Checker, ExternSig, FuncSig, ParamSig, StructInfo};
+pub use diag::{CheckResult, Diagnostic, ErrorKind};
+pub use rules::ValueState;
+pub use scope::BindingId;

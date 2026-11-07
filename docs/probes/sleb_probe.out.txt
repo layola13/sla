@@ -1,0 +1,21 @@
+# sleb_probe — venue sci (sa_all) sab.zig encodeSleb128/encodeUleb128, original encoder output
+# captured 2026-11-07 by coordinator via docs/probes/{build.zig,sleb_main.zig} on Kaggle venue 2201
+sleb 0 =00
+sleb 1 =01
+sleb -1 =7f
+sleb 63 =3f
+sleb 64 =c0 00
+sleb -64 =40
+sleb -65 =bf 7f
+sleb -12345 =c7 9f 7f
+sleb -12365 =b3 9f 7f
+sleb 12345 =b9 e0 00
+sleb -1000000 =c0 fb 42
+sleb 1000000 =c0 84 3d
+uleb 0 =00
+uleb 1 =01
+uleb 63 =3f
+uleb 128 =80 01
+uleb 300 =ac 02
+uleb 16384 =80 80 01
+uleb 4294967295 =ff ff ff ff 0f
