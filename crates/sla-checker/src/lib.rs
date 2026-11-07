@@ -29,7 +29,10 @@ pub mod types_util;
 
 mod check_binary;
 mod check_builtin;
+mod check_leaves;
 mod check_preassoc;
+mod check_receiver_leaves;
+mod check_receiver_leaves2;
 mod check_call;
 mod check_method;
 mod check_literal;
@@ -44,6 +47,9 @@ mod check_trait;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod tests_r1;
 #[cfg(test)]
 mod tests_e2e;
 #[cfg(test)]

@@ -31,12 +31,12 @@
 //! docs/divergences/checker.md.
 //!
 //! Deliberately NOT here (registered in checker.md): the
-//! name-keyed std leaf cascade keyed on receiver shape (Option /
-//! Result / Vec / HashMap / ... method leaves and push/pop/remove),
-//! the static-constructor leaves (`Vec::new` and kin), and the
-//! borrow-array-to-slice coercion side table (this crate has no
-//! `array_to_slice_borrow_args` table; the coercion is not
-//! recognized on method paths either).
+//! borrow-array-to-slice coercion side table (this crate has
+//! no `array_to_slice_borrow_args` table; the coercion is not
+//! recognized on method paths either). The name-keyed std
+//! leaf cascade and the static-constructor leaves that used
+//! to be listed here were ported by the R-1 line into
+//! check_leaves.rs / check_receiver_leaves.rs (+2).
 
 use crate::checker::{Checker, FuncSig, ParamSig};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};

@@ -112,14 +112,18 @@ impl Checker {
             }
             let target_ty = self.check_expr(&call.args[0])?;
             // Zig sum arm: array element, else sliceElementType,
-            // else vecElementType — NOT "any generic user type's
-            // first parameter" (the phase-1 slice accepted e.g.
-            // Option<i32>, which Zig rejects).
+            // else vecElementType, else growVecElementType — NOT
+            // "any generic user type's first parameter" (the
+            // phase-1 slice accepted e.g. Option<i32>, which Zig
+            // rejects). (GrowVec added with the R-1 port.)
             return match target_ty {
                 Type::Array(a) => Ok((*a.elem).clone()),
                 ref other => {
                     match crate::types_util::slice_element_type(other)
                         .or_else(|| crate::types_util::vec_element_type(other))
+                        .or_else(|| {
+                            crate::check_leaves::ud_inner(other, "GrowVec")
+                        })
                     {
                         Some(elem) => Ok(elem),
                         None => Err(Diagnostic::new(
@@ -351,12 +355,32 @@ impl Checker {
             return Ok((*f.ret).clone());
         }
 
+        // Receiver-shape std leaf cascade (R-1 port,
+        // check_receiver_leaves.rs): the Option/Result/Vec/
+        // HashMap/... method leaves and push/pop/remove. In
+        // Zig the cascade sits before externs/macros; here it
+        // runs after them (this dispatch's standing order,
+        // D-C19 family), just before receiver-inferred
+        // resolution, which stays the fallback.
+        if let Some(result) = self.check_receiver_leaf_call(call) {
+            return result;
+        }
+
         // Receiver-inferred resolution (inherent -> trait -> dyn
         // -> using extensions), mirroring the venue block at
         // :9669-9725: it runs after plain functions, struct
         // constructors and fn-ptr locals, as in Zig.
         if let Some(result) = self.check_receiver_call(call) {
             return result;
+        }
+
+        // `str::from_utf8` leaf: in Zig it sits after the
+        // imported-macro stage (venue :10518), just before the
+        // Undefined fallback — the same relative position here.
+        if call.associated_target.as_deref() == Some("str")
+            && name == "from_utf8"
+        {
+            return self.check_str_from_utf8_call(call);
         }
 
         // Zig's bottom fallback for ANY call that reached the end
@@ -459,11 +483,10 @@ impl Checker {
     /// `Some(Err(..))`. Consumption specials first.
     ///
     /// Order inside the block (Zig): trait target -> `ptr` leaves
-    /// -> inherent `{Target}_{name}` in funcs ONLY -> the
-    /// `Option::None` unit constructor -> trait fallback for the
-    /// target type. (The name-keyed static-constructor leaves —
-    /// `Vec::new` and kin — are std-surface leaves, not part of
-    /// this machinery; see checker.md remaining list.)
+    /// -> std-surface associated leaves (`Vec::new` and kin,
+    /// check_leaves.rs, R-1 port) -> inherent `{Target}_{name}`
+    /// in funcs ONLY -> the `Option::None` unit constructor ->
+    /// trait fallback for the target type.
     fn check_associated_call(
         &mut self,
         target: &str,
@@ -558,6 +581,14 @@ impl Checker {
                 }
                 Ok(Type::Pointer(Box::new(call.generics[0].clone())))
             })());
+        }
+
+        // Std-surface associated leaves (R-1 port,
+        // check_leaves.rs): the Zig associated block's
+        // name-keyed static constructors (`Vec::new`, ...),
+        // between the `ptr` leaves and the inherent lookup.
+        if let Some(result) = self.check_std_assoc_leaf(target, call) {
+            return Some(result);
         }
 
         // Inherent: `{Target}_{name}` in funcs ONLY (Zig does not

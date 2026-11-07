@@ -434,6 +434,39 @@ INT-2 线测试的文案 pin 外全绿（见 D-C18 跨线注记）。
   （check_method_args）——两形并存的收敛候后续线。
 - D-C19 / D-C20 / D-C21 三条（见上）。
 
+**【R-1 销账 2026-11-07，rust-r1-fix 线】**：上表前两项已
+落地。静态构造叶与关联内在叶全量镜像于新文件
+`check_leaves.rs`（含 future/poll 关联形——与 check_preassoc
+的裸名形共用同一臂体——、task/executor、Box/Rc/Arc、Atomic、
+Cell/RefCell、Mutex/RwLock、File::open、VecDeque、HashMap/
+HashSet/BTree 系、Vec/GrowVec、mpsc::channel、thread::spawn、
+ManuallyDrop::new、Box::from_raw 的 unsafe 门），接入点为
+check_associated_call 在 ptr 叶之后、inherent 之前（与 Zig
+同位）；`str::from_utf8` 叶置于分派尾（导入宏级之后、未定义
+回退之前，与 Zig :10518 同位，现头口径 Result<String,i32>）。
+接收者形状级联全量镜像于 `check_receiver_leaves.rs` +
+`check_receiver_leaves2.rs`，接入点为 check_call 在
+receiver-inferred 级之前（位置差沿 D-C19(a) 在册）；同批补
+`Ordering::Variant` 标识符臂（parser prefix.rs 编码的原子序
+值形，五变体）与 CLI pipeline 的导入宏注册（此前 sla-cli 只
+登记 externs，STR_PTR 等 sa_std 宏在普通 fn 体一律
+Undefined call——普查 R-1 宏分量；oracle 早有此登记，CLI
+漏接）。根因注记：所谓「@test 体内可解析」为假象——Check
+前端根本不解析 @test 体（parse_test_bodies 仅 TestCodegen
+为真），std 可调用面此前对任何受检函数体都未装配，普通 fn
+体只是唯一被真正检查的体。回归钉 tests_r1.rs（25 测，修复
+前 18 正例红）。余留（在册）：① Chan::new 的注解驱动
+payload 表（chan_new_pending/chan_calls）未 port，叶只回
+Chan<infer>；② 迭代臂（iter/copied/collect/join/map/
+filter/fold）按形状开火，非迭代接收者报底回退 Undefined
+call 而非 Zig 的 TypeMismatch（Zig 的 inherent method_match
+在该臂之前，用户同名方法判读一致）；③ push 消费纪律的
+arena 路由（checkArenaMoveArg）未 port（本 crate 无 arena
+表）；④ consumeInsertArgIfMoved 的尾纪律以 push 守卫集
+近似；⑤ 结构体 `.clone()` 臂省 Zig 的末段 shallow-copy 门
+（UncloneableClone 字段遍历已 port）；⑥ `__slice_view`
+（lang-gap E_res 产物形）未随本级联 port。
+
 ### 反馈单
 
 本段无新 Zig 侧缺陷候选：三项的 Zig 行为经探针核清后均

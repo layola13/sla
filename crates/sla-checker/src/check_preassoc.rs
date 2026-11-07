@@ -339,7 +339,7 @@ impl Checker {
     /// Venue :5623/:5655 — `checkFutureJoin2Call` /
     /// `checkFutureSelect2Call` (identical gates, pair vs
     /// either carrier).
-    fn check_future_join2_call(
+    pub(crate) fn check_future_join2_call(
         &mut self,
         call: &CallExpr,
         select: bool,
@@ -365,7 +365,7 @@ impl Checker {
     }
 
     /// Venue :5635 — `checkFuturePairAccessorCall`.
-    fn check_future_pair_accessor_call(
+    pub(crate) fn check_future_pair_accessor_call(
         &mut self,
         call: &CallExpr,
         want_left: bool,
@@ -387,7 +387,7 @@ impl Checker {
     }
 
     /// Venue :5667 — `checkFutureEitherSideCall`.
-    fn check_future_either_side_call(
+    pub(crate) fn check_future_either_side_call(
         &mut self,
         call: &CallExpr,
     ) -> CheckResult<Type> {
@@ -403,7 +403,7 @@ impl Checker {
     }
 
     /// Venue :5675 — `checkFutureEitherAccessorCall`.
-    fn check_future_either_accessor_call(
+    pub(crate) fn check_future_either_accessor_call(
         &mut self,
         call: &CallExpr,
         want_left: bool,
@@ -425,7 +425,7 @@ impl Checker {
     }
 
     /// Venue :8430 — `poll__ready` arm.
-    fn check_poll_ready_call(&mut self, call: &CallExpr) -> CheckResult<Type> {
+    pub(crate) fn check_poll_ready_call(&mut self, call: &CallExpr) -> CheckResult<Type> {
         if call.args.len() != 1 {
             return Err(invalid_args());
         }
@@ -440,7 +440,7 @@ impl Checker {
     }
 
     /// Venue :8438 — `poll__pending` arm.
-    fn check_poll_pending_call(&mut self, call: &CallExpr) -> CheckResult<Type> {
+    pub(crate) fn check_poll_pending_call(&mut self, call: &CallExpr) -> CheckResult<Type> {
         if !call.args.is_empty() {
             return Err(invalid_args());
         }
@@ -454,7 +454,7 @@ impl Checker {
     }
 
     /// Venue :8445 — `poll__is_ready` / `poll__is_pending` arm.
-    fn check_poll_is_call(&mut self, call: &CallExpr) -> CheckResult<Type> {
+    pub(crate) fn check_poll_is_call(&mut self, call: &CallExpr) -> CheckResult<Type> {
         if call.args.len() != 1 {
             return Err(invalid_args());
         }
@@ -467,7 +467,7 @@ impl Checker {
     }
 
     /// Venue :8453 — `poll__value` arm.
-    fn check_poll_value_call(&mut self, call: &CallExpr) -> CheckResult<Type> {
+    pub(crate) fn check_poll_value_call(&mut self, call: &CallExpr) -> CheckResult<Type> {
         if call.args.len() != 1 {
             return Err(invalid_args());
         }

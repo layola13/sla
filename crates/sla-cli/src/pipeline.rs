@@ -313,6 +313,25 @@ pub fn run_frontend(
             },
         );
     }
+    // R-1 fix: imported macros register too (mirrors the
+    // sla-oracle wiring). Without this the CLI front end never
+    // populated `imported_macros`, so every sa_std macro call
+    // (STR_PTR, BYTES_EQ, PTR_NULL, ...) in an ordinary fn body
+    // fell to "Undefined call" even though the checker's
+    // imported-macro stage and the contract registry both exist.
+    for record in &report.imported_macro_registry {
+        checker.register_imported_macro(
+            &record.name,
+            sla_checker::ImportedMacroInfo {
+                arity: record.arity,
+                leading_outputs: record.leading_outputs,
+                import_path: record.import_path.clone(),
+                borrowed_arg_mask: record.borrowed_arg_mask,
+                address_slot_arg_mask: record.address_slot_arg_mask,
+                direct_callees: record.direct_callees.clone(),
+            },
+        );
+    }
     stage_done(stderr, profile, &format!("{prefix}load contracts"), start);
 
     let start = Instant::now();

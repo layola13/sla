@@ -341,6 +341,22 @@ impl Checker {
                 generics: Vec::new(),
             }));
         }
+        // The parser encodes the atomic `Ordering::Variant`
+        // value form as a single identifier (parser prefix.rs);
+        // the five atomic variants type as the `Ordering` type
+        // (R-1 port — without this arm every atomic leaf's
+        // ordering argument is an UndefinedVariable).
+        if let Some(variant) = name.strip_prefix("Ordering::") {
+            if matches!(
+                variant,
+                "Relaxed" | "Acquire" | "Release" | "AcqRel" | "SeqCst"
+            ) {
+                return Ok(Type::UserDefined(sla_ast::types::UserDefined {
+                    name: "Ordering".to_string(),
+                    generics: Vec::new(),
+                }));
+            }
+        }
         if let Some(binding) = self.scopes.lookup(name) {
             let (state, ty) = (binding.state, binding.ty.clone());
             return match state {
