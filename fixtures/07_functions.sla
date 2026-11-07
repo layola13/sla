@@ -1,0 +1,28 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 07_functions / 125_fact：递归 + 多函数。
+
+fn fact(n: i32) -> i32 {
+    if n <= 1 {
+        return 1;
+    } else {
+        return n * fact(n - 1);
+    };
+}
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+fn main() -> i32 {
+    println("{}", fact(5));
+    println("{}", add(40, 2));
+    return 0;
+}
+
+@test "basic 07 functions recursion"() {
+    if fact(5) != 120 { panic(701); };
+    if fact(0) != 1 { panic(702); };
+    if add(40, 2) != 42 { panic(703); };
+}

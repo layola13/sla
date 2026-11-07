@@ -1,0 +1,20 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+// 对标 tsgosa 03_if_else：分支函数 max。
+
+fn max(a: i32, b: i32) -> i32 {
+    if a > b { a } else { b }
+}
+
+fn main() -> i32 {
+    println("{}", max(7, 42));
+    println("{}", max(-3, -9));
+    return 0;
+}
+
+@test "basic 03 max branches"() {
+    if max(7, 42) != 42 { panic(301); };
+    if max(-3, -9) != -3 { panic(302); };
+    if max(5, 5) != 5 { panic(303); };
+}

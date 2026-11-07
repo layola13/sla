@@ -1,0 +1,18 @@
+[package]
+name = "sla-oracle"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "sla-oracle"
+path = "src/main.rs"
+
+[dependencies]
+sla-abi = { path = "../sla-abi" }
+sla-ast = { path = "../sla-ast" }
+sla-lexer = { path = "../sla-lexer" }
+sla-parser = { path = "../sla-parser" }
+sla-checker = { path = "../sla-checker" }
+sla-lowering = { path = "../sla-lowering" }
+sla-codegen-text = { path = "../sla-codegen-text" }
+sla-codegen-sab = { path = "../sla-codegen-sab" }

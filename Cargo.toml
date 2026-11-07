@@ -1,0 +1,28 @@
+# sla-plugin-rust — Rust re-implementation experiment of sa_plugin_sla (side line).
+# Crate topology FIXED by the six-house verdict 2026-11-07 (Q1 = A+ mirror+relocate,
+# Q2 = A duties-as-modules): see ~/workspace/consult-rust-split/VERDICT.md and
+# docs/COORDINATION.md. 10 members; dependency direction is one-way, acyclic.
+# Backends consume upstream types only through sla-lowering output.
+[workspace]
+resolver = "2"
+members = [
+    "crates/sla-abi",
+    "crates/sla-lexer",
+    "crates/sla-ast",
+    "crates/sla-parser",
+    "crates/sla-checker",
+    "crates/sla-lowering",
+    "crates/sla-codegen-text",
+    "crates/sla-codegen-sab",
+    "crates/sla-plugin",
+    "crates/sla-oracle",
+]
+
+[profile.release]
+debug = false
+
+# House discipline (six-house verdict, mandatory item 4): the iteration order of
+# std HashMap/HashSet must never reach any emission path — use insertion-ordered
+# structures (Vec-backed index maps, BTreeMap, arena order). Rust/clippy has no
+# lint that can enforce this; it is enforced by review plus the sla-oracle
+# boundary-dump determinism checks (docs/COORDINATION.md §4).

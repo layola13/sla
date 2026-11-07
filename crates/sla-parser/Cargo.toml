@@ -1,0 +1,8 @@
+[package]
+name = "sla-parser"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sla-lexer = { path = "../sla-lexer" }
+sla-ast = { path = "../sla-ast" }

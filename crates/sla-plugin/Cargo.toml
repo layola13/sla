@@ -1,0 +1,17 @@
+[package]
+name = "sla-plugin"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+sla-abi = { path = "../sla-abi" }
+sla-ast = { path = "../sla-ast" }
+sla-lexer = { path = "../sla-lexer" }
+sla-parser = { path = "../sla-parser" }
+sla-checker = { path = "../sla-checker" }
+sla-lowering = { path = "../sla-lowering" }
+sla-codegen-text = { path = "../sla-codegen-text" }
+sla-codegen-sab = { path = "../sla-codegen-sab" }

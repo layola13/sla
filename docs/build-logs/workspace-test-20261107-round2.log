@@ -1,0 +1,55 @@
+   Compiling sla-ast v0.1.0 (/root/sla-plugin-rust/crates/sla-ast)
+   Compiling sla-checker v0.1.0 (/root/sla-plugin-rust/crates/sla-checker)
+   Compiling sla-parser v0.1.0 (/root/sla-plugin-rust/crates/sla-parser)
+   Compiling sla-lowering v0.1.0 (/root/sla-plugin-rust/crates/sla-lowering)
+   Compiling sla-codegen-text v0.1.0 (/root/sla-plugin-rust/crates/sla-codegen-text)
+   Compiling sla-codegen-sab v0.1.0 (/root/sla-plugin-rust/crates/sla-codegen-sab)
+   Compiling sla-plugin v0.1.0 (/root/sla-plugin-rust/crates/sla-plugin)
+   Compiling sla-oracle v0.1.0 (/root/sla-plugin-rust/crates/sla-oracle)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.41s
+     Running unittests src/lib.rs (target/debug/deps/sla_abi-4910fc5724f9afaf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sla_ast-3d87a49cc899bf68)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sla_checker-fdd93bb9b51d528c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sla_codegen_sab-557dfc9a45c5d21d)
+
+running 7 tests
+test leb128::tests::uleb_known_vectors ... ok
+test literals::tests::decode_known ... ok
+test literals::tests::decode_rejects_unknown_escape ... ok
+test leb128::tests::sleb_known_vectors ... FAILED
+test leb128::tests::uleb_round_trip ... ok
+test literals::tests::escape_table ... ok
+test literals::tests::round_trip ... ok
+
+failures:
+
+---- leb128::tests::sleb_known_vectors stdout ----
+
+thread 'leb128::tests::sleb_known_vectors' (136765) panicked at crates/sla-codegen-sab/src/leb128.rs:102:9:
+assertion `left == right` failed
+  left: [199, 159, 127]
+ right: [179, 159, 127]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    leb128::tests::sleb_known_vectors
+
+test result: FAILED. 6 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p sla-codegen-sab --lib`

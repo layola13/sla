@@ -1,0 +1,87 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_max = vtable { call = @sla__max }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__max(a: i32, b: i32) -> i32:
+L_ENTRY:
+    tmp_0 = sgt a, b
+    tmp_1 = alloc 4
+    br tmp_0 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_0
+    tmp_2 = add a, 0
+    store tmp_1+0, tmp_2 as i32
+    !tmp_2
+    jmp L_MERGE_2
+
+L_ELSE_1:
+    !tmp_0
+    tmp_3 = add b, 0
+    store tmp_1+0, tmp_3 as i32
+    !tmp_3
+    jmp L_MERGE_2
+
+L_MERGE_2:
+    tmp_4 = load tmp_1+0 as i32
+    !tmp_1
+    return tmp_4
+
+@main() -> i32:
+L_ENTRY:
+    tmp_5 = 7
+    tmp_6 = 42
+    tmp_7 = call @sla__max(tmp_5, tmp_6)
+    !tmp_5
+    !tmp_6
+    tmp_8 = call @sa_fmt_u64(tmp_7, 10)
+    tmp_9 = call @sa_fmt_buffer_data(tmp_8)
+    tmp_10 = call @sa_fmt_buffer_len(tmp_8)
+    tmp_11 = tmp_9
+    call @sa_print_bytes(&tmp_11, tmp_10)
+    call @sa_fmt_buffer_free(^tmp_8)
+    !tmp_11
+    !tmp_10
+    !tmp_7
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_12 = 0
+    tmp_13 = 3
+    tmp_14 = sub tmp_12, tmp_13
+    !tmp_12
+    !tmp_13
+    tmp_15 = 0
+    tmp_16 = 9
+    tmp_17 = sub tmp_15, tmp_16
+    !tmp_15
+    !tmp_16
+    tmp_18 = call @sla__max(tmp_14, tmp_17)
+    !tmp_14
+    !tmp_17
+    tmp_19 = call @sa_fmt_u64(tmp_18, 10)
+    tmp_20 = call @sa_fmt_buffer_data(tmp_19)
+    tmp_21 = call @sa_fmt_buffer_len(tmp_19)
+    tmp_22 = tmp_20
+    call @sa_print_bytes(&tmp_22, tmp_21)
+    call @sa_fmt_buffer_free(^tmp_19)
+    !tmp_22
+    !tmp_21
+    !tmp_18
+    @const SLA_STR_1 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_1, 1)
+    tmp_23 = 0
+    return tmp_23
+
+@test "basic 03 max branches"():
+L_TEST_ENTRY_3:
+    return
+

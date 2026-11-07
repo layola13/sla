@@ -1,0 +1,9 @@
+[package]
+name = "sla-ast"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Direction lock (six-house verdict 2026-11-07, mandatory item 6):
+# sla-lexer owns Span/Loc/TokenKind; sla-ast depends on sla-lexer, never reverse.
+sla-lexer = { path = "../sla-lexer" }

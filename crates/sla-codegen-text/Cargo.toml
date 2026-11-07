@@ -1,0 +1,8 @@
+[package]
+name = "sla-codegen-text"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sla-ast = { path = "../sla-ast" }
+sla-lowering = { path = "../sla-lowering" }

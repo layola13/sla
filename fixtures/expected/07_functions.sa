@@ -1,0 +1,86 @@
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_fact = vtable { call = @sla__fact }
+@const SLA_FNPTR_VT_add = vtable { call = @sla__add }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__fact(n: i32) -> i32:
+L_ENTRY:
+    tmp_0 = 1
+    tmp_1 = sle n, tmp_0
+    !tmp_0
+    br tmp_1 -> L_THEN_0, L_ELSE_1
+
+L_THEN_0:
+    !tmp_1
+    tmp_2 = 1
+    !n
+    return tmp_2
+
+L_ELSE_1:
+    !tmp_1
+    tmp_3 = 1
+    tmp_4 = sub n, tmp_3
+    !tmp_3
+    tmp_5 = call @sla__fact(tmp_4)
+    !tmp_4
+    tmp_6 = mul n, tmp_5
+    !tmp_5
+    !n
+    return tmp_6
+
+
+@sla__add(a: i32, b: i32) -> i32:
+L_ENTRY:
+    tmp_8 = add a, b
+    !b
+    !a
+    return tmp_8
+
+@main() -> i32:
+L_ENTRY:
+    tmp_9 = 5
+    tmp_10 = call @sla__fact(tmp_9)
+    !tmp_9
+    tmp_11 = call @sa_fmt_u64(tmp_10, 10)
+    tmp_12 = call @sa_fmt_buffer_data(tmp_11)
+    tmp_13 = call @sa_fmt_buffer_len(tmp_11)
+    tmp_14 = tmp_12
+    call @sa_print_bytes(&tmp_14, tmp_13)
+    call @sa_fmt_buffer_free(^tmp_11)
+    !tmp_14
+    !tmp_13
+    !tmp_10
+    @const SLA_STR_0 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_0, 1)
+    tmp_15 = 40
+    tmp_16 = 2
+    tmp_17 = call @sla__add(tmp_15, tmp_16)
+    !tmp_15
+    !tmp_16
+    tmp_18 = call @sa_fmt_u64(tmp_17, 10)
+    tmp_19 = call @sa_fmt_buffer_data(tmp_18)
+    tmp_20 = call @sa_fmt_buffer_len(tmp_18)
+    tmp_21 = tmp_19
+    call @sa_print_bytes(&tmp_21, tmp_20)
+    call @sa_fmt_buffer_free(^tmp_18)
+    !tmp_21
+    !tmp_20
+    !tmp_17
+    @const SLA_STR_1 = utf8:"\n"
+    call @sa_print_bytes(&SLA_STR_1, 1)
+    tmp_22 = 0
+    return tmp_22
+
+@test "basic 07 functions recursion"():
+L_TEST_ENTRY_3:
+    return
+

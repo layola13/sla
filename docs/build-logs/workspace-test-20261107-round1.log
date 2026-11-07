@@ -1,0 +1,130 @@
+   Compiling sla-ast v0.1.0 (/root/sla-plugin-rust/crates/sla-ast)
+   Compiling sla-lexer v0.1.0 (/root/sla-plugin-rust/crates/sla-lexer)
+   Compiling sla-abi v0.1.0 (/root/sla-plugin-rust/crates/sla-abi)
+   Compiling sla-checker v0.1.0 (/root/sla-plugin-rust/crates/sla-checker)
+   Compiling sla-parser v0.1.0 (/root/sla-plugin-rust/crates/sla-parser)
+   Compiling sla-lowering v0.1.0 (/root/sla-plugin-rust/crates/sla-lowering)
+   Compiling sla-codegen-text v0.1.0 (/root/sla-plugin-rust/crates/sla-codegen-text)
+   Compiling sla-codegen-sab v0.1.0 (/root/sla-plugin-rust/crates/sla-codegen-sab)
+   Compiling sla-cli v0.1.0 (/root/sla-plugin-rust/crates/sla-cli)
+   Compiling sla-plugin v0.1.0 (/root/sla-plugin-rust/crates/sla-plugin)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.61s
+     Running unittests src/lib.rs (target/debug/deps/sla_abi-4910fc5724f9afaf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sla_ast-bfaaf3dea1270023)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sla_checker-7e8cd0a6ba4ef7dc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/sla_slice-d498d332f781c5bb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sla_codegen_sab-fc66d088d321e649)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sla_codegen_text-e2a86924227201cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sla_lexer-cb6d5726a00c87bc)
+
+running 5 tests
+test lexer::tests::basic_lexing ... ok
+test lexer::tests::numeric_separators ... ok
+test lexer::tests::suffix_asymmetry ... ok
+test lexer::tests::fixtures_lex_clean ... ok
+test lexer::tests::template_pieces ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sla_lowering-3af177e0335e26c9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sla_parser-28738516f3901718)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sla_plugin-ba7d227ac59b2a77)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sla_abi
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sla_ast
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sla_checker
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sla_codegen_sab
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sla_codegen_text
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sla_lexer
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sla_lowering
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sla_parser
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sla_plugin
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,5 @@
+Warning: Permanently added '[127.0.0.1]:2201' (ED25519) to the list of known hosts.
+   Compiling sla-cli v0.1.0 (/root/sla-plugin-rust/crates/sla-cli)
+   Compiling sla-plugin v0.1.0 (/root/sla-plugin-rust/crates/sla-plugin)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.50s
+checked: 18 .rs files, limit 700
