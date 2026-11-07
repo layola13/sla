@@ -17,6 +17,13 @@ lowering/text 线为 `D-T1..D-T14`（全文 divergences/lowering-text.md）。
 FB-001 = D-CK1、FB-002 = DEF-LEX-ESCAPE-EOF（均已实证确认）；
 FB-003..FB-009 = lowering/text 线 (c) 类七条 D-T9/D-T3/D-T4/D-T5/
 D-T6/D-T7/D-T8（源码机制定案，候主会话确认派线）。
+二期续发：FB-010..FB-014 = checker 扩围五条（D-C12/D-C13/D-C14/
+D-C15/D-C16）；FB-015..FB-017 = SAB 二期三条（D17/D18/D22）；
+FB-020 = oracle 二期 D-O1（checker D-C6 的字节级实证）。
+
+**二期合编（2026-11-07）**：checker +7（D-C11..D-C17）、SAB +6
+（SAB-D17..D22）、oracle +2（D-O1/D-O2），在册合计 **82 条**；
+集成发现 INT-1 已销账（见文末），INT-2 仍开口。
 
 ## 已知有意分歧（不迁就）
 
@@ -129,6 +136,13 @@ D-T6/D-T7/D-T8（源码机制定案，候主会话确认派线）。
 | checker D-C8 | b | 两套类型相等并存（默认宽度不敏感 / 严格版），严格只打在出过事的调用点，靠自觉选用 |
 | checker D-C9 | c | while 条件臂一条裸 return TypeMismatch 无 setError 文案，用户所见取决于包装器兜底（低危诊断面缺口） |
 | checker D-C10 | a | extern 实参类型整体旁路（源码注释明言 bypass FFI 签名检查）——有意设计，显式登记备查 |
+| checker D-C11 | b | 【二期】泛型实例化不在检查器——归 monomorphizer 的流水线分工（镜像「不存在」本身） |
+| checker D-C12 | c | 【二期】解构消费无 Copy 豁免：let 解构根绑定无条件消费，Copy 元组亦然；FB-010 |
+| checker D-C13 | c | 【二期】switch 模式零检查（模式本身不经类型/穷尽校验）；FB-011 |
+| checker D-C14 | c | 【二期】generic_func_ref 裸 CompileError、无诊断文案；FB-012 |
+| checker D-C15 | c | 【二期】pattern 的 writable 标记读作 is_const（语义反转）；FB-013 |
+| checker D-C16 | c | 【二期】match 推断路 OR 条件 + 回写 scrutinee 类型（检查改写被检对象）；FB-014 |
+| checker D-C17 | b | 【二期】侧表键口径：Zig 按 CallExpr 子对象指针、Rust 按节点地址；清理名单两边同为名字列表（与 D-CK1 的关联面） |
 
 ### D-CK1 实证结论（协调线全管线复现，2026-11-07）
 
@@ -149,9 +163,9 @@ D-T6/D-T7/D-T8（源码机制定案，候主会话确认派线）。
 
 ## 子系统线 E（SAB）合编 — 全文见 divergences/sab.md
 
-计数：(a) 1（SAB-D01，已修正复测全同）· (b) 5（D06/D08/D09/D15/D16）·
+计数：一期 (a) 1（SAB-D01，已修正复测全同）· (b) 5（D06/D08/D09/D15/D16）·
 (c) 10（D02/D03/D04/D05/D07/D10/D11/D12/D13/D14，其中 D10/D11 标嫌疑候二期定性）；
-另已核查排除 4 项。要点摘录：
+另已核查排除 4 项。二期续登 D17..D22 后全册 (a) 2 · (b) 8 · (c) 12，合计 22。要点摘录：
 
 | 编号 | 类 | 一句话 |
 |---|---|---|
@@ -168,12 +182,23 @@ D-T6/D-T7/D-T8（源码机制定案，候主会话确认派线）。
 | SAB-D14 | c | 布局吞错家族模式登记（历史 SIGSEGV 案型 + 当前活实例 D02/D04/D10），二期逐模块普查 else \|_\| / catch {} / orelse 字面量 |
 | SAB-D06/D08/D09/D16 | b | 错误通道（catch unreachable/@intCast 面）、寄存器身份、所有权状态集、单 struct 733 方法→50 模块等结构性重构，见全文 |
 | SAB-D15 | b | 端口错误无条件携带原因字符串（对 D07 的有意分歧，仅诊断面） |
+| SAB-D17 | a | 【二期】sig.id 双轨：genFuncSig 用发射计数（:5964，两表长度和、入表前赋值，test 双计数跳号）、declInstForSig 用 intern id（:6008）——**已逐字镜像并以真产物字节级验证**（multi.sab sig.id 0/1/2 vs 操作数 0/5/9；multi2.sab 跳号 0/1/3）；Zig 侧气味 FB-015 |
+| SAB-D18 | c | 【二期】逃逸闭包按 AutoHashMap 迭代序（指针哈希序）发射——产物字节序本质不确定；端口以插入序保存；FB-016 |
+| SAB-D19 | b | 【二期】driver 子集省略面登记：E 组释放/清理全缺、无 L_ENTRY（模型口径）、标量重赋不走栈槽、while 分支状态恢复未接（if 值形态已响亮拒绝） |
+| SAB-D20 | b | 【二期】B2 所有权形态：StdImportModule 存四段内容、MacroLocalChange.old 为 Option、宏 ctx 为 Rc 句柄 |
+| SAB-D21 | b | 【二期】test decl 命名口径（Zig 引号名；一期模型名系占位）；附：test sig 的 llvm_name `_saasm_test_{id}` driver 尚未设置，列三期项 |
+| SAB-D22 | c | 【二期】panic 非单参数形态静默写死代码 "1"、多参实参不求值被丢弃；driver 字节镜像；FB-017 |
 
 对拍口径注记（SAB 线交付声明，协调线采纳）：一期 SAB 对拍 =
 **同模型对同模型**（编码器 + emit 主干对手工 lowering 的 fixture01 模型，
 与 sci 现头原编码器探针 cmp 全同：76B sha 000fb0e6…、427B sha 31fc5e86…）；
 fixture01 的 println/str_eq 走 std 表面展开属二期，**01 端到端不列一期判据**；
 AST 入口现响亮报 UnsupportedSabDirectFeature。
+**二期更新**：AST 入口 `generate_from_program` 已接 B4 driver 真实驱动
+（B2/B3/B4 落地），fixture01 级非 std 表面程序端到端发射并与手工模型
+逐字节相等（334B sha e92ab628…→双轨镜像后重钉 2ab94012…；控制流件
+1184B）；std 表面（D 组）与 C/F/G/H/I 未接线调用点一律响亮报错带
+组别 + Zig 行段。二期探针复验：76B/427B sha 维持全同。
 
 ### sleb128 已知向量分歧 — 结案（COORDINATION §6 销账）
 
@@ -245,6 +270,17 @@ control_flow_rules.zig。对拍状态：fixture 01 先行全等，02/03/04/07
   return 上。真实归属候 checker 线边界转储对账（若不同，仅测试台
   事实登记调整，发射代码不变）。
 
+## oracle 线二期合编 — 全文见 divergences/oracle-p2.md
+
+| 编号 | 类 | 一句话 |
+|---|---|---|
+| D-O1 | c | return 清理序：Zig `!b !a !c !d`（哈希序）vs Rust 声明序——**checker D-C6 的首个字节级实证**（e2e_a 全文仅此一处 diff）；非 Copy 类型 drop 序可观察；Rust 按纪律不迁就哈希序；FB-020 |
+| D-O2 | a | oracle 未接 build 模式 @test 体清空（D-T7 定层的流水线职责）——**二期收尾已接线销账**：e2e_b 逐字节全等（sha 8623e8d0…）、e2e_c 维持全等、e2e_a 仅剩 D-O1 |
+
+二期全管线对拍结论：e2e_c 与真插件产物**逐字节全等**（sha fe190281…，
+实验首个 AST 驱动端到端对拍点）；5/5 fixtures 被 INT-2 挡在 check 段
+（println 调用无从注册，逐件清单见 oracle 线报告 §3）。
+
 ## 协调线集成发现（2026-11-07，全管线接通后）
 
 ### INT-1 (本移植缺陷，checker 线) 非 void 函数的 return 在场仍报 missing return
@@ -258,6 +294,14 @@ control_flow_rules.zig。对拍状态：fixture 01 先行全等，02/03/04/07
   的返回在场判定（check_func 的终结/尾值分析路径）内部；checker 线
   16 个单测全绿但未覆盖「源码 parse → check 普通 return 函数」形态。
 - 处置：归 checker 线修复（其单测集补此形态）；协调线不代改。
+- **二期已销账（2026-11-07）**：根因 = Rust 侧 `check_tail_type`
+  自创了 Zig 不存在的 missing-return 判定（只认尾 expr_stmt、
+  尾随 return_stmt 即报缺失）；Zig `checkFunc`（type_checker.zig
+  :2596-2604）根本无此检查（仅四条件核对尾表达式类型，return 值
+  由 return 臂 :2991 自行核对）。已按 Zig 原形重写，真值双路
+  （源码 + 场地真插件 9 探针逐条对齐）；checker 24/24（+8 条
+  parse→check 形态单测，含钉住「非表达式尾/空 body 放行」的
+  Zig 真实口径）；oracle 三探针 e2e_a/b/c 转 rc=0，全管线对拍解锁。
 
 ### INT-2 (本移植覆盖缺口，一期范围) 合同加载/导入展开段在 crate 图中无主
 - Zig 对应面：plugin_import_expand 的 loadImportedContracts（.sai
@@ -269,3 +313,8 @@ control_flow_rules.zig。对拍状态：fixture 01 先行全等，02/03/04/07
   checker 只接受注册、oracle 的 seed 只覆盖 .sla 类型名。
 - 处置：二期/集成后续立项（.sai 合同解析器 + 展开接线）；INT-1 修复后
   无 std 依赖的程序应先行对拍，本条只挡含 std 表面调用的 fixtures。
+- **二期状态（2026-11-07）**：无 std 依赖对拍已完成（e2e_c 全等、
+  e2e_b 全等、e2e_a 仅剩 D-O1）；本条仍开口——阻挡清单已逐件确立
+  （5/5 fixtures 全死于 check 段 `println` 调用、rc=5，01 另有
+  `str_eq` 第二挡，oracle 线报告 §3），候三期立项 .sai 合同解析 +
+  展开接线（与 SAB D 组表面预载同批规划）。

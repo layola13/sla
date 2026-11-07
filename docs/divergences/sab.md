@@ -151,6 +151,108 @@
  与 SAB-D10（null 合并）。登记为模式类，二期逐模块普查
  `else |_|`、`catch {}`、`orelse <字面量>` 三种形态。
 
+## 二期 B 组新增登记（2026-11-07，SAB 线二期）
+
+### SAB-D17 sig.id 双轨：genFuncSig 用序号、decl 用 intern id（a 类；已双轨镜像）
+- 规则（逐条，行号为参照树 `sab_codegen.zig` 现行编号）：
+ ① `genFuncSig`（5963）在入口先算 id：5964 行
+ `id = function_sigs.items.len + test_sigs.items.len`（两表
+ **当时**长度之和，即此前经此路径建出的 sig 总数），5985 行
+ 写入 `FunctionSig.id`；此 id 还决定 test 的 llvm_name
+ （5995 行 `"_saasm_test_{d}"` 以同一 id 格式化）。
+ ② sig 本体随后才入表：普通/异步/test 路径在 genFuncSig 返回
+ 后以 `sig_idx = function_sigs.items.len` 捕获下标再 append
+ （如 genFuncDeclNamed 6214-6216、genTestDecl 6478-6480）；
+ extern 路径 genExternDecl（6267-6272）先 appendDeclInst 后
+ append——三路 id 均为「入表前计数」，故第 n 个 sig 的 id 是
+ 0 起的建出序号（受 ③ 的跳号影响）。
+ ③ test 双计数：genTestDecl 在 6480 行把 fsig 追加进
+ function_sigs，又在 6493 行把同一 sig 追加进 test_sigs——
+ 一个 test 使计数器前进 2，紧随其后的 sig.id 跳过一个数。
+ ④ decl 操作数是另一轨：`declInstForSig`（6007）6008 行
+ `id = intern(fsig.name)`（符号表 intern 序号），6017/6018 行
+ operands[0]=Symbol(id)、operands[1]=Func(id)，与 fsig.id
+ 无关；多函数时两轨系统性不同，单函数时恰同为 0。
+ ⑤ 同公式的旁路：appendGeneratedFuncSig（5601-5612）生成型
+ sig 亦用 function+test 两表长度和。不同公式的边界路径
+ （driver 子集外，仅登记不镜像）：makeContractExternSig
+ （6300）id 先置 0（6318），emitContractExternDecl（6335）
+ 以 6339 行 `function_sigs.items.len`（仅主表）覆写、
+ emitReferencedContractExternDecls 以排序下标覆写（6404），
+ 且该路径末尾 renumberFunctionSigs（6434-6445）会把全部
+ sig.id 重写为主表下标——即 Zig 本体在 contract extern
+ 介入时亲手抹平双轨；cloneModuleFunctionSig（4866-4868）/
+ cloneDecodedModuleFunctionSig（4887-4903）的克隆 sig 亦只
+ 用主表长度。以上边界均在 driver 子集之外（contract extern
+ 调用与模块克隆在 driver 内响亮拒绝），不影响本条镜像面。
+- 真产物裁决（2026-11-07，场地三真 Zig 插件 `sa sla sab
+ build`，证据级别=**真产物字节级**）：程序 A 三函数
+ add/helper/main → multi.sab 662 B、sha256 `1a27f1d1…`：
+ sig.id=0/1/2（建出序号），decl 操作数=0/5/9（intern id，
+ 池序 sla__add=0、sla__helper=5、main=9），双轨实锤。程序 B
+ 函数+@test+函数 → multi2.sab 573 B、sha256 `6df45c9f…`：
+ sig.id=0/1/**3**（test 双计数跳号在真产物中证实），decl
+ 操作数=0/5/7，test 的 llvm_name `_saasm_test_1` 亦以序号
+ id 构成。本端口 driver 产出与真产物在 sig.id 字段逐项
+ 一致（整模块字节不等是 SAB-D19 的既登记省略面，与本条
+ 无关）。
+- 处置（协调线裁决：按 Zig 双轨镜像以对齐真产物字节，不
+ 统一）：driver 的 `begin_sig` 按 ①-③ 给 sig.id 编号
+ （function_sigs 下标 + 进入时 test_sigs 长度，覆写在
+ append_decl_inst **之后**，使 decl 操作数保持 intern id），
+ 经主干新增的加法钩子 `ModuleBuilder::set_sig_id` 落地；
+ B5 主干默认口径（一期模型/generate() 路径的 intern id）
+ 与既有 API 签名不变，一期探针黄金向量不受影响。回归：
+ driver_e2e 新增 P3（func→test→func）逐字节对拍手工双轨
+ 模型（sig.id=0/1/3）。Zig 侧双轨气味仍挂 FB-015，本条在
+ 本端口分类为 (a) 类**已镜像**（怪癖照录，no improvements）。
+
+### SAB-D18 逃逸闭包条目以 AutoHashMap 迭代序发射（c 类）
+- 原文：`escaped_closure_entries`（~330）为
+ `AutoHashMap(*const ast.Node, …)`，`emitEscapedClosureEntries`
+ （~5900）以 `valueIterator()` 迭代序逐条发射 wrapper/worker——
+ 发射序由指针哈希决定、非源码序，字节可随分配环境漂移。
+- 端口方针：state.rs 以插入序 `Vec<(node_key, entry)>` 保存，
+ 发射序由插入序决定（哈希序纪律）；已落单 FB-016。
+
+### SAB-D19 driver 子集的发射省略面（b 类，范围登记非缺陷）
+- 二期 driver（B4 子集）相对 Zig 全量 gen 的有意省略，全部属
+ E 组未接线范围，逐项在此登记以免被误读为「已对齐」：
+ ① 释放/清理发射全缺（`releaseOpenLocals`/`emitRelease`/
+ 分支平衡释放/循环跳转清理）——纯标量 Copy 子集内无释放指令，
+ 与 phase-1 手工模型口径一致；② 函数入口不发 `L_ENTRY` 标签
+ （模型口径；测试 decl 的 `L_TEST_ENTRY` 例外，Zig genTestDecl
+ 确有此标签、driver 已发）；③ `bindingNeedsScalarReassignSlot`
+ 的栈槽路径未用，标量 let/assign 走普通寄存器 assign
+ （genLetFromValue 的兜底臂形态）；④ if 值形态（genIfValue 的
+ alloc/store/load 结果槽）响亮拒绝而非静默误降；⑤ while 的
+ 分支释放/状态恢复（restoreReleased 等）未接，循环体局部靠
+ locals 截断收口。以上各项在触及非标量/值形态时均响亮报错。
+
+### SAB-D20 B2 辅助结构的所有权形态（b 类）
+- `StdImportModule`：Zig 存 `FlattenResult` + 独立 sig 列表，
+ 本端口直接存四段模块内容，`module()` 重组出同一 `sab.Module`
+ 视图（字节等价、形态不同）。
+- `MacroLocalChange.old`：Zig 在 `had_old=false` 时为未初始化
+ 内存，本端口为 `Option<MacroLocalBinding>`（None 即无旧值）；
+ `MacroArgBinding.ctx` 的裸回指针改为 `Rc<RefCell<…>>` 共享
+ 句柄。均为所有权纪律强制的形态适配，无输出影响。
+
+### SAB-D21 测试 decl 命名：driver 从 Zig、phase-1 模型为占位（b 类）
+- phase-1 `fixture01.rs` 手工模型自承其测试函数名
+ `test_hello_world` 是占位猜测、无 `L_TEST_ENTRY` 标签。
+ Zig `genFuncSig` 的 test 臂以 `"{name}"`（带引号原文）为符号名、
+ `genTestDecl` 发 `L_TEST_ENTRY` 标签。driver 以 Zig 为准
+ （引号名 + 标签 + `_saasm_test_{id}` llvm_name 口径由 sig 字段
+ 承载）；模型文件保留作一期编码器对拍证据，不再作 AST 路
+ 命名口径。两者差异属模型占位被真实口径取代，非 Zig 缺陷。
+
+### SAB-D22 panic 非单参数形态静默写死代码 "1"（c 类）
+- 原文：`genCall` panic 臂（15167–15180）的 `else` 兜底把
+ 操作数写为文本 `"1"`，不区分无参/多参；多参时实参不求值、
+ 代码被替换，无诊断。静默兜底家族（与 SAB-D14 同科）。
+- 端口方针：driver 字节级镜像（同为代码 1）+ 落单 FB-017。
+
 ## 已核查排除（checked & cleared，不计入分歧数）
 
 - foldTopLevelBinaryConst 溢出返回 null（796–798）：只是放弃
@@ -166,8 +268,11 @@
 
 ## 计数
 
-- (a) 输出分歧：**1**（SAB-D01，已修正并复测全同）
-- (b) 结构性重构：**5**（D06、D08、D09、D15、D16）
-- (c) 可疑构造：**10**（D02、D03、D04、D05、D07、D10、D11、
- D12、D13、D14；其中 D10/D11 标「嫌疑」待二期复核定性）
-- 合计登记 **16** 条；另已核查排除 4 项。
+- (a) 输出分歧：**2**（SAB-D01，已修正并复测全同；SAB-D17，
+ sig.id 双轨已按真产物逐字镜像、driver 输出与 Zig 在该字段
+ 一致，Zig 侧气味仍挂 FB-015）
+- (b) 结构性重构：**8**（D06、D08、D09、D15、D16、D19、
+ D20、D21）
+- (c) 可疑构造：**12**（D02、D03、D04、D05、D07、D10、D11、
+ D12、D13、D14、D18、D22；其中 D10/D11 标「嫌疑」待复核定性）
+- 合计登记 **22** 条；另已核查排除 4 项。

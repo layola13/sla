@@ -1,8 +1,16 @@
-# REPORT.md — Rust 版 sa_plugin_sla 差分实验 · 一期报告
+# REPORT.md — Rust 版 sa_plugin_sla 差分实验 · 一期报告（附二期收编）
 
 状态时刻：2026-11-07 约 09:50 CST（第二任协调线更新）。本报告是**阶段性**的：
 四条子系统线**已全部交付**，集成轮在场地三（2202）推进；未完成项逐项明示，
 不把中间状态说成验收结果。本地仓仅本地 git，不建远端、不推送。
+
+**二期收编（2026-11-07 约 10:1x CST，三期协调线）**：二期四线 + 两件
+收尾小线全部交付并经协调线收编——INT-1 修复销账、checker 扩围完成
+（未覆盖清单仅剩 3 项近似/简化）、SAB B 组落地且 `generate_from_program`
+真实驱动、oracle 全管线对拍达成（e2e_b/e2e_c 逐字节全等、e2e_a 仅剩
+FB-020 一处）、分阶段计时同窗补测完成。workspace 测试 **137 passed /
+0 failed**，分歧在册 **82 条**，反馈环累计 **18 单**（FB-001..FB-017 +
+FB-020）。详情见 §9；§1/§7 已按二期状态更新。
 
 ## 0. 本实验的目的（用户定调）
 
@@ -15,14 +23,14 @@
 | 交付 | 状态 |
 |---|---|
 | ABI 摸底 docs/ABI_MAP.md | **完成**：双描述符符号（数据 + fn）、PluginDescriptor 64B 逐字段、宿主加载/校验/命令分发路径、Context 约 88B 手工镜像面、handler ABI（state field 40B / options 16B / result 48B、返回码语义、result_free 所有权）、命令面全表 |
-| 分歧登记 docs/DIVERGENCES.md + docs/divergences/&lt;lane&gt;.md | **合编完成**：协调线 5（D-C1..C5）+ lexer/ast 9 + parser 13（D-P1..P13）+ checker 10（D-C1..D-C10）+ SAB 16（SAB-D01..D16）+ lowering/text 14（D-T1..D-T14），合计 67 条在册；反馈环已发 9 单（FB-001/FB-002 已实证，FB-003..FB-009 为 lowering/text 的 (c) 类七条） |
+| 分歧登记 docs/DIVERGENCES.md + docs/divergences/<lane>.md | **合编完成**：一期 67 条（协调线 5 + lexer/ast 9 + parser 13 + checker 10 + SAB 16 + lowering/text 14）；二期续登 checker +7（D-C11..D-C17）+ SAB +6（D17..D22）+ oracle +2（D-O1/D-O2），**合计 82 条在册**；反馈环累计 18 单（FB-001..FB-017 + FB-020） |
 | Crate 图定案 | **完成**：六家裁断 Q1=A+ / Q2=A（全文 ~/workspace/consult-rust-split/VERDICT.md），10 成员已落根 Cargo.toml，见 docs/COORDINATION.md §1 |
 | sla-abi 全量镜像 + sla-plugin 锚点 | **完成（协调线欠账已补）**：abi 四模块镜像（布局按场地探针实测钉死，测试 5/5）；plugin 描述符双锚点已接线 + skills 静态表逐字镜像（其测试与 .so 符号验活候 workspace 全量编译放行，见 §7） |
-| sla-oracle 边界转储 | **已跑通**：D-P3 seed 预扫描（协调线职责）+ seed/tokens/AST/checked/lowering/SAB 模型字节/文本六段转储 + 分阶段计时；generate 已接通（CheckInfo 适配） |
-| 垂直切片对拍（3–5 程序逐字节） | **text 路已定谳 5/5**：lowering/text 线自有对拍台（parser→CheckInfo 桩→text 发射）在场地三复验，五件 fixtures 逐字节全等。oracle 全管线对拍仍卡两处：checker 的 INT-1 误报（在场 return 被报 missing return，3 行最小复现已备，见 §7.1）与 INT-2 合同段缺口——这是本报告最大的未完成项 |
-| 分阶段计时对比 | **半成**：Zig 侧基线已实测（§5）；Rust 侧无成功端到端产物（INT-1 挡），未测（不拿失败路径计时冒充） |
+| sla-oracle 边界转储 | **已跑通**：D-P3 seed 预扫描（协调线职责）+ seed/tokens/AST/checked/lowering/SAB 模型字节/文本六段转储 + 分阶段计时；generate 已接通（CheckInfo 适配）；二期接线 build 模式 @test 体清空（D-O2 销账） |
+| 垂直切片对拍（3–5 程序逐字节） | **text 路已定谳 5/5**（lowering/text 线对拍台）。**oracle 全管线对拍二期达成**：INT-1 修复后，e2e_c/e2e_b 与真插件产物**逐字节全等**，e2e_a 仅剩 D-O1（清理序哈希序，FB-020）一处；5 件 fixtures 仍被 INT-2 挡在 check 段（逐件清单已立）——INT-2 是当前最大的未完成项 |
+| 分阶段计时对比 | **二期补测完成（同窗实测）**：e2e 三探针 Zig 端到端中位 26 ms、Rust 管线 3–4 ms；两边分阶段本体均 sub-ms 级、端到端皆启动主导（口径差异如实注于 §9，不作编译速度结论） |
 | 700 行纪律 | **达标（盘点时刻）**：check_file_lines.sh 通过，全部 .rs 全 ≤700 |
-| 全 workspace 构建 | **10/10 crate 构建通过**；round5 全量测试（场地三、清单校验过的树）**64 passed / 0 failed**（§4）；plugin .so 描述符双锚点 nm -D 验活 |
+| 全 workspace 构建 | **10/10 crate 构建通过**；round5 全量测试（场地三、清单校验过的树）**64 passed / 0 failed**（§4）；plugin .so 描述符双锚点 nm -D 验活；**二期终验 137 passed / 0 failed**（§9） |
 
 ## 2. 这条差分线已经照出了什么
 
@@ -135,14 +143,18 @@
 
 ## 7. 未完成项与场地状态（如实登记）
 
-1. 垂直切片字节对拍未过——管线已接通（workspace 全绿、oracle 端到端
-   可跑、plugin 双锚点已验活），卡点收窄为两处（DIVERGENCES 集成发现）：
-   **INT-1** checker 对在场 return 误报 missing return（最小复现
-   docs/probes/e2e_c.sla 三行，AST 转储证明 parse 无误，归 checker 线
-   修复并补单测）；**INT-2** 合同加载/导入展开段在一期 crate 图中无主，
-   fixtures 的 println/std 调用无从注册（候二期立项 .sai 合同解析 +
-   展开接线）。INT-1 清零后：无 std 依赖程序先行 compare.sh 逐字节
-   对拍 → bench.sh 计时同窗补测 → 本节销账。
+1. ~~垂直切片字节对拍未过~~ **二期进展**：**INT-1 已修复销账**
+   （根因 = Rust 侧自创 Zig 不存在的 missing-return 判定，按
+   type_checker.zig:2596-2604 原形重写，真值双路实证）；无 std
+   依赖程序对拍已完成（e2e_b/e2e_c 逐字节全等、e2e_a 仅剩 D-O1），
+   计时同窗补测已完成（§9）。**INT-2 仍开口且为当前最大未完成项**：
+   合同加载/导入展开段在 crate 图中无主，5/5 fixtures 的 println/std
+   调用无从注册（逐件阻挡清单已立，候三期立项 .sai 合同解析 +
+   展开接线，与 SAB D 组表面预载同批规划）。二期其余开口：
+   checker 未覆盖仅剩 3 项（关联调用接收者推导全形态、match 守卫
+   语义近似、plain-if 条件 integer 口径）；SAB 的 C 组（预扫/符号）
+   与 D 组（std 表面）未接线（driver 调用点均响亮报错）、test sig
+   的 llvm_name 未设（SAB-D21 附记）。
 2. 第二 ABI 锚点（sla_compile_handler / result_free）按设计**未导出**：
    handler 编译器尚无端口，导出桩会虚构原实现没有的行为；类型面已在
    sla-abi 备齐，候 handler 移植时接线。
@@ -168,3 +180,85 @@
 - 建议（候用户决定，不自动进二期）：继续推进的优先序 = 先完成集成轮（字节对拍 +
   边界转储 + 计时补测）拿到全管线差分基线，再按 §3 的价值序把语料面对 SAB 与
   checker 扩面；crate 图已按裁断定版，二期不再动拓扑，只在数据说话时重议 SAB 子 crate 化。
+
+## 9. 二期收编（2026-11-07，三期协调线）
+
+二期线组：checker 线（INT-1 → 扩围）、SAB 线（B 组）、oracle 线
+（INT-1 落地后启动），加收尾小线两件（SAB-D17 双轨镜像、oracle
+D-O2 接线）。场地三（2202）全程承载，开工前全量同步 md5 清单
+0 差异、基线 64/0 复现后开线；各线只同步自家路径、逐次双确认。
+
+### 9.1 checker 线
+
+- **INT-1 销账**：根因是移植侧自创判定（见 §7.1 与 DIVERGENCES
+  集成发现节）。修复后 checker 24/24，补 8 条「源码 parse → check」
+  形态单测（含把 Zig「非表达式尾/空 body 在检查器层放行」的真实
+  口径钉死，防 INT-1 以「补全」之名复活）。
+- **扩围完成**：未覆盖清单逐项攻下——switch/match 应用层（多路
+  合并改 BindingId 键控）+ match/switch 终止形态、if-let 链、
+  let_destructure + 解构消费站点（D-C7 清单最后一处）+ let_else、
+  泛型实例化（镜像「检查器无此检查」本身）、三张侧表（实证 try
+  无独立表、写共享 cleanups，照 Zig 结构合并）、enum 字面量、
+  slice 表达式、导入宏、trait/impl 契约、运算符重载、dyn/slice
+  强转（附带修正一期偏差：const 臂误消费初值源）、闭包字面量、
+  sum 的 slice 形态；关联调用为大部完成。checker **80/80**
+  （24 → +56），真值双路（Zig 源码 + 真插件 12 探针）。
+- 新分歧 D-C11..D-C17；反馈单 **FB-010..FB-014**（解构无 Copy
+  豁免、switch 模式零检查、generic_func_ref 裸错误、pattern
+  writable/is_const 反转、match 推断 OR 条件改写类型）。
+- 确切剩余：① 关联调用接收者类型推导全形态；② match 守卫绑定
+  可见性/消费语义近似；③ plain-if 条件接受 integer（一期既有
+  简化，Zig 收 boolean/integer/infer），均已登记候后续线。
+
+### 9.2 SAB 线
+
+- B2 types（369 行）/ B3 state（255 行）/ B4 driver（642 + 532 行）
+  落地，`generate_from_program` 改真实驱动（签名未动）：用户函数 +
+  函数间调用程序端到端 334 B 与手工模型逐字节相等；while/if 控制
+  流件 1184 B 双跑确定性一致；@test + panic 守卫件已钉 sha。
+- std 表面（D 组）与 C/F/G/H/I 未接线调用点全部响亮报错（组别 +
+  Zig 行段），无静默跳过、无回落文本路。sab **17/17**。
+- 新分歧 SAB-D17..D22；反馈单 **FB-015..FB-017**：逃逸闭包按
+  AutoHashMap 迭代序（指针哈希序）发射（FB-016，产物字节序本质
+  不确定）、panic 多参静默写死 "1"（FB-017）、sig.id 双轨
+  （FB-015）。
+- **收尾 D17（真产物裁决）**：双轨规则钉到行（:5964 入表前以两表
+  长度和赋值、test 双计数跳号、:6008 decl 操作数走 intern），并以
+  真插件 `sa sla sab build` 产物字节级验证：multi.sab（662 B）
+  sig.id 0/1/2 vs 操作数 0/5/9；multi2.sab（573 B）sig.id 0/1/**3**
+  跳号实锤。端口已逐字镜像，driver_e2e 逐件重钉并给出字段级解释；
+  一期探针 76B/427B sha 维持全同。
+
+### 9.3 oracle 线
+
+- **全管线对拍达成**（与本窗现跑真插件产物比）：e2e_c 逐字节
+  全等（sha fe190281…）、e2e_b 在 D-O2 接线后逐字节全等
+  （sha 8623e8d0…）、e2e_a 仅剩 D-O1 一处。此为实验首个
+  AST 驱动端到端对拍点。
+- **D-O1 = FB-020**：return 清理序 Zig 为哈希序 `!b !a !c !d`、
+  Rust 为声明序——checker D-C6（清理名单 = StringHashMap 迭代序）
+  的首个字节级实证；非 Copy 类型 drop 序可观察。Rust 按发射纪律
+  不迁就，已落反馈单候主线处置。
+- **INT-2 阻挡清单**：5/5 fixtures 全死于 check 段 println 调用
+  （rc=5），01 另有 str_eq 第二挡，逐件在案。
+- **计时同窗实测**（7 轮中位，e2e 三探针）：Zig 端到端 26 ms、
+  Rust 管线 3–4 ms；分阶段本体两边皆 sub-ms 级（Rust 各段
+  0.002–0.111 ms；Zig 探针 profile 分辨率内 0 ms）。口径注记：
+  两边端到端均启动主导，Rust 侧是轻线束（无插件加载/合同段），
+  与 sa 宿主非同一起跑线——本表只作实测登记，不作编译速度结论；
+  一期 ±20% 预估至此仍**未证实未证伪**（可比口径不存在），
+  不引用。fixture 01 contract load 同窗补测：首跑 61 ms、
+  次跑 9 ms（Rust 侧该段不存在，记未测）。
+
+### 9.4 二期总账
+
+- 测试：workspace **137 passed / 0 failed**（64 → +73：一期基线
+  之上 INT-1 +8、checker 扩围 +56、SAB +7、oracle +2）；100 个
+  .rs 文件全 ≤700 行（最大 driver.rs 642）。
+- 分歧在册 **82 条**（一期 67 + 二期 15）；反馈环累计 **18 单**
+  （FB-001..FB-017 + FB-020），全部候主会话确认后与 Zig 侧修复
+  并行（常设政策）。
+- 三期候选（按差分价值序）：INT-2 合同段立项（解锁 5 fixtures
+  全管线 + SAB D 组表面）→ SAB C 组预扫/符号 → checker 剩余
+  3 项 → SAB-D21 的 test llvm_name → handler 活体对拍
+  （§3 价值序第 3 位，一期 §7.2 的第二 ABI 锚点候此接线）。

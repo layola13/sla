@@ -1,0 +1,3 @@
+CONSUMED-INTERNAL: lowering facts flow into codegen-text via the
+CheckInfo adapter (oracle, below); no separate lowered-form dump
+exists yet. ReachableSet computation: pending lowering lane.

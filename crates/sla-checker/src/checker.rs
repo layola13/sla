@@ -17,9 +17,10 @@
 
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::rules::ValueState;
-use crate::scope::{BindingId, ScopeStack};
+use crate::scope::{Binding, BindingId, ScopeStack};
 use crate::types_util;
 use sla_ast::decls::{FuncDecl, MacroDecl, Param};
+use sla_ast::node::Node;
 use sla_ast::types::Type;
 use std::collections::HashMap;
 
@@ -86,6 +87,45 @@ impl StructInfo {
     }
 }
 
+/// One enum variant's shape, for pattern binding and enum literals.
+/// The legacy `Checker::enums` table keeps only variant NAMES (its
+/// public shape predates this line); this table carries the fields.
+#[derive(Debug, Clone)]
+pub struct EnumVariantInfo {
+    pub name: String,
+    pub fields: Vec<(String, Type)>,
+}
+
+/// A registered trait: supertraits plus its declared methods, for
+/// the impl-contract check (Zig `traits` + `TraitDecl`).
+#[derive(Debug, Clone)]
+pub struct TraitInfo {
+    pub supertraits: Vec<String>,
+    pub methods: Vec<TraitMethodInfo>,
+}
+
+/// One trait method signature (Zig `ast.TraitMethod`).
+#[derive(Debug, Clone)]
+pub struct TraitMethodInfo {
+    pub name: String,
+    pub params: Vec<ParamSig>,
+    pub ret_ty: Type,
+}
+
+/// An imported (SA-text) macro registration, mirroring Zig
+/// `ImportedMacro` (type_checker.zig:25). The checker consults only
+/// `arity` and `leading_outputs`; the masks and callee list are
+/// carried for parity with the registration API.
+#[derive(Debug, Clone)]
+pub struct ImportedMacroInfo {
+    pub arity: usize,
+    pub leading_outputs: usize,
+    pub import_path: Option<String>,
+    pub borrowed_arg_mask: u64,
+    pub address_slot_arg_mask: u64,
+    pub direct_callees: Vec<String>,
+}
+
 /// Loop bookkeeping for the LoopConditionalConsume gate. Zig keeps
 /// exactly one such pair in loose fields (overwritten by nested
 /// loops); the stack top here plays that role.
@@ -104,6 +144,21 @@ pub struct LoopCtx {
 pub struct Checker {
     pub structs: HashMap<String, StructInfo>,
     pub enums: HashMap<String, Vec<String>>,
+    /// Variant shapes by enum name (see [`EnumVariantInfo`]).
+    pub enum_variants: HashMap<String, Vec<EnumVariantInfo>>,
+    /// Registered traits by name (Zig `traits`).
+    pub traits: HashMap<String, TraitInfo>,
+    /// `"trait|type"` pairs for every registered trait impl
+    /// (Zig `trait_impls`).
+    pub trait_impls: std::collections::HashSet<String>,
+    /// Operator overload lists keyed `"{Type}|{op_name}"`, values
+    /// are mangled symbols `"{Type}__{op_name}"` (Zig `overloads`).
+    pub overloads: HashMap<String, Vec<String>>,
+    /// Generic parameter names per function (Zig `FuncDecl.generics`;
+    /// the checker stores but never substitutes them — D-C11).
+    pub func_generics: HashMap<String, Vec<String>>,
+    /// Imported SA-text macros (Zig `imported_macros`).
+    pub imported_macros: HashMap<String, ImportedMacroInfo>,
     /// Single-`Ty` component aliases, for name resolution.
     pub aliases: HashMap<String, Type>,
     pub funcs: HashMap<String, FuncSig>,
@@ -118,6 +173,20 @@ pub struct Checker {
     /// `phi_cleanups`: bindings consumed on only some branch paths,
     /// released on the paths where they stayed active.
     pub phi_cleanups: HashMap<usize, Vec<String>>,
+    /// `await_cleanups` (Zig type_checker.zig:150): bindings to
+    /// release if an await suspends, keyed by the await node. Kept
+    /// apart from `cleanups`, whose await-adjacent entries mean
+    /// something else (the try arm shares `cleanups` in Zig too).
+    pub await_cleanups: HashMap<usize, Vec<String>>,
+    /// `macro_call_try_cleanups` (Zig type_checker.zig:151):
+    /// bindings live across a macro call whose body may `?`-propagate,
+    /// keyed by the call node (Zig keys by the `*const CallExpr`
+    /// sub-object; the containing node address is the Rust analogue).
+    pub macro_call_try_cleanups: HashMap<usize, Vec<String>>,
+    /// `dyn_box_coercions` / `dyn_rc_coercions`: value node -> trait
+    /// name for `Box<dyn Trait>` / `Rc<dyn Trait>` let coercions.
+    pub dyn_box_coercions: HashMap<usize, String>,
+    pub dyn_rc_coercions: HashMap<usize, String>,
     pub loop_ctx: Vec<LoopCtx>,
     /// Frame index of the current function's root scope.
     pub fn_root_depth: usize,
@@ -137,6 +206,12 @@ impl Checker {
         Checker {
             structs: HashMap::new(),
             enums: HashMap::new(),
+            enum_variants: HashMap::new(),
+            traits: HashMap::new(),
+            trait_impls: std::collections::HashSet::new(),
+            overloads: HashMap::new(),
+            func_generics: HashMap::new(),
+            imported_macros: HashMap::new(),
             aliases: HashMap::new(),
             funcs: HashMap::new(),
             extern_funcs: HashMap::new(),
@@ -146,6 +221,10 @@ impl Checker {
             expr_types: HashMap::new(),
             cleanups: HashMap::new(),
             phi_cleanups: HashMap::new(),
+            await_cleanups: HashMap::new(),
+            macro_call_try_cleanups: HashMap::new(),
+            dyn_box_coercions: HashMap::new(),
+            dyn_rc_coercions: HashMap::new(),
             loop_ctx: Vec::new(),
             fn_root_depth: 0,
             current_ret_ty: None,
@@ -167,11 +246,42 @@ impl Checker {
     }
 
     pub fn register_func(&mut self, func: &FuncDecl) {
+        self.register_func_as(&func.name.clone(), func);
+    }
+
+    /// Register a function under an explicit (possibly mangled)
+    /// symbol name — impl methods and operator overloads live under
+    /// keys other than their declaration name in Zig (`funcs` is
+    /// keyed by symbol, not by source name).
+    pub fn register_func_as(&mut self, symbol: &str, func: &FuncDecl) {
         let sig = FuncSig {
             params: func.params.iter().map(ParamSig::from).collect(),
             ret_ty: (*func.ret_ty).clone(),
         };
-        self.funcs.insert(func.name.clone(), sig);
+        self.funcs.insert(symbol.to_string(), sig);
+        if !func.generics.is_empty() {
+            self.func_generics
+                .insert(symbol.to_string(), func.generics.clone());
+        }
+    }
+
+    /// Record an enum's variant shapes (companion to
+    /// [`Checker::register_enum`], which keeps the name list).
+    pub fn register_enum_variants(
+        &mut self,
+        name: &str,
+        variants: Vec<EnumVariantInfo>,
+    ) {
+        self.enum_variants.insert(name.to_string(), variants);
+    }
+
+    pub fn register_trait(&mut self, name: &str, info: TraitInfo) {
+        self.traits.insert(name.to_string(), info);
+    }
+
+    /// Mirrors Zig `registerImportedMacro` (type_checker.zig:2119).
+    pub fn register_imported_macro(&mut self, name: &str, info: ImportedMacroInfo) {
+        self.imported_macros.insert(name.to_string(), info);
     }
 
     /// Mirrors Zig `registerImportedFunctionSignature`.
@@ -321,6 +431,119 @@ impl Checker {
             },
             _ => false,
         }
+    }
+
+    // -- cleanup collection helpers ----------------------------------
+
+    /// Mirrors Zig `borrowSourceAliasedByOtherActive` (issue013):
+    /// some OTHER active binding anywhere in the scope chain borrows
+    /// from `name`, so `name` itself must not be released.
+    pub fn borrow_source_aliased_by_other_active(&self, name: &str) -> bool {
+        for frame in &self.scopes.frames {
+            for b in &frame.bindings {
+                if b.name == name || b.state != ValueState::Active {
+                    continue;
+                }
+                if b.borrow_source.as_deref() == Some(name) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Mirrors Zig `functionExitBindingEscapes`: the candidate
+    /// escapes through `result_expr` when the result's root binding
+    /// IS the candidate, or when following the root's borrow-source
+    /// chain reaches the candidate. (Zig bounds the walk by the
+    /// total symbol count; the chain here is finite by construction
+    /// and the same bound is applied.)
+    pub fn binding_escapes_through(&self, result_expr: &Node, candidate: &str) -> bool {
+        let root = match result_expr {
+            Node::Identifier(name) => name.as_str(),
+            Node::MoveExpr(m) => match &*m.expr {
+                Node::Identifier(name) => name.as_str(),
+                _ => return false,
+            },
+            _ => return false,
+        };
+        if root == candidate {
+            return true;
+        }
+        let total: usize = self
+            .scopes
+            .frames
+            .iter()
+            .map(|f| f.bindings.len())
+            .sum();
+        let mut current = root.to_string();
+        let mut remaining = total + 1;
+        while remaining > 0 {
+            remaining -= 1;
+            let Some(binding) = self.scopes.lookup(&current) else {
+                return false;
+            };
+            let Some(source) = binding.borrow_source.clone() else {
+                return false;
+            };
+            if source == candidate {
+                return true;
+            }
+            current = source;
+        }
+        false
+    }
+
+    /// Names of all currently active, non-internal bindings,
+    /// innermost frame first (Zig walks the scope chain from the
+    /// current scope outward; within a frame Zig's order is hash
+    /// order, here declaration order — D-C6). Shared by the await,
+    /// try, and macro-try cleanup collectors, which differ only in
+    /// their exclusion predicate.
+    pub fn collect_active_names(&self, exclude: impl Fn(&Binding) -> bool) -> Vec<String> {
+        let mut names = Vec::new();
+        for frame in self.scopes.frames.iter().rev() {
+            for b in &frame.bindings {
+                if b.state != ValueState::Active
+                    || types_util::is_internal_symbol(&b.name)
+                    || exclude(b)
+                {
+                    continue;
+                }
+                names.push(b.name.clone());
+            }
+        }
+        names
+    }
+
+    /// Mirrors Zig `recordAwaitCleanup` (type_checker.zig:336):
+    /// every active non-internal binding, EXCEPT bindings that
+    /// escape through the awaited future expression and borrow-like
+    /// bindings aliased by another active binding (issue013). A
+    /// non-empty list lands in `await_cleanups` keyed by the await
+    /// node; Zig stores nothing for an empty list.
+    pub fn record_await_cleanup(&mut self, await_node: &Node, future_expr: &Node) {
+        let names = self.collect_active_names(|b| {
+            self.binding_escapes_through(future_expr, &b.name)
+                || (types_util::is_borrow_like_type(&b.ty)
+                    && self.borrow_source_aliased_by_other_active(&b.name))
+        });
+        if !names.is_empty() {
+            self.await_cleanups
+                .insert(types_util::node_key_of(await_node), names);
+        }
+    }
+
+    /// Mirrors the try arm's `collectTryCleanup`
+    /// (type_checker.zig:1662): every active non-internal binding
+    /// except those the try expression itself uses. Stored into the
+    /// shared `cleanups` table — Zig has no separate try table.
+    pub fn record_try_cleanup(&mut self, try_node: &Node, operand: &Node) {
+        let names = self.collect_active_names(|b| {
+            crate::rules::expr_uses_identifier_value(operand, &b.name)
+        });
+        self.cleanups
+            .insert(types_util::node_key_of(try_node), names);
     }
 
     /// Resolve a user-defined name through the alias table.

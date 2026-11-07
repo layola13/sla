@@ -1,0 +1,91 @@
+    Finished `release` profile [optimized] target(s) in 3.38s
+### e2e_a zig_e2e_build_ms
+26
+26
+26
+28
+26
+27
+28
+### e2e_a zig_profile_check
+[sla-profile] load contracts summary: roots=0 visited=0 elapsed=0ms
+[sla-profile] check read source: 0ms
+[sla-profile] check source expand: 0ms
+[sla-profile] check parse: 0ms
+[sla-profile] check import expand: 0ms
+[sla-profile] check monomorphize: 0ms
+[sla-profile] check type check: 0ms
+### e2e_a rust_e2e_ms
+4
+3
+4
+4
+4
+4
+4
+### e2e_a rust_profile
+stage seed 0.002ms
+stage lex 0.039ms
+stage parse 0.026ms
+stage check 0.015ms
+stage codegen_text 0.083ms
+### e2e_b zig_e2e_build_ms
+27
+27
+26
+26
+24
+23
+27
+### e2e_b zig_profile_check
+[sla-profile] load contracts summary: roots=0 visited=0 elapsed=0ms
+[sla-profile] check read source: 0ms
+[sla-profile] check source expand: 0ms
+[sla-profile] check parse: 0ms
+[sla-profile] check import expand: 0ms
+[sla-profile] check monomorphize: 0ms
+[sla-profile] check type check: 0ms
+### e2e_b rust_e2e_ms
+4
+5
+4
+4
+3
+3
+3
+### e2e_b rust_profile
+stage seed 0.003ms
+stage lex 0.044ms
+stage parse 0.048ms
+stage check 0.033ms
+stage codegen_text 0.111ms
+### e2e_c zig_e2e_build_ms
+26
+26
+25
+24
+26
+26
+25
+### e2e_c zig_profile_check
+[sla-profile] load contracts summary: roots=0 visited=0 elapsed=0ms
+[sla-profile] check read source: 0ms
+[sla-profile] check source expand: 0ms
+[sla-profile] check parse: 0ms
+[sla-profile] check import expand: 0ms
+[sla-profile] check monomorphize: 0ms
+[sla-profile] check type check: 0ms
+### e2e_c rust_e2e_ms
+3
+3
+3
+2
+3
+3
+4
+### e2e_c rust_profile
+stage seed 0.002ms
+stage lex 0.013ms
+stage parse 0.013ms
+stage check 0.010ms
+stage codegen_text 0.031ms

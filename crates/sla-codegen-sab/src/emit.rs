@@ -302,6 +302,104 @@ impl ModuleBuilder {
         self.append_inst(inst);
     }
 
+    /// The interned name for an id (Zig `symbols.items[id]`).
+    pub fn symbol_name(&self, id: u32) -> &str {
+        &self.symbols[id as usize]
+    }
+
+    /// Number of instructions emitted so far (Zig
+    /// `instructions.items.len`, the `makeInst` expanded-line source).
+    pub fn instructions_len(&self) -> usize {
+        self.instructions.len()
+    }
+
+    /// Whether the last emitted instruction terminates its block
+    /// (Zig `lastIsTerminator` + `isTerminator`, lines 6776-6790:
+    /// jmp / br / br_null / return / panic / panic_msg /
+    /// early_return).
+    pub fn last_is_terminator(&self) -> bool {
+        match self.instructions.last() {
+            None => false,
+            Some(inst) => matches!(
+                inst.kind,
+                InstKind::Jmp
+                    | InstKind::Br
+                    | InstKind::BrNull
+                    | InstKind::Return
+                    | InstKind::Panic
+                    | InstKind::PanicMsg
+                    | InstKind::EarlyReturn
+            ),
+        }
+    }
+
+    /// Override a sig's `id` after `add_sig` (SAB-D17 dual track:
+    /// the Zig `genFuncSig` assigns `FunctionSig.id` from the
+    /// emission-count counter — `function_sigs.len + test_sigs.len`
+    /// — while `declInstForSig`'s operands use the interned name
+    /// id). The trunk default stays the intern id (the phase-1
+    /// model口径); a caller mirroring the Zig counter must call
+    /// this AFTER `append_decl_inst`, because the decl instruction
+    /// captures its operands from the sig's id at append time and
+    /// those operands must remain the intern id.
+    pub fn set_sig_id(&mut self, sig_index: usize, id: u32) {
+        self.function_sigs[sig_index].id = id;
+    }
+
+    /// Fill in a sig's params / param ids after `add_sig` (the Zig
+    /// `genFuncSig` builds them while interning scoped param names,
+    /// which must happen after the function name is interned).
+    pub fn set_sig_params(&mut self, sig_index: usize, params: Vec<ParamSpec>, param_ids: Vec<u32>) {
+        let sig = &mut self.function_sigs[sig_index];
+        sig.params = params;
+        sig.param_ids = param_ids;
+    }
+
+    /// Set a sig's return capability (Zig `genFuncSig`'s
+    /// `return_cap = returnCapForType(ret_ty)`).
+    pub fn set_sig_return_cap(&mut self, sig_index: usize, cap: Option<CapPrefix>) {
+        self.function_sigs[sig_index].return_cap = cap;
+    }
+
+    /// Set a sig's test metadata (Zig `genFuncSig` test arm:
+    /// `llvm_name = "_saasm_test_{id}"`, ignored / should_panic).
+    pub fn set_sig_test_meta(&mut self, sig_index: usize, ignored: bool, should_panic: bool) {
+        let sig = &mut self.function_sigs[sig_index];
+        sig.ignored = ignored;
+        sig.should_panic = should_panic;
+    }
+
+    /// `panic(<reg>)`: operands `[Reg(code)]` — the Zig `genCall`
+    /// panic arm's non-literal form (lines 15167–15180), sibling of
+    /// `emit_panic_code`.
+    pub fn emit_panic_reg(&mut self, code: u32) {
+        let mut inst = self.make_inst(InstKind::Panic);
+        inst.operands[0] = Operand::Reg(code);
+        self.append_inst(inst);
+    }
+
+    /// Clone of a registered sig (Zig reads `function_sigs.items[i]`
+    /// freely; `genTestDecl` copies the test sig into `test_sigs`).
+    pub fn sig_clone(&self, sig_index: usize) -> FunctionSig {
+        self.function_sigs[sig_index].clone()
+    }
+
+    /// `dst = src` register assign (Zig `emitAssignReg`, lines
+    /// 3882-3898): a no-op when dst == src. The Zig version also
+    /// transfers release metadata and marks the source consumed;
+    /// that bookkeeping is E-group state work — the instruction
+    /// shape ported here is the whole byte-level effect.
+    pub fn emit_assign_reg(&mut self, dst: u32, src: u32) {
+        if dst == src {
+            return;
+        }
+        self.record_reg(dst);
+        let mut inst = self.make_inst(InstKind::Assign);
+        inst.operands[0] = Operand::Reg(dst);
+        inst.operands[1] = Operand::Reg(src);
+        self.append_inst(inst);
+    }
+
     /// Consume the builder into the finished module.
     pub fn finish(mut self) -> Module {
         self.finish_function();

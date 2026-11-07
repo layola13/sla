@@ -1,0 +1,75 @@
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@const SLA_FNPTR_VT_while_sum = vtable { call = @sla__while_sum }
+@const SLA_FNPTR_VT_main = vtable { call = @main }
+@sla__while_sum(limit: i32) -> i32:
+L_ENTRY:
+    tmp_0 = 0
+    t = add tmp_0, 0
+    !tmp_0
+    tmp_1 = 0
+    i = add tmp_1, 0
+    !tmp_1
+    jmp L_WHILE_HEAD_0
+
+L_WHILE_HEAD_0:
+    tmp_2 = slt i, limit
+    br tmp_2 -> L_WHILE_BODY_1, L_WHILE_COND_FALSE_2
+
+L_WHILE_BODY_1:
+    !tmp_2
+    tmp_3 = add t, i
+    !t
+    t = tmp_3
+    tmp_4 = 1
+    tmp_5 = add i, tmp_4
+    !tmp_4
+    !i
+    i = tmp_5
+    jmp L_WHILE_HEAD_0
+
+L_WHILE_COND_FALSE_2:
+    !tmp_2
+    jmp L_WHILE_EXIT_3
+
+L_WHILE_EXIT_3:
+    !i
+    !limit
+    return t
+
+@main() -> i32:
+L_ENTRY:
+    tmp_6 = 10
+    tmp_7 = call @sla__while_sum(tmp_6)
+    !tmp_6
+    return tmp_7
+
+@test "probe while"():
+L_TEST_ENTRY_4:
+    tmp_8 = 10
+    tmp_9 = call @sla__while_sum(tmp_8)
+    !tmp_8
+    tmp_10 = 45
+    tmp_11 = ne tmp_9, tmp_10
+    !tmp_9
+    !tmp_10
+    br tmp_11 -> L_THEN_5, L_ELSE_6
+
+L_THEN_5:
+    !tmp_11
+    panic(401)
+
+L_ELSE_6:
+    !tmp_11
+    jmp L_MERGE_7
+
+L_MERGE_7:
+    return
+

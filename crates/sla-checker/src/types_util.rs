@@ -257,6 +257,149 @@ pub fn value_assignable_to(expected: &Type, actual: &Type) -> bool {
         && matches!(actual, Type::Pointer(_))
 }
 
+/// Mirrors lowering_rules `peelBorrowPointerType`: strip borrow /
+/// pointer layers until a non-carrier type remains.
+pub fn peel_borrow_pointer(ty: &Type) -> &Type {
+    let mut curr = ty;
+    loop {
+        match curr {
+            Type::Borrow(inner) | Type::Pointer(inner) => curr = inner,
+            other => return other,
+        }
+    }
+}
+
+/// Mirrors lowering_rules `optionInnerType`: `Option<T>` (after a
+/// borrow/pointer peel) yields `T`.
+pub fn option_inner_type(ty: &Type) -> Option<Type> {
+    match peel_borrow_pointer(ty) {
+        Type::UserDefined(u) if u.name == "Option" && u.generics.len() == 1 => {
+            Some(u.generics[0].clone())
+        }
+        _ => None,
+    }
+}
+
+/// Mirrors lowering_rules `resultOkType`: `Result<T, E>` yields `T`.
+pub fn result_ok_type(ty: &Type) -> Option<Type> {
+    match peel_borrow_pointer(ty) {
+        Type::UserDefined(u) if u.name == "Result" && u.generics.len() == 2 => {
+            Some(u.generics[0].clone())
+        }
+        _ => None,
+    }
+}
+
+/// Mirrors lowering_rules `resultErrType`: `Result<T, E>` yields `E`.
+pub fn result_err_type(ty: &Type) -> Option<Type> {
+    match peel_borrow_pointer(ty) {
+        Type::UserDefined(u) if u.name == "Result" && u.generics.len() == 2 => {
+            Some(u.generics[1].clone())
+        }
+        _ => None,
+    }
+}
+
+/// Shared shape of lowering_rules `userDefinedGenericInner`:
+/// `Name<T>` (after a peel) yields `T`.
+fn user_defined_generic_inner(ty: &Type, name: &str) -> Option<Type> {
+    match peel_borrow_pointer(ty) {
+        Type::UserDefined(u) if u.name == name && u.generics.len() == 1 => {
+            Some(u.generics[0].clone())
+        }
+        _ => None,
+    }
+}
+
+/// Mirrors lowering_rules `sliceElementType` (`Slice<T>` -> `T`).
+pub fn slice_element_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "Slice")
+}
+
+/// Mirrors lowering_rules `vecElementType` (`Vec<T>` -> `T`).
+pub fn vec_element_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "Vec")
+}
+
+/// Mirrors lowering_rules `boxInnerType` (`Box<T>` -> `T`).
+pub fn box_inner_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "Box")
+}
+
+/// Mirrors lowering_rules `rcInnerType` (`Rc<T>` -> `T`).
+pub fn rc_inner_type(ty: &Type) -> Option<Type> {
+    user_defined_generic_inner(ty, "Rc")
+}
+
+/// Mirrors lowering_rules `arrayType`: the array shape under any
+/// borrow/pointer peel.
+pub fn array_type_of(ty: &Type) -> Option<(Type, usize)> {
+    match peel_borrow_pointer(ty) {
+        Type::Array(a) => Some(((*a.elem).clone(), a.len)),
+        _ => None,
+    }
+}
+
+/// Mirrors lowering_rules `concreteTypeName`: the user-defined name
+/// under any borrow/pointer peel.
+pub fn concrete_type_name(ty: &Type) -> Option<&str> {
+    match peel_borrow_pointer(ty) {
+        Type::UserDefined(u) => Some(u.name.as_str()),
+        _ => None,
+    }
+}
+
+/// Mirrors lowering_rules `dynTraitName`: a user type named
+/// `__dyn_<Trait>` denotes a dyn-trait carrier; yields the trait.
+pub fn dyn_trait_name(ty: &Type) -> Option<&str> {
+    match peel_borrow_pointer(ty) {
+        Type::UserDefined(u) => u.name.strip_prefix("__dyn_"),
+        _ => None,
+    }
+}
+
+/// Mirrors the checker's `rootIdentifier` (type_checker.zig:1808):
+/// the binding an expression is rooted at, peeling index and field
+/// projections (NOT borrows/moves). Used by the destructure and
+/// await consumption sites, which consume the whole root binding.
+pub fn root_identifier_deep(node: &Node) -> Option<&str> {
+    match node {
+        Node::Identifier(name) => Some(name.as_str()),
+        Node::IndexExpr(i) => root_identifier_deep(&i.target),
+        Node::FieldExpr(f) => root_identifier_deep(&f.expr),
+        _ => None,
+    }
+}
+
+/// Mirrors lowering_rules `literalZero`.
+pub fn literal_zero(node: &Node) -> bool {
+    match node {
+        Node::Literal(sla_ast::exprs::Literal::IntVal(v)) => *v == 0,
+        Node::Literal(sla_ast::exprs::Literal::FloatVal(v)) => *v == 0.0,
+        _ => false,
+    }
+}
+
+/// Mirrors the checker's `enumNameMatchesDecl`: a pattern's enum
+/// name matches a declaration name exactly, or as a prefix followed
+/// by `_` (e.g. pattern `Message` against decl `Message_Kind`).
+pub fn enum_name_matches_decl(pattern_name: &str, decl_name: &str) -> bool {
+    if pattern_name == decl_name {
+        return true;
+    }
+    if decl_name.len() <= pattern_name.len() {
+        return false;
+    }
+    decl_name.starts_with(pattern_name)
+        && decl_name.as_bytes()[pattern_name.len()] == b'_'
+}
+
+/// Mirrors lowering_rules `isSwitchDefaultPattern`: the pattern is
+/// the bare identifier `default`.
+pub fn is_switch_default_pattern(node: &Node) -> bool {
+    matches!(node, Node::Identifier(name) if name == "default")
+}
+
 /// Address-based identity of a node inside the borrowed AST,
 /// mirroring the `*const ast.Node` keys of Zig's side tables
 /// (`expr_types`, `cleanups`, `phi_cleanups`).

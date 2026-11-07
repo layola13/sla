@@ -169,14 +169,15 @@
   构造器/fn-ptr 的分派序，及 mem::forget / Box::into_raw /
   ManuallyDrop::into_inner 三个关联消费特例）。
 - 消费站点覆盖（对照 D-C7 清单）：let/赋值/release/move/extern/宏/
-  try/await 八处 + 关联特例三处已移植；仅解构移动（:2913）随
-  let_destructure 一并未覆盖。
+  try/await 八处 + 关联特例三处已移植；~~仅解构移动（:2913）随
+  let_destructure 一并未覆盖~~（二期已补齐，见文末二期销账节）。
 - 构建：Kaggle 场地（2201，cargo/rustc 1.99.1）`cargo test -p sla-checker`
   全绿（16 测试，含 D-C1 遮蔽演示、D-C8 宽度口径、D-C9 while 口径、
   双 extern 行为、宏条件消费、循环条件消费五项钉死测试），
   干净重编零警告；日志 `docs/build-logs/checker-build-20261107.log`。
   每个 .rs ≤700 行（最大 tests.rs 581 行）。
-- 未覆盖清单（切片外，遇之以 OutOfSlice 响亮拒绝，不静默近似）：
+- 未覆盖清单（切片外，遇之以 OutOfSlice 响亮拒绝，不静默近似；
+  二期已全部或大部销账，逐项状态见文末二期销账节，此处保留原文作对照）：
   switch/match 臂（含 mergeMultiBranchScopeStates 的应用层——规则已移植）、
   if-let 链、let_else / let_destructure、闭包字面量与立即调用、
   泛型函数实例化检查、trait/impl 契约检查（方法体已查）、
@@ -187,3 +188,142 @@
 - 接线说明（交协调线）：本 crate 直接消费 sla-ast（根 Cargo.toml 的
   path 依赖为协调线所建，未改动）；任务书预设的「临时镜像」因 sla-ast
   已就绪而未启用（镜像文件已删除）；未改任何根 workspace 文件。
+
+## INT-1 销账（2026-11-07，二期 checker 线第一段）
+
+### INT-1 (a) 本移植缺陷 — 已修复销账：非 void 函数对在场 return 误报 missing return
+- 根因（一句话）：Rust `check_tail_type` 自行发明了 Zig 不存在的
+  「missing return」判定——它只认尾 `expr_stmt` 为函数返回值，尾随
+  `return_stmt` 时 `block_tail_type` 返回 None 即报
+  "missing return value in non-void function"；而 Zig `checkFunc`
+  （type_checker.zig:2596-2604）**根本没有 missing-return 检查**：
+  仅当 ret 非 void、body 非空、末语句为 `expr_stmt` 且该语句不终止
+  时才核对尾表达式类型，其余形态（return 尾、终止性尾表达式、
+  非表达式尾、空 body）一概不查；return 值本身已由 `return_stmt`
+  臂（:2991 起）核对。
+- 修复：`crates/sla-checker/src/check_program.rs` 的
+  `check_tail_type` 按上述 Zig 原形逐条件重写（void/空 body/
+  非 expr_stmt 尾/终止性尾 → 直接通过；非终止 expr_stmt 尾 →
+  取 `expr_types` 核对，缺记录时 CompileError 与 Zig
+  `orelse return TypeError.CompileError` 对齐，不匹配改为
+  TypeMismatch 且文案与 Zig 同式
+  "TypeMismatch in function tail expression: expected …, actual …"，
+  此前 Rust 侧误用 CompileError）。发明的 missing-return 错误已删除。
+- 附带实证的 Zig 行为（忠实保留，不作 (c) 另立）：非 void 函数以
+  非表达式语句结尾（`let` 尾）或空 body 时，Zig 检查器同样放行——
+  这不是本次修复引入的宽松，而是 Zig 检查器口径本身；已由单测
+  `non_expression_tail_passes_per_zig` / `empty_body_passes_per_zig`
+  钉住，防止后人再以「补全 missing return」之名复活 INT-1。
+  （分类说明：本条按本文件分类法属 (a) 与 Zig 行为分歧之本移植
+  缺陷；任务书预置的 (b) 标签经实证不适用——(b) 指 Rust 纪律
+  逼出的表达受阻，本缺陷与之无关。）
+- 真值依据（双路）：① Zig 源码 type_checker.zig:2596-2604 +
+  :2991；② 场地三真插件（现头 6002b386，`sa sla check`，2026-11-07）
+  九探针实测：return 尾 rc=0、if 双臂 return rc=0、尾 if 表达式
+  rc=0、尾算术表达式 rc=0、尾类型不匹配 rc=1 (TypeMismatch in
+  function tail expression: expected i32, actual boolean)、
+  let 尾 rc=0、return 类型不匹配 rc=1 (TypeMismatch in return)、
+  空 body rc=0。
+- 新增单测（`crates/sla-checker/src/tests_e2e.rs`，parse→check
+  形态，经 Cargo dev-dependency 引 sla-parser；另 `src/lib.rs`
+  注册模块）：e2e_c 本体（与 docs/probes/e2e_c.sla 逐字一致）+
+  if 双臂 return、尾 if 表达式、尾算术表达式、尾类型不匹配、
+  return 类型不匹配、let 尾、空 body，共 8 条。
+- 场地实测（场地三 2202，md5 双确认 0 差异后）：
+  `cargo test -p sla-checker` 24/24 全绿（原 16 + 新增 8）；
+  `cargo test --workspace --no-fail-fast` 72/72 全绿（基线 64 + 8，
+  无回退）；oracle 全管线对 e2e_a/e2e_b/e2e_c 三探针均 rc=0
+  （修复前三者皆死于 INT-1）。
+
+## 二期扩围销账（2026-11-07，checker 线第二段）
+
+按任务书顺序逐项镜像（Zig 行段为本机参照树 type_checker.zig 口径），
+场地三（2202）实测：`cargo test -p sla-checker` 80/80
+（起点 24，新增 56）；`cargo test --workspace --no-fail-fast`
+134/134（起点 72，只增不减）。真值双路：Zig 源码 + 场地真插件
+（现头 6002b386）12 探针（switch 消费/switch 尾/if-let/let-else
+正反/destructure Copy/match 正反/泛型/slice 正反/闭包推断/
+while-let/await 重复）逐项对齐。
+
+### 逐项销账
+
+1. **switch/match 臂应用层**（switch :5464、match :5494）：
+   `check_match.rs` 新建。switch 只查 scrutinee 与臂体、模式不查
+   （D-C13）；match 三路（infer 推断路 / Option·Result 路 / 枚举路）
+   全量移植含守卫检查与活臂尾类型一致性；多路合并走
+   `merge_multi_branch_states`（BindingId 键控，D-C1 的 Rust 侧
+   纪律在新代码同样适用）。`expr_terminates` 补 match
+   （非空且全臂终止）与 switch（再加 default 臂存在）形态。
+   sentinel 读回点一律以 `current_ret_ty` 字段对应（D-C5 纪律）。
+2. **if-let 链**（:5252）：`check_flow.rs::check_if_let`，链条件在
+   chain 帧内顺序检查、后条件可见先绑定；合并与 plain if 同构。
+3. **let_destructure + 消费站点 :2913 与 let_else**（:2858/:2866）：
+   `check_stmt.rs`。解构根无条件消费（D-C12/FB-010）；let-else 的
+   else 块先于绑定检查且必须发散。
+4. **泛型函数实例化检查**：检查器层**不存在**该检查——实例化归
+   monomorphizer（D-C11）；`generic_func_ref` 臂裸 CompileError
+   照录（D-C14/FB-012）。
+5. **三张侧表**：`await_cleanups`（:336 recordAwaitCleanup，含逃逸
+   与借用别名排除）、`macro_call_try_cleanups`（:5095，传播参数
+   排除 + 递归 macroHasTry/macroParamIsTrySource，check_macro.rs）；
+   **try 无独立侧表**——Zig 的 try 清理写入共享 `cleanups`
+   （collectTryCleanup :1662），任务书「try_cleanups」即此，已照
+   Zig 结构合并登记（D-C17）。
+6. **清单余项**：enum 字面量定型（check_literal.rs，:4780）；
+   slice 表达式（同文件，:4734，字面量界 + 静态界检查）；
+   导入宏（check_macro.rs 名称结果表全量移植 lowering_rules:3020
+   + 调用臂 arity/表达式输出双形态）；trait/impl 契约
+   （check_trait.rs：超 trait 须直接 impl、方法须为 trait 自有、
+   Self 替换签名相等）；运算符重载 + 数值结构体二元特例
+   （check_binary.rs：overloadSymbol 精确匹配 + AmbiguousCall、
+   struct 加减/标量乘特例、Eq/Ord 派生门）；dyn/slice 强转
+   （check_stmt.rs let/const 臂 + dyn_box/dyn_rc_coercions 侧表，
+   附带修正 const 臂误消费——Zig const 臂从不消费初值源）；
+   闭包字面量（推断参数响亮拒绝，文案与场地探针逐字一致）+
+   IIFE + 局部闭包/fn-ptr 变量调用（先于用户函数解析）；
+   关联调用补 trait 方法符号 `{Type}__{Trait}_{method}` 候选；
+   sum 的 slice 形态（收紧为 array/slice/vec 三路，删除一期
+   「任意泛型首参」近似）。
+
+### 二期新登记分歧
+
+- **D-C11 (b) 泛型实例化不在检查器**：Zig 流水线 monomorphize →
+  type-check，检查器从不见未特化泛型函数；`FuncDecl.generics`
+  在 type_checker.zig 全文未被查阅，调用点的 `CallExpr.generics`
+  仅内建特例使用。Rust 镜像照此：登记泛型名但从不替换，用户
+  调用按未替换签名检查。形态差异属流水线分工而非检查器行为差。
+- **D-C12 (b) 解构消费无 Copy 豁免**（→ FB-010）：:2913 无条件
+  consumeBinding，与相邻 let 站点（:2844）的 Copy/borrow 豁免
+  口径分叉；场地实证 Copy 元组解构后复用 rc=1 UseAfterMove。
+- **D-C13 (b) switch 模式零检查**（→ FB-011）：:5464 臂从不查
+  case.pattern——无定型、无绑名、无穷尽性。
+- **D-C14 (c) generic_func_ref 裸错误**（→ FB-012）：:3209
+  `return TypeError.CompileError` 无 setError，诊断只能靠包裹层
+  回退文案。
+- **D-C15 (b) pattern writable→is_const 反转**（→ FB-013）：
+  definePatternBindings（:1649）把名为 writable 的参数直塞
+  defineSymbol 的 is_const 槽；if-let/while-let/match 传 true
+  （绑定实为 const）、let-else 传 false（实为可变）。Rust 照录。
+- **D-C16 (b) match 推断路 OR 条件 + 改写 scrutinee 类型**
+  （→ FB-014）：:5494 推断路以「枚举名或变体名」析取判定
+  Option/Result，并回写根绑定 `sym.ty`。
+- **D-C17 (b) 侧表键与清理名单的寻址口径**：Zig
+  macro_call_try_cleanups 按 `*const CallExpr` 子对象指针键控，
+  Rust 按包含节点地址键控（节点身份口径差，同 D-C3 家族）；
+  三张侧表的值在 Zig 与 Rust 两侧同为**名字列表**（身份键控只
+  覆盖状态快照/合并，清理名单的按名寻址是 Zig 原结构，照录并
+  在此明示其与 D-CK1 的关联面）。
+
+### 二期剩余未覆盖清单（确切）
+
+- 关联调用的**接收者类型推导**全形态：现实现覆盖显式 target 的
+  限定名候选 + trait 方法符号扫描；由首参表达式类型反推接收者
+  类型的形态仍为近似（Zig 侧该路径与方法调用下沉形态耦合，
+  本段未逐行移植）。
+- match 守卫（guard）的完整形态：已移植「守卫须为基本
+  boolean/integer」校验；守卫内的绑定可见性与消费语义未单独
+  建模（Zig 侧守卫与 case 体同帧，本镜像同帧处理，作为近似
+  登记在此）。
+- plain if 条件接受 integer 一项：一期镜像要求 Boolean，
+  Zig 接受 boolean/integer/infer——属一期既有简化，本段
+  按任务范围未动，登记在此待后续线处理。

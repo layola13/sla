@@ -1,0 +1,4 @@
+mode: full (--no-build-mode: @test bodies kept)
+OK
+structs(0): 
+enums(0): 

@@ -5,3 +5,9 @@ edition = "2021"
 
 [dependencies]
 sla-ast = { path = "../sla-ast" }
+
+# Only the parse->check end-to-end tests (tests_e2e.rs) consume the
+# parser; the checker library itself does not depend on it in
+# production code (the oracle wires parser -> checker at runtime).
+[dev-dependencies]
+sla-parser = { path = "../sla-parser" }

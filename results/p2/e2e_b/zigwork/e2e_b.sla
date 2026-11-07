@@ -1,0 +1,17 @@
+fn while_sum(limit: i32) -> i32 {
+    let t: i32 = 0;
+    let i: i32 = 0;
+    while i < limit {
+        t = t + i;
+        i = i + 1;
+    }
+    return t;
+}
+
+fn main() -> i32 {
+    return while_sum(10);
+}
+
+@test "probe while"() {
+    if while_sum(10) != 45 { panic(401); };
+}

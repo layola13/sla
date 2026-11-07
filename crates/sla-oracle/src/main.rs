@@ -15,6 +15,15 @@
 //! - staged timing (SLA_RS_PROFILE=1 prints per-stage ms to stderr).
 //!
 //! Usage: sla-oracle <input.sla> [-o out.sa] [--dump-boundaries <dir>]
+//!        [--build-mode | --no-build-mode]
+//!
+//! Build mode (the default, D-O2): after parsing and before checking,
+//! every top-level `@test` body is emptied in place, mirroring the Zig
+//! pipeline, whose build mode clears test bodies before codegen so the
+//! `sa sla build` artifact carries only the test shell (header, entry
+//! label, `return`). `--no-build-mode` (alias `--keep-test-bodies`)
+//! keeps the full bodies for diagnosis; compare/bench runs must use
+//! the default so they measure the same program the plugin builds.
 //!
 //! Exit codes: 0 full pipeline produced output; 2 usage / IO error;
 //! 3 text codegen failed loudly (unported emission path) after
@@ -36,6 +45,11 @@ fn main() -> ExitCode {
     let mut input: Option<PathBuf> = None;
     let mut output: Option<PathBuf> = None;
     let mut dump_dir: Option<PathBuf> = None;
+    // Build mode is the default (D-O2): the oracle's compare/bench
+    // paths are calibrated against `sa sla build` artifacts, which
+    // carry emptied @test bodies, so keeping bodies by default would
+    // compare a different program than the plugin builds.
+    let mut build_mode = true;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -47,12 +61,17 @@ fn main() -> ExitCode {
                 i += 1;
                 dump_dir = args.get(i).map(PathBuf::from);
             }
+            "--build-mode" => build_mode = true,
+            "--no-build-mode" | "--keep-test-bodies" => build_mode = false,
             other => input = Some(PathBuf::from(other)),
         }
         i += 1;
     }
     let Some(input) = input else {
-        eprintln!("usage: sla-oracle <input.sla> [-o out.sa] [--dump-boundaries <dir>]");
+        eprintln!(
+            "usage: sla-oracle <input.sla> [-o out.sa] [--dump-boundaries <dir>] \
+             [--build-mode | --no-build-mode]"
+        );
         return ExitCode::from(2);
     };
     let profile = std::env::var_os("SLA_RS_PROFILE").is_some();
@@ -121,7 +140,7 @@ fn main() -> ExitCode {
     let type_refs: Vec<&str> = seed_types.iter().map(String::as_str).collect();
     let enum_refs: Vec<&str> = seed_enums.iter().map(String::as_str).collect();
     parser.seed_known_type_names(&type_refs, &enum_refs);
-    let root = match parser.parse_program() {
+    let mut root = match parser.parse_program() {
         Ok(root) => root,
         Err(e) => {
             let expected = e.expected.as_deref().unwrap_or("-");
@@ -137,6 +156,27 @@ fn main() -> ExitCode {
         }
     };
     stage_done(profile, "parse", t);
+
+    // -- stage: build-mode @test pruning (D-O2) ---------------------------
+    // The Zig pipeline's build mode clears @test bodies before codegen
+    // (plugin_compile; D-T7 / FB-008): the build artifact keeps only
+    // the declaration shell — name and ignored/should_panic modifiers —
+    // and codegen's gen_test_decl emits header + entry label + `return`
+    // for the empty body, exactly the golden shape in fixtures/expected.
+    // The pruning therefore replaces each TestDecl's statement list
+    // with an empty one, in place: the tree is NOT cloned or rebuilt,
+    // so the surviving nodes keep their addresses for the checker's
+    // node-key side tables (D-T10), and it runs before checking so the
+    // checker and codegen both see the build-mode program. The AST
+    // dump below is this pruned tree — what the later stages consume.
+    let t = Instant::now();
+    let pruned_tests = if build_mode {
+        prune_test_bodies(&mut root)
+    } else {
+        0
+    };
+    stage_done(profile, "build_mode_prune", t);
+
     dump("02_ast.txt", &format!("{root:#?}\n"));
 
     // -- stage: check ---------------------------------------------------------
@@ -147,6 +187,16 @@ fn main() -> ExitCode {
     };
     let mut checker = Checker::new();
     let mut checked_text = String::new();
+    // Dump caliber (D-O2): in build mode the checker saw emptied @test
+    // bodies; say so on the checked dump so a missing test-body fact is
+    // read as the build-mode program, not as a checker gap.
+    if build_mode {
+        checked_text.push_str(&format!(
+            "mode: build (@test bodies pruned before check: {pruned_tests})\n"
+        ));
+    } else {
+        checked_text.push_str("mode: full (--no-build-mode: @test bodies kept)\n");
+    }
     let check_rc = match checker.check_program(program) {
         Ok(()) => {
             checked_text.push_str("OK\n");
@@ -290,6 +340,30 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
     // a silent workaround.
 }
 
+/// D-O2 build-mode pruning: empty every top-level `TestDecl` body in
+/// place, preserving the declaration shell (name, `is_ignored`,
+/// `should_panic`). Returns how many bodies were non-empty and got
+/// cleared. Only the body's own `Vec` is cleared — no node of the
+/// surviving tree moves, so node-address keys stay valid (D-T10).
+/// Tests live only at the top level of a program (the parser flattens
+/// modules and has no other TestDecl nesting), so one pass over the
+/// program's declarations is the whole operation.
+fn prune_test_bodies(root: &mut Node) -> usize {
+    let Node::Program(program) = root else {
+        return 0;
+    };
+    let mut pruned = 0;
+    for decl in &mut program.decls {
+        if let Node::TestDecl(test) = decl {
+            if !test.body.is_empty() {
+                pruned += 1;
+            }
+            test.body.clear();
+        }
+    }
+    pruned
+}
+
 fn stage_done(profile: bool, name: &str, t: Instant) {
     if profile {
         eprintln!("stage {name} {:.3}ms", t.elapsed().as_secs_f64() * 1000.0);
@@ -398,4 +472,64 @@ fn scan_declared_type_names(text: &str) -> (Vec<String>, Vec<String>) {
         }
     }
     (types, enums)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sla_ast::{ImportDecl, Program, TestDecl};
+
+    fn test_decl(name: &str, body: Vec<Node>) -> Node {
+        Node::TestDecl(TestDecl {
+            name: name.to_string(),
+            is_ignored: true,
+            should_panic: false,
+            body,
+        })
+    }
+
+    #[test]
+    fn prune_empties_test_bodies_but_keeps_the_shell() {
+        let mut root = Node::Program(Program {
+            decls: vec![
+                Node::ImportDecl(ImportDecl {
+                    path: "sa_std/fmt.sai".to_string(),
+                }),
+                test_decl("full", vec![Node::Identifier("x".to_string())]),
+                test_decl("already empty", Vec::new()),
+            ],
+        });
+        assert_eq!(prune_test_bodies(&mut root), 1);
+        let Node::Program(program) = &root else {
+            panic!("root must stay a program");
+        };
+        // Non-test declarations are untouched.
+        assert!(matches!(&program.decls[0], Node::ImportDecl(_)));
+        for decl in &program.decls[1..] {
+            let Node::TestDecl(test) = decl else {
+                panic!("test decl must stay a test decl");
+            };
+            assert!(test.body.is_empty());
+            assert!(test.is_ignored);
+            assert!(!test.should_panic);
+        }
+        assert_eq!(program.decls.len(), 3);
+        // Pruning is idempotent: a second pass clears nothing new.
+        assert_eq!(prune_test_bodies(&mut root), 0);
+    }
+
+    #[test]
+    fn prune_on_a_tree_without_tests_changes_nothing() {
+        let mut root = Node::Program(Program {
+            decls: vec![Node::ImportDecl(ImportDecl {
+                path: "sa_std/fmt.sai".to_string(),
+            })],
+        });
+        let before = format!("{root:?}");
+        assert_eq!(prune_test_bodies(&mut root), 0);
+        assert_eq!(format!("{root:?}"), before);
+        // A non-program root is not a pipeline input; prune is a no-op.
+        let mut leaf = Node::Identifier("x".to_string());
+        assert_eq!(prune_test_bodies(&mut leaf), 0);
+    }
 }

@@ -12,9 +12,10 @@ use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::rules::ValueState;
 use crate::types_util::{
     bool_ty, i64_ty, is_borrow_like_type, is_integer_type, is_numeric_type, node_key_of,
+    option_inner_type, result_ok_type, root_identifier_deep,
     type_desc, types_equal, u64_ty, value_assignable_to, void_ty,
 };
-use sla_ast::exprs::{BinaryOp, Literal};
+use sla_ast::exprs::Literal;
 use sla_ast::node::Node;
 use sla_ast::types::{Primitive, Type};
 
@@ -38,11 +39,7 @@ impl Checker {
                 Literal::StringVal(_) => crate::types_util::raw_ptr_ty(),
             }),
             Node::Identifier(name) => self.check_identifier(name),
-            Node::BinaryExpr(b) => {
-                let left = self.check_expr(&b.left)?;
-                let right = self.check_expr(&b.right)?;
-                check_binary(b.op, &left, &right)
-            }
+            Node::BinaryExpr(b) => self.check_binary_expr(b),
             Node::BorrowExpr(b) => {
                 if let Node::Identifier(name) = &*b.expr {
                     match self.lookup_state(name) {
@@ -157,36 +154,167 @@ impl Checker {
                 })
             }
             Node::TryExpr(t) => {
-                let inner = self.check_expr(&t.expr)?;
+                // Zig try arm (:3562): non-Copy non-borrow identifier
+                // sources are consumed FIRST ("try propagation");
+                // then Option/Result unwrap with a caller-side
+                // cleanup recorded into the shared `cleanups` table;
+                // then a struct `value`-field fallback; anything
+                // else is NotAStruct.
+                let operand_ty = self.check_expr(&t.expr)?;
                 if let Node::Identifier(name) = &*t.expr {
-                    if !self.type_is_copy(&inner) && !is_borrow_like_type(&inner) {
+                    if !self.type_is_copy(&operand_ty)
+                        && !is_borrow_like_type(&operand_ty)
+                    {
                         self.consume_binding(name, "try propagation")?;
                     }
                 }
-                Ok(try_payload_type(&inner))
+                if matches!(operand_ty, Type::Infer) {
+                    return Ok(operand_ty);
+                }
+                if let Some(unwrapped) = option_inner_type(&operand_ty) {
+                    self.record_try_cleanup(node, &t.expr);
+                    return Ok(unwrapped);
+                }
+                if let Some(unwrapped) = result_ok_type(&operand_ty) {
+                    self.record_try_cleanup(node, &t.expr);
+                    return Ok(unwrapped);
+                }
+                let peeled = peel_borrow_pointer(&operand_ty).clone();
+                match &peeled {
+                    Type::UserDefined(u) => {
+                        let info = match self.structs.get(&u.name) {
+                            Some(info) => info,
+                            None => {
+                                return Err(Diagnostic::new(
+                                    ErrorKind::NotAStruct,
+                                    format!(
+                                        "TypeMismatch: try requires Option, Result, or struct value, actual {}",
+                                        type_desc(&operand_ty)
+                                    ),
+                                ))
+                            }
+                        };
+                        match info.field_ty("value") {
+                            Some(value_ty) => {
+                                let value_ty = value_ty.clone();
+                                self.record_try_cleanup(node, &t.expr);
+                                Ok(value_ty)
+                            }
+                            None => Err(Diagnostic::new(
+                                ErrorKind::FieldNotFound,
+                                format!(
+                                    "TypeMismatch: try requires Option, Result, or struct value, actual {}",
+                                    type_desc(&operand_ty)
+                                ),
+                            )),
+                        }
+                    }
+                    _ => Err(Diagnostic::new(
+                        ErrorKind::NotAStruct,
+                        format!(
+                            "TypeMismatch: try requires Option, Result, or struct value, actual {}",
+                            type_desc(&operand_ty)
+                        ),
+                    )),
+                }
             }
             Node::AwaitExpr(a) => {
-                let inner = self.check_expr(&a.expr)?;
-                if let Node::Identifier(name) = &*a.expr {
-                    if !self.type_is_copy(&inner) && !is_borrow_like_type(&inner) {
-                        self.consume_binding(name, "await")?;
+                // Zig await arm (:3668): the operand must be a
+                // future; recordAwaitCleanup runs BEFORE the root
+                // consumption, so the awaited binding is still
+                // active in the snapshot and is excluded by the
+                // escape rule instead.
+                let operand_ty = self.check_expr(&a.expr)?;
+                let inner = match &operand_ty {
+                    Type::Future(payload) => (**payload).clone(),
+                    other => {
+                        return Err(Diagnostic::new(
+                            ErrorKind::TypeMismatch,
+                            format!(
+                                "await requires future<T>, actual {}",
+                                type_desc(other)
+                            ),
+                        ))
+                    }
+                };
+                self.record_await_cleanup(node, &a.expr);
+                if let Some(root) = root_identifier_deep(&a.expr) {
+                    let root = root.to_string();
+                    match self.lookup_state(&root) {
+                        None => {
+                            return Err(Diagnostic::new(
+                                ErrorKind::UndefinedVariable,
+                                format!("UndefinedVariable: `{root}`"),
+                            ))
+                        }
+                        Some(crate::rules::ValueState::Consumed) => {
+                            return Err(Diagnostic::new(
+                                ErrorKind::UseAfterMove,
+                                format!(
+                                    "UseAfterMove: `{root}` was already consumed"
+                                ),
+                            ))
+                        }
+                        _ => {}
+                    }
+                    self.consume_binding(&root, "await")?;
+                }
+                Ok(inner)
+            }
+            Node::EnumLiteral(e) => self.check_enum_literal(e),
+            Node::SliceExpr(sl) => self.check_slice_expr(sl),
+            Node::ClosureLiteral(c) => {
+                // Zig closure_literal arm (:4700): parameter types
+                // must be annotated — an `infer` parameter is a
+                // TypeMismatch with this exact diagnostic (venue
+                // probe p_closure_infer, rc=1). Parameters are
+                // defined as CONST bindings in a child scope; the
+                // body is a single expression whose type is the
+                // closure's return type.
+                for p in &c.params {
+                    if matches!(*p.ty, Type::Infer) {
+                        return Err(Diagnostic::new(
+                            ErrorKind::TypeMismatch,
+                            "closure parameter types must be inferred from context; standalone inference is not available",
+                        ));
                     }
                 }
-                Ok(match inner {
-                    Type::Future(payload) => (*payload).clone(),
-                    other => other,
-                })
+                self.scopes.push_frame();
+                for p in &c.params {
+                    self.define_symbol_with_state(
+                        &p.name,
+                        (*p.ty).clone(),
+                        true,
+                        crate::rules::ValueState::Active,
+                        None,
+                    )?;
+                }
+                let body_result = self.check_expr(&c.body);
+                self.scopes.pop_frame();
+                let ret = body_result?;
+                Ok(Type::Closure(sla_ast::types::ClosureType {
+                    params: c.params.iter().map(|p| (*p.ty).clone()).collect(),
+                    ret: Box::new(ret),
+                }))
             }
             Node::IfExpr(i) => self.check_if_expr(i),
+            Node::SwitchExpr(s) => self.check_switch(s),
+            Node::MatchExpr(m) => self.check_match(m),
             Node::CallExpr(c) => self.check_call(node, c),
             Node::UnsafeExpr(u) => Ok(self.check_block_value(&u.body)?.unwrap_or_else(void_ty)),
-            Node::GenericFuncRef(g) => match self.funcs.get(&g.func_name) {
-                Some(sig) => Ok(fn_ptr_of(sig)),
-                None => Err(Diagnostic::new(
-                    ErrorKind::UndefinedVariable,
-                    format!("UndefinedVariable: `{}`", g.func_name),
-                )),
-            },
+            Node::GenericFuncRef(_) => {
+                // The Zig arm is a bare `return TypeError.CompileError`
+                // (type_checker.zig:3209) with NO setError: a generic
+                // function reference that survives monomorphization
+                // into the checker is simply rejected, and the
+                // caller's wrapper synthesizes the fallback text.
+                // Generic INSTANTIATION is the monomorphizer's job,
+                // upstream of the checker entirely (D-C11 / FB-012).
+                Err(Diagnostic::new(
+                    ErrorKind::CompileError,
+                    "checkExpr failed at node tag generic_func_ref",
+                ))
+            }
             _ => Err(Diagnostic::out_of_slice(crate::types_util::node_tag(node))),
         }
     }
@@ -444,83 +572,5 @@ fn index_result_type(target: &Type) -> Option<Type> {
             }
         }
         _ => None,
-    }
-}
-
-/// Payload of a `?`-propagated value: Result<T, E> / Option<T> -> T;
-/// anything else passes through unchanged (as in the Zig arm, which
-/// falls back to the inner type for non-wrapper shapes).
-fn try_payload_type(inner: &Type) -> Type {
-    if let Type::UserDefined(u) = inner {
-        if (u.name == "Result" || u.name == "Option") && !u.generics.is_empty() {
-            return u.generics[0].clone();
-        }
-    }
-    inner.clone()
-}
-
-/// Binary operator typing, mirroring the `binary_expr` arm
-/// (type_checker.zig:3215) minus its overload / numeric-struct
-/// special cases (out of slice, listed as not-covered).
-fn check_binary(op: BinaryOp, left: &Type, right: &Type) -> CheckResult<Type> {
-    let mismatch = |what: &str| {
-        Diagnostic::new(
-            ErrorKind::TypeMismatch,
-            format!(
-                "TypeMismatch: {what} on {} and {}",
-                type_desc(left),
-                type_desc(right)
-            ),
-        )
-    };
-    match op {
-        BinaryOp::LogicalAnd | BinaryOp::LogicalOr => {
-            if matches!(left, Type::Primitive(Primitive::Boolean))
-                && matches!(right, Type::Primitive(Primitive::Boolean))
-            {
-                Ok(bool_ty())
-            } else {
-                Err(mismatch("logical operator requires boolean operands"))
-            }
-        }
-        BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt
-        | BinaryOp::Ge => {
-            if types_equal(left, right) {
-                Ok(bool_ty())
-            } else {
-                Err(mismatch("comparison requires equal types"))
-            }
-        }
-        BinaryOp::Spaceship => {
-            if types_equal(left, right) {
-                Ok(Type::UserDefined(sla_ast::types::UserDefined {
-                    name: "Ordering".to_string(),
-                    generics: Vec::new(),
-                }))
-            } else {
-                Err(mismatch("spaceship requires equal types"))
-            }
-        }
-        BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor => {
-            if is_integer_type(left) && types_equal(left, right) {
-                Ok(left.clone())
-            } else {
-                Err(mismatch("bitwise operator requires integer operands"))
-            }
-        }
-        BinaryOp::Shl | BinaryOp::Shr => {
-            if is_integer_type(left) && is_integer_type(right) {
-                Ok(left.clone())
-            } else {
-                Err(mismatch("shift requires integer operands"))
-            }
-        }
-        BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => {
-            if is_numeric_type(left) && types_equal(left, right) {
-                Ok(left.clone())
-            } else {
-                Err(mismatch("arithmetic requires equal numeric types"))
-            }
-        }
     }
 }

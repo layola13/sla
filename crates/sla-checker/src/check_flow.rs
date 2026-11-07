@@ -33,11 +33,7 @@ impl Checker {
 
     pub fn check_if_expr(&mut self, expr: &IfExpr) -> CheckResult<Type> {
         if expr.let_chain.is_some() {
-            // The Zig arm for if-let chains recovers the function's
-            // return type from the `return_ty_sentinel` symbol with a
-            // `.?` unwrap (type_checker.zig:5252); the whole arm is
-            // outside this slice.
-            return Err(Diagnostic::out_of_slice("if_expr let_chain"));
+            return self.check_if_let(expr);
         }
         let cond_ty = self.check_expr(&expr.cond)?;
         if !matches!(cond_ty, Type::Primitive(sla_ast::types::Primitive::Boolean)) {
@@ -100,6 +96,161 @@ impl Checker {
                 }
             }
             _ => Ok(void_ty()),
+        }
+    }
+
+    /// The if-let chain arm (type_checker.zig:5252-5340). The chain
+    /// values are checked in a fresh pattern frame (Zig's
+    /// `chain_scope`), each pattern's bindings defined there in
+    /// order — later conditions see earlier bindings — and the
+    /// then block is checked under that frame. The else block and
+    /// the state merge run on the OUTER scope chain, exactly as in
+    /// Zig, whose `saveScopeStates(scope)` after the then block
+    /// never includes the pattern bindings. The return type Zig
+    /// reads back through `return_ty_sentinel` with a `.?` unwrap
+    /// is `current_ret_ty` here (D-C5); no unwrap path exists.
+    fn check_if_let(&mut self, expr: &IfExpr) -> CheckResult<Type> {
+        let chain = expr.let_chain.as_ref().expect("let_chain checked");
+        let pre = self.scopes.save_states();
+
+        self.scopes.push_frame();
+        let mut chain_result = Ok(());
+        for cond in chain {
+            let value_ty = match self.check_expr(&cond.value) {
+                Ok(t) => t,
+                Err(e) => {
+                    chain_result = Err(e);
+                    break;
+                }
+            };
+            if let Err(e) =
+                self.define_pattern_bindings(&cond.pattern, &value_ty, "if let", true)
+            {
+                chain_result = Err(e);
+                break;
+            }
+        }
+        let then_ty = if chain_result.is_ok() {
+            match self.check_block_value(&expr.then_block) {
+                Ok(t) => t,
+                Err(e) => {
+                    chain_result = Err(e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let then_states = self.scopes.save_states();
+        let then_terminates = crate::check_program::block_terminates(&expr.then_block);
+        self.scopes.pop_frame();
+        self.scopes.restore_states(&pre);
+        chain_result?;
+
+        let (else_ty, else_terminates) = match &expr.else_block {
+            Some(else_block) => {
+                let ty = self.check_block_value(else_block)?;
+                let term = crate::check_program::block_terminates(else_block);
+                (ty, term)
+            }
+            None => (None, false),
+        };
+        let else_states = self.scopes.save_states();
+
+        match plan_branch_state_merge(then_terminates, else_terminates) {
+            BranchStateMergeAction::RestorePre => self.scopes.restore_states(&pre),
+            BranchStateMergeAction::RestoreThen => {
+                self.scopes.restore_states(&then_states)
+            }
+            BranchStateMergeAction::RestoreElse => {}
+            BranchStateMergeAction::KeepCurrent => {
+                self.merge_branch_states(
+                    &then_states,
+                    &else_states,
+                    expr.then_block.last(),
+                    expr.else_block.as_ref().and_then(|b| b.last()),
+                );
+            }
+        }
+
+        match (then_ty, else_ty) {
+            (Some(t), Some(e)) => {
+                if types_equal(&t, &e) {
+                    Ok(t)
+                } else {
+                    Err(Diagnostic::new(
+                        ErrorKind::TypeMismatch,
+                        "if expression branch type mismatch",
+                    ))
+                }
+            }
+            _ => Ok(void_ty()),
+        }
+    }
+
+    /// Mirrors Zig `mergeMultiBranchScopeStates`
+    /// (type_checker.zig:2738) with identity-keyed snapshots: the
+    /// live-branch count selects restore-pre / restore-single /
+    /// intersect-live via `plan_multi_branch_state_merge`; the
+    /// intersect case folds each binding's per-branch end states
+    /// with `intersect_live_branch_value_states` and records phi
+    /// cleanups on the last node of every live branch where the
+    /// binding stayed active. Used by `switch` and `match`.
+    pub fn merge_multi_branch_states(
+        &mut self,
+        pre: &StateSnapshot,
+        live_states: &[StateSnapshot],
+        live_bodies: &[&[Node]],
+    ) {
+        use crate::rules::{intersect_live_branch_value_states, plan_multi_branch_state_merge, MultiBranchStateMergeAction};
+        match plan_multi_branch_state_merge(live_states.len()) {
+            MultiBranchStateMergeAction::RestorePre => {
+                self.scopes.restore_states(pre)
+            }
+            MultiBranchStateMergeAction::RestoreSingle => {
+                self.scopes.restore_states(&live_states[0])
+            }
+            MultiBranchStateMergeAction::IntersectLive => {
+                let mut updates: Vec<(crate::scope::BindingId, ValueState)> =
+                    Vec::new();
+                let mut phi: Vec<(usize, String)> = Vec::new();
+                for frame in &self.scopes.frames {
+                    for b in &frame.bindings {
+                        if crate::types_util::is_internal_symbol(&b.name) {
+                            continue;
+                        }
+                        let per_branch: Vec<ValueState> = live_states
+                            .iter()
+                            .map(|s| {
+                                s.get(&b.id).copied().unwrap_or(ValueState::Active)
+                            })
+                            .collect();
+                        let merged =
+                            intersect_live_branch_value_states(&per_branch);
+                        updates.push((b.id, merged));
+                        if merged == ValueState::Consumed {
+                            for (state, body) in
+                                per_branch.iter().zip(live_bodies.iter())
+                            {
+                                if *state == ValueState::Active {
+                                    if let Some(last) = body.last() {
+                                        phi.push((
+                                            node_key_of(last),
+                                            b.name.clone(),
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                for (id, state) in updates {
+                    self.set_state_by_id(id, state);
+                }
+                for (key, name) in phi {
+                    self.phi_cleanups.entry(key).or_default().push(name);
+                }
+            }
         }
     }
 

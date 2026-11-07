@@ -1,0 +1,5 @@
+stage seed 0.002ms
+stage lex 0.018ms
+stage parse 0.021ms
+stage check 0.023ms
+stage codegen_text 0.031ms

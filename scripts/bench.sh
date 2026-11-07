@@ -5,7 +5,11 @@
 #           run for the stage breakdown.
 # Rust side: `sla-oracle` end-to-end x7 + one SLA_RS_PROFILE=1 run which
 #           prints parse/check/codegen stage ms to stderr.
-# Caliber: tiny inputs (287-729 B); both sides are startup-dominated.
+# Caliber: tiny inputs; both sides are startup-dominated.
+# Phase-2 change (oracle line): bench inputs are docs/probes/e2e_*.sla --
+# the fixtures all carry std-surface calls and cannot complete the Rust
+# pipeline yet (INT-2), so timing them would measure fail-fast, not the
+# pipeline. Probes run end-to-end on both sides.
 # Numbers are slice-scale measurements only -- never extrapolate.
 set -u
 export PATH="$HOME/.cargo/bin:$PATH"
@@ -13,7 +17,7 @@ cd "$(dirname "$0")/.."
 source /content/tools/env.sh
 export SA_STD_DIR=/content/sa_all/sci/sa_std
 cargo build --release 2>&1 | tail -1
-mkdir -p results/bench_work && cp fixtures/*.sla results/bench_work/
+mkdir -p results/bench_work && cp docs/probes/e2e_*.sla results/bench_work/
 cd results/bench_work
 for f in *.sla; do
   n=${f%.sla}

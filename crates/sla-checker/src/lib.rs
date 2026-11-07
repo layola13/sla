@@ -27,16 +27,35 @@ pub mod rules;
 pub mod scope;
 pub mod types_util;
 
+mod check_binary;
 mod check_call;
+mod check_literal;
 mod check_expr;
+mod check_macro;
 mod check_flow;
+mod check_match;
+mod check_pattern;
 mod check_program;
 mod check_stmt;
+mod check_trait;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_e2e;
+#[cfg(test)]
+mod tests_phase2;
+#[cfg(test)]
+mod tests_phase2b;
+#[cfg(test)]
+mod tests_phase2c;
+#[cfg(test)]
+mod tests_phase2d;
 
-pub use checker::{Checker, ExternSig, FuncSig, ParamSig, StructInfo};
+pub use checker::{
+    Checker, EnumVariantInfo, ExternSig, FuncSig, ImportedMacroInfo, ParamSig,
+    StructInfo, TraitInfo, TraitMethodInfo,
+};
 pub use diag::{CheckResult, Diagnostic, ErrorKind};
 pub use rules::ValueState;
 pub use scope::BindingId;

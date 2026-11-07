@@ -1,0 +1,422 @@
+Program(
+    Program {
+        decls: [
+            ImportDecl(
+                ImportDecl {
+                    path: "sa_std/io/print.sai",
+                },
+            ),
+            ImportDecl(
+                ImportDecl {
+                    path: "sa_std/fmt.sai",
+                },
+            ),
+            FuncDecl(
+                FuncDecl {
+                    name: "max",
+                    is_pub: false,
+                    is_extern: false,
+                    abi: None,
+                    no_mangle: false,
+                    is_decl_only: false,
+                    generics: [],
+                    params: [
+                        Param {
+                            name: "a",
+                            ty: Primitive(
+                                I32,
+                            ),
+                            is_borrow: false,
+                            is_move: false,
+                        },
+                        Param {
+                            name: "b",
+                            ty: Primitive(
+                                I32,
+                            ),
+                            is_borrow: false,
+                            is_move: false,
+                        },
+                    ],
+                    ret_ty: Primitive(
+                        I32,
+                    ),
+                    body: [
+                        ExprStmt(
+                            IfExpr(
+                                IfExpr {
+                                    cond: BinaryExpr(
+                                        BinaryExpr {
+                                            op: Gt,
+                                            left: Identifier(
+                                                "a",
+                                            ),
+                                            right: Identifier(
+                                                "b",
+                                            ),
+                                        },
+                                    ),
+                                    let_chain: None,
+                                    then_block: [
+                                        ExprStmt(
+                                            Identifier(
+                                                "a",
+                                            ),
+                                        ),
+                                    ],
+                                    else_block: Some(
+                                        [
+                                            ExprStmt(
+                                                Identifier(
+                                                    "b",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            ),
+                        ),
+                    ],
+                    is_inline: false,
+                    is_async: false,
+                    operator: None,
+                },
+            ),
+            FuncDecl(
+                FuncDecl {
+                    name: "main",
+                    is_pub: false,
+                    is_extern: false,
+                    abi: None,
+                    no_mangle: false,
+                    is_decl_only: false,
+                    generics: [],
+                    params: [],
+                    ret_ty: Primitive(
+                        I32,
+                    ),
+                    body: [
+                        ExprStmt(
+                            CallExpr(
+                                CallExpr {
+                                    func_name: "println",
+                                    associated_target: None,
+                                    generics: [],
+                                    args: [
+                                        Literal(
+                                            StringVal(
+                                                "{}",
+                                            ),
+                                        ),
+                                        CallExpr(
+                                            CallExpr {
+                                                func_name: "max",
+                                                associated_target: None,
+                                                generics: [],
+                                                args: [
+                                                    Literal(
+                                                        IntVal(
+                                                            7,
+                                                        ),
+                                                    ),
+                                                    Literal(
+                                                        IntVal(
+                                                            42,
+                                                        ),
+                                                    ),
+                                                ],
+                                                callee: None,
+                                            },
+                                        ),
+                                    ],
+                                    callee: None,
+                                },
+                            ),
+                        ),
+                        ExprStmt(
+                            CallExpr(
+                                CallExpr {
+                                    func_name: "println",
+                                    associated_target: None,
+                                    generics: [],
+                                    args: [
+                                        Literal(
+                                            StringVal(
+                                                "{}",
+                                            ),
+                                        ),
+                                        CallExpr(
+                                            CallExpr {
+                                                func_name: "max",
+                                                associated_target: None,
+                                                generics: [],
+                                                args: [
+                                                    BinaryExpr(
+                                                        BinaryExpr {
+                                                            op: Sub,
+                                                            left: Literal(
+                                                                IntVal(
+                                                                    0,
+                                                                ),
+                                                            ),
+                                                            right: Literal(
+                                                                IntVal(
+                                                                    3,
+                                                                ),
+                                                            ),
+                                                        },
+                                                    ),
+                                                    BinaryExpr(
+                                                        BinaryExpr {
+                                                            op: Sub,
+                                                            left: Literal(
+                                                                IntVal(
+                                                                    0,
+                                                                ),
+                                                            ),
+                                                            right: Literal(
+                                                                IntVal(
+                                                                    9,
+                                                                ),
+                                                            ),
+                                                        },
+                                                    ),
+                                                ],
+                                                callee: None,
+                                            },
+                                        ),
+                                    ],
+                                    callee: None,
+                                },
+                            ),
+                        ),
+                        ReturnStmt(
+                            ReturnStmt {
+                                value: Some(
+                                    Literal(
+                                        IntVal(
+                                            0,
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                    ],
+                    is_inline: false,
+                    is_async: false,
+                    operator: None,
+                },
+            ),
+            TestDecl(
+                TestDecl {
+                    name: "basic 03 max branches",
+                    is_ignored: false,
+                    should_panic: false,
+                    body: [
+                        ExprStmt(
+                            IfExpr(
+                                IfExpr {
+                                    cond: BinaryExpr(
+                                        BinaryExpr {
+                                            op: Ne,
+                                            left: CallExpr(
+                                                CallExpr {
+                                                    func_name: "max",
+                                                    associated_target: None,
+                                                    generics: [],
+                                                    args: [
+                                                        Literal(
+                                                            IntVal(
+                                                                7,
+                                                            ),
+                                                        ),
+                                                        Literal(
+                                                            IntVal(
+                                                                42,
+                                                            ),
+                                                        ),
+                                                    ],
+                                                    callee: None,
+                                                },
+                                            ),
+                                            right: Literal(
+                                                IntVal(
+                                                    42,
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    let_chain: None,
+                                    then_block: [
+                                        ExprStmt(
+                                            CallExpr(
+                                                CallExpr {
+                                                    func_name: "panic",
+                                                    associated_target: None,
+                                                    generics: [],
+                                                    args: [
+                                                        Literal(
+                                                            IntVal(
+                                                                301,
+                                                            ),
+                                                        ),
+                                                    ],
+                                                    callee: None,
+                                                },
+                                            ),
+                                        ),
+                                    ],
+                                    else_block: None,
+                                },
+                            ),
+                        ),
+                        ExprStmt(
+                            IfExpr(
+                                IfExpr {
+                                    cond: BinaryExpr(
+                                        BinaryExpr {
+                                            op: Ne,
+                                            left: CallExpr(
+                                                CallExpr {
+                                                    func_name: "max",
+                                                    associated_target: None,
+                                                    generics: [],
+                                                    args: [
+                                                        BinaryExpr(
+                                                            BinaryExpr {
+                                                                op: Sub,
+                                                                left: Literal(
+                                                                    IntVal(
+                                                                        0,
+                                                                    ),
+                                                                ),
+                                                                right: Literal(
+                                                                    IntVal(
+                                                                        3,
+                                                                    ),
+                                                                ),
+                                                            },
+                                                        ),
+                                                        BinaryExpr(
+                                                            BinaryExpr {
+                                                                op: Sub,
+                                                                left: Literal(
+                                                                    IntVal(
+                                                                        0,
+                                                                    ),
+                                                                ),
+                                                                right: Literal(
+                                                                    IntVal(
+                                                                        9,
+                                                                    ),
+                                                                ),
+                                                            },
+                                                        ),
+                                                    ],
+                                                    callee: None,
+                                                },
+                                            ),
+                                            right: BinaryExpr(
+                                                BinaryExpr {
+                                                    op: Sub,
+                                                    left: Literal(
+                                                        IntVal(
+                                                            0,
+                                                        ),
+                                                    ),
+                                                    right: Literal(
+                                                        IntVal(
+                                                            3,
+                                                        ),
+                                                    ),
+                                                },
+                                            ),
+                                        },
+                                    ),
+                                    let_chain: None,
+                                    then_block: [
+                                        ExprStmt(
+                                            CallExpr(
+                                                CallExpr {
+                                                    func_name: "panic",
+                                                    associated_target: None,
+                                                    generics: [],
+                                                    args: [
+                                                        Literal(
+                                                            IntVal(
+                                                                302,
+                                                            ),
+                                                        ),
+                                                    ],
+                                                    callee: None,
+                                                },
+                                            ),
+                                        ),
+                                    ],
+                                    else_block: None,
+                                },
+                            ),
+                        ),
+                        ExprStmt(
+                            IfExpr(
+                                IfExpr {
+                                    cond: BinaryExpr(
+                                        BinaryExpr {
+                                            op: Ne,
+                                            left: CallExpr(
+                                                CallExpr {
+                                                    func_name: "max",
+                                                    associated_target: None,
+                                                    generics: [],
+                                                    args: [
+                                                        Literal(
+                                                            IntVal(
+                                                                5,
+                                                            ),
+                                                        ),
+                                                        Literal(
+                                                            IntVal(
+                                                                5,
+                                                            ),
+                                                        ),
+                                                    ],
+                                                    callee: None,
+                                                },
+                                            ),
+                                            right: Literal(
+                                                IntVal(
+                                                    5,
+                                                ),
+                                            ),
+                                        },
+                                    ),
+                                    let_chain: None,
+                                    then_block: [
+                                        ExprStmt(
+                                            CallExpr(
+                                                CallExpr {
+                                                    func_name: "panic",
+                                                    associated_target: None,
+                                                    generics: [],
+                                                    args: [
+                                                        Literal(
+                                                            IntVal(
+                                                                303,
+                                                            ),
+                                                        ),
+                                                    ],
+                                                    callee: None,
+                                                },
+                                            ),
+                                        ),
+                                    ],
+                                    else_block: None,
+                                },
+                            ),
+                        ),
+                    ],
+                },
+            ),
+        ],
+    },
+)

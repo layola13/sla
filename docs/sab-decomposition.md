@@ -34,10 +34,10 @@ divergences/sab.md SAB-D01）。
 | # | 模块 | Zig 行段 | 职责 | 状态 |
 |---|------|----------|------|------|
 | B1 | `profile.rs` | 17–57 | SLA_SAB_PROFILE 环境门控的分段计时打印 | ○ |
-| B2 | `types.rs` | 66–293 | 辅助结构：Local/借用守卫值/分支快照槽/宏捕获/StdSurfaceRule/StdImportModule/DecodedModuleLocalRemap 等 | ○ |
-| B3 | `state.rs` | 294–534 | `Codegen` 字段全集 + init/deinit（Rust 侧拆为若干所有权明确的子状态，见 SAB-D09） | ○ |
-| B4 | `driver.rs` | 535–632 | `generate` 编排：预扫→表面预载→future 助手→trait vtable→逐 decl 分发→逃逸闭包→契约 extern→encodeProgramWithConsts | ○ |
-| B5 | `emit.rs` | 1103–1139, 3615–3622, 3848–4030 节选, 19172–19186 | 发射主干：intern/makeInst/appendInst + 原语发射器（assign/op/ptr_add/alloc/load/store/take/jmp/label/branch/return/panic） | ◐ 主干已实现（intern/命名/decl/assign/op/call/label/jmp/branch/return/panic/字符串常量），余原语二期补齐 |
+| B2 | `types.rs` | 66–293 | 辅助结构：Local/借用守卫值/分支快照槽/宏捕获/StdSurfaceRule/StdImportModule/DecodedModuleLocalRemap 等 | ✅ 二期落地（369 行，结构全集） |
+| B3 | `state.rs` | 294–534 | `Codegen` 字段全集 + init/deinit（Rust 侧拆为若干所有权明确的子状态，见 SAB-D09） | ✅ 二期落地（255 行，ProgramState/FrameState/CodegenState + RegState 枚举收敛） |
+| B4 | `driver.rs` | 535–632 | `generate` 编排：预扫→表面预载→future 助手→trait vtable→逐 decl 分发→逃逸闭包→契约 extern→encodeProgramWithConsts | ◐ 二期本段范围 ✅（driver.rs 642 + driver_gen.rs 532；fixture01 级编排路径已通、generate_from_program 真实驱动；C/D/F–I 组调用点为响亮未接线，见 SAB-D19） |
+| B5 | `emit.rs` | 1103–1139, 3615–3622, 3848–4030 节选, 19172–19186 | 发射主干：intern/makeInst/appendInst + 原语发射器（assign/op/ptr_add/alloc/load/store/take/jmp/label/branch/return/panic） | ◐ 主干已实现（intern/命名/decl/assign/op/call/label/jmp/branch/return/panic/字符串常量）；二期补 emit_assign_reg/emit_panic_reg/sig 元信息 setter 与 set_sig_id 双轨钩子（SAB-D17） |
 | B6 | `literals.rs` | 1140–1272 | 字符串字面量解码/转义（`\xHH` 大写）+ utf8 常量追加（尾 NUL） | ◐ 转义/解码已实现；常量标签管理在 emit.rs |
 
 ## C. 预扫与符号

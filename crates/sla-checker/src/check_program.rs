@@ -15,7 +15,7 @@
 use crate::checker::{Checker, StructInfo};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::rules::ValueState;
-use crate::types_util::{is_internal_symbol, value_assignable_to};
+use crate::types_util::{is_internal_symbol, node_key_of, value_assignable_to};
 use sla_ast::decls::{FuncDecl, Program, TestDecl, TypeAliasComponent};
 use sla_ast::node::Node;
 use sla_ast::types::Type;
@@ -58,6 +58,22 @@ impl Checker {
                         &e.name,
                         e.variants.iter().map(|v| v.name.clone()).collect(),
                     );
+                    self.register_enum_variants(
+                        &e.name,
+                        e.variants
+                            .iter()
+                            .map(|v| crate::checker::EnumVariantInfo {
+                                name: v.name.clone(),
+                                fields: v
+                                    .fields
+                                    .iter()
+                                    .map(|f| {
+                                        (f.name.clone(), (*f.ty).clone())
+                                    })
+                                    .collect(),
+                            })
+                            .collect(),
+                    );
                 }
                 Node::TypeAliasDecl(a) => {
                     if !type_names.insert(a.name.clone()) {
@@ -77,39 +93,138 @@ impl Checker {
                         return Err(redecl(&t.name));
                     }
                     trait_names.insert(t.name.clone());
+                    self.register_trait(
+                        &t.name,
+                        crate::checker::TraitInfo {
+                            supertraits: t.supertraits.clone(),
+                            methods: t
+                                .methods
+                                .iter()
+                                .map(|m| crate::checker::TraitMethodInfo {
+                                    name: m.name.clone(),
+                                    params: m
+                                        .params
+                                        .iter()
+                                        .map(crate::checker::ParamSig::from)
+                                        .collect(),
+                                    ret_ty: (*m.ret_ty).clone(),
+                                })
+                                .collect(),
+                        },
+                    );
                 }
                 _ => {}
             }
         }
-        // Supertraits must exist (Zig checkProgram validates them).
+        // Supertraits must exist (Zig checkProgram validates them
+        // with a bare `return TypeError.UndefinedVariable`).
         for decl in &program.decls {
             if let Node::TraitDecl(t) = decl {
                 for sup in &t.supertraits {
                     if !trait_names.contains(sup) {
                         return Err(Diagnostic::new(
-                            ErrorKind::CompileError,
+                            ErrorKind::UndefinedVariable,
                             format!("unknown supertrait `{sup}` of trait `{}`", t.name),
                         ));
                     }
                 }
             }
         }
-        // Pass 2: functions and macros.
+        // Pass 2: functions, macros, impls, overloads — registered
+        // under Zig's symbol keys (type_checker.zig checkProgram):
+        // inherent methods as `{Type}_{method}`, trait methods as
+        // `{Type}__{Trait}_{method}`, overloads as `{Type}__{op}`.
         for decl in &program.decls {
             match decl {
                 Node::FuncDecl(f) => self.register_func(f),
                 Node::MacroDecl(m) => self.register_macro(m),
                 Node::ImplDecl(imp) => {
-                    for method in &imp.methods {
-                        if let Node::FuncDecl(f) = method {
-                            self.register_func(f);
+                    let target_name = target_type_name(&imp.target_ty)?;
+                    if let Some(trait_name) = &imp.trait_name {
+                        let key = format!("{trait_name}|{target_name}");
+                        if !self.trait_impls.insert(key) {
+                            return Err(Diagnostic::new(
+                                ErrorKind::Redeclaration,
+                                format!(
+                                    "Redeclaration: impl `{trait_name}` for `{target_name}` is already defined"
+                                ),
+                            ));
                         }
+                    }
+                    for method in &imp.methods {
+                        let Node::FuncDecl(f) = method else {
+                            return Err(Diagnostic::new(
+                                ErrorKind::CompileError,
+                                "impl block contains a non-function member",
+                            ));
+                        };
+                        let method_key = match &imp.trait_name {
+                            Some(trait_name) => format!(
+                                "{target_name}__{trait_name}_{}",
+                                f.name
+                            ),
+                            None => format!("{target_name}_{}", f.name),
+                        };
+                        if self.funcs.contains_key(&method_key) {
+                            return Err(Diagnostic::new(
+                                ErrorKind::Redeclaration,
+                                format!(
+                                    "Redeclaration: method `{}` for `{target_name}` is already defined",
+                                    f.name
+                                ),
+                            ));
+                        }
+                        self.register_func_as(&method_key, f);
+                    }
+                }
+                Node::OverloadDecl(o) => {
+                    let target_name = target_type_name(&o.target_ty)?;
+                    for method in &o.methods {
+                        let Node::FuncDecl(f) = method else {
+                            return Err(Diagnostic::new(
+                                ErrorKind::CompileError,
+                                format!(
+                                    "overload `{target_name}` contains a non-function member"
+                                ),
+                            ));
+                        };
+                        let op = f.operator.ok_or_else(|| {
+                            Diagnostic::new(
+                                ErrorKind::CompileError,
+                                format!(
+                                    "overload `{target_name}` methods must use an operator function"
+                                ),
+                            )
+                        })?;
+                        let op_name = match op {
+                            sla_ast::exprs::BinaryOp::Add => "op_add",
+                            sla_ast::exprs::BinaryOp::Sub => "op_sub",
+                            sla_ast::exprs::BinaryOp::Mul => "op_mul",
+                            sla_ast::exprs::BinaryOp::Div => "op_div",
+                            _ => {
+                                return Err(Diagnostic::new(
+                                    ErrorKind::CompileError,
+                                    format!(
+                                        "unsupported overload operator `{}` in overload `{target_name}`",
+                                        f.name
+                                    ),
+                                ))
+                            }
+                        };
+                        let symbol = format!("{target_name}__{op_name}");
+                        self.overloads
+                            .entry(format!("{target_name}|{op_name}"))
+                            .or_default()
+                            .push(symbol.clone());
+                        self.register_func_as(&symbol, f);
                     }
                 }
                 _ => {}
             }
         }
-        // Pass 3: check bodies.
+        // Pass 3: check bodies. Impl blocks go through the trait
+        // contract check (`check_impl`); overload bodies check as
+        // regular functions, as in Zig.
         for decl in &program.decls {
             match decl {
                 Node::FuncDecl(f) => {
@@ -118,8 +233,9 @@ impl Checker {
                     }
                 }
                 Node::TestDecl(t) => self.check_test(t)?,
-                Node::ImplDecl(imp) => {
-                    for method in &imp.methods {
+                Node::ImplDecl(imp) => self.check_impl(imp)?,
+                Node::OverloadDecl(o) => {
+                    for method in &o.methods {
                         if let Node::FuncDecl(f) = method {
                             if !f.is_decl_only && !f.is_extern {
                                 self.check_func(f)?;
@@ -164,34 +280,53 @@ impl Checker {
         self.check_block(&func.body)
     }
 
-    /// Tail-expression typing: a non-void function must end in an
-    /// expression statement whose recorded type is assignable to the
-    /// declared return type (Zig reads `expr_types` the same way).
+    /// Tail-expression typing, mirroring the tail check at the end
+    /// of Zig `checkFunc` (type_checker.zig:2596-2604) EXACTLY:
+    /// Zig has NO missing-return check at all. It only type-checks
+    /// the tail when ALL of these hold: the return type is non-void,
+    /// the body is non-empty, the last statement is an expression
+    /// statement, and that statement does not terminate. Every
+    /// other shape passes this stage untouched:
+    ///   * a trailing `return` statement (INT-1: the previous port
+    ///     invented a "missing return value" error here — Zig's
+    ///     `return_stmt` arm already type-checked the value);
+    ///   * a terminating tail expression (e.g. an `if` whose two
+    ///     branches both `return`);
+    ///   * a non-expression tail (let / assignment / loop / ...) or
+    ///     an empty body — Zig simply never looks at them here.
     fn check_tail_type(&mut self, func: &FuncDecl, ret_ty: &Type) -> CheckResult<()> {
         if matches!(ret_ty, Type::Primitive(sla_ast::types::Primitive::VoidType)) {
             return Ok(());
         }
-        let tail_ty = block_tail_type(self, &func.body);
-        match tail_ty {
-            Some(ty) => {
-                if value_assignable_to(ret_ty, &ty) {
-                    Ok(())
-                } else {
-                    Err(Diagnostic::new(
-                        ErrorKind::CompileError,
-                        format!(
-                            "return type mismatch in `{}`: expected {}, actual {}",
-                            func.name,
-                            crate::types_util::type_desc(ret_ty),
-                            crate::types_util::type_desc(&ty)
-                        ),
-                    ))
-                }
-            }
-            None => Err(Diagnostic::new(
+        let Some(last) = func.body.last() else {
+            return Ok(());
+        };
+        let Node::ExprStmt(inner) = last else {
+            return Ok(());
+        };
+        if stmt_terminates(last) {
+            return Ok(());
+        }
+        // Zig: `expr_types.get(last) orelse return TypeError.CompileError`
+        // (no setError on that path). Practically unreachable: the
+        // body was just checked, so the tail type was recorded.
+        let Some(ty) = self.expr_types.get(&node_key_of(inner)).cloned() else {
+            return Err(Diagnostic::new(
                 ErrorKind::CompileError,
-                format!("missing return value in non-void function `{}`", func.name),
-            )),
+                "function tail expression has no recorded type",
+            ));
+        };
+        if value_assignable_to(ret_ty, &ty) {
+            Ok(())
+        } else {
+            Err(Diagnostic::new(
+                ErrorKind::TypeMismatch,
+                format!(
+                    "TypeMismatch in function tail expression: expected {}, actual {}",
+                    crate::types_util::type_desc(ret_ty),
+                    crate::types_util::type_desc(&ty)
+                ),
+            ))
         }
     }
 
@@ -267,6 +402,18 @@ fn block_exit_cleanups(bindings: &[crate::scope::Binding]) -> Vec<String> {
     names
 }
 
+/// Mirrors Zig `typeName`: only user-defined types have a name;
+/// anything else is a CompileError.
+pub fn target_type_name(ty: &Type) -> CheckResult<String> {
+    match ty {
+        Type::UserDefined(u) => Ok(u.name.clone()),
+        _ => Err(Diagnostic::new(
+            ErrorKind::CompileError,
+            "type name is only defined for user-defined types",
+        )),
+    }
+}
+
 fn redecl(name: &str) -> Diagnostic {
     Diagnostic::new(
         ErrorKind::Redeclaration,
@@ -317,6 +464,23 @@ pub fn expr_terminates(node: &Node) -> bool {
             None => false,
         },
         Node::UnsafeExpr(u) => block_terminates(&u.body),
+        // Mirrors Zig `exprTerminates` match arm: a match whose
+        // every case body terminates (and which has cases at all)
+        // terminates.
+        Node::MatchExpr(m) => {
+            !m.cases.is_empty()
+                && m.cases.iter().all(|c| block_terminates(&c.body))
+        }
+        // Mirrors Zig `exprTerminates` switch arm (#7 there): an
+        // all-diverging switch terminates only when a `default`
+        // arm exists, so no value can fall through.
+        Node::SwitchExpr(s) => {
+            !s.cases.is_empty()
+                && s.cases
+                    .iter()
+                    .any(|c| crate::types_util::is_switch_default_pattern(&c.pattern))
+                && s.cases.iter().all(|c| block_terminates(&c.body))
+        }
         _ => false,
     }
 }

@@ -1,0 +1,49 @@
+0 At 0 1 @
+1 Identifier 1 7 import
+2 StringLiteral 8 29 "sa_std/io/print.sai"
+3 At 30 31 @
+4 Identifier 31 37 import
+5 StringLiteral 38 54 "sa_std/fmt.sai"
+6 At 55 56 @
+7 Identifier 56 62 import
+8 StringLiteral 63 81 "sa_std/string.sa"
+9 KeywordFn 126 128 fn
+10 Identifier 129 133 main
+11 LParen 133 134 (
+12 RParen 134 135 )
+13 Arrow 136 138 ->
+14 Identifier 139 142 i32
+15 LBrace 143 144 {
+16 Identifier 149 156 println
+17 LParen 156 157 (
+18 StringLiteral 157 170 "hello world"
+19 RParen 170 171 )
+20 Semicolon 171 172 ;
+21 KeywordReturn 177 183 return
+22 IntLiteral 184 185 0
+23 Semicolon 185 186 ;
+24 RBrace 187 188 }
+25 At 190 191 @
+26 Identifier 191 195 test
+27 StringLiteral 196 218 "basic 01 hello world"
+28 LParen 218 219 (
+29 RParen 219 220 )
+30 LBrace 221 222 {
+31 KeywordIf 227 229 if
+32 Bang 230 231 !
+33 Identifier 231 237 str_eq
+34 LParen 237 238 (
+35 StringLiteral 238 251 "hello world"
+36 Comma 251 252 ,
+37 StringLiteral 253 266 "hello world"
+38 RParen 266 267 )
+39 LBrace 268 269 {
+40 Identifier 270 275 panic
+41 LParen 275 276 (
+42 IntLiteral 276 279 101
+43 RParen 279 280 )
+44 Semicolon 280 281 ;
+45 RBrace 282 283 }
+46 Semicolon 283 284 ;
+47 RBrace 285 286 }
+48 Eof 287 287 

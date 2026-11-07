@@ -51,10 +51,7 @@ impl Checker {
                 self.check_for(&f.var_name, &f.start, end, &f.body)
             }
             Node::WhileStmt(w) => {
-                if w.let_pattern.is_some() {
-                    return Err(Diagnostic::out_of_slice("while let_pattern"));
-                }
-                self.check_while(&w.cond, &w.body)
+                self.check_while(&w.cond, w.let_pattern.as_ref(), &w.body)
             }
             Node::BreakStmt(_) => {
                 let names = self.collect_break_cleanups();
@@ -71,9 +68,8 @@ impl Checker {
                 Ok(())
             }
             Node::ReleaseStmt(r) => self.check_release(&r.var_name),
-            Node::LetElseStmt(_) | Node::LetDestructureStmt(_) => {
-                Err(Diagnostic::out_of_slice(node_tag(node)))
-            }
+            Node::LetElseStmt(l) => self.check_let_else(l),
+            Node::LetDestructureStmt(l) => self.check_let_destructure(l),
             _ => Err(Diagnostic::new(
                 ErrorKind::CompileError,
                 format!("checkStmt failed at node tag {}", node_tag(node)),
@@ -92,17 +88,69 @@ impl Checker {
         is_const: bool,
     ) -> CheckResult<()> {
         let val_ty = self.check_expr(value)?;
+        // Slice coercion (Zig let arm only — the const arm has NO
+        // slice path): a declared `Slice<T>` accepts a borrow of an
+        // array of T, defines the binding, and returns WITHOUT the
+        // implicit-move consumption.
+        if !is_const {
+            if let Some(d) = declared {
+                if let Some(elem) =
+                    crate::types_util::slice_element_type(d)
+                {
+                    if let Type::Borrow(inner) = &val_ty {
+                        if let Some((arr_elem, _)) =
+                            crate::types_util::array_type_of(inner)
+                        {
+                            if crate::types_util::types_equal(&elem, &arr_elem)
+                            {
+                                if !is_discard_name(name) {
+                                    self.define_symbol_with_state(
+                                        name,
+                                        d.clone(),
+                                        is_const,
+                                        ValueState::Active,
+                                        None,
+                                    )?;
+                                }
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+        }
         let expected = match declared {
             Some(d) => {
-                if !value_assignable_to(d, &val_ty) {
-                    return Err(Diagnostic::new(
-                        ErrorKind::TypeMismatch,
-                        format!(
-                            "TypeMismatch: expected {}, actual {}",
-                            type_desc(d),
-                            type_desc(&val_ty)
-                        ),
-                    ));
+                // Dyn coercions (both let and const arms): record
+                // the coercion in the side table and fall through
+                // with the declared type.
+                let dyn_trait = self.can_coerce_to_dyn_box(d, &val_ty).or_else(
+                    || self.can_coerce_rc_new_to_dyn_rc(d, value, &val_ty),
+                );
+                match dyn_trait {
+                    Some((is_rc, trait_name)) => {
+                        let table = if is_rc {
+                            &mut self.dyn_rc_coercions
+                        } else {
+                            &mut self.dyn_box_coercions
+                        };
+                        table.insert(
+                            crate::types_util::node_key_of(value),
+                            trait_name,
+                        );
+                    }
+                    None => {
+                        if !value_assignable_to(d, &val_ty) {
+                            return Err(Diagnostic::new(
+                                ErrorKind::TypeMismatch,
+                                format!(
+                                    "TypeMismatch: expected {}, actual {}",
+                                    type_desc(d),
+                                    type_desc(&val_ty)
+                                ),
+                            ));
+                        }
+                    }
                 }
                 d.clone()
             }
@@ -125,10 +173,201 @@ impl Checker {
                 borrow_source,
             )?;
         }
-        if let Node::Identifier(src) = value {
-            if !self.type_is_copy(&val_ty) && !is_borrow_like_type(&val_ty) {
-                self.consume_binding(src, "implicit let move")?;
+        // The implicit-move consumption exists only in the `let`
+        // arm; the Zig const arm never consumes its initializer's
+        // source (the phase-1 mirror consumed for both).
+        if !is_const {
+            if let Node::Identifier(src) = value {
+                if !self.type_is_copy(&val_ty) && !is_borrow_like_type(&val_ty)
+                {
+                    self.consume_binding(src, "implicit let move")?;
+                }
             }
+        }
+        Ok(())
+    }
+
+    /// Mirrors Zig `canCoerceToDynBox`: declared `Box<__dyn_T>`
+    /// against a `Box<X>` value whose X implements T.
+    /// Returns (false, trait_name) on success.
+    fn can_coerce_to_dyn_box(
+        &self,
+        declared: &Type,
+        val_ty: &Type,
+    ) -> Option<(bool, String)> {
+        let declared_inner = crate::types_util::box_inner_type(declared)?;
+        let trait_name =
+            crate::types_util::dyn_trait_name(&declared_inner)?.to_string();
+        let val_inner = crate::types_util::box_inner_type(val_ty)?;
+        if self.type_implements_trait(&val_inner, &trait_name) {
+            Some((false, trait_name))
+        } else {
+            None
+        }
+    }
+
+    /// Mirrors Zig `canCoerceRcNewToDynRc`: declared `Rc<__dyn_T>`
+    /// against an `Rc::new(x)` call producing `Rc<X>`, X: T.
+    /// Returns (true, trait_name) on success.
+    fn can_coerce_rc_new_to_dyn_rc(
+        &self,
+        declared: &Type,
+        value: &Node,
+        val_ty: &Type,
+    ) -> Option<(bool, String)> {
+        let declared_inner = crate::types_util::rc_inner_type(declared)?;
+        let trait_name =
+            crate::types_util::dyn_trait_name(&declared_inner)?.to_string();
+        let Node::CallExpr(call) = value else {
+            return None;
+        };
+        if call.associated_target.as_deref() != Some("Rc")
+            || call.func_name != "new"
+        {
+            return None;
+        }
+        let val_inner = crate::types_util::rc_inner_type(val_ty)?;
+        if self.type_implements_trait(&val_inner, &trait_name) {
+            Some((true, trait_name))
+        } else {
+            None
+        }
+    }
+
+    /// Mirrors the `let_else_stmt` arm (type_checker.zig:2858):
+    /// the value is typed, the else block is checked (in its own
+    /// block scope, BEFORE the pattern bindings exist), the else
+    /// block must diverge, and only then are the pattern bindings
+    /// defined in the current scope — with `is_const = false`,
+    /// the Zig `writable` argument's literal value (D-C15).
+    fn check_let_else(
+        &mut self,
+        stmt: &sla_ast::stmts::LetElseStmt,
+    ) -> CheckResult<()> {
+        let value_ty = self.check_expr(&stmt.value)?;
+        self.check_block(&stmt.else_block)?;
+        if !crate::check_program::block_terminates(&stmt.else_block) {
+            return Err(Diagnostic::new(
+                ErrorKind::TypeMismatch,
+                "let else block must diverge",
+            ));
+        }
+        self.define_pattern_bindings(&stmt.pattern, &value_ty, "let else", false)
+    }
+
+    /// Mirrors the `let_destructure_stmt` arm
+    /// (type_checker.zig:2866-2950), including the LAST unported
+    /// `consumeBinding` site of the D-C7 census (:2913): after the
+    /// new bindings are defined, the value's ROOT binding (through
+    /// index/field projections) is consumed UNCONDITIONALLY — no
+    /// Copy or borrow exemption, unlike the implicit let move
+    /// (D-C12 / FB-010; venue-verified: destructuring a `(i32, i32)`
+    /// tuple variable leaves it consumed).
+    fn check_let_destructure(
+        &mut self,
+        stmt: &sla_ast::stmts::LetDestructureStmt,
+    ) -> CheckResult<()> {
+        let val_ty = self.check_expr(&stmt.value)?;
+        if stmt.is_slice {
+            let elem_ty = match crate::types_util::array_type_of(&val_ty) {
+                Some((elem, _)) => elem,
+                None => match crate::types_util::slice_element_type(&val_ty) {
+                    Some(elem) => elem,
+                    None => {
+                        return Err(Diagnostic::new(
+                            ErrorKind::TypeMismatch,
+                            "slice destructuring requires array or slice value",
+                        ))
+                    }
+                },
+            };
+            if stmt.rest_name.is_none() {
+                return Err(Diagnostic::new(
+                    ErrorKind::InvalidArgsCount,
+                    "slice destructuring requires a rest binding",
+                ));
+            }
+            if !stmt.names.is_empty() {
+                if let Some((_, arr_len)) =
+                    crate::types_util::array_type_of(&val_ty)
+                {
+                    if arr_len < stmt.names.len() {
+                        return Err(Diagnostic::new(
+                            ErrorKind::InvalidArgsCount,
+                            format!(
+                                "slice destructuring arity mismatch: pattern={}, array={}",
+                                stmt.names.len(),
+                                arr_len
+                            ),
+                        ));
+                    }
+                }
+            }
+            for name in &stmt.names {
+                if !is_discard_name(name) {
+                    self.define_symbol(name, elem_ty.clone(), false)?;
+                }
+            }
+            let slice_ty = Type::UserDefined(sla_ast::types::UserDefined {
+                name: "Slice".to_string(),
+                generics: vec![elem_ty.clone()],
+            });
+            if let Some(rest) = &stmt.rest_name {
+                if !is_discard_name(rest) {
+                    self.define_symbol(rest, slice_ty.clone(), false)?;
+                }
+            }
+            if let Some(alias) = &stmt.rest_alias {
+                if !is_discard_name(alias) {
+                    self.define_symbol(alias, slice_ty.clone(), false)?;
+                }
+            }
+        } else {
+            let elems = match &val_ty {
+                Type::Tuple(t) => t.elems.clone(),
+                _ => {
+                    return Err(Diagnostic::new(
+                        ErrorKind::TypeMismatch,
+                        "let destructuring requires tuple value",
+                    ))
+                }
+            };
+            if stmt.names.len() != elems.len() {
+                return Err(Diagnostic::new(
+                    ErrorKind::InvalidArgsCount,
+                    format!(
+                        "let destructuring arity mismatch: pattern={}, tuple={}",
+                        stmt.names.len(),
+                        elems.len()
+                    ),
+                ));
+            }
+            for (name, elem_ty) in stmt.names.iter().zip(elems.iter()) {
+                if !is_discard_name(name) {
+                    self.define_symbol(name, elem_ty.clone(), false)?;
+                }
+            }
+        }
+        if let Some(root) =
+            crate::types_util::root_identifier_deep(&stmt.value)
+        {
+            let root = root.to_string();
+            match self.lookup_state(&root) {
+                None => {
+                    return Err(Diagnostic::new(
+                        ErrorKind::UndefinedVariable,
+                        format!("UndefinedVariable: `{root}`"),
+                    ))
+                }
+                Some(ValueState::Consumed) => {
+                    return Err(Diagnostic::new(
+                        ErrorKind::UseAfterMove,
+                        format!("UseAfterMove: `{root}` was already consumed"),
+                    ))
+                }
+                _ => {}
+            }
+            self.consume_binding(&root, "destructuring move")?;
         }
         Ok(())
     }
@@ -302,20 +541,40 @@ impl Checker {
     /// LoopConditionalConsume ban inside `consume_binding` is the
     /// compensating approximation (D-C4). Afterwards only
     /// previously-uninitialized bindings roll back.
-    fn check_while(&mut self, cond: &Node, body: &[Node]) -> CheckResult<()> {
+    fn check_while(
+        &mut self,
+        cond: &Node,
+        let_pattern: Option<&sla_ast::exprs::EnumPattern>,
+        body: &[Node],
+    ) -> CheckResult<()> {
         let cond_ty = self.check_expr(cond)?;
-        let ok = matches!(
-            cond_ty,
-            Type::Primitive(Primitive::Boolean) | Type::Primitive(Primitive::Integer)
-        );
-        if !ok {
-            return Err(Diagnostic::new(
-                ErrorKind::TypeMismatch,
-                "while condition must be bool/int unless using while let",
-            ));
+        if let_pattern.is_none() {
+            let ok = matches!(
+                cond_ty,
+                Type::Primitive(Primitive::Boolean)
+                    | Type::Primitive(Primitive::Integer)
+            );
+            if !ok {
+                return Err(Diagnostic::new(
+                    ErrorKind::TypeMismatch,
+                    "while condition must be bool/int unless using while let",
+                ));
+            }
         }
         let pre = self.scopes.save_states();
         let frame = self.scopes.push_frame();
+        // `while let`: the pattern bindings live in the loop scope
+        // (Zig defines them in `loop_scope` before checking the
+        // body), with `is_const = true` — the Zig `writable`
+        // argument's literal value (D-C15).
+        if let Some(pattern) = let_pattern {
+            if let Err(e) =
+                self.define_pattern_bindings(pattern, &cond_ty, "while let", true)
+            {
+                self.scopes.pop_frame();
+                return Err(e);
+            }
+        }
         self.loop_ctx.push(LoopCtx {
             frame_index: frame,
             body_terminates: crate::check_program::block_terminates(body),

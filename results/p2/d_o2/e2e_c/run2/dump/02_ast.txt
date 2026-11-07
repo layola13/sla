@@ -1,0 +1,37 @@
+Program(
+    Program {
+        decls: [
+            FuncDecl(
+                FuncDecl {
+                    name: "one",
+                    is_pub: false,
+                    is_extern: false,
+                    abi: None,
+                    no_mangle: false,
+                    is_decl_only: false,
+                    generics: [],
+                    params: [],
+                    ret_ty: Primitive(
+                        I32,
+                    ),
+                    body: [
+                        ReturnStmt(
+                            ReturnStmt {
+                                value: Some(
+                                    Literal(
+                                        IntVal(
+                                            1,
+                                        ),
+                                    ),
+                                ),
+                            },
+                        ),
+                    ],
+                    is_inline: false,
+                    is_async: false,
+                    operator: None,
+                },
+            ),
+        ],
+    },
+)

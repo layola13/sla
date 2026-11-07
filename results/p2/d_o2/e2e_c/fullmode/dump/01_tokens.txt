@@ -1,0 +1,12 @@
+0 KeywordFn 0 2 fn
+1 Identifier 3 6 one
+2 LParen 6 7 (
+3 RParen 7 8 )
+4 Arrow 9 11 ->
+5 Identifier 12 15 i32
+6 LBrace 16 17 {
+7 KeywordReturn 22 28 return
+8 IntLiteral 29 30 1
+9 Semicolon 30 31 ;
+10 RBrace 32 33 }
+11 Eof 34 34 

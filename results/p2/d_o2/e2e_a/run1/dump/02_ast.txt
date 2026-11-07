@@ -1,0 +1,236 @@
+Program(
+    Program {
+        decls: [
+            FuncDecl(
+                FuncDecl {
+                    name: "arith_values",
+                    is_pub: false,
+                    is_extern: false,
+                    abi: None,
+                    no_mangle: false,
+                    is_decl_only: false,
+                    generics: [],
+                    params: [],
+                    ret_ty: Primitive(
+                        I32,
+                    ),
+                    body: [
+                        LetStmt(
+                            LetStmt {
+                                name: "a",
+                                ty: None,
+                                value: BinaryExpr(
+                                    BinaryExpr {
+                                        op: Add,
+                                        left: Literal(
+                                            IntVal(
+                                                2,
+                                            ),
+                                        ),
+                                        right: BinaryExpr(
+                                            BinaryExpr {
+                                                op: Mul,
+                                                left: Literal(
+                                                    IntVal(
+                                                        3,
+                                                    ),
+                                                ),
+                                                right: Literal(
+                                                    IntVal(
+                                                        4,
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    },
+                                ),
+                            },
+                        ),
+                        LetStmt(
+                            LetStmt {
+                                name: "b",
+                                ty: None,
+                                value: BinaryExpr(
+                                    BinaryExpr {
+                                        op: Div,
+                                        left: BinaryExpr(
+                                            BinaryExpr {
+                                                op: Sub,
+                                                left: Literal(
+                                                    IntVal(
+                                                        20,
+                                                    ),
+                                                ),
+                                                right: Literal(
+                                                    IntVal(
+                                                        8,
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                        right: Literal(
+                                            IntVal(
+                                                3,
+                                            ),
+                                        ),
+                                    },
+                                ),
+                            },
+                        ),
+                        LetStmt(
+                            LetStmt {
+                                name: "c",
+                                ty: None,
+                                value: BinaryExpr(
+                                    BinaryExpr {
+                                        op: Mod,
+                                        left: Literal(
+                                            IntVal(
+                                                17,
+                                            ),
+                                        ),
+                                        right: Literal(
+                                            IntVal(
+                                                5,
+                                            ),
+                                        ),
+                                    },
+                                ),
+                            },
+                        ),
+                        LetStmt(
+                            LetStmt {
+                                name: "d",
+                                ty: None,
+                                value: BinaryExpr(
+                                    BinaryExpr {
+                                        op: Sub,
+                                        left: Literal(
+                                            IntVal(
+                                                0,
+                                            ),
+                                        ),
+                                        right: BinaryExpr(
+                                            BinaryExpr {
+                                                op: Add,
+                                                left: Literal(
+                                                    IntVal(
+                                                        2,
+                                                    ),
+                                                ),
+                                                right: Literal(
+                                                    IntVal(
+                                                        3,
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    },
+                                ),
+                            },
+                        ),
+                        ReturnStmt(
+                            ReturnStmt {
+                                value: Some(
+                                    BinaryExpr(
+                                        BinaryExpr {
+                                            op: Add,
+                                            left: BinaryExpr(
+                                                BinaryExpr {
+                                                    op: Add,
+                                                    left: BinaryExpr(
+                                                        BinaryExpr {
+                                                            op: Add,
+                                                            left: Identifier(
+                                                                "a",
+                                                            ),
+                                                            right: BinaryExpr(
+                                                                BinaryExpr {
+                                                                    op: Mul,
+                                                                    left: Identifier(
+                                                                        "b",
+                                                                    ),
+                                                                    right: Literal(
+                                                                        IntVal(
+                                                                            10,
+                                                                        ),
+                                                                    ),
+                                                                },
+                                                            ),
+                                                        },
+                                                    ),
+                                                    right: BinaryExpr(
+                                                        BinaryExpr {
+                                                            op: Mul,
+                                                            left: Identifier(
+                                                                "c",
+                                                            ),
+                                                            right: Literal(
+                                                                IntVal(
+                                                                    100,
+                                                                ),
+                                                            ),
+                                                        },
+                                                    ),
+                                                },
+                                            ),
+                                            right: Identifier(
+                                                "d",
+                                            ),
+                                        },
+                                    ),
+                                ),
+                            },
+                        ),
+                    ],
+                    is_inline: false,
+                    is_async: false,
+                    operator: None,
+                },
+            ),
+            FuncDecl(
+                FuncDecl {
+                    name: "main",
+                    is_pub: false,
+                    is_extern: false,
+                    abi: None,
+                    no_mangle: false,
+                    is_decl_only: false,
+                    generics: [],
+                    params: [],
+                    ret_ty: Primitive(
+                        I32,
+                    ),
+                    body: [
+                        ReturnStmt(
+                            ReturnStmt {
+                                value: Some(
+                                    CallExpr(
+                                        CallExpr {
+                                            func_name: "arith_values",
+                                            associated_target: None,
+                                            generics: [],
+                                            args: [],
+                                            callee: None,
+                                        },
+                                    ),
+                                ),
+                            },
+                        ),
+                    ],
+                    is_inline: false,
+                    is_async: false,
+                    operator: None,
+                },
+            ),
+            TestDecl(
+                TestDecl {
+                    name: "probe arith",
+                    is_ignored: false,
+                    should_panic: false,
+                    body: [],
+                },
+            ),
+        ],
+    },
+)

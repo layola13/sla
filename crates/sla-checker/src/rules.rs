@@ -251,3 +251,183 @@ fn block_consumption(body: &[Node], param: &str) -> MacroParamConsumption {
 pub fn macro_param_consumption(body: &[Node], param: &str) -> MacroParamConsumption {
     block_consumption(body, param)
 }
+
+/// Mirrors Zig `exprUsesIdentifierValue` (type_checker.zig:1821):
+/// whether evaluating `expr` reads the VALUE of binding `name`
+/// (through await/move/cast wrappers, calls, branches and literal
+/// containers). The try-cleanup and await analyses consult it to
+/// keep the propagated value's own bindings out of the cleanup set.
+/// Note the Zig quirks, preserved: `index_expr` looks only at the
+/// INDEX (not the target), and `slice_expr` only at its bounds.
+pub fn expr_uses_identifier_value(expr: &Node, name: &str) -> bool {
+    match expr {
+        Node::Identifier(n) => n == name,
+        Node::AwaitExpr(a) => expr_uses_identifier_value(&a.expr, name),
+        Node::MoveExpr(m) => expr_uses_identifier_value(&m.expr, name),
+        Node::CastExpr(c) => expr_uses_identifier_value(&c.expr, name),
+        Node::BinaryExpr(b) => {
+            expr_uses_identifier_value(&b.left, name)
+                || expr_uses_identifier_value(&b.right, name)
+        }
+        Node::CallExpr(c) => c
+            .args
+            .iter()
+            .any(|arg| expr_uses_identifier_value(arg, name)),
+        Node::IfExpr(i) => {
+            expr_uses_identifier_value(&i.cond, name)
+                || block_uses_identifier_value(&i.then_block, name)
+                || i.else_block
+                    .as_ref()
+                    .map(|b| block_uses_identifier_value(b, name))
+                    .unwrap_or(false)
+        }
+        Node::SwitchExpr(s) => {
+            expr_uses_identifier_value(&s.val, name)
+                || s.cases
+                    .iter()
+                    .any(|case| block_uses_identifier_value(&case.body, name))
+        }
+        Node::MatchExpr(m) => {
+            expr_uses_identifier_value(&m.val, name)
+                || m.cases.iter().any(|case| {
+                    case.guard
+                        .as_ref()
+                        .map(|g| expr_uses_identifier_value(g, name))
+                        .unwrap_or(false)
+                        || block_uses_identifier_value(&case.body, name)
+                })
+        }
+        Node::TryExpr(t) => expr_uses_identifier_value(&t.expr, name),
+        Node::StructLiteral(l) => l
+            .fields
+            .iter()
+            .any(|f| expr_uses_identifier_value(&f.value, name)),
+        Node::EnumLiteral(l) => l
+            .fields
+            .iter()
+            .any(|f| expr_uses_identifier_value(&f.value, name)),
+        Node::TupleLiteral(l) => l
+            .elements
+            .iter()
+            .any(|e| expr_uses_identifier_value(e, name)),
+        Node::ArrayLiteral(l) => l
+            .elements
+            .iter()
+            .any(|e| expr_uses_identifier_value(e, name)),
+        Node::RepeatArrayLiteral(l) => expr_uses_identifier_value(&l.value, name),
+        Node::IndexExpr(i) => expr_uses_identifier_value(&i.index, name),
+        Node::SliceExpr(s) => {
+            expr_uses_identifier_value(&s.start, name)
+                || expr_uses_identifier_value(&s.end, name)
+        }
+        _ => false,
+    }
+}
+
+/// Mirrors Zig `stmtUsesIdentifierValue` (type_checker.zig:1895).
+pub fn stmt_uses_identifier_value(stmt: &Node, name: &str) -> bool {
+    match stmt {
+        Node::LetStmt(l) => expr_uses_identifier_value(&l.value, name),
+        Node::LetElseStmt(l) => {
+            expr_uses_identifier_value(&l.value, name)
+                || block_uses_identifier_value(&l.else_block, name)
+        }
+        Node::LetDestructureStmt(l) => expr_uses_identifier_value(&l.value, name),
+        Node::ConstStmt(c) => expr_uses_identifier_value(&c.value, name),
+        Node::AssignStmt(a) => expr_uses_identifier_value(&a.value, name),
+        Node::ExprStmt(e) => expr_uses_identifier_value(e, name),
+        Node::ReturnStmt(r) => r
+            .value
+            .as_ref()
+            .map(|v| expr_uses_identifier_value(v, name))
+            .unwrap_or(false),
+        Node::ForStmt(f) => {
+            expr_uses_identifier_value(&f.start, name)
+                || f.end
+                    .as_ref()
+                    .map(|e| expr_uses_identifier_value(e, name))
+                    .unwrap_or(false)
+                || block_uses_identifier_value(&f.body, name)
+        }
+        Node::WhileStmt(w) => {
+            expr_uses_identifier_value(&w.cond, name)
+                || block_uses_identifier_value(&w.body, name)
+        }
+        Node::BlockStmt(b) => block_uses_identifier_value(&b.body, name),
+        _ => false,
+    }
+}
+
+/// Mirrors Zig `blockUsesIdentifierValue` (type_checker.zig:1913).
+pub fn block_uses_identifier_value(body: &[Node], name: &str) -> bool {
+    body.iter().any(|s| stmt_uses_identifier_value(s, name))
+}
+
+fn macro_node_has_try(node: &Node) -> bool {
+    match node {
+        Node::TryExpr(_) => true,
+        Node::BlockStmt(b) => macro_body_has_try(&b.body),
+        Node::UnsafeExpr(u) => macro_body_has_try(&u.body),
+        Node::IfExpr(i) => {
+            macro_node_has_try(&i.cond)
+                || macro_body_has_try(&i.then_block)
+                || i.else_block
+                    .as_ref()
+                    .map(|b| macro_body_has_try(b))
+                    .unwrap_or(false)
+        }
+        Node::ForStmt(f) => macro_body_has_try(&f.body),
+        Node::WhileStmt(w) => macro_body_has_try(&w.body),
+        Node::ExprStmt(e) => macro_node_has_try(e),
+        Node::AssignStmt(a) => macro_node_has_try(&a.value),
+        Node::LetStmt(l) => macro_node_has_try(&l.value),
+        Node::ReturnStmt(r) => r
+            .value
+            .as_ref()
+            .map(|v| macro_node_has_try(v))
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+/// Mirrors Zig `macroBodyHasTry` (control_flow_rules.zig:81).
+pub fn macro_body_has_try(body: &[Node]) -> bool {
+    body.iter().any(macro_node_has_try)
+}
+
+fn macro_node_has_try_source(node: &Node, name: &str) -> bool {
+    match node {
+        Node::TryExpr(t) => {
+            matches!(&*t.expr, Node::Identifier(n) if n == name)
+        }
+        Node::BlockStmt(b) => macro_param_is_try_source(&b.body, name),
+        Node::UnsafeExpr(u) => macro_param_is_try_source(&u.body, name),
+        Node::IfExpr(i) => {
+            macro_node_has_try_source(&i.cond, name)
+                || macro_param_is_try_source(&i.then_block, name)
+                || i.else_block
+                    .as_ref()
+                    .map(|b| macro_param_is_try_source(b, name))
+                    .unwrap_or(false)
+        }
+        Node::ForStmt(f) => macro_param_is_try_source(&f.body, name),
+        Node::WhileStmt(w) => macro_param_is_try_source(&w.body, name),
+        Node::ExprStmt(e) => macro_node_has_try_source(e, name),
+        Node::AssignStmt(a) => macro_node_has_try_source(&a.value, name),
+        Node::LetStmt(l) => macro_node_has_try_source(&l.value, name),
+        Node::ReturnStmt(r) => r
+            .value
+            .as_ref()
+            .map(|v| macro_node_has_try_source(v, name))
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+/// Mirrors Zig `macroParamIsTrySource` (control_flow_rules.zig:74):
+/// whether the macro parameter `name` is directly `?`-propagated
+/// somewhere in the body.
+pub fn macro_param_is_try_source(body: &[Node], name: &str) -> bool {
+    body.iter()
+        .any(|n| macro_node_has_try_source(n, name))
+}

@@ -30,8 +30,48 @@ use sla_ast::types::Type;
 impl Checker {
     pub fn check_call(&mut self, node: &Node, call: &CallExpr) -> CheckResult<Type> {
         let _ = node;
-        if call.callee.is_some() {
-            return Err(Diagnostic::out_of_slice("immediately-invoked closure call"));
+        if let Some(callee) = &call.callee {
+            // Immediately-invoked closure: the callee must type as a
+            // closure; arity and argument types are checked against
+            // its parameter list (Zig call arm, callee path).
+            let callee_ty = self.check_expr(callee)?;
+            let (params, ret) = match &callee_ty {
+                Type::Closure(c) => (c.params.clone(), (*c.ret).clone()),
+                Type::FnPtr(f) => (f.params.clone(), (*f.ret).clone()),
+                other => {
+                    return Err(Diagnostic::new(
+                        ErrorKind::TypeMismatch,
+                        format!(
+                            "TypeMismatch: callee is not callable, actual {}",
+                            type_desc(other)
+                        ),
+                    ))
+                }
+            };
+            if call.args.len() != params.len() {
+                return Err(Diagnostic::new(
+                    ErrorKind::InvalidArgsCount,
+                    format!(
+                        "closure expects {} arguments, got {}",
+                        params.len(),
+                        call.args.len()
+                    ),
+                ));
+            }
+            for (arg, expected) in call.args.iter().zip(params.iter()) {
+                let arg_ty = self.check_expr(arg)?;
+                if !types_equal(expected, &arg_ty) {
+                    return Err(Diagnostic::new(
+                        ErrorKind::TypeMismatch,
+                        format!(
+                            "TypeMismatch: closure argument expects {}, actual {}",
+                            type_desc(expected),
+                            type_desc(&arg_ty)
+                        ),
+                    ));
+                }
+            }
+            return Ok(ret);
         }
         if let Some(target) = &call.associated_target {
             return self.check_associated_call(target, call);
@@ -47,13 +87,23 @@ impl Checker {
                 ));
             }
             let target_ty = self.check_expr(&call.args[0])?;
+            // Zig sum arm: array element, else sliceElementType,
+            // else vecElementType — NOT "any generic user type's
+            // first parameter" (the phase-1 slice accepted e.g.
+            // Option<i32>, which Zig rejects).
             return match target_ty {
                 Type::Array(a) => Ok((*a.elem).clone()),
-                Type::UserDefined(u) if !u.generics.is_empty() => Ok(u.generics[0].clone()),
-                other => Err(Diagnostic::new(
-                    ErrorKind::TypeMismatch,
-                    format!("sum over {}", type_desc(&other)),
-                )),
+                ref other => {
+                    match crate::types_util::slice_element_type(other)
+                        .or_else(|| crate::types_util::vec_element_type(other))
+                    {
+                        Some(elem) => Ok(elem),
+                        None => Err(Diagnostic::new(
+                            ErrorKind::TypeMismatch,
+                            format!("sum over {}", type_desc(other)),
+                        )),
+                    }
+                }
             };
         }
 
@@ -92,14 +142,44 @@ impl Checker {
             });
         }
 
+        // 3b. Imported macros (registered from .sa imports).
+        if let Some(result) = self.check_imported_macro_call(name, call) {
+            return result;
+        }
+
         // 4. User macros.
         if let Some(mac) = self.macros.get(name).cloned() {
             for arg in &call.args {
                 self.check_expr(arg)?;
             }
+            // macro_call_try_cleanups (Zig :5095): when the macro
+            // can `?`-propagate, the caller-side cleanup is every
+            // active non-internal binding EXCEPT the roots of
+            // arguments passed into try-source parameters. Recorded
+            // against the call node even when the list is empty
+            // (Zig puts unconditionally inside `if (has_macro_try)`).
+            if self.macro_has_try(&mac) {
+                let mut propagated: Vec<String> = Vec::new();
+                for index in 0..mac.params.len() {
+                    if self.macro_param_is_try_source(&mac, index) {
+                        if let Some(arg) = call.args.get(index) {
+                            if let Some(root) =
+                                crate::types_util::root_identifier_deep(arg)
+                            {
+                                propagated.push(root.to_string());
+                            }
+                        }
+                    }
+                }
+                let cleanup = self.collect_active_names(|b| {
+                    propagated.iter().any(|n| n == &b.name)
+                });
+                self.macro_call_try_cleanups
+                    .insert(crate::types_util::node_key_of(node), cleanup);
+            }
             for (index, param) in mac.params.iter().enumerate() {
                 let consumption =
-                    crate::rules::macro_param_consumption(&mac.body, param);
+                    self.macro_param_consumption_recursive(&mac, index);
                 match consumption {
                     MacroParamConsumption::Never => {}
                     MacroParamConsumption::Conditional => {
@@ -112,8 +192,16 @@ impl Checker {
                         ));
                     }
                     MacroParamConsumption::Always => {
-                        if let Some(Node::Identifier(arg_name)) = call.args.get(index) {
-                            match self.lookup_state(arg_name) {
+                        // Zig consumes through `rootIdentifier(arg)`
+                        // (identifier/index/field chains), not only
+                        // bare identifier arguments.
+                        let arg_root = call
+                            .args
+                            .get(index)
+                            .and_then(crate::types_util::root_identifier_deep);
+                        if let Some(arg_name) = arg_root {
+                            let arg_name = arg_name.to_string();
+                            match self.lookup_state(&arg_name) {
                                 None => {
                                     return Err(Diagnostic::new(
                                         ErrorKind::UndefinedVariable,
@@ -130,12 +218,52 @@ impl Checker {
                                 }
                                 _ => {}
                             }
-                            self.consume_binding(arg_name, "user macro move")?;
+                            self.consume_binding(&arg_name, "user macro move")?;
                         }
                     }
                 }
             }
             return Ok(void_ty());
+        }
+
+        // 4b. Local closure / fn-pointer variables shadow function
+        // names (Zig resolves the callee binding before user
+        // functions, ~:4305): a call through a binding of closure
+        // or fn-ptr type is checked against that type.
+        if let Some(binding_ty) = self.lookup_ty(name) {
+            let callable = match &binding_ty {
+                Type::Closure(c) => {
+                    Some((c.params.clone(), (*c.ret).clone()))
+                }
+                Type::FnPtr(f) => Some((f.params.clone(), (*f.ret).clone())),
+                _ => None,
+            };
+            if let Some((params, ret)) = callable {
+                if call.args.len() != params.len() {
+                    return Err(Diagnostic::new(
+                        ErrorKind::InvalidArgsCount,
+                        format!(
+                            "callable `{name}` expects {} arguments, got {}",
+                            params.len(),
+                            call.args.len()
+                        ),
+                    ));
+                }
+                for (arg, expected) in call.args.iter().zip(params.iter()) {
+                    let arg_ty = self.check_expr(arg)?;
+                    if !types_equal(expected, &arg_ty) {
+                        return Err(Diagnostic::new(
+                            ErrorKind::TypeMismatch,
+                            format!(
+                                "TypeMismatch: argument to `{name}` expects {}, actual {}",
+                                type_desc(expected),
+                                type_desc(&arg_ty)
+                            ),
+                        ));
+                    }
+                }
+                return Ok(ret);
+            }
         }
 
         // 5. User functions / imported signatures.
@@ -362,6 +490,23 @@ impl Checker {
                 .get(cand)
                 .cloned()
                 .or_else(|| self.imported_funcs.get(cand).cloned());
+            if let Some(sig) = sig {
+                return self.check_call_args_against_sig(cand, &sig, &call.args);
+            }
+        }
+        // Trait-method symbols `{Type}__{Trait}_{name}` registered
+        // by trait impls: the receiver type is the target, the
+        // trait segment is whatever impl provided the method.
+        let prefix = format!("{target}__");
+        let suffix = format!("_{name}");
+        let trait_symbols: Vec<String> = self
+            .funcs
+            .keys()
+            .filter(|k| k.starts_with(&prefix) && k.ends_with(&suffix))
+            .cloned()
+            .collect();
+        for cand in &trait_symbols {
+            let sig = self.funcs.get(cand).cloned();
             if let Some(sig) = sig {
                 return self.check_call_args_against_sig(cand, &sig, &call.args);
             }
