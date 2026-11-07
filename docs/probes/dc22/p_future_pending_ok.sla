@@ -1,0 +1,2 @@
+fn f() -> future<i32> { return future__pending::<i32>(); }
+fn main() -> i32 { return 0; }

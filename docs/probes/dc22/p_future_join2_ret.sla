@@ -1,0 +1,2 @@
+fn f(a: future<i32>, b: future<u64>) -> future<FuturePair<i32, u64>> { return future__join2(a, b); }
+fn main() -> i32 { return 0; }

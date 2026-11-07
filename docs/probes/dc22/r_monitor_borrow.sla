@@ -1,0 +1,2 @@
+fn f(h: u64) -> i32 { let c = monitor(&h); return 0; }
+fn main() -> i32 { return 0; }

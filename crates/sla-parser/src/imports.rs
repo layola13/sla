@@ -16,11 +16,9 @@
 //! hard-coded personal machine paths (`/home/vscode/projects/...`).
 //! Those are NOT ported. What is ported, in Zig's order: ancestor
 //! roots, the `SA_STD_DIR` / `SLA_STD_DIR` / `SCI_ROOT` env roots,
-//! the plugin-home resolution, and plain relative resolution.
-//! Workspace-package imports (`workspace.zig`) are not ported: such
-//! paths fall through to relative resolution and fail loudly with
-//! FileNotFound, exactly as a Zig workspace miss does (see
-//! docs/divergences/contracts.md INT2-5).
+//! the plugin-home resolution, workspace-package resolution
+//! (`workspace.zig`, ported in `crate::workspace` since phase 4 —
+//! INT2-5 closed), and plain relative resolution.
 
 use std::path::{Path, PathBuf};
 
@@ -287,8 +285,96 @@ fn is_explicit_file_import_path(path: &str) -> bool {
         || path == ".."
 }
 
+/// Zig `moduleNamespaceFromImportPath`: the file stem of the
+/// basename (last `.` segment dropped).
+pub fn module_namespace_from_import_path(import_path: &str) -> String {
+    let base = import_path.rsplit('/').next().unwrap_or(import_path);
+    match base.rfind('.') {
+        Some(dot) => base[..dot].to_string(),
+        None => base.to_string(),
+    }
+}
+
+/// Zig `moduleNamespaceMatchesImportPath`.
+pub fn module_namespace_matches_import_path(import_path: &str, namespace: &str) -> bool {
+    module_namespace_from_import_path(import_path) == namespace
+}
+
+/// Zig `splitImportedMangledSymbol`: split at the FIRST `__`;
+/// both sides must be non-empty.
+pub fn split_imported_mangled_symbol(symbol: &str) -> Option<(&str, &str)> {
+    let sep = symbol.find("__")?;
+    if sep == 0 || sep + 2 >= symbol.len() {
+        return None;
+    }
+    Some((&symbol[..sep], &symbol[sep + 2..]))
+}
+
+/// Zig `resolveWorkspacePackageImport` (plugin_imports.zig):
+/// `<package>/<rel>` where `<package>` names a workspace member's
+/// `package` declaration. Explicit / glob / std / plugin paths and
+/// slash-less paths never take this route. Workspace resolution
+/// failures other than OutOfMemory are swallowed to `None` in Zig
+/// (the import then falls through to relative resolution); member
+/// listing failures propagate in Zig and map to ImportError::Io
+/// here (there is no allocator error kind in this port).
+fn resolve_workspace_package_import(
+    base_dir: &Path,
+    import_path: &str,
+) -> Result<Option<ResolvedImport>, ImportError> {
+    if is_explicit_file_import_path(import_path) {
+        return Ok(None);
+    }
+    if is_glob_import_path(import_path) {
+        return Ok(None);
+    }
+    if is_sa_std_import(import_path) || is_sla_std_import(import_path) || is_plugin_import(import_path)
+    {
+        return Ok(None);
+    }
+    let slash = match import_path.find('/') {
+        Some(s) => s,
+        None => return Ok(None),
+    };
+    if slash == 0 || slash + 1 >= import_path.len() {
+        return Ok(None);
+    }
+    let package_name = &import_path[..slash];
+    let rel_path = &import_path[slash + 1..];
+
+    let base_str = base_dir.to_string_lossy().into_owned();
+    let resolved_workspace =
+        match crate::workspace::resolve_from_root_path(&base_str, None) {
+            Ok(r) => r,
+            Err(_) => return Ok(None),
+        };
+    let ws_manifest = match &resolved_workspace.workspace_manifest {
+        Some(m) => m,
+        None => return Ok(None),
+    };
+    let members = crate::workspace::list_workspace_members(
+        &resolved_workspace.workspace_root,
+        ws_manifest,
+    )
+    .map_err(|e| ImportError::Io {
+        path: import_path.to_string(),
+        message: e.to_string(),
+    })?;
+    for member in &members {
+        let member_package = match &member.package_name {
+            Some(p) => p,
+            None => continue,
+        };
+        if member_package != package_name {
+            continue;
+        }
+        return read_import_from_root(Path::new(&member.member_root), rel_path, import_path);
+    }
+    Ok(None)
+}
+
 /// Zig `resolveImportFile`, in the original's order: sla_std,
-/// sa_std, plugin, workspace (not ported — falls through), then the
+/// sa_std, plugin, workspace, then the
 /// base-dir-relative candidate, then the path as written.
 pub fn resolve_import_file(
     base_dir: &Path,
@@ -303,7 +389,9 @@ pub fn resolve_import_file(
     if let Some(r) = resolve_plugin_import(raw_import_path)? {
         return Ok(r);
     }
-    let _ = is_explicit_file_import_path(raw_import_path); // workspace gate shares this test in Zig
+    if let Some(r) = resolve_workspace_package_import(base_dir, raw_import_path)? {
+        return Ok(r);
+    }
     let candidate = if Path::new(raw_import_path).is_absolute() {
         PathBuf::from(raw_import_path)
     } else {
@@ -508,5 +596,60 @@ mod tests {
             Err(ImportError::FileNotFound(_))
         ));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn workspace_package_resolution_and_fallthrough() {
+        // INT2-5: `<package>/<rel>` resolves against the workspace
+        // member whose sa.mod declares `package "<package>"`.
+        let dir = std::env::temp_dir().join(format!(
+            "sla_imports_ws_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("members/app/src")).unwrap();
+        std::fs::create_dir_all(dir.join("members/libx")).unwrap();
+        std::fs::write(
+            dir.join("sa.mod"),
+            "workspace {\n  members [\"members/app\", \"members/libx\"]\n  default_member \"app\"\n}\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("members/app/sa.mod"), "package \"app\"\n").unwrap();
+        std::fs::write(dir.join("members/libx/sa.mod"), "package \"libx\"\n").unwrap();
+        std::fs::write(
+            dir.join("members/libx/helper.sai"),
+            "@extern libx_answer() -> i32\n",
+        )
+        .unwrap();
+        let base = dir.join("members/app/src");
+        let resolved = resolve_import_file(&base, "libx/helper.sai").unwrap();
+        assert_eq!(resolved.source, "@extern libx_answer() -> i32\n");
+        assert_eq!(resolved.output_path, "libx/helper.sai");
+        // Unknown package: falls through to relative resolution,
+        // which misses loudly (venue probe ws_badpkg: FileNotFound).
+        assert!(matches!(
+            resolve_import_file(&base, "nope/helper.sai"),
+            Err(ImportError::FileNotFound(_))
+        ));
+        // Explicit paths never take the workspace route.
+        assert!(matches!(
+            resolve_import_file(&base, "./libx/helper.sai"),
+            Err(ImportError::FileNotFound(_))
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn module_namespace_and_mangled_split() {
+        assert_eq!(module_namespace_from_import_path("a/b/libx.sla"), "libx");
+        assert_eq!(module_namespace_from_import_path("libx"), "libx");
+        assert!(module_namespace_matches_import_path("x/y.sla", "y"));
+        assert_eq!(
+            split_imported_mangled_symbol("libx__helper"),
+            Some(("libx", "helper"))
+        );
+        assert_eq!(split_imported_mangled_symbol("__helper"), None);
+        assert_eq!(split_imported_mangled_symbol("libx__"), None);
+        assert_eq!(split_imported_mangled_symbol("plain"), None);
     }
 }

@@ -1,0 +1,1 @@
+fn main() -> i32 { let s = future__select2(1, 2); return 0; }

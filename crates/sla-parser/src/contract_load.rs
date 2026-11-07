@@ -1,31 +1,41 @@
 //! Imported-contract loading: the `loadImportedContracts` slice of
 //! `sa_plugin_sla/src/plugin_import_expand.zig` (the recursive
-//! loader at :1338-1447 plus `scanExpandedSourceImports` at :91),
+//! loader at :1369-1392 plus `scanExpandedSourceImports` at :91),
 //! with path resolution from `imports` (plugin_imports.zig) and
 //! contract parsing from `contract` (contract_parser.zig).
 //!
-//! Mirrored order of operations, per resolved file:
+//! Mirrored order of operations, per resolved file (box head
+//! 2cc12ea8 `loadImportContractsRecursive`):
 //!   1. mark visited (by canonical path, first-visit wins);
 //!   2. expand the source (`source_expand.expandForModulePath` —
-//!      only the no-directive fast path is ported; a source that
-//!      uses `@expand_tuple` fails loudly, see INT2-7);
+//!      fully ported in `source_expand` since phase 4; an invalid
+//!      directive fails loudly with InvalidExpandTuple, closing
+//!      INT2-7);
 //!   3. scan the expanded source for nested `@import`s and load
-//!      them recursively (nested contracts land BEFORE the file's
-//!      own, as in Zig);
-//!   4. `.sai` -> extern declarations, `.sal` -> layout defines.
+//!      them recursively (nested contracts AND macros land BEFORE
+//!      the file's own, as in Zig);
+//!   4. `.sai` -> extern declarations, `.sal` -> layout defines;
+//!   5. imported `[MACRO]` registration from the expanded source
+//!      (`plugin_imported_macros::loadImportedMacrosFromExpandedSource`,
+//!      ported in `imported_macros` since phase 4, closing INT2-4's
+//!      registration gap at this layer; the plugin wiring registers
+//!      the records into the checker).
 //!
 //! What this slice deliberately does NOT do (phase-remaining, and
 //! reported loudly in the `LoadReport` instead of silently skipped):
-//!   * `.sla` inline expansion of imported bodies;
-//!   * imported `[MACRO]` registration (`plugin_imported_macros.zig`)
-//!     — macro names encountered are listed in the report;
+//!   * `.sla` inline expansion of imported bodies — that lives in
+//!     the plugin wiring layer now (`sla_plugin::sla_expand`,
+//!     include-all mode; the selective/reachability mode remains
+//!     loudly unwired there);
 //!   * layout defines have no table in the Rust checker — they are
 //!     carried in the report, not dropped (INT2-3).
 
 use crate::contract::{parse_sai, parse_sal, ContractParseError, ExternalFunction, LayoutDefine};
+use crate::imported_macros::{load_imported_macros_from_expanded_source, ImportedMacroRecord};
 use crate::imports::{
     expanded_source_may_contain_imports, import_path_from_line, resolve_import_files, ImportError,
 };
+use crate::source_expand::SourceExpandError;
 use std::path::{Path, PathBuf};
 
 /// The outcome of a contract load. All lists are in deterministic
@@ -43,11 +53,23 @@ pub struct LoadReport {
     pub layout_defines: Vec<LayoutDefine>,
     /// Canonical paths of every file visited, in first-visit order.
     pub visited: Vec<String>,
-    /// `[MACRO]` definitions encountered but NOT registered
-    /// (phase-remaining): (file, macro names in source order).
+    /// `[MACRO]` definitions encountered, per file: (canonical file
+    /// path, macro names in source order). Kept from phase 3 for the
+    /// oracle dump; the full records are in `imported_macros`.
     pub macro_defs: Vec<(String, Vec<String>)>,
-    /// Resolved `.sla` imports whose bodies were NOT expanded
-    /// (phase-remaining), in visit order.
+    /// Imported macro records in registration order (phase 4,
+    /// INT2-4 closed at this layer). Duplicate names are NOT
+    /// deduplicated here beyond the loader's own registry semantics:
+    /// this list is the per-file definition sequence; the registry
+    /// the plugin registers from is `imported_macro_registry`.
+    pub imported_macros: Vec<ImportedMacroRecord>,
+    /// The final imported-macro registry after the whole closure
+    /// loaded (later definitions overwrite earlier ones by name, in
+    /// place, mirroring Zig's `imported_macros.put`).
+    pub imported_macro_registry: Vec<ImportedMacroRecord>,
+    /// Resolved `.sla` imports whose bodies were NOT expanded by
+    /// this slice (the plugin wiring's expansion layer owns them),
+    /// in visit order.
     pub sla_imports: Vec<String>,
 }
 
@@ -65,13 +87,12 @@ pub enum ContractLoadError {
         file: String,
         kind: ContractParseError,
     },
-    /// A contract-closure source uses `@expand_tuple`; the source
-    /// expansion port is phase-remaining (INT2-7). Loud by design:
-    /// Zig expands these silently, we refuse rather than scan an
-    /// unexpanded source and register a wrong contract set.
-    UnsupportedExpandTuple(String),
-    /// The full import-expansion entry (`.sla` body inlining) is
-    /// not wired in this slice.
+    /// A contract-closure source carries an invalid `@expand_tuple`
+    /// directive (Zig `error.InvalidExpandTuple`, propagated out of
+    /// `expandForModulePath` by `loadImportContractsRecursive`).
+    InvalidExpandTuple(String),
+    /// The selective (reachability-driven) `.sla` import expansion
+    /// entry is not wired in this slice.
     UnwiredExpansion(String),
 }
 
@@ -82,8 +103,8 @@ impl std::fmt::Display for ContractLoadError {
             ContractLoadError::Parse { file, kind } => {
                 write!(f, "contract parse failed in {file}: {kind}")
             }
-            ContractLoadError::UnsupportedExpandTuple(file) => {
-                write!(f, "@expand_tuple expansion not ported (in {file})")
+            ContractLoadError::InvalidExpandTuple(file) => {
+                write!(f, "error.InvalidExpandTuple (in {file})")
             }
             ContractLoadError::UnwiredExpansion(what) => {
                 write!(f, "import expansion not wired in this slice: {what}")
@@ -102,13 +123,16 @@ impl From<ImportError> for ContractLoadError {
 
 struct LoadState {
     visited: Vec<String>,
+    macro_registry: Vec<ImportedMacroRecord>,
     report: LoadReport,
 }
 
-/// Zig `loadImportedContracts` (plugin_import_expand.zig:1429):
-/// walk the program's `@import` declarations in order and load the
-/// contract closure of each. `source_file` is the importing file;
-/// it is excluded from its own closure (Zig `source_abs`).
+/// Zig `loadImportedContracts` (plugin_import_expand.zig:1429 in
+/// the phase-3 tree; the recursive core is unchanged at the box
+/// head): walk the program's `@import` declarations in order and
+/// load the contract closure of each. `source_file` is the
+/// importing file; it is excluded from its own closure (Zig
+/// `source_abs`).
 pub fn load_imported_contracts(
     decl_import_paths: &[String],
     source_file: &Path,
@@ -120,18 +144,21 @@ pub fn load_imported_contracts(
     let source_abs = crate::imports::real_path(source_file);
     let mut state = LoadState {
         visited: Vec::new(),
+        macro_registry: Vec::new(),
         report: LoadReport::default(),
     };
     for import_path in decl_import_paths {
         load_recursive(&source_dir, import_path, Some(&source_abs), &mut state)?;
     }
     state.report.visited = state.visited;
+    state.report.imported_macro_registry = state.macro_registry;
     Ok(state.report)
 }
 
-/// Zig `loadImportContractsRecursive` (:1338) +
-/// `scanExpandedSourceImports` (:91), fused: resolve, visit, scan
-/// nested imports first, then load this file's own contracts.
+/// Zig `loadImportContractsRecursive` +
+/// `scanExpandedSourceImports`, fused: resolve, visit, expand, scan
+/// nested imports first, then load this file's own contracts, then
+/// its imported macros.
 fn load_recursive(
     base_dir: &Path,
     import_path: &str,
@@ -150,17 +177,16 @@ fn load_recursive(
             .map(Path::to_path_buf)
             .unwrap_or_else(|| base_dir.to_path_buf());
 
-        // source_expand.expandForModulePath fast path: without the
-        // directive the expansion is the identity.
-        if resolved.source.contains("@expand_tuple") {
-            return Err(ContractLoadError::UnsupportedExpandTuple(
-                resolved.path.clone(),
-            ));
-        }
-        let expanded: &str = &resolved.source;
+        // source_expand.expandForModulePath (ported, `source_expand`).
+        let expanded = crate::source_expand::expand_for_module_path(&resolved.path, &resolved.source)
+            .map_err(|e| match e {
+                SourceExpandError::InvalidExpandTuple => {
+                    ContractLoadError::InvalidExpandTuple(resolved.path.clone())
+                }
+            })?;
 
         // Nested imports first (Zig scans before loading contracts).
-        if expanded_source_may_contain_imports(expanded) {
+        if expanded_source_may_contain_imports(&expanded) {
             for line in expanded.split('\n') {
                 if let Some(child_import) = import_path_from_line(line) {
                     load_recursive(
@@ -173,46 +199,38 @@ fn load_recursive(
             }
         }
 
-        let macro_names = scan_macro_names(expanded);
-        if !macro_names.is_empty() {
-            state
-                .report
-                .macro_defs
-                .push((resolved.path.clone(), macro_names));
-        }
-
         if resolved.path.ends_with(".sla") {
             state.report.sla_imports.push(resolved.path.clone());
         } else if resolved.path.ends_with(".sai") {
-            let funcs = parse_sai(expanded).map_err(|kind| ContractLoadError::Parse {
+            let funcs = parse_sai(&expanded).map_err(|kind| ContractLoadError::Parse {
                 file: resolved.path.clone(),
                 kind,
             })?;
             state.report.externs.extend(funcs);
         } else if resolved.path.ends_with(".sal") {
-            let defs = parse_sal(expanded).map_err(|kind| ContractLoadError::Parse {
+            let defs = parse_sal(&expanded).map_err(|kind| ContractLoadError::Parse {
                 file: resolved.path.clone(),
                 kind,
             })?;
             state.report.layout_defines.extend(defs);
         }
-    }
-    Ok(())
-}
 
-/// `[MACRO] NAME ...` headers in an SA-text source, in source order.
-/// Reporting only: imported-macro registration is phase-remaining.
-fn scan_macro_names(source: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    for line in source.lines() {
-        let line = line.trim_start();
-        if let Some(rest) = line.strip_prefix("[MACRO]") {
-            if let Some(name) = rest.split_whitespace().next() {
-                names.push(name.to_string());
-            }
+        // Imported macros last for this file (Zig order), from the
+        // expanded source, registered under the OUTPUT path.
+        let defined = load_imported_macros_from_expanded_source(
+            &expanded,
+            Some(&resolved.output_path),
+            &mut state.macro_registry,
+        );
+        if !defined.is_empty() {
+            state.report.macro_defs.push((
+                resolved.path.clone(),
+                defined.iter().map(|r| r.name.clone()).collect(),
+            ));
+            state.report.imported_macros.extend(defined);
         }
     }
-    names
+    Ok(())
 }
 
 #[cfg(test)]
@@ -292,11 +310,13 @@ mod tests {
     }
 
     #[test]
-    fn sa_file_macros_are_reported_not_registered() {
+    fn sa_file_macros_are_registered_in_the_report() {
+        // Phase 3 pinned "reported, not registered" (INT2-4); phase 4
+        // registers. The macro_defs listing is kept for the dump.
         let tree = TempTree::new("macros");
         tree.write(
             "sub/m.sa",
-            "[MACRO] FOO %out\n    call @x()\n[END_MACRO]\n",
+            "[MACRO] FOO %out\n    %out = copy 1\n[END_MACRO]\n",
         );
         tree.write("main.sla", "@import \"sub/m.sa\"\n");
         let report =
@@ -305,22 +325,41 @@ mod tests {
         assert_eq!(report.macro_defs.len(), 1);
         assert_eq!(report.macro_defs[0].1, vec!["FOO".to_string()]);
         assert!(report.externs.is_empty());
+        assert_eq!(report.imported_macros.len(), 1);
+        assert_eq!(report.imported_macros[0].name, "FOO");
+        assert_eq!(report.imported_macros[0].arity, 1);
+        assert_eq!(report.imported_macros[0].leading_outputs, 1);
+        assert_eq!(report.imported_macros[0].assigned_output_mask, 1);
+        assert_eq!(report.imported_macro_registry.len(), 1);
     }
 
     #[test]
-    fn expand_tuple_in_closure_is_loud() {
+    fn expand_tuple_in_closure_expands_and_registers() {
+        // Phase 3 pinned a loud UnsupportedExpandTuple (INT2-7);
+        // phase 4 expands: the generated extern registers.
         let tree = TempTree::new("expand");
         tree.write(
             "sub/e.sai",
-            "@expand_tuple(1, 2, T)\n@extern f() -> void\n",
+            "@expand_tuple(1, 2, T) {\n@extern f_$N() -> void\n}\n",
+        );
+        tree.write("main.sla", "@import \"sub/e.sai\"\n");
+        let report =
+            load_imported_contracts(&["sub/e.sai".to_string()], &tree.0.join("main.sla"))
+                .unwrap();
+        assert_eq!(report.extern_names(), vec!["f_1", "f_2"]);
+    }
+
+    #[test]
+    fn invalid_expand_tuple_in_closure_is_loud() {
+        let tree = TempTree::new("expandbad");
+        tree.write(
+            "sub/e.sai",
+            "@expand_tuple(2, 1, T) {\n@extern f() -> void\n}\n",
         );
         tree.write("main.sla", "@import \"sub/e.sai\"\n");
         let err =
             load_imported_contracts(&["sub/e.sai".to_string()], &tree.0.join("main.sla"))
                 .unwrap_err();
-        assert!(matches!(
-            err,
-            ContractLoadError::UnsupportedExpandTuple(_)
-        ));
+        assert!(matches!(err, ContractLoadError::InvalidExpandTuple(_)));
     }
 }

@@ -25,9 +25,14 @@
 //!              crate's one IO module, kept apart from the parser
 //!   contract_load — loadImportedContracts orchestration
 //!              (plugin_import_expand.zig slice)
+//!   source_expand — @expand_tuple expansion (source_expand.zig)
+//!   imported_macros — [MACRO] registration scan
+//!              (plugin_imported_macros.zig)
+//!   workspace — sa.mod / workspace packages (workspace.zig)
 
 pub mod contract;
 pub mod contract_load;
+pub mod imported_macros;
 pub mod decl;
 pub mod decl_types;
 pub mod error;
@@ -38,9 +43,11 @@ pub mod numlit;
 pub mod parser;
 pub mod pattern;
 pub mod prefix;
+pub mod source_expand;
 pub mod stmt;
 pub mod tails;
 pub mod types;
+pub mod workspace;
 
 pub use contract::{ExternalFunction, LayoutDefine};
 pub use contract_load::{load_imported_contracts, ContractLoadError, LoadReport};

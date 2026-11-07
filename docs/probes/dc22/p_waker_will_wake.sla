@@ -1,0 +1,2 @@
+fn f(a: Waker, b: Waker) -> bool { return WAKER_WILL_WAKE(a, b); }
+fn main() -> i32 { return 0; }

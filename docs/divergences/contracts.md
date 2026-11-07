@@ -162,3 +162,34 @@ port-side gap (INT2-1..INT2-7) or a mirrored quirk (INT2-8); no new
 Zig-side defect candidate met the bar (the println/str_eq
 shadowing behavior is coherent across checker and both codegens —
 a builtin surface, not a defect). Slots returned unused.
+
+
+## Phase-4 closure notes (IMP line, 2026-11-07)
+
+- INT2-4 (imported macros unwired) — CLOSED for the registration
+  path by the IMP line: plugin_imported_macros.zig is mirrored
+  (`sla-parser/src/imported_macros.rs`), contract loading collects
+  the registry in Zig order (LoadReport.imported_macro_registry),
+  the plugin layer registers it into the checker
+  (contracts::load_imported_contracts_into), and the oracle does
+  the same for its dump. Remaining sub-gaps are registered as
+  IMP-2 (no assigned_output_mask FIELD on the plugin-layer info
+  struct; mask data itself is carried and printed) and IMP-3
+  (checker-side place-overlap validation of imported-macro calls,
+  a checker-line item). See docs/divergences/import-expand.md.
+- INT2-5 (workspace package imports unwired) — CLOSED:
+  workspace.zig is mirrored (`sla-parser/src/workspace.rs`) and
+  package-name resolution is wired into resolve_import_file in
+  Zig's exact order (sla_std -> sa_std -> plugin -> workspace ->
+  relative). Venue probes: member-package import rc=0, unknown
+  package fails loudly via the relative fallback
+  (error.FileNotFound), matching Zig's NoWorkspace fallback.
+- INT2-7 (expand_tuple Unimplemented) — CLOSED: source_expand.zig
+  is mirrored (`sla-parser/src/source_expand.rs`); contract
+  loading now REALLY expands imported sources
+  (UnsupportedExpandTuple removed; InvalidExpandTuple is the
+  loud mirror error), the oracle expands the root source before
+  parsing, and the venue probe shapes are covered by tests
+  (min>max -> InvalidExpandTuple; @each/@join ordinals). The
+  string-literal quirk of the Zig scan is mirrored verbatim and
+  filed as FB-045 / IMP-8.

@@ -1,0 +1,2 @@
+extern "C" fn va_f(tag: i32, args: ...) -> f64 { return va_next_f64(args); }
+fn main() -> i32 { return 0; }

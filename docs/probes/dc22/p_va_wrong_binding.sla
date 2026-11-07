@@ -1,0 +1,2 @@
+extern "C" fn va_z(fixed: i32, args: ...) -> i64 { let a = va_next_i32(fixed); return fixed as i64; }
+fn main() -> i32 { return 0; }

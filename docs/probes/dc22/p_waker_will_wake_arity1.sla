@@ -1,0 +1,2 @@
+fn f(a: Waker) -> i32 { let b = WAKER_WILL_WAKE(a); return 0; }
+fn main() -> i32 { return 0; }

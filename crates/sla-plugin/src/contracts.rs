@@ -18,6 +18,9 @@
 //!   * `ExternSig` has no `return_fallible` field — the flag is
 //!     carried in the `LoadReport` but dropped at registration
 //!     (INT2-2; the Zig checker itself only stores it for codegen);
+//!   * `ImportedMacroInfo` has no `assigned_output_mask` field —
+//!     the mask is carried in the record but dropped at
+//!     registration (IMP-2, same shape as INT2-2);
 //!   * layout defines have no checker table to land in (INT2-3);
 //!   * `println` / `str_eq` are NOT contracts in Zig — they are
 //!     checker name-specials (type_checker.zig isPrintlnCall /
@@ -30,7 +33,8 @@
 
 use sla_ast::node::Node;
 use sla_ast::Program;
-use sla_checker::{Checker, ExternSig};
+use sla_checker::{Checker, ExternSig, ImportedMacroInfo};
+use sla_parser::imported_macros::ImportedMacroRecord;
 use sla_parser::contract::ExternalFunction;
 use sla_parser::contract_load::{ContractLoadError, LoadReport};
 use std::path::Path;
@@ -62,10 +66,30 @@ pub fn decl_import_paths(program: &Program) -> Vec<String> {
         .collect()
 }
 
+/// Convert one imported-macro record into the checker's
+/// registration shape. `assigned_output_mask` has no field to land
+/// in (IMP-2) and is dropped here, audibly, in the same way
+/// `return_fallible` is dropped for externs (INT2-2).
+pub fn imported_macro_info_of(record: &ImportedMacroRecord) -> ImportedMacroInfo {
+    ImportedMacroInfo {
+        arity: record.arity,
+        leading_outputs: record.leading_outputs,
+        import_path: record.import_path.clone(),
+        borrowed_arg_mask: record.borrowed_arg_mask,
+        address_slot_arg_mask: record.address_slot_arg_mask,
+        direct_callees: record.direct_callees.clone(),
+    }
+}
+
 /// Zig `loadImportedContracts` + `TypeChecker.loadContracts`,
 /// wired: load the contract closure of the program's imports and
-/// register every extern into `checker`. The full report (visited
-/// files, layout defines, unregistered macro definitions, `.sla`
+/// register every extern AND every imported macro into `checker`
+/// (macros since phase 4 — INT2-4 closed; the records are generated
+/// from each imported file's own declarations and merged in
+/// deterministic load order with per-file provenance retained in
+/// the report, the federation-shaped registration direction of the
+/// 2026-11-07 ruling — see docs/divergences/import-expand.md
+/// IMP-7). The full report (visited files, layout defines, `.sla`
 /// imports) is returned for boundary dumps and accounting.
 pub fn load_imported_contracts_into(
     checker: &mut Checker,
@@ -77,18 +101,24 @@ pub fn load_imported_contracts_into(
     for func in &report.externs {
         checker.register_extern_func(&func.name, extern_sig_of(func));
     }
+    for record in &report.imported_macro_registry {
+        checker.register_imported_macro(&record.name, imported_macro_info_of(record));
+    }
     Ok(report)
 }
 
-/// The rest of `plugin_import_expand.zig` — `.sla` body inlining,
-/// module tables, reachability-driven materialization — is outside
-/// the contract slice. Its entry point exists so that any future
-/// caller hits a loud refusal, never a silent partial expansion
-/// (task rule: unwired places fail loudly).
+/// The `.sla` body-inlining entry of `plugin_import_expand.zig`.
+/// Phase 4 wires the include-all combination in
+/// `sla_plugin::sla_expand::expand_sla_imports`; the DEFAULT
+/// selective combination remains unwired, and this entry point
+/// exists so that a caller asking for the default (no options)
+/// hits a loud refusal, never a silent partial expansion (task
+/// rule: unwired places fail loudly).
 pub fn expand_sla_imports_unwired() -> ContractLoadError {
     ContractLoadError::UnwiredExpansion(
-        "expandSlaImports (plugin_import_expand.zig) is phase-remaining; \
-         only the loadImportedContracts slice is wired"
+        "expandSlaImports with default (selective/reachability) options \
+         is not wired; the include-all combination lives in \
+         sla_plugin::sla_expand::expand_sla_imports"
             .to_string(),
     )
 }
@@ -113,6 +143,26 @@ mod tests {
         let sig = extern_sig_of(&func);
         assert_eq!(sig.move_params, vec![true]);
         assert_eq!(sig.ret_abi, "i32");
+    }
+
+    #[test]
+    fn imported_macro_info_conversion_drops_only_assigned_mask() {
+        let record = ImportedMacroRecord {
+            name: "FOO".to_string(),
+            arity: 2,
+            leading_outputs: 1,
+            import_path: Some("m.sa".to_string()),
+            borrowed_arg_mask: 0b10,
+            address_slot_arg_mask: 0b01,
+            assigned_output_mask: 0b01,
+            direct_callees: vec!["helper".to_string()],
+        };
+        let info = imported_macro_info_of(&record);
+        assert_eq!(info.arity, 2);
+        assert_eq!(info.leading_outputs, 1);
+        assert_eq!(info.borrowed_arg_mask, 0b10);
+        assert_eq!(info.address_slot_arg_mask, 0b01);
+        assert_eq!(info.direct_callees, vec!["helper".to_string()]);
     }
 
     #[test]

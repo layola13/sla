@@ -1,0 +1,2 @@
+fn f(w: Waker) -> Waker { return WAKER_CLONE(w); }
+fn main() -> i32 { return 0; }

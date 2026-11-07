@@ -1,0 +1,2 @@
+fn f(h: u64) -> Chan<(u64, i32)> { return monitor(h); }
+fn main() -> i32 { return 0; }

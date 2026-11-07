@@ -1,0 +1,2 @@
+fn f(d: ptr, v: ptr) -> RawWaker { return RAW_WAKER_NEW(d, v); }
+fn main() -> i32 { return 0; }

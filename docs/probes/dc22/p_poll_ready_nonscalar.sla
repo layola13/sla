@@ -1,0 +1,2 @@
+fn f(s: String) -> i32 { let p = poll__ready(s); return 0; }
+fn main() -> i32 { return 0; }

@@ -2,6 +2,10 @@
 # Crate topology FIXED by the six-house verdict 2026-11-07 (Q1 = A+ mirror+relocate,
 # Q2 = A duties-as-modules): see ~/workspace/consult-rust-split/VERDICT.md and
 # docs/COORDINATION.md. 10 members; dependency direction is one-way, acyclic.
+# Phase 4 (user ruling 2026-11-07): an 11th member, crates/sla-cli (the
+# standalone `sla` binary), was authorized as a top-level consumer in the
+# same class as sla-plugin / sla-oracle; no edges between existing crates
+# were added.
 # Backends consume upstream types only through sla-lowering output.
 [workspace]
 resolver = "2"
@@ -16,6 +20,7 @@ members = [
     "crates/sla-codegen-sab",
     "crates/sla-plugin",
     "crates/sla-oracle",
+    "crates/sla-cli",
 ]
 
 [profile.release]

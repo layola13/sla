@@ -1,0 +1,2 @@
+fn f(r: RawWaker) -> i32 { let d = RAW_WAKER_GET_DATA(r); return 0; }
+fn main() -> i32 { return 0; }

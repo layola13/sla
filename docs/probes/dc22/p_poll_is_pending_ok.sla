@@ -1,0 +1,2 @@
+fn f(p: Poll<i32>) -> bool { return poll__is_pending(p); }
+fn main() -> i32 { return 0; }

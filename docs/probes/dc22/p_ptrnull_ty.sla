@@ -1,0 +1,2 @@
+fn f() -> *i32 { return ptr__null::<i32>(); }
+fn main() -> i32 { return 0; }

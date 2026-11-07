@@ -194,6 +194,23 @@ pub struct Checker {
     pub dyn_box_coercions: HashMap<usize, String>,
     pub dyn_rc_coercions: HashMap<usize, String>,
     pub loop_ctx: Vec<LoopCtx>,
+    /// `monitor_calls` side table (Zig type_checker.zig:298):
+    /// call nodes the `monitor` arm accepted, keyed like the
+    /// other side tables. Zig's codegen consults it to lower
+    /// monitor calls; here it is recorded for parity.
+    pub monitor_calls: std::collections::HashSet<usize>,
+    /// Zig `unsafe_depth` (type_checker.zig:341): incremented
+    /// around unsafe blocks; the `ptr::read_volatile` arms gate
+    /// on it (D-C21's missing counter, now carried).
+    pub unsafe_depth: usize,
+    /// Zig `current_fn_is_variadic_def`: whether the function
+    /// under check is an exported extern "C" variadic
+    /// definition, the `va_next_*` gate. No sla-ast surface can
+    /// set it yet (FuncDecl carries no variadic marker and the
+    /// type surface has no VaList primitive — D-C24), so it
+    /// stays false for parsed programs, exactly the verdict Zig
+    /// gives every non-variadic context.
+    pub current_fn_is_variadic: bool,
     /// Frame index of the current function's root scope.
     pub fn_root_depth: usize,
     /// The current function's return type (Zig: the
@@ -232,6 +249,9 @@ impl Checker {
             dyn_box_coercions: HashMap::new(),
             dyn_rc_coercions: HashMap::new(),
             loop_ctx: Vec::new(),
+            monitor_calls: std::collections::HashSet::new(),
+            unsafe_depth: 0,
+            current_fn_is_variadic: false,
             fn_root_depth: 0,
             current_ret_ty: None,
         }

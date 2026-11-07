@@ -418,6 +418,74 @@ impl ModuleBuilder {
         self.append_inst(inst);
     }
 
+    /// The full symbol table (F group: decoded-module splicing
+    /// reads names by id and resolves ids by name).
+    pub fn symbols(&self) -> &[String] {
+        &self.symbols
+    }
+
+    /// Number of interned symbols.
+    pub fn symbols_len(&self) -> usize {
+        self.symbols.len()
+    }
+
+    /// The id of an already-interned name, if any (Zig
+    /// `symbol_ids.get`).
+    pub fn symbol_id(&self, name: &str) -> Option<u32> {
+        self.symbol_ids.get(name).copied()
+    }
+
+    /// Whether a register has been recorded in the current
+    /// function (Zig `current_reg_seen.contains`).
+    pub fn reg_seen(&self, reg: u32) -> bool {
+        self.recorded_regs.contains(&reg)
+    }
+
+    /// Number of function sigs so far (Zig `function_sigs.items.len`).
+    pub fn function_sigs_len(&self) -> usize {
+        self.function_sigs.len()
+    }
+
+    /// The const decls so far (F group compatibility scans).
+    pub fn const_decls(&self) -> &[ConstDecl] {
+        &self.const_decls
+    }
+
+    /// Append a sig exactly as given — no id/entry rewriting
+    /// (F group clone paths set both themselves, Zig
+    /// `function_sigs.append(cloned)`).
+    pub fn push_sig_verbatim(&mut self, sig: FunctionSig) -> usize {
+        self.function_sigs.push(sig);
+        self.function_sigs.len() - 1
+    }
+
+    /// Emit the decl instruction for a sig using an explicit
+    /// operand id (F group: `declInstForSig` interns the sig's
+    /// name for the operands, independent of the sig's own `id`
+    /// field — the clone paths carry a counter id there).
+    pub fn append_decl_inst_as(&mut self, sig_index: usize, operand_id: u32) {
+        let kind = match self.function_sigs[sig_index].kind {
+            FunctionKind::Normal => InstKind::FuncDecl,
+            FunctionKind::FfiWrapper => InstKind::FfiWrapperDecl,
+            FunctionKind::External => InstKind::ExternDecl,
+            FunctionKind::Exported => InstKind::ExportDecl,
+            FunctionKind::TestFunc => InstKind::TestDecl,
+            FunctionKind::Gpu => InstKind::GpuDecl,
+        };
+        let mut inst = Instruction::new(kind, 0, self.instructions.len() as u32);
+        inst.operands[0] = Operand::Symbol(operand_id);
+        inst.operands[1] = Operand::Func(operand_id);
+        self.append_inst(inst);
+    }
+
+    /// Append a fully built instruction verbatim (F group:
+    /// cloned decoded-module instructions land here; Zig
+    /// `instructions.append`). The I-group aggregate/closure
+    /// primitives in `agg_emit.rs` land here too.
+    pub fn append_instruction(&mut self, inst: Instruction) {
+        self.append_inst(inst);
+    }
+
     /// Consume the builder into the finished module.
     pub fn finish(mut self) -> Module {
         self.finish_function();

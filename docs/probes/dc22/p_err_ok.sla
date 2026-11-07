@@ -1,0 +1,2 @@
+fn f() -> Result<i32, i32> { return Err(7); }
+fn main() -> i32 { return 0; }

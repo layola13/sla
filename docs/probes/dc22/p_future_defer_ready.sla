@@ -1,0 +1,2 @@
+fn f() -> future<i32> { return future__defer_ready(42); }
+fn main() -> i32 { return 0; }

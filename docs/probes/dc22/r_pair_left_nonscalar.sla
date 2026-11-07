@@ -1,0 +1,2 @@
+fn f(p: FuturePair<String, i32>) -> i32 { let x = future__pair_left(p); return 0; }
+fn main() -> i32 { return 0; }

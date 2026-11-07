@@ -1,0 +1,2 @@
+fn f(e: FutureEither<i32, u64>) -> i32 { return future__either_left(e); }
+fn main() -> i32 { return 0; }

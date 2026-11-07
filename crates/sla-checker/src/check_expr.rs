@@ -301,7 +301,15 @@ impl Checker {
             Node::SwitchExpr(s) => self.check_switch(s),
             Node::MatchExpr(m) => self.check_match(m),
             Node::CallExpr(c) => self.check_call(node, c),
-            Node::UnsafeExpr(u) => Ok(self.check_block_value(&u.body)?.unwrap_or_else(void_ty)),
+            Node::UnsafeExpr(u) => {
+                // Zig threads `unsafe_depth` around unsafe blocks
+                // (type_checker.zig:10563): the read_volatile arms
+                // gate on it.
+                self.unsafe_depth += 1;
+                let result = self.check_block_value(&u.body);
+                self.unsafe_depth -= 1;
+                Ok(result?.unwrap_or_else(void_ty))
+            }
             Node::GenericFuncRef(_) => {
                 // The Zig arm is a bare `return TypeError.CompileError`
                 // (type_checker.zig:3209) with NO setError: a generic

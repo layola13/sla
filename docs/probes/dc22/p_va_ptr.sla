@@ -1,0 +1,2 @@
+extern "C" fn va_p(tag: i32, args: ...) -> ptr { return va_next_ptr(args); }
+fn main() -> i32 { return 0; }

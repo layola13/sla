@@ -1,0 +1,8 @@
+== str_literal_directive
+rc=0
+Sla Compiler: Successfully parsed and verified syntax and types of main.sla.
+
+== str_literal_invalid
+rc=1
+Macro Expansion Error: failed to expand tuple templates in bad.sla: error.InvalidExpandTuple
+

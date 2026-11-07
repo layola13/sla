@@ -1,0 +1,25 @@
+== mac_one_expr
+rc=1
+--err--
+Type Check Error: failed to verify types: macro GET_ONE expects 2 args or 1 args when using expression output, got 0 (error.InvalidArgsCount)
+
+== inline_broken_check
+rc=0
+Sla Compiler: Successfully parsed and verified syntax and types of main2.sla.
+--err--
+
+== inline_broken_build
+rc=0
+Sla Compiler: Successfully compiled main2.sla to main2.sa.
+--err--
+
+== exp_full
+rc=0
+Sla Compiler: Successfully parsed and verified syntax and types of full.sla.
+--err--
+
+== ws_badpkg
+rc=1
+--err--
+Import Error: failed to expand @import SLA sources: error.FileNotFound
+

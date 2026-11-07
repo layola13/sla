@@ -1,0 +1,8 @@
+== nest_check
+rc=0
+Sla Compiler: Successfully parsed and verified syntax and types of main.sla.
+
+== nest_build
+rc=0
+Sla Compiler: Successfully compiled main.sla to main.sa.
+

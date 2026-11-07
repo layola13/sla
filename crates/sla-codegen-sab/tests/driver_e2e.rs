@@ -494,10 +494,14 @@ fn driver_fixture01_std_surface_is_loudly_uncovered() {
     let check = type_all_i32(&program);
     match generate_from_program(&program, &check) {
         Err(Error::UnsupportedSabDirectFeature(msg)) => {
-            assert!(msg.contains("println"), "attribution names println: {msg}");
-            assert!(msg.contains("group D"), "attribution names group D: {msg}");
+            // Phase 4 (SAB-F): println's deps are ensured during
+            // preload (step 2) through the F-group import
+            // machine; with no snippet flattener wired, the stop
+            // is the sci flatten boundary in group F.
+            assert!(msg.contains("flattenStdSnippet"), "attribution names the F boundary: {msg}");
+            assert!(msg.contains("group F"), "attribution names group F: {msg}");
         }
-        other => panic!("expected loud D-group refusal, got {other:?}"),
+        other => panic!("expected loud F-group refusal, got {other:?}"),
     }
 }
 

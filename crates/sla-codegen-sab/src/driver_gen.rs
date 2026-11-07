@@ -66,6 +66,7 @@ impl<'c> Driver<'c> {
                 Ok(())
             }
             Node::BlockStmt(b) => self.gen_scoped_block(&b.body),
+            Node::UsingDecl(_) => Ok(()),
             Node::ExprStmt(e) => {
                 // Zig genStmt expr arm: if/switch/match and panic
                 // calls discard without release; other calls and
@@ -92,11 +93,7 @@ impl<'c> Driver<'c> {
                 "E5 release_locals",
                 "10210",
             )),
-            Node::ForStmt(_) => Err(unsupported(
-                "for statement",
-                "G gen_for",
-                "10208",
-            )),
+            Node::ForStmt(f) => self.gen_for(f),
             Node::LetElseStmt(_) => Err(unsupported(
                 "let-else statement (pattern family)",
                 "G patterns",
@@ -123,6 +120,13 @@ impl<'c> Driver<'c> {
     pub(crate) fn gen_let(&mut self, name: &str, _explicit_ty: Option<&Type>, value: &Node) -> Result<()> {
         if sla_lowering::is_discard_name(name) {
             let _ = self.gen_expr(value)?;
+            return Ok(());
+        }
+        // I group: the genLet closure-binding arms (Zig 8156–8180)
+        // — a closure literal or a plain alias of a closure
+        // binding registers in `closure_bindings` instead of
+        // materializing a value.
+        if self.try_gen_closure_let(name, value)? {
             return Ok(());
         }
         if matches!(value, Node::Literal(Literal::StringVal(_))) {
@@ -212,6 +216,12 @@ impl<'c> Driver<'c> {
         match expr {
             Node::Literal(lit) => self.gen_literal(lit, expr),
             Node::Identifier(name) => {
+                // Zig genExpr identifier arm (12264): a closure
+                // parameter currently being inlined resolves to
+                // its substituted register before any local.
+                if let Some(&mapped) = self.state.program.closure_param_regs.get(name) {
+                    return Ok(mapped);
+                }
                 if let Some(reg) = self.state.frame.local_reg(name) {
                     return Ok(reg);
                 }
@@ -267,10 +277,26 @@ impl<'c> Driver<'c> {
             }
             Node::CallExpr(call) => self.gen_call(expr, call),
             Node::IfExpr(ife) => self.gen_if(expr, ife),
-            Node::ClosureLiteral(_) => Err(unsupported(
-                "closure literal (escaped-capture collection)",
-                "I closures",
-                "10610",
+            Node::CastExpr(c) => self.gen_cast(c),
+            Node::UnsafeExpr(u) => self.gen_unsafe_expr(expr, u),
+            Node::TryExpr(t) => self.gen_try(expr, t),
+            Node::InlineAsmExpr(_) => self.gen_inline_asm(),
+            // I group: aggregate literal materialization (Zig
+            // genExpr dispatch, current-head sab_codegen.zig
+            // 12345–12349 + enum literal arm).
+            Node::StructLiteral(lit) => self.gen_struct_literal(lit),
+            Node::TupleLiteral(lit) => self.gen_tuple_literal(expr, lit),
+            Node::ArrayLiteral(lit) => self.gen_array_literal(expr, lit),
+            Node::RepeatArrayLiteral(lit) => self.gen_repeat_array_literal(expr, lit),
+            Node::EnumLiteral(lit) => self.gen_enum_literal(lit),
+            Node::MoveExpr(mv) => self.gen_move_expr(mv),
+            Node::ClosureLiteral(_) => Err(Error::UnsupportedSabDirectFeature(
+                // Zig's genExpr has no closure-literal arm: a bare
+                // closure literal in expression position falls to
+                // the switch's else and is refused plainly (it is
+                // only meaningful at a let binding or a call site,
+                // both handled by the I-group closure family).
+                "closure literal in expression position".to_string(),
             )),
             other => Err(unsupported(
                 &format!("expression kind {other:?}"),
@@ -316,12 +342,10 @@ impl<'c> Driver<'c> {
     /// Every named surface in the Zig dispatch head that belongs to
     /// another group stops loudly with that attribution.
     pub(crate) fn gen_call(&mut self, _expr: &Node, call: &CallExpr) -> Result<u32> {
-        if call.callee.is_some() {
-            return Err(unsupported(
-                "immediately-invoked closure callee",
-                "I closures",
-                "15162-15166",
-            ));
+        // I group: an immediately-invoked closure callee inlines
+        // through the closure family (Zig 17770–17774).
+        if let Some(callee) = &call.callee {
+            return self.gen_invoked_closure_call(callee, call);
         }
         // panic builtin (Zig 15167-15180): a panic instruction, then
         // a fresh bookkeeping tmp as the expression's register.
@@ -386,6 +410,13 @@ impl<'c> Driver<'c> {
                 "B4 driver step 7 / F fragments",
                 "15460-15480",
             ));
+        }
+        // I group: a call through a let-bound closure name
+        // inlines the closure body (Zig 17812).
+        if call.associated_target.is_none() {
+            if let Some(reg) = self.try_gen_bound_closure_call(call)? {
+                return Ok(reg);
+            }
         }
         // Plain user-function static call.
         let resolved = self.check.resolve_alias(&call.func_name);
@@ -458,13 +489,9 @@ impl<'c> Driver<'c> {
         let tail_is_expr = |block: &[Node]| matches!(block.last(), Some(Node::ExprStmt(_)));
         if let Some(else_block) = &ife.else_block {
             if tail_is_expr(&ife.then_block) && tail_is_expr(else_block) {
-                if let Some(ty) = self.check.expr_type(expr) {
-                    if !sla_lowering::is_void_type(ty) {
-                        return Err(unsupported(
-                            "if in value position (genIfValue result-slot path)",
-                            "G gen_if_value",
-                            "18934-19042",
-                        ));
+                if let Some(ty) = self.check.expr_type(expr).cloned() {
+                    if !sla_lowering::is_void_type(&ty) {
+                        return self.gen_if_value(ife, else_block, &ty);
                     }
                 }
             }

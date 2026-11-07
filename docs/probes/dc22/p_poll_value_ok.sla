@@ -1,0 +1,2 @@
+fn f(p: Poll<i32>) -> i32 { return poll__value(p); }
+fn main() -> i32 { return 0; }

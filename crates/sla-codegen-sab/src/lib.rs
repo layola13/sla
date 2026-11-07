@@ -28,10 +28,50 @@
 //!   preload traversal, future/thread usage scans, and
 //!   `stackAllocSize` (lines 1998–2317, 2419).
 //! The driver's step 2 (surface load + preload) is wired to
-//! D1/D5; dep ensuring queues into `pending_std_deps` (SAB-D26)
-//! because the F-group fragment append is not yet ported, and
-//! surface *calls* still stop loudly at their D-group call
-//! sites. See docs/phase3/sab-d.md.
+//! D1/D5; dep ensuring ran queue-only (SAB-D26) until the
+//! F group landed. See docs/phase3/sab-d.md.
+//!
+//! Phase 4 (SAB-F slice) adds the F-group fragment machinery:
+//! - `decode.rs` / `decode_sigs.rs` / `decode_inst.rs` (F1/F2):
+//!   the SAB byte decoder — sci `sab.zig`'s `decodeModule` read
+//!   path, the entry point every fragment splice starts from;
+//! - `fragment.rs` / `fragment_names.rs`: the decoded-module
+//!   remap — stable interning for globals, hygienic
+//!   `__decoded_r_…` registers, label remap, text rewriting;
+//! - `fragment_append.rs`: sig/instruction cloning, dep-closure
+//!   filtered appends, const appends, body splices;
+//! - `fragment_template.rs`: the `__sla_macro_arg_{n}`
+//!   placeholder templates and hygiene-renamed fragment bodies;
+//! - `fragment_imports.rs`: cached std import modules and
+//!   macro templates, dep append/flush, and the production
+//!   `SurfaceEmitter` / `StdDepEnsurer` implementations.
+//! The one boundary this crate cannot supply is sci's
+//! `flattenStdSnippet` (SA-text flattener + verifier), behind
+//! the `StdSnippetFlattener` trait; the default provider stops
+//! loudly there (SAB-D31). Driver step 2 now appends preload
+//! deps immediately outside function bodies, exactly as Zig's
+//! `ensureStdDeps` does (SAB-D26 resolved), so a program that
+//! reaches for baked std surfaces dies at that F boundary —
+//! one level deeper than the old D-group call-site stop.
+//!
+//! Phase 4 (SAB-G slice) adds the G-group macro-expansion and
+//! call-site materialization machinery:
+//! - `macro_plan.rs`: the ArgRole classification — imported-macro
+//!   call plans, per-argument lowering actions and address-of
+//!   shapes (lowering_rules.zig:101/500/528/570);
+//! - `macro_ctx.rs`: `MacroExpansionContext` mechanics —
+//!   argument/local lookup, hygienic naming, scope mark/restore
+//!   (sab_codegen.zig:8867–8935, 9584);
+//! - `callsite_args.rs`: `SabLoweredCallArg` and the call-site
+//!   buffer materialization family — value / leading-output /
+//!   materialized-slot / address-expression arguments and the
+//!   per-argument dispatch (sab_codegen.zig:14452–14689, 15960);
+//! - `macro_expand.rs`: the expansion orchestration
+//!   (`genImportedMacroCall`, sab_codegen.zig:15072) over the
+//!   F-group fragment machine and the direct-macro seam.
+//! The mechanisms are not yet wired into the driver's `gen_call`
+//! (that surface wiring is the F/driver side); they fail through
+//! host seams, never silently. See the G-group report.
 //!
 //! Phase 3 (SAB-C slice) adds the C-group pre-scan and symbols:
 //! - `prescan_consts.rs` (C1): global scalar/array const
@@ -45,6 +85,23 @@
 //! The driver's C-group call points (pre-scan step, trait vtable
 //! step, extern suppression, binding registers, lowered symbols)
 //! are wired to these modules; see docs/phase3/sab-c.md.
+//!
+//! Phase 4 (SAB-I slice) adds the I-group aggregate / closure
+//! family:
+//! - `agg_emit.rs`: the memory emission primitives and stored-
+//!   value release helpers the family consumes (Zig 4417–4800,
+//!   4240–4340), implemented over the trunk's public instruction
+//!   append so the trunk file itself needs no I-group edits;
+//! - `aggregate.rs`: struct/union literals, field plans and
+//!   transfer planning, `genCopyValue` / shallow-copy / deep-
+//!   clone dispatch (Zig 7913, 21172–22239, 7663);
+//! - `aggregate_seq.rs`: tuple/array/repeat-array/enum literals
+//!   (Zig 21472, 22133–22400, 10983);
+//! - `closures.rs`: inline and let-bound closures, closure
+//!   calls, `genMove`, and impl/overload decl dispatch
+//!   (Zig 4009, 7314–7360, 8156–8180, 14283, 19351–19412).
+//! Escaped (thread-spawn) closures stay loudly unported; see
+//! the I-group REPORT for the death-point coordinates.
 //!
 //! Phase 2 (this slice) adds the B-group state and driver:
 //! - `types.rs` (B2): the Zig auxiliary structures (lines 66–293);
@@ -67,19 +124,48 @@
 //! with its group attribution. SAB never falls back to the text
 //! backend.
 
+pub mod agg_emit;
+pub mod aggregate;
+pub mod aggregate_copy;
+pub mod aggregate_seq;
+pub mod branch_state;
+pub mod callsite_args;
+pub mod captures;
+pub mod closures;
 pub mod copy_facts;
+pub mod decode;
+pub mod decode_inst;
+pub mod decode_sigs;
 pub mod driver;
 pub mod driver_gen;
+pub mod driver_types;
+pub mod gen_struct;
 pub mod emit;
 pub mod encode;
 pub mod error;
 pub mod fixture01;
+pub mod fragment;
+pub mod fragment_append;
+pub mod fragment_imports;
+pub mod fragment_names;
+pub mod fragment_template;
 pub mod ir;
 pub mod layout;
 pub mod leb128;
 pub mod literals;
+pub mod locals;
+pub mod macro_ctx;
+pub mod macro_expand;
+pub mod macro_plan;
+pub mod opkinds;
 pub mod pool;
 pub mod prescan_bindings;
+pub mod release_drop;
+pub mod release_emit;
+pub mod release_locals;
+pub mod release_meta;
+pub mod release_plans;
+pub mod release_prim;
 pub mod prescan_consts;
 pub mod state;
 pub mod surface_load;
@@ -89,9 +175,12 @@ pub mod surface_scan;
 pub mod symbols;
 pub mod types;
 
+pub use decode_sigs::{decode_function_sigs_only, decode_module, decode_test_function_sigs_only};
 pub use emit::ModuleBuilder;
 pub use encode::encode_module;
 pub use error::{Error, Result};
+pub use fragment::FragmentMachine;
+pub use fragment_imports::{MachineStdDeps, MachineSurfaceEmitter, NoSnippetFlattener, StdSnippetFlattener};
 pub use ir::Module;
 
 /// Serialize a fully built module to SAB v4 bytes.
@@ -123,4 +212,17 @@ pub fn generate_from_program_with_roots(
     roots: surface_load::SurfaceRoots,
 ) -> Result<Vec<u8>> {
     driver::generate_from_program_with_roots(program, check, roots)
+}
+
+/// [`generate_from_program_with_roots`] with an explicit F-group
+/// snippet flattener (the sci flattener boundary; the default
+/// entry points use [`NoSnippetFlattener`], which stops loudly
+/// at that boundary whenever a program actually reaches it).
+pub fn generate_from_program_with_flattener(
+    program: &sla_ast::Node,
+    check: &dyn sla_lowering::CheckInfo,
+    roots: surface_load::SurfaceRoots,
+    flattener: Box<dyn StdSnippetFlattener>,
+) -> Result<Vec<u8>> {
+    driver::generate_from_program_with_flattener(program, check, roots, flattener)
 }

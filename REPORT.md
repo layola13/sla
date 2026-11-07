@@ -439,3 +439,138 @@ Rust 线束端到端显著更低（暖 −85.6% / 冷 −88.3%）、本体段两
   （候 FB-035 裁断）。协调裁决延后项 3 件见 §10.1 末。
 - 场地注记：场地三 hold 至 2026-11-07 约 19:43 CST；全部交付
   物在本地主本，场地消亡不丢成果。三期快照 id 见本次提交。
+
+## 11. 四期收编（2026-11-07，四期协调线）
+
+### 11.0 总览
+
+四期在本日内收编。期间形态与口径经用户四次裁定演进，均已执行并在本节登记：仓库上 GitHub（layola13/sla，main = d811673c 起步，推送归主会话）；产品形态改独立二进制（14:33）；Zig 版 tag 后封存、sla 独立版为此后主线，10:11 替代裁决门作废、计时降为记录项，SAB 注册表联邦化转为本仓设计约束（14:37）；导入规矩 sla_std 薄包为主流、直引 .sai 保持兼容（14:39 定、14:40 补正）；四期升全场第一优先、今晚必须完工（14:44/14:45），盒上新时段 Rust 线先行，另有堵路线点名权（14:47，全期未触发）。
+
+九线交付：八个 patch 合入本地主本（D-C22、IMP、SAB-F、SAB-H、CLI、SAB-G、SAB-I、SAB-E），ORCP 为记录项交付。合并验真法：每线 patch 先核 sha256，再以 pristine d811673c 逐序套 patch 与主本 `diff -r` 比对；SAB-I/SAB-E 各有两处接线冲突经三方合并人工裁决（11.10）。收编终验（盒上、合并终树）：
+
+- **workspace 483 passed / 0 failed**（三期基线 294 → +189）；
+- check_file_lines：**188 个 .rs 全 ≤700 行**；
+- fixtures 对拍 5/5（01/03/04 与真插件逐字节全等，02/07 仅差 D-C23 清理序，与三期口径一致，fixture_parity 套件内断言）；
+- 独立二进制 `sla`（release）构建成功并完成双侧计时（11.6）。
+
+### 11.1 逐线结果
+
+- **D-C22 裸名段**：全段镜像销账。新 `check_preassoc.rs` 按 Zig 原序接在关联块之前；90 件真插件探针（参照头 sla 2cc12ea8）逐名钉死：Some/Ok/Err/ptr__null 谓词不查 associated_target、裸名 `::<T>` 为解析器 SyntaxError、poll-scalar = numeric、monitor → Chan<(u64,i32)>；顺带销 D-C21 第三件（ptr::read_volatile 同门）。checker 146 → 175。
+- **IMP 导入展开面**：四项全接线 + 对拍。import 宏系统全量镜像（关 INT2-4）、workspace 包全量镜像含怪癖照抄（关 INT2-5；包名解析序 sla_std→sa_std→plugin→workspace→相对）、@expand_tuple 全量镜像（关 INT2-7）、函数体内联展开 include_all 组合接线（check 实路），其余组合响亮未接线（IMP-1）。
+- **SAB-F（关键路径）**：F 组全量落地、第一形态即合、无撞墙。decode 三模块（decodeModule 读路径全量镜像）+ fragment 五模块（remap/clone/append/模板/缓存/导入机）；接线三点：driver step 2 ensurer 换 MachineStdDeps（SAB-D26 销账）、函数尾 flush、MachineSurfaceEmitter 实现 D4 trait。
+- **SAB-E**：E1–E7 十模块全量移植（opkinds/locals/branch_state/release_plans/release_meta/release_locals/release_drop/captures/release_prim/release_emit + state 三帧字段）；库级移植，driver 对 ReleaseStmt 仍响亮拒绝（接线需求 W1，未写成通过）。
+- **SAB-G**：macro_plan/macro_ctx/callsite_args/macro_expand 全量移植（ArgRole 分类、卫生名力学、材料化一族、genImportedMacroCall 编排）；机制未接 driver gen_call（接线归 F/驱动侧，接口坐标在册）。
+- **SAB-H**：gen_struct 全组落地（gen_for 数值范围形、gen_block_tail_value_store、gen_if_value、gen_unsafe、gen_cast、gen_try 结构体臂、inline_asm、using）；集合形 for 在 H 边界响亮拒绝。
+- **SAB-I**：聚合/闭包/字面量全家落地（agg_emit 原语、结构体/联合字面量、tuple/array/repeat/enum 字面量、copy/deep-clone 组内臂、闭包全家）；闭包绑定为名字→AST 登记 + `dst=0` 原形，无 Rc 冒充 owned（D-A1 合规）。
+- **CLI（sla-cli）**：新顶层 crate 落地，命令全集接通（check/build/test/build-exe/-wasm/-js/-c/build-workspace/sab build|workspace/init/help），新鲜度本地门逐项镜像（Wyhash 键构成/manifest/SLA_NO_FRESHNESS_CACHE 语义）、五级 sa 可执行解析、子进程委派面。对拍 49 行：19 全等 + 新鲜度双侧命中 + build-exe 两侧产物运行 rc=42，DIFF 30 案全部定类。
+- **ORCP**：协议准备 + Zig 侧预备测量段交付；决定性双侧交错跑由协调线在收编时以其 harness 补跑（11.6）。
+
+### 11.2 测试总账（收编终验，盒上合并终树实测）
+
+| crate | 通过 | 注 |
+|---|---|---|
+| sla-abi | 5 | |
+| sla-ast | 0 | 无单测（沿袭） |
+| sla-checker | 175 | 146 + D-C22 的 29 |
+| sla-cli | 32 | 本期新 crate |
+| sla-codegen-sab | 171 | lib 117 + e2e 7/4/7/5/8/13 + golden 3 + release_emit_e 7 |
+| sla-codegen-text | 5 | fixture_parity |
+| sla-lexer | 5 | |
+| sla-lowering | 9 | |
+| sla-oracle | 2 | |
+| sla-parser | 47 | lib 35 + fixtures 12 |
+| sla-plugin | 32 | lib 25 + contracts 3 + import_expand 4 |
+| **合计** | **483 / 0** | 基线 294 → +189 |
+
+### 11.3 死亡点新坐标
+
+- **默认形态**：driver step 2 → F 组 `cachedStdImportModule` → **`flattenStdSnippet` 边界**（SAB-D31）——sci 宿主面（SA 文本 flattener + verifier），不在本 crate 内，已留 `StdSnippetFlattener` trait + 响亮默认报错，不静默降级。收编实证：repeat-array 字面量程序的 `sa_std/core/mem.sa` 预载在此响亮停（11.10 pin）。
+- **注入替身 flattener 后**：越过 step 2，死于 gen_call 的 println 臂（D 组 format_print 展开构造，坐标已钉，归 D 组续线）。
+- **组级未达点**：gen_try 的 UserDefined 形参先死于 prim_type 子集（D2 归属）；逃逸闭包（thread spawn）三处坐标在 SAB-I 报告；ReleaseStmt 的 driver 接管（E 接线需求 W1）；G 机制入 driver gen_call 的接线（含 SAB-D123 的 emitDirect 直达族约 360 行）；含 std 表面调用程序的 SAB 直降（CLI-D4，同名响亮错误镜像）。
+
+### 11.4 分歧增量
+
+本期新增登记 **44 条**：IMP-1..8、CLI-D1..11、SAB-D29..D33、SAB-D101..D103、SAB-D121..D124、SAB-D141..D145、SAB-D161..D167、D-C24。在册总数 106 → **150**。本期销账/关闭：D-C22（逐名实证销账）、SAB-D26（F 接线落地）、INT2-4/INT2-5/INT2-7（IMP 接线落地）。分类与全文分布于各台账（checker.md、import-expand.md、cli-commands.md、contracts.md、sab 系），逐线报告有三分类标注；本节不另造分类总表。
+
+### 11.5 反馈增量（候选单，只登记、候主会话现头确认）
+
+本期新发 **20 单**，累计 24 → **44 单**：
+
+- FB-039 sci `readInstructions` 的 atomic_value_ty 存在字节宽松读（SAB 解码路）；FB-040 函数签名布尔字节宽松读与同记录严格校验并存；FB-041 `decodeModule` 重复段静默覆盖。
+- FB-045 字符串内 `@expand_tuple` 被展开：合法程序被拒 + 字符串值被静默改写（双形实锤，前端展开路）；FB-046 workspace manifest 静默忽略未知项 + 裸 InvalidFormat 无定位；FB-047 未闭合 `[MACRO]` 块吞至 EOF 静默注册；FB-048 .idx 宏缓存损坏时部分注册（观察级）。
+- FB-053 关联块前构造谓词（Some/Ok/Err/ptr__null）不查 associated_target，与同段 None/monitor 纪律不一致（check 路）。
+- FB-059/060/061/068 哈希迭代序入发射路径（确定性家族，SAB 路）：HashMap 值单元深释放、RefCell borrow 释放走查、分支 companions 合并槽、结构体字面量 pending_moved_fields。
+- FB-062 `genImportedMacroArg` 的 bypass 后 `unreachable`（契约扩展即 UB/panic 无诊断）；FB-063 `emitDirectImportedMacroCall` 对 arity 不符静默回退 fragment 拼接；FB-064 宏实参绑定递归无环路守卫。
+- FB-065 genIfValue 双终止臂返回未定义簿记寄存器；FB-066 opKindForCast 对 float→unsigned 一律 fptosi（与文本路一致性未核）；FB-067 genUnsafeExpr void 形零哨兵在终止路径未定义即被返回。
+- FB-069 genArrayLiteral 与 genTupleLiteral 的存值所有权记账不一致（SAB 路）；FB-070 genEnumLiteral 以名字字符串特判 `Option::None`，同名用户枚举被劫持（名字特判家族）。
+
+编号块未用归还：FB-042..044、FB-049..052、FB-054..055、FB-056..058（056 随形态裁定消解、057 并入 ORCP 预备段注记存档）。FB-059..070 原登记于各线报告，收编时由协调线据原文立成单文件（docs/feedback/，出处已注于各单）。
+
+### 11.6 产品形态计时（记录项，非完工门；14:37 裁定）
+
+口径：ORC 协议（docs/phase3/oracle-timing.md），同场地（盒 25023）同语料（8 件，源 sha 与三期 §6.1 在册值 8/8 一致）同窗交错（奇数轮 Zig 先、偶数轮反序），暖 = SLA_NO_FRESHNESS_CACHE=1 真跑、冷 = 逐轮清缓存，n=9 中位数；计时段 flock 独占，当窗 load 约 4.6。Rust 侧为合并终树 release 构建的独立二进制 `sla build`，Zig 侧为 `sa sla build`。原始轮次数据在 p4-deliver/orcp/decisive1（协调线交付目录）。
+
+| 件 | Zig 暖 | Rust 暖 | Zig 冷 | Rust 冷 |
+|---|---|---|---|---|
+| e2e_a | 17 | 3 | 19 | 4 |
+| e2e_b | 17 | 3 | 18 | 4 |
+| e2e_c | 18 | 3 | 18 | 4 |
+| 01_hello | 27 | 144 | 77 | 155 |
+| 02_arith | 17 | 3 | 19 | 3 |
+| 03_if_else | 17 | 4 | 17 | 4 |
+| 04_while_sum | 17 | 4 | 18 | 4 |
+| 07_functions | 17 | 3 | 19 | 3 |
+| **中位数之和** | **147** | **167** | **205** | **181** |
+| 进程地板（--version 中位） | 15 | 14 | — | — |
+
+读法（三条注记，缺一不可）：① 01_hello 是唯一含 std 表面调用（println）的件，Rust 侧经 CLI-D4 路径构成（自家前端尝试 + 委派接缝），未逐段拆分，其 144/155 ms 主导了 Rust 侧合计；剔除该件，Rust 暖合计 23 ms 对 Zig 120 ms。② 产物 sha：两侧逐件逐口径均为单值；跨侧同值 5/8（e2e_b/e2e_c/01_hello/03_if_else/04_while_sum），不同 3 件（e2e_a/02_arith/07_functions）归因于在册的 FB-016/020 发射序家族（Rust 为声明/登记序，与主线 det 定形同向），CLI 对拍矩阵中下游产物逐字全等与运行 rc 一致支持语义等价、字节差为序差。③ 与 §10.5 不直比作结论：§10.5 为 harness 形态数（暖中位和 Zig 215 / Rust 31），本表为产品二进制形态数；预备段的 Zig 侧预备值（暖 374 / 冷 411，当窗 load 10.49）已被本表同窗数取代，仅存档于 ORCP PREP。
+
+### 11.7 拓扑变化
+
+- **新增顶层 crate `crates/sla-cli`**（workspace 第 11 个成员）：独立二进制 `sla`，可依赖管线 crate 与 sla-abi，无人依赖它；承载命令层（未来主线本体，14:37 裁定）。`sla-plugin` cdylib 保留为镜像工件（A0 对拍证据），不再是产品形态。
+- 集成拆分：`crates/sla-codegen-sab/src/driver_types.rs` 由 driver.rs 逐字抽出（driver.rs 706 → 608 行），driver.rs 以再导出保持全部既有 `crate::driver::...` 路径，零行为变更（动因与过程见 11.10）。
+
+### 11.8 联邦化约束落实点（14:37 裁定转入本仓的设计约束）
+
+- SAB-F（SAB-D33）：本线未触及注册面结构、未新增中央表、未改 D1 来源，仅消费既有规则数据。差距如实登记：声明生成器（含 sla_std 包装声明同源）与按包合并加载面未实现，D1 仍读中央 meta。
+- IMP（IMP-7）：导入宏与 workspace 包的注册均由各导入文件的声明在加载时生成、Vec 确定序合并、provenance 出处保留——联邦形态已在导入面落地；SAB 表面注册表未触及、未发明清单格式。
+- SAB-G：零新增中心名表；Zig 三处名字键硬编码特例（FS_READ_BUFFER_FREE 表、BTREE_ 前缀、ONCE 特例）逐字保留并点名，候联邦化改述为 plan 标志。
+- SAB-E / SAB-H / SAB-I / D-C22 / CLI：未触注册面（E 明示 SAB-D33 缺口原样、未缩小未扩大）。
+
+### 11.9 sla_std 导入规矩：现状与差距（14:39 定、14:40 补正口径）
+
+现状：包名解析序本为 sla_std 优先（IMP 实证）；直引 `.sai` 在独立二进制全程兼容、活体证明（CLI 对拍），无拒绝/警告式处理；各线新语料与探针按主流形式书写。差距仅两项（按补正口径，旧形式存在不计为差距）：① 包装生成器（sai-wrap）在本仓零镜像（IMP 登记）；② 薄包形式 `sla_std/wrap/*.sla` 未通（CLI-D6：contract_load 缺 sla_std 根解析；IMP 的正文展开已合入，根解析衔接未落）。存量语料不迁移。
+
+### 11.10 集成期裁决与合并注记（协调线，四项）
+
+1. **SAB-I 三方合并**：driver_gen.rs 与 lib.rs 各一处冲突，以 git merge-file 三方定位后人工裁决——driver_gen 取 H 组四臂（cast/unsafe/try/asm）与 I 组聚合六臂并存，ClosureLiteral 臂以 I 组的忠实移植版替换基线前向桩（I 为闭包辖区主，两形皆响亮拒绝、I 版为现头镜像）；I 的其余三处接线（try_gen_closure_let / closure_param_regs / gen_invoked_closure_call）无冲突合入；lib.rs 取模块并集与 I 的文档块。其 5 个新文件与该线后像逐字全等（审计实证）。
+2. **SAB-E 合并**：lib.rs 两处冲突为模块表字母序插入，取并集（十模块齐全实证）；其 emit.rs 的 `append_instruction` hunk 与 F 组逐字相同，按该线注记丢弃。
+3. **emit.rs `append_instruction` 去重**：SAB-I 的过滤 patch 曾以偏移方式插入第二份同名定义（正文一致，注释为 F+I 超集版），集成时删去第一份、保留注释超集版；终树恰一份（grep 实证 = 1），文档信息无损。
+4. **driver.rs 行数拆分与一处测试 pin 校准**：合并树 driver.rs 达 706 行，触线 ≤700 纪律——将类型/算子助手五函数逐字抽至 driver_types.rs（11.7），driver.rs 608 行、全仓 188 文件复检全过。测试 pin 校准一处：`driver_e2e_i` 的 repeat-array 段在 F 接线落地后，其 `sa_std/core/mem.sa` 预载改经片段机器、响亮止于 SAB-D31 边界（协调线在盒上以探针钉死：tag=repeat、错误含 flattenStdSnippet 与该 import 名；tuple/array 两段不受影响、保持生成断言）——按 SAB-F 线更新旧 pin 的先例，将该段改为断言边界错误并注明翻回条件（真 flattener 落地后恢复生成 + 池断言）。首轮终验 482/1 的唯一红即此，校准后同一终验流程重跑 483/0。
+   口径注记：终验（final2）树与本地快照树的代码与测试逐字一致；快照树其后仅多纯文档（FB-059..070 单文件、本 §11、状态与协调文档）。
+
+### 11.11 场地、争用与参照头
+
+- 场地：主战场为 Colab 盒（裸 ssh 25023、隔离 HOME /content/plhome-rust4、独立目录 /content/rust4/、重套件 flock 串行）；Kaggle 为第二战场——2201 探活无会话注册（IMP 当轮写入状态文件并回盒完成，未干等），2203 活（CLI 线全程使用，rustup/cargo 1.99.1 与盒同版）。
+- 争用登记：各线均报 heavy.lock 空闲直取、无争用事件；优先序反转（14:44）后亦无实际抢占；堵路线点名（14:47）全期未触发。
+- 参照头：Zig 参照以盒上 sa_all @ 2cc12ea8 为主（sab_codegen.zig 23,771 行、type_checker.zig 11,022 行现头口径）；SAB-G 线的编号基准为 local-sa @ 3de91932（sab_codegen.zig 20,024 行版）——参照头异质如实登记，G 段行号与 FB-062..064 在主会话确认时须按现头复核。
+
+### 11.12 简报缺陷（协调线自登记）
+
+- 派单点名的若干 Zig 函数名为 docs/sab-decomposition.md 的释义名：SAB-F 的四个点名函数、SAB-I 的 `emitAggregateLiteral`/`STD_CLOSURE_*` 在现头全仓零命中；各线改以盒上源码为准据完成并在各自报告注明映射。
+- docs/sab-decomposition.md 在基线即截断于 §F 标题（文件 6,312 B）；G/H/I 段范围以派单正文与现头源码为准。
+
+### 11.13 FB-035 与 handler 面 B
+
+FB-035（sla_compile_handler 出货缺失）：产品形态裁定后对 Rust 线不再构成阻挡，本期如此登记；handler 面 B 按派单未建。Zig 侧事实登记不变，候主线处置。CLI 耦合面取舍（证据在 CLI 报告 §4）：最终编译委派现有 `sa` CLI 正是 Zig 插件自身的架构接缝（下游 artifact.sa.bc / output.bin 两侧逐字全等）；链接 SA 编译库的备选经盒上实查不成立——libsa_asm.a 有符号无头文件、SLA 前端不存在独立库形态。
+
+### 11.14 未合上部分总表（缺口坐标，照实登记）
+
+- SAB-D31 `flattenStdSnippet` 边界（sci 宿主面）：一切 std 片段展开止于此；后续路径 = sci 侧 flattener 落地或 Rust 侧移植该面，不在本期范围。
+- gen_call println 臂（D 组 format_print 展开构造）：替身 flattener 下的下一死亡点，归 D 组续线。
+- CLI-D4（std 表面程序 SAB 直降响亮拒绝，候 flattener 入口切换）、CLI-D5（test 前置剪枝未移植：test-codegen 配置下 SAB 清理错位 MemoryLeak；同程序普通 SAB 路 build-exe 运行 rc=45 干净，辖区归属候主会话定）、CLI-D6（sla_std 薄包根解析，见 11.9）。
+- SAB-I 逃逸闭包未移植保持响亮（坐标三处在其报告）；片段臂四处候消费 F 的 FragmentMachine（其接线需求 4）；impl &self 聚合形参死于基线 prim_type 子集（D2，非本组引入）。
+- SAB-E 接线需求 W1（ReleaseStmt 接管）与 W2–W6；SAB-G 入 driver gen_call 的接线与 SAB-D123（emitDirect 族约 360 行）；SAB-H 的 gen_try 端到端候 prim_type 子集放宽；D-C24(b)（va_next 成功路候 sla-ast 补 VaList primitive / 变参标记 / `...` 形参面）。
+- IMP-1（函数体内联展开的其余组合响亮未接线）。
+
+四期快照 id 见本次提交；推送归主会话。

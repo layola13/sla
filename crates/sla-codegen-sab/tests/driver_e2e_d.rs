@@ -12,9 +12,10 @@
 //!   surface call site consumes it);
 //! - a missing surface file is the SAB-D02 zero-rule outcome:
 //!   generation proceeds, the walk is loudly logged;
-//! - a `println` program still dies at its precise dead point —
-//!   the gen_call surface expansion (group D), with the F-group
-//!   fragment machinery behind it — even with rules loaded.
+//! - a `println` program dies at its precise dead point —
+//!   since phase 4 (SAB-F) that is driver step 2's dep append
+//!   hitting the sci flatten boundary in the F group (the old
+//!   gen_call D-group stop is now behind a working flattener).
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -243,10 +244,14 @@ fn d_println_dies_at_gen_call_surface_expansion() {
     let check = type_all_i32(&program);
     match generate_from_program_with_roots(&program, &check, roots) {
         Err(Error::UnsupportedSabDirectFeature(msg)) => {
-            assert!(msg.contains("println"), "dead point names println: {msg}");
-            assert!(msg.contains("group D"), "dead point is group D: {msg}");
+            // Phase 4 (SAB-F): the death point moved deeper —
+            // preload's dep ensuring now appends through the
+            // F-group import machine and stops at the sci
+            // flatten boundary (SAB-D31), before gen_call.
+            assert!(msg.contains("flattenStdSnippet"), "dead point names the F boundary: {msg}");
+            assert!(msg.contains("group F"), "dead point is group F: {msg}");
         }
-        other => panic!("expected loud D-group refusal at gen_call, got {other:?}"),
+        other => panic!("expected loud F-group refusal at step 2, got {other:?}"),
     }
     std::fs::remove_dir_all(&dir).ok();
 }

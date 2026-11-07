@@ -150,6 +150,19 @@ pub struct FrameState {
     pub result_slot_refcell_slots: HashMap<u32, u32>,
     /// Zig `borrow_address_temps` (payload map).
     pub borrow_address_temps: HashMap<u32, BorrowAddressTempState>,
+    /// Zig `object_ptr_regs` (E2; current-head DEF-SAB-BORROW-
+    /// WRITE-NULL provenance set): registers whose value is an
+    /// object pointer delivered directly, so access through
+    /// them skips the through-load.
+    pub object_ptr_regs: HashSet<u32>,
+    /// Zig `field_handle_view_regs` (E7; DEF-KB-1): handle-
+    /// typed field views that must be disposed with a real
+    /// release, not `move_`.
+    pub field_handle_view_regs: HashSet<u32>,
+    /// Zig `current_drop_node`: the statement whose checker
+    /// cleanup list is currently being emitted, keyed by
+    /// `sla_lowering::node_key` (Zig stores the node pointer).
+    pub current_drop_node: Option<usize>,
     /// Zig `future_state_vtables` / `future_readiness` /
     /// `future_readiness_by_name` (H group payloads).
     pub future_state_vtables: HashMap<u32, String>,
@@ -189,6 +202,8 @@ impl FrameState {
         self.result_slot_refcell_handles.clear();
         self.result_slot_refcell_slots.clear();
         self.borrow_address_temps.clear();
+        self.object_ptr_regs.clear();
+        self.field_handle_view_regs.clear();
         self.future_state_vtables.clear();
         self.future_readiness.clear();
         self.future_readiness_by_name.clear();

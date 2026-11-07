@@ -1,0 +1,1 @@
+fn main() -> i32 { let x = future__pair_left(42); return 0; }

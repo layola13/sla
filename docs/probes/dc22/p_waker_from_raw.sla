@@ -1,0 +1,2 @@
+fn f(r: RawWaker) -> Waker { return WAKER_FROM_RAW(r); }
+fn main() -> i32 { return 0; }

@@ -1,0 +1,2 @@
+fn f(p: FuturePair<i32, u64>) -> i32 { return future__pair_left(p); }
+fn main() -> i32 { return 0; }

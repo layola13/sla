@@ -25,6 +25,7 @@ pub mod commands;
 pub mod contracts;
 pub mod init_cmd;
 pub mod skills_cmd;
+pub mod sla_expand;
 pub mod stability;
 pub mod stability_validate;
 

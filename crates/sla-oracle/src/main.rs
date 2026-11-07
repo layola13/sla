@@ -37,7 +37,9 @@
 //!
 //! Exit codes: 0 full pipeline produced output; 2 usage / IO error;
 //! 3 text codegen failed loudly (unported emission path) after
-//! successful parse+check; 4 parse error; 5 check diagnostic.
+//! successful parse+check; 4 parse error (including root-source
+//! `@expand_tuple` expansion failure, which precedes parsing);
+//! 5 check diagnostic.
 //! Stages that do not exist yet dump an explicit NOT-IMPLEMENTED marker
 //! instead of fabricated data — an oracle that invents boundary data is
 //! worse than one that admits the gap.
@@ -93,6 +95,18 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // -- stage: source expansion (phase 4): Zig plugin_compile
+    // expands the ROOT source before parsing (expandForModulePath);
+    // an invalid directive is the "Macro Expansion Error" path.
+    // Exit 4 (the parse family): expansion is the first transform.
+    let source =
+        match sla_parser::source_expand::expand_for_module_path(&input.to_string_lossy(), &source) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("sla-oracle: source expansion failed: {e}");
+                return ExitCode::from(4);
+            }
+        };
     if let Some(dir) = &dump_dir {
         if let Err(e) = std::fs::create_dir_all(dir) {
             eprintln!("sla-oracle: cannot create dump dir {}: {e}", dir.display());
@@ -194,8 +208,10 @@ fn main() -> ExitCode {
     // before checking (Zig: loadImportedContracts runs ahead of
     // checkProgram). The dump lists everything the load touched —
     // including the parts that have no registration home yet
-    // (layout defines, INT2-3) or are phase-remaining (imported
-    // macros, .sla body expansion) — loudly, never silently.
+    // (layout defines, INT2-3) — loudly, never silently. Imported
+    // macros register in this stage since phase 4; .sla body
+    // expansion remains a separate plugin-layer stage
+    // (sla_plugin::sla_expand, include-all mode).
     let t = Instant::now();
     let Node::Program(program) = &root else {
         eprintln!("sla-oracle: parser root is not a Program node");
@@ -211,6 +227,20 @@ fn main() -> ExitCode {
                     sla_checker::ExternSig {
                         move_params: func.params.iter().map(|p| p.is_move).collect(),
                         ret_abi: func.ret_ty.clone(),
+                    },
+                );
+            }
+            // Phase 4 (INT2-4 closed): imported macros register too.
+            for record in &report.imported_macro_registry {
+                checker.register_imported_macro(
+                    &record.name,
+                    sla_checker::ImportedMacroInfo {
+                        arity: record.arity,
+                        leading_outputs: record.leading_outputs,
+                        import_path: record.import_path.clone(),
+                        borrowed_arg_mask: record.borrowed_arg_mask,
+                        address_slot_arg_mask: record.address_slot_arg_mask,
+                        direct_callees: record.direct_callees.clone(),
                     },
                 );
             }
@@ -443,14 +473,30 @@ fn contracts_dump_text(report: &sla_parser::contract_load::LoadReport) -> String
         text.push_str(&format!("  {} = {} ({})\n", def.name, def.val_str, def.val_int));
     }
     text.push_str(&format!(
-        "macro defs NOT registered [phase-remaining] ({} files):\n",
+        "macro defs by file ({} files):\n",
         report.macro_defs.len()
     ));
     for (file, names) in &report.macro_defs {
         text.push_str(&format!("  {file}: {}\n", names.join(", ")));
     }
     text.push_str(&format!(
-        ".sla imports NOT body-expanded [phase-remaining] ({}):\n",
+        "imported macros REGISTERED ({} in registry):\n",
+        report.imported_macro_registry.len()
+    ));
+    for record in &report.imported_macro_registry {
+        text.push_str(&format!(
+            "  {} arity={} leading={} borrowed={:#x} addr={:#x} assigned={:#x} from={}\n",
+            record.name,
+            record.arity,
+            record.leading_outputs,
+            record.borrowed_arg_mask,
+            record.address_slot_arg_mask,
+            record.assigned_output_mask,
+            record.import_path.as_deref().unwrap_or("-")
+        ));
+    }
+    text.push_str(&format!(
+        ".sla imports NOT body-expanded by the contracts stage ({}):\n",
         report.sla_imports.len()
     ));
     for path in &report.sla_imports {

@@ -1,0 +1,2 @@
+fn f(p: Poll<String>) -> i32 { let x = poll__value(p); return 0; }
+fn main() -> i32 { return 0; }

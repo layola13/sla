@@ -73,6 +73,14 @@ impl Checker {
             }
             return Ok(ret);
         }
+        // Pre-associated bare-name block (D-C22, check_preassoc.rs):
+        // in Zig this segment (venue :8320-8541) sits BEFORE the
+        // callee/chan-probe stages' resolution proper and before
+        // the associated block — `Some`/`Ok`/`Err`/`ptr__null`
+        // fire even with an associated target present.
+        if let Some(result) = self.check_pre_assoc_call(node, call) {
+            return result;
+        }
         if let Some(target) = &call.associated_target {
             // Associated forms that resolve (or hard-fail, as in
             // Zig) return here; a miss FALLS THROUGH to the plain
@@ -528,9 +536,12 @@ impl Checker {
             return Some(self.check_trait_associated_call(target, call));
         }
 
-        // `ptr` leaves (venue :8457): `null` only; `read_volatile`
-        // needs the unsafe-depth counter this crate does not carry
-        // and falls through (checker.md remaining list).
+        // `ptr` leaves (venue :8565/:8568): `null`, plus
+        // `read_volatile` behind the unsafe gate (the counter
+        // D-C21 missed is now carried, checker.rs `unsafe_depth`).
+        if (target == "ptr" || target == "std__ptr") && name == "read_volatile" {
+            return Some(self.check_read_volatile_call(call));
+        }
         if (target == "ptr" || target == "std__ptr") && name == "null" {
             return Some((|| {
                 if !call.args.is_empty() {

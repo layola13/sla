@@ -1,0 +1,8 @@
+== ws_typo_root
+rc=1
+error: InvalidFormat
+
+== unterm_macro
+rc=0
+Sla Compiler: Successfully parsed and verified syntax and types of main.sla.
+

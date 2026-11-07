@@ -1,0 +1,25 @@
+[package]
+name = "sla-cli"
+version = "0.1.0"
+edition = "2021"
+
+# Standalone `sla` binary (phase-4 delivery form, user ruling
+# 2026-11-07): the SLA command layer as its own executable instead
+# of a host-loaded cdylib. Top-level consumer like sla-plugin /
+# sla-oracle: it depends on the pipeline crates, nobody depends on
+# it, and it adds no edges between the existing crates. The final
+# compile step is delegated to the installed `sa` toolchain's own
+# command line (the same seam the Zig plugin uses), never linked.
+
+[[bin]]
+name = "sla"
+path = "src/main.rs"
+
+[dependencies]
+sla-ast = { path = "../sla-ast" }
+sla-lexer = { path = "../sla-lexer" }
+sla-parser = { path = "../sla-parser" }
+sla-checker = { path = "../sla-checker" }
+sla-lowering = { path = "../sla-lowering" }
+sla-codegen-text = { path = "../sla-codegen-text" }
+sla-codegen-sab = { path = "../sla-codegen-sab" }

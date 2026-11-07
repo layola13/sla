@@ -1,0 +1,2 @@
+fn f() -> Poll<i32> { return poll__ready(42); }
+fn main() -> i32 { return 0; }

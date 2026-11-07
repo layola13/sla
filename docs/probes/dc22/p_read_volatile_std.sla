@@ -1,0 +1,2 @@
+fn f(p: *i32) -> i32 { let v = unsafe { std__ptr__read_volatile(p) }; return v; }
+fn main() -> i32 { return 0; }

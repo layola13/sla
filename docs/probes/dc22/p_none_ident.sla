@@ -1,0 +1,2 @@
+fn f() -> Option<i32> { return None; }
+fn main() -> i32 { return 0; }

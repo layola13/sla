@@ -379,3 +379,79 @@
   探针产物 798 B（sha256 `131c90aa…`）——两程序在本端口均
   死于 gen_call 表面展开（D 组）/ 其后 F 组片段机器，
   死点已在 driver_e2e_d 中钉死。
+
+## 四期 F 组新增登记（2026-11-07，SAB-F 线）
+
+### SAB-D26 销账注（2026-11-07，SAB-F 线）
+- F 组落地后，本条所述「无条件走排队分支」已解除：driver
+  step 2 的 preload 改经 `MachineStdDeps`（F 机器的
+  `ensureStdDeps` 镜像，函数体内排队 / 函数体外立即
+  `appendStdDepsNow`），函数尾 `flushPendingStdDeps` 已接线
+  （gen_func_decl / gen_test_decl）。`PendingStdDeps` 保留为
+  排队分支的单元形态与 D4 测试载体。append 的时点差异自此
+  消除；新的不可观察性只在 flattener 边界（SAB-D31）。
+
+### SAB-D29 解码器不建模 raw_text（b 类）
+- 原文：sci `sab.zig` 的 `Module` 指令/常量带 `raw_text`：
+  v2/v3 流内嵌、v<4 由 `synthesizeRawText` 解码时合成、
+  常量由 `readConstDecls` 合成 `@const {name} = {literal}`。
+- 移植形态：本仓 IR 自一期起即不建模 `raw_text`（写路径从
+  不序列化它）；F1/F2 解码器照常消费 v2/v3 的 raw-text 槽
+  位但不保存，常量合成文本不保存，`synthesizeRawText` 整段
+  跳过。后果仅在诊断/反汇编面：畸形旧版模块（major<4）在
+  Zig 合成步可能报 `InvalidTag`（如 call 的 reg 操作数越
+  界），本端口会成功解码——字节发射面无差（raw_text 不入
+  线格式）。符号池由 Zig 的借用切片改 owned `String`，同
+  属本条所有权形态。
+
+### SAB-D30 常量兼容检查只比 literal_text（b 类）
+- 原文：`ensureConstDeclCompatible` 比 `raw_text` 与
+  `literal_text` 双字段。
+- 移植形态：本端口只比 `literal_text`。对解码所得常量，
+  Zig 的 raw_text 恒为合成式 `@const {name} = {literal}`，
+  同名下与 literal 等价 ⟺ raw 等价，判读无差；差异面仅
+  「宿主侧以别路径构造、raw_text 与合成式不同」的常量 —
+  本端口的常量构造点（C1/C3）均不携带独立 raw_text，该面
+  不可达。登记备查。
+
+### SAB-D31 flattenStdSnippet 边界（b 类，结构边界非缺陷）
+- 原文：`cachedStdImportModule` / `cachedStdMacroTemplate` /
+  `emitStdMacroFragmentFresh` 均经 `flattenStdSnippet`
+  （sci SA 文本 flattener + verifier + SAB 编码，宿主侧
+  `sci_bridge`）取得片段模块——该机器在 Zig 拓扑里本就不
+  在 sab_codegen 内。
+- 移植形态：同位置设 `StdSnippetFlattener` trait 边界，机
+  器侧把 Zig 逐字构建的 snippet 源码交给 provider；默认
+  `NoSnippetFlattener` 响亮报 F 组坐标。片段机器其余部分
+  （解码/remap/clone/append/模板/缓存/flush）全部实装并有
+  替身 provider 的端到端测试钉死。真 flattener 的移植归
+  sci 镜像面后续线，不在本线辖区。
+
+### SAB-D32 缓存片段路径的错误回退收窄（b 类）
+- 原文：`emitStdMacroFragmentWithLiteralArgs` 对缓存路径
+  的失败只吞 `error.UnsupportedType` 一种（转 fresh 路径），
+  其余上抛。
+- 移植形态：本端口错误类型无 `UnsupportedType` 对应变体，
+  缓存路径错误全部上抛。在无 flattener 的现形态下不可观察
+  （两路同死于边界）；候真 flattener 接入时按原文细分。
+
+### SAB-D33 表面注册面：联邦化设计约束登记（蓄意，用户裁定）
+- 裁定出处：用户 2026-11-07 14:37（联邦化转入 Rust 侧设
+  计约束）+ 14:39/14:40 补正（直引 .sai 保持完全兼容、亦
+  为合法生成源）。约束：Rust 侧 SAB 表面注册须「从声明生
+  成、可按包联邦」，不扩展 Zig 式手工中央表。
+- 本线落实：F 组只**消费**既有规则数据（D1 自
+  `std_surface.sla_meta` 解析），未新增任何中央表结构、未
+  改注册来源。生成源现状 = .sai/.sla 声明面（含 sla_std
+  薄包声明与直引 .sai 声明，两者均合法）；差距仅记「生
+  成/联邦机制未覆盖之面」：注册清单的声明生成器与按包合
+  并加载面尚未实现（D1 仍读 Zig 时代的中央 meta 文件），
+  归后续线（E–I 续线同守本约束）。
+
+## 四期计数增补
+
+- (b) 结构性重构：+4（D29、D30、D31、D32）；蓄意 +1（D33）；
+  D26 销账（行为差异消除，条目保留为历史）。
+- (c) 新候选：FB-039（atomic_value_ty 存在字节宽松）、
+  FB-040（sig 布尔字节宽松与同记录严格校验并存）、
+  FB-041（decodeModule 重复段静默覆盖）。

@@ -20,20 +20,20 @@
 //! scalar binary operations, `if` / `while` forms, `let` / assign /
 //! return / break / continue, and the `panic(code)` builtin. The
 //! C group (pre-scan and symbols) is wired as of phase 3: global
-//! scalar consts fold (aliases and binary expressions included),
-//! checker-typed global array consts materialize as hex consts,
-//! assigned bindings are collected by the full C2 walker, trait
-//! vtable decls are emitted for program-local traits, and
-//! decl-only extern prototypes with a concrete twin are
-//! suppressed. The D group (std surface infrastructure) is wired
-//! as of the SAB-D slice: step 2 loads the surface rules (D1)
-//! and preloads surface deps into the pending queue (D5/D4,
-//! SAB-D26); surface *expansion* at call sites still belongs to
-//! the F-group fragment machinery. Every call point into a group
-//! this phase does not implement (F fragments, G macros,
-//! H async, I closures/impls) fails loudly with
-//! `UnsupportedSabDirectFeature` naming the group and the Zig line
-//! range — never a silent skip, never a text-backend fallback.
+//! scalar consts fold, checker-typed global array consts
+//! materialize as hex consts, assigned bindings are collected by
+//! the full C2 walker, trait vtable decls are emitted for
+//! program-local traits, and decl-only extern prototypes with a
+//! concrete twin are suppressed. The D group is wired as of the
+//! SAB-D slice (step 2 loads rules via D1 and preloads deps via
+//! D5/D4); the F group is wired as of phase 4 (SAB-F): preload
+//! deps append through the import machine, and surface expansion
+//! runs through the fragment machinery behind the
+//! `StdSnippetFlattener` boundary (SAB-D31). Every call point
+//! into a group this phase does not implement (G macros, H async,
+//! I closures/impls) fails loudly with
+//! `UnsupportedSabDirectFeature` naming the group and the Zig
+//! line range — never a silent skip, never a text fallback.
 //!
 //! Emission conventions inside the subset follow the phase-1 hand
 //! model (`fixture01.rs`): the `ModuleBuilder` trunk interns in
@@ -59,114 +59,22 @@ use sla_lowering::{
 
 use crate::encode::encode_module;
 use crate::error::{Error, Result};
+use crate::fragment::FragmentMachine;
+use crate::fragment_imports::{MachineStdDeps, NoSnippetFlattener, StdSnippetFlattener};
 use crate::ir::{CapPrefix, FunctionKind, FunctionSig, OpKind, ParamSpec, PrimType};
 use crate::prescan_bindings;
 use crate::prescan_consts;
 use crate::state::CodegenState;
 use crate::surface_load::{self, SurfaceRoots};
 use crate::surface_preload::SurfacePreloader;
-use crate::surface_query::PendingStdDeps;
 use crate::surface_scan;
 use crate::symbols;
 use crate::types::Local;
 
-/// A loud, group-attributed unsupported error (SAB-D15: the reason
-/// string always travels with the error).
-pub(crate) fn unsupported(what: &str, group: &str, zig_ref: &str) -> Error {
-    Error::UnsupportedSabDirectFeature(format!(
-        "{what} [group {group}; Zig sab_codegen.zig:{zig_ref}]"
-    ))
-}
-
-/// Zig `primType` (lines 1569–1591), primitive arm. Non-primitive
-/// types route through the D2 layout adapter in Zig; only the
-/// pointer-shaped cases are resolved here, the rest is loud.
-fn prim_type(ty: &Type) -> Result<PrimType> {
-    match ty {
-        Type::Primitive(p) => Ok(match p {
-            Primitive::I8 => PrimType::I8,
-            Primitive::I16 => PrimType::I16,
-            Primitive::I32 => PrimType::I32,
-            Primitive::I64 | Primitive::Integer | Primitive::Isize => PrimType::I64,
-            Primitive::U8 => PrimType::U8,
-            Primitive::U16 => PrimType::U16,
-            Primitive::U32 => PrimType::U32,
-            Primitive::U64 | Primitive::Usize => PrimType::U64,
-            Primitive::F32 => PrimType::F32,
-            Primitive::F64 | Primitive::Float => PrimType::F64,
-            Primitive::Boolean => PrimType::I1,
-            Primitive::RawPtr => PrimType::Ptr,
-            Primitive::VoidType => PrimType::Void,
-        }),
-        Type::Pointer(_) | Type::Borrow(_) | Type::FnPtr(_) | Type::Closure(_) => {
-            Ok(PrimType::Ptr)
-        }
-        _ => Err(unsupported(
-            "non-primitive type has no primType in the driver subset",
-            "D2 layout",
-            "1590-1706",
-        )),
-    }
-}
-
-/// Zig `abiReturnPrimType`: bool returns widen to i32.
-fn abi_return_prim_type(ty: &Type) -> Result<PrimType> {
-    if matches!(ty, Type::Primitive(Primitive::Boolean)) {
-        return Ok(PrimType::I32);
-    }
-    prim_type(ty)
-}
-
-/// Zig `returnCapForType` (lines 5628–5635) over sla-lowering's
-/// `abiCapKindFromType`.
-fn return_cap_for_type(ty: &Type) -> Option<CapPrefix> {
-    match abi_cap_kind_from_type(ty) {
-        AbiCapKind::Borrow => Some(CapPrefix::Borrow),
-        AbiCapKind::Move => Some(CapPrefix::Move),
-        AbiCapKind::Raw => Some(CapPrefix::Raw),
-        AbiCapKind::None => None,
-    }
-}
-
-/// Zig `scalarBinaryOpKind` (lines 2349–2380): lowering plan ->
-/// SAB op kind.
-pub(crate) fn scalar_binary_op_kind(plan: ScalarBinaryOp) -> OpKind {
-    match plan {
-        ScalarBinaryOp::Add => OpKind::Add,
-        ScalarBinaryOp::Sub => OpKind::Sub,
-        ScalarBinaryOp::Mul => OpKind::Mul,
-        ScalarBinaryOp::SDiv => OpKind::Sdiv,
-        ScalarBinaryOp::UDiv => OpKind::Udiv,
-        ScalarBinaryOp::SRem => OpKind::Srem,
-        ScalarBinaryOp::URem => OpKind::Urem,
-        ScalarBinaryOp::BitAnd | ScalarBinaryOp::LogicalAnd => OpKind::And,
-        ScalarBinaryOp::BitOr | ScalarBinaryOp::LogicalOr => OpKind::Or,
-        ScalarBinaryOp::BitXor => OpKind::Xor,
-        ScalarBinaryOp::Shl => OpKind::Shl,
-        ScalarBinaryOp::LShr => OpKind::Lshr,
-        ScalarBinaryOp::AShr => OpKind::Ashr,
-        ScalarBinaryOp::Eq => OpKind::Eq,
-        ScalarBinaryOp::Ne => OpKind::Ne,
-        ScalarBinaryOp::SLt => OpKind::Slt,
-        ScalarBinaryOp::SLe => OpKind::Sle,
-        ScalarBinaryOp::SGt => OpKind::Sgt,
-        ScalarBinaryOp::SGe => OpKind::Sge,
-        ScalarBinaryOp::ULt => OpKind::Ult,
-        ScalarBinaryOp::ULe => OpKind::Ule,
-        ScalarBinaryOp::UGt => OpKind::Ugt,
-        ScalarBinaryOp::UGe => OpKind::Uge,
-        ScalarBinaryOp::FAdd => OpKind::Fadd,
-        ScalarBinaryOp::FSub => OpKind::Fsub,
-        ScalarBinaryOp::FMul => OpKind::Fmul,
-        ScalarBinaryOp::FDiv => OpKind::Fdiv,
-        ScalarBinaryOp::FCmpEq => OpKind::FcmpEq,
-        ScalarBinaryOp::FCmpNe => OpKind::FcmpNe,
-        ScalarBinaryOp::FCmpLt => OpKind::FcmpLt,
-        ScalarBinaryOp::FCmpLe => OpKind::FcmpLe,
-        ScalarBinaryOp::FCmpGt => OpKind::FcmpGt,
-        ScalarBinaryOp::FCmpGe => OpKind::FcmpGe,
-    }
-}
+pub(crate) use crate::driver_types::{
+    abi_return_prim_type, prim_type, return_cap_for_type, scalar_binary_op_kind,
+    unsupported,
+};
 
 // The step-3 future scan is D5's full walker,
 // `surface_scan::program_uses_future_task_runtime` — Zig's
@@ -186,12 +94,21 @@ pub struct Driver<'c> {
     /// D1 surface-location roots for step 2 (defaults to the
     /// process environment; harnesses may substitute fixtures).
     pub surface_roots: SurfaceRoots,
+    /// The F-group snippet flattener (sci boundary, SAB-D31);
+    /// defaults to [`NoSnippetFlattener`] (loud stop there).
+    pub flattener: Box<dyn StdSnippetFlattener>,
     pub(crate) funcs: HashMap<String, FuncShape>,
     /// C2 per-function repeated-let names for the function currently
     /// being emitted (Zig `multi_let_bindings` is program-global
     /// there; the subset scopes it per function, as the Zig field
     /// comment describes the intent — see SAB-D08).
     pub(crate) multi_let: std::collections::HashSet<String>,
+    /// I group: enum declarations by name, collected from the
+    /// program before emission (Zig reads `tc.enums`; the port's
+    /// `CheckInfo` exposes no enum table, so the driver gathers
+    /// the program's own enum decls — imported enums stop loudly
+    /// in `gen_enum_literal`, see the I-group REPORT).
+    pub(crate) enums: HashMap<String, sla_ast::EnumDecl>,
 }
 
 impl<'c> Driver<'c> {
@@ -200,13 +117,21 @@ impl<'c> Driver<'c> {
             state: CodegenState::new(),
             check,
             surface_roots: SurfaceRoots::from_env(),
+            flattener: Box::new(NoSnippetFlattener),
             funcs: HashMap::new(),
             multi_let: std::collections::HashSet::new(),
+            enums: HashMap::new(),
         }
     }
 
     pub(crate) fn b(&mut self) -> &mut crate::emit::ModuleBuilder {
         &mut self.state.builder
+    }
+
+    /// Zig `flushPendingStdDeps` (from `finishFunctionBody`).
+    fn flush_pending_std_deps(&mut self) -> Result<()> {
+        let mut machine = FragmentMachine::new(&mut self.state);
+        machine.flush_pending_std_deps(&mut *self.flattener)
     }
 
     /// Zig `loweredFuncSymbol` (lines 953–963), via C3
@@ -254,13 +179,14 @@ impl<'c> Driver<'c> {
         // (`SurfacePreloader`). The load's fallback walk is
         // recorded in the program state (SAB-D02's loud log);
         // a missing surface file leaves zero rules, as in Zig.
-        // Preload discovers every surface dep and queues it in
-        // `pending_std_deps` through D4's ensurer (SAB-D26: the
-        // F-group append that Zig performs here is not ported
-        // yet). Zig wraps preload errors with a trace and
-        // re-raises; the port's errors carry their reasons
-        // (SAB-D15), so propagation is direct. Surface *calls*
-        // still stop loudly at their gen_call sites (group D).
+        // Preload ensures every dep through the F machine's
+        // ensurer: outside a function body (the case here) Zig's
+        // `ensureStdDeps` appends immediately via
+        // `appendStdDepsNow` → `flattenStdSnippet` — the SAB-D26
+        // queue-only port is resolved, and with the default
+        // flattener a dep-bearing program stops loudly at that
+        // sci boundary (SAB-D31). Errors propagate directly
+        // (their reasons travel with them, SAB-D15).
         {
             let roots = self.surface_roots.clone();
             let log = surface_load::load_std_surface_rules(
@@ -270,18 +196,15 @@ impl<'c> Driver<'c> {
             self.state.program.surface_load_log = Some(log);
             let rules = self.state.program.std_surface_rules.clone();
             let check = self.check;
-            let mut ensurer = PendingStdDeps::new(
-                &mut self.state.program.included_imports,
-                &mut self.state.program.pending_std_deps,
-            );
+            let mut ensurer = MachineStdDeps {
+                machine: FragmentMachine::new(&mut self.state),
+                flattener: &mut *self.flattener,
+            };
             let preloader = SurfacePreloader::new(check, &rules);
             preloader.preload_std_surface_deps(&mut ensurer, program)?;
         }
 
-        // Step 3: future helpers (H call point). The gate is
-        // D5's full scan (`programUsesFutureTaskRuntime`, Zig
-        // 614–617); helper *emission* is H-group and not ported,
-        // so a positive scan is a loud H stop, as before.
+        // Step 3: future helpers (H call point; D5 scan gate).
         if surface_scan::program_uses_future_task_runtime(program) {
             return Err(unsupported(
                 "program uses future/task runtime; helper emission not ported",
@@ -290,14 +213,7 @@ impl<'c> Driver<'c> {
             ));
         }
 
-        // Step 4: trait vtable decls (Zig 550–556), via C3
-        // (`symbols::emit_trait_vtable_decl`): one vtable const
-        // per trait impl, emitted before any function. Trait and
-        // decl-only facts come from the program's own declarations
-        // (plus the checker's function table under mangled names);
-        // an impl of a trait the program does not declare fails
-        // loudly inside C3, as Zig's `tc.traits` miss does. The
-        // impl *methods* themselves remain I-group (step 5).
+        // Step 4: trait vtable decls (Zig 550–556), via C3.
         {
             let mut traits: std::collections::HashMap<String, sla_ast::TraitDecl> =
                 std::collections::HashMap::new();
@@ -345,6 +261,14 @@ impl<'c> Driver<'c> {
             }
         }
 
+        // I group: enum declarations for `gen_enum_literal`
+        // (Zig resolves them through `tc.enums`).
+        for decl in &prog.decls {
+            if let Node::EnumDecl(e) = decl {
+                self.enums.insert(e.name.clone(), e.clone());
+            }
+        }
+
         // Callable shapes for every concrete user function first:
         // Zig resolves callees through the checker's `tc.funcs`,
         // independent of declaration order.
@@ -383,20 +307,8 @@ impl<'c> Driver<'c> {
                     }
                 }
                 Node::TestDecl(t) => self.gen_test_decl(t)?,
-                Node::ImplDecl(_) => {
-                    return Err(unsupported(
-                        "impl decl emission",
-                        "I closures/impls",
-                        "574-582",
-                    ))
-                }
-                Node::OverloadDecl(_) => {
-                    return Err(unsupported(
-                        "overload decl emission",
-                        "I closures/impls",
-                        "583-591",
-                    ))
-                }
+                Node::ImplDecl(i) => self.gen_impl_decl(i)?,
+                Node::OverloadDecl(o) => self.gen_overload_decl(o)?,
                 Node::StructDecl(_)
                 | Node::EnumDecl(_)
                 | Node::TraitDecl(_)
@@ -453,22 +365,15 @@ impl<'c> Driver<'c> {
 
     // -- declarations ---------------------------------------------
 
-    /// Zig `genFuncSig` + `appendDeclInst` for the subset: builds
-    /// the sig (interning the lowered name first, then the scoped
-    /// param names in order), appends the decl instruction, and
-    /// binds the params as locals.
+    /// Zig `genFuncSig` + `appendDeclInst` for the subset.
     ///
-    /// SAB-D17 dual track, mirrored faithfully: the sig's `id` is
-    /// the Zig emission counter `function_sigs.len + test_sigs.len`
-    /// sampled at `genFuncSig` entry (sab_codegen.zig:5964) — NOT
-    /// the interned name id the trunk's `add_sig` defaults to —
-    /// while the decl instruction's operands keep the intern id
-    /// (`declInstForSig`, sab_codegen.zig:6008). A test sig counts
-    /// twice for later sigs: `genTestDecl` appends it to both
-    /// lists (sab_codegen.zig:6480, 6493), so the counter after a
-    /// test jumps by 2. The override is applied after
-    /// `append_decl_inst` so the decl operands are captured with
-    /// the intern id still in place.
+    /// SAB-D17 dual track, mirrored faithfully: the sig's `id`
+    /// is the Zig emission counter `function_sigs.len +
+    /// test_sigs.len` sampled at `genFuncSig` entry
+    /// (sab_codegen.zig:5964), while decl operands keep the
+    /// intern id (`declInstForSig`, :6008); a test sig counts
+    /// twice (appended to both lists, :6480/:6493). The
+    /// override is applied after `append_decl_inst`.
     fn begin_sig(
         &mut self,
         lowered: &str,
@@ -538,9 +443,17 @@ impl<'c> Driver<'c> {
         Ok(sig_index)
     }
 
-    /// Zig `genFuncDecl` / `genFuncDeclNamed` (lines 6183–6265),
-    /// non-async path.
+    /// Zig `genFuncDecl`: the lowered name comes from the decl
+    /// itself. I-group decl dispatchers (impl/overload) call the
+    /// named form below with their mangled names, mirroring Zig's
+    /// `genFuncDecl` → `genFuncDeclNamed` split.
     fn gen_func_decl(&mut self, f: &FuncDecl) -> Result<()> {
+        let lowered = self.lowered_symbol(f);
+        self.gen_func_decl_named(&lowered, f)
+    }
+
+    /// Zig `genFuncDeclNamed` (lines 6183–6265), non-async path.
+    pub(crate) fn gen_func_decl_named(&mut self, lowered: &str, f: &FuncDecl) -> Result<()> {
         if f.is_async {
             return Err(unsupported(
                 &format!("async function `{}` (continuation plans)", f.name),
@@ -568,8 +481,7 @@ impl<'c> Driver<'c> {
             );
             set
         };
-        let lowered = self.lowered_symbol(f);
-        let _sig_index = self.begin_sig(&lowered, FunctionKind::Normal, &f.params, &f.ret_ty, false, false)?;
+        let _sig_index = self.begin_sig(lowered, FunctionKind::Normal, &f.params, &f.ret_ty, false, false)?;
 
         // Tail-expression return path (Zig 6231-6250): a non-void
         // function whose last statement is an expression statement
@@ -599,6 +511,7 @@ impl<'c> Driver<'c> {
                 self.b().emit_return(None);
             }
         }
+        self.flush_pending_std_deps()?;
         self.b().finish_function();
         self.state.frame.in_function_body = false;
         Ok(())
@@ -630,6 +543,7 @@ impl<'c> Driver<'c> {
         if !self.b().last_is_terminator() {
             self.b().emit_return(None);
         }
+        self.flush_pending_std_deps()?;
         self.b().finish_function();
         // Zig genTestDecl also registers the sig in `test_sigs`.
         let sig = self.b().sig_clone(sig_index);
@@ -682,5 +596,18 @@ pub fn generate_from_program_with_roots(
 ) -> Result<Vec<u8>> {
     let mut driver = Driver::new(check);
     driver.surface_roots = roots;
+    driver.generate(program)
+}
+
+/// [`generate_from_program_with_roots`] + F flattener (SAB-D31).
+pub fn generate_from_program_with_flattener(
+    program: &Node,
+    check: &dyn CheckInfo,
+    roots: SurfaceRoots,
+    flattener: Box<dyn StdSnippetFlattener>,
+) -> Result<Vec<u8>> {
+    let mut driver = Driver::new(check);
+    driver.surface_roots = roots;
+    driver.flattener = flattener;
     driver.generate(program)
 }

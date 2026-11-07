@@ -1,0 +1,52 @@
+== exp_ok
+rc=0
+Sla Compiler: Successfully parsed and verified syntax and types of main.sla.
+--err--
+note[SA-PLUGIN]: 'sa sla check' is deprecated: language frontends are dispatched by file extension, so run the host verb directly (e.g. 'sa check <file.sla>'). The 'sa sla' form keeps working during the transition.
+
+== exp_build
+rc=0
+Sla Compiler: Successfully compiled main.sla to main.sa.
+--err--
+note[SA-PLUGIN]: 'sa sla build' is deprecated: language frontends are dispatched by file extension, so run the host verb directly (e.g. 'sa build <file.sla>'). The 'sa sla' form keeps working during the transition.
+
+== exp_bad
+rc=1
+--err--
+note[SA-PLUGIN]: 'sa sla check' is deprecated: language frontends are dispatched by file extension, so run the host verb directly (e.g. 'sa check <file.sla>'). The 'sa sla' form keeps working during the transition.
+Macro Expansion Error: failed to expand tuple templates in bad.sla: error.InvalidExpandTuple
+
+== mac_expr
+rc=1
+--err--
+note[SA-PLUGIN]: 'sa sla check' is deprecated: language frontends are dispatched by file extension, so run the host verb directly (e.g. 'sa check <file.sla>'). The 'sa sla' form keeps working during the transition.
+Type Check Error: failed to verify types: macro SET_PAIR expects 3 args or 2 args when using expression output, got 1 (error.InvalidArgsCount)
+
+== mac_bad
+rc=1
+--err--
+note[SA-PLUGIN]: 'sa sla check' is deprecated: language frontends are dispatched by file extension, so run the host verb directly (e.g. 'sa check <file.sla>'). The 'sa sla' form keeps working during the transition.
+Type Check Error: failed to verify types: macro SET_PAIR expects 3 args or 2 args when using expression output, got 2 (error.InvalidArgsCount)
+
+== ws_check
+rc=0
+Sla Compiler: Successfully parsed and verified syntax and types of main.sla.
+--err--
+note[SA-PLUGIN]: 'sa sla check' is deprecated: language frontends are dispatched by file extension, so run the host verb directly (e.g. 'sa check <file.sla>'). The 'sa sla' form keeps working during the transition.
+
+== inline_check
+rc=0
+Sla Compiler: Successfully parsed and verified syntax and types of main.sla.
+--err--
+note[SA-PLUGIN]: 'sa sla check' is deprecated: language frontends are dispatched by file extension, so run the host verb directly (e.g. 'sa check <file.sla>'). The 'sa sla' form keeps working during the transition.
+
+== inline_build
+rc=0
+Sla Compiler: Successfully compiled main.sla to main.sa.
+--err--
+note[SA-PLUGIN]: 'sa sla build' is deprecated: language frontends are dispatched by file extension, so run the host verb directly (e.g. 'sa build <file.sla>'). The 'sa sla' form keeps working during the transition.
+
+lib.sla
+main.sa
+main.sla
+9

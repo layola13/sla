@@ -413,6 +413,10 @@ INT-2 线测试的文案 pin 外全绿（见 D-C18 跨线注记）。
   `ptr::read_volatile`（本 crate 无 unsafe_depth 计数器，
   关联形回落到未解析）。均为判定外围/记录面，不影响已钉
   探针的 rc 口径，逐件登记在此。
+  **【四期注记 2026-11-07】**：第三件已随 D-C22 线销账——
+  `unsafe_depth` 计数器已入 checker（UnsafeExpr 臂维护），
+  关联形与裸名形 read_volatile 均按现头口径镜像；余两件
+  （dyn_borrow_args 记录面、array_to_slice 强转）仍在册。
 - 观察（不立单）：match 守卫的 TypeMismatch 在 Zig 无
   setError、靠包裹层合成「checkExpr failed at node tag
   match_expr」——与 D-C9 同族的诊断面缺口，既有登记覆盖。
@@ -480,6 +484,45 @@ type_is_eq_ord 先例带 visiting 集（自引用 derive 结构体
   阻塞条件 = 语料/fixture 出现这些名字的**调用形**且 Rust
   侧落到 Undefined call 回退（现 fixtures 与 e2e 均未触达 —
   Option/Result 构造在现有管线走 enum 字面量/模式路）。
+  **【四期 D-C22 线销账 2026-11-07】**：全段已镜像于新文件
+  `check_preassoc.rs`，接入点按 Zig 原序置于关联块**之前**
+  （`check_call`）。真值 = 场地现头 sla `2cc12ea8`
+  （type_checker.zig 11,022 行，本段现址 :8320-8541）真插件
+  90 探针（`docs/probes/dc22/`，rc + 诊断原文）；单测
+  tests_phase3e.rs 29 条逐名钉住，checker 175/175、workspace
+  323/0（基线 294 + 29，零回退）。逐名实证结论：
+
+  | 名 | 实证行为（rc 口径） |
+  |---|---|
+  | `Some(x)` | 恰 1 参 → Option<inner>；arity≠1 InvalidArgsCount（无 setError）；用户同名 fn 不可遮蔽（2 参 fn 在场时 Some(1,2) 仍被臂拒）；**谓词不查 associated_target**（`foo::Some(42)` rc=0，见 FB-053） |
+  | `None()` | 仅裸调用；0 参 → Option<infer>；None(1) InvalidArgsCount。标识符形 `None` 走既有字面量路（rc=0） |
+  | `monitor(h)` | 仅裸调用；arity≠1 CompileError（setError 原文）；实参 peel 后须 primitive u64 否则 CompileError（setError 原文）；`monitor(&h)` rc=0；记录 monitor_calls 侧表（本线新携）；→ Chan<(u64, i32)>（return 位错配报 TypeMismatch "actual Chan"）；`foo::monitor(h)` 回落 Undefined call |
+  | `Ok(x)` / `Err(x)` | 恰 1 参 → Result<inner, infer> / Result<infer, inner>；arity InvalidArgsCount；同样不查目标（`foo::Ok(42)` rc=0，FB-053） |
+  | `ptr__null` / `std__ptr__null` | 0 参 + 恰 1 泛型 → *T；无泛型 InvalidArgsCount。**拼写事实**：裸名后 `::<T>` 是 Zig 解析器 SyntaxError（探针 p_ptrnull_ok 等 rc=1 系语法层），可达拼写是 `ptr__null<T>()`（r_ptrnull_plain_generic rc=0）；关联形 `ptr::null::<T>()` 为既有路径 |
+  | `future__pending` | 0 参 + 1 泛型 → future<T>（泛型同样走 `<T>` 拼写）；无泛型 InvalidArgsCount |
+  | `future__defer_ready(x)` | 1 参 + 0 泛型 → future<inner>；带泛型在 Zig 为 SyntaxError（解析层） |
+  | `future__join2` / `future__select2` | 2 参 + 0 泛型；两参须 future 且载荷 poll-scalar（= numeric，含浮点）否则 TypeMismatch；→ future<FuturePair<L,R>> / future<FutureEither<L,R>>（return 位实证） |
+  | `future__pair_left/right` | 1 参 FuturePair；选侧须 poll-scalar 否则 TypeMismatch（String 侧实证） |
+  | `future__either_side` | 1 参 FutureEither → u64；非 either TypeMismatch |
+  | `future__either_left/right` | 同 pair 访问器（either 载体） |
+  | `poll__ready(x)` | 载荷须 numeric（含 1.5 浮点 rc=0；String rc=1 TypeMismatch）→ Poll<inner> |
+  | `poll__pending` | 0 参 + 1 泛型，泛型须 numeric（String 泛型 TypeMismatch）→ Poll<T> |
+  | `poll__is_ready/is_pending` | 1 参须 Poll → bool；非 Poll TypeMismatch（**不查**载荷 scalar 性） |
+  | `poll__value` | 1 参 Poll → inner，inner 须 numeric（Poll<String> TypeMismatch） |
+  | `RAW_WAKER_NEW(d, v)` | 2 参均须 pointer 值（*T 或 raw_ptr）否则 TypeMismatch → RawWaker |
+  | `RAW_WAKER_GET_DATA/GET_VTABLE` | 1 参（类型不查）→ *infer |
+  | `RAW_WAKER_CLONE` | 1 参 → RawWaker |
+  | `WAKER_FROM_RAW` / `WAKER_CLONE` | 1 参 → Waker |
+  | `WAKER_GET_DATA/GET_VTABLE`、`LOCAL_WAKER_GET_DATA/GET_VTABLE` | 1 参 → *infer |
+  | `WAKER_WILL_WAKE` | 2 参 → bool；arity≠2 InvalidArgsCount |
+  | `WAKER_WAKE/WAKE_BY_REF`、`RAW_WAKER_WAKE/WAKE_BY_REF` | 1 参 → i32（return 位实证） |
+  | `va_next_i32/i64/u32/u64/f64/ptr` | 门序 = 变参门 → arity → 标识符 → VaList 类型：非变参定义内 TypeMismatch（setError 原文）；变参内 arity≠1 InvalidArgsCount、非标识符实参 TypeMismatch（setError）、非 VaList 绑定 TypeMismatch（setError 带实参类型）；未知 `va_next_*` 前缀 UndefinedVariable（setError 支持列表原文）。成功路（rc=0）经语料形态实证（va_sum/va_mix/va_first_ptr 探针），但 Rust 侧被 ast 面挡住，见 D-C24 |
+  | `ptr__read_volatile` / `std__ptr__read_volatile` | unsafe 外 CompileError（setError "ptr::read_volatile requires unsafe"）；unsafe 内 1 参须 pointer/borrow 否则 TypeMismatch → pointee。本线同时补齐 D-C21 所缺的 `unsafe_depth` 计数器（check_expr 的 UnsafeExpr 臂增减），关联形 `ptr::read_volatile`（现头 :8568）同门接入关联块 |
+
+  附带定性（不立单）：本段绝大多数 arity/kind 错误**无
+  setError**，用户所见文案由包裹层合成（"checkExpr failed
+  at call {name} with {n} args (error.{kind})"）——与 D-C9
+  同族诊断面事实，既有登记覆盖，不重复立单。
 - **D-C23 (a) 02/07 全管线残差 = D-C6 的端到端实形**：补臂后
   五 fixtures 经 oracle（build 模式）全 rc=0，01/03/04 与
   expected **逐字节全等**；02_arith 与 07_functions 各只剩
@@ -528,3 +571,38 @@ type_is_eq_ord 先例带 visiting 集（自引用 derive 结构体
 hash/debug 等均为一贯设计口径）；D-C23 的哈希序清理属
 D-C6 已在册候选的实形确认，不重复立单。号段 FB-029..
 FB-032 未使用，归还协调线。
+
+## 四期销账（2026-11-07，D-C22 线）
+
+D-C22 全段销账（详见上文 INT21 节 D-C22 条的四期注记表）：
+新文件 `check_preassoc.rs`（关联块前裸名段全量镜像，接入序
+与 Zig 一致），checker 新携 `monitor_calls` 侧表、
+`unsafe_depth` 计数器、`current_fn_is_variadic` 门状态；
+tests_phase3e.rs 29 条单测与 90 件真插件探针逐名对应。
+场地实测（Colab 盒工作副本，HOME=/content/plhome-rust4）：
+`cargo test -p sla-checker` 175/175（146 基线 + 29）；
+`cargo test --workspace --no-fail-fast` 323/0（294 基线
++ 29，零回退）；check_file_lines.sh 通过（131 个 .rs）。
+
+### 四期新登记分歧
+
+- **D-C24 (b) va_next 成功路被 sla-ast 表面挡住**：Zig 的
+  `va_next_*` 成功路要求 (1) FuncDecl 的变参定义标记
+  （`current_fn_is_variadic_def`，由 `extern "C" fn f(...
+  args: ...)` 定义置位）与 (2) primitive `va_list` 类型的
+  实参绑定。Rust 侧 sla-ast 的 FuncDecl 无变参标记、
+  Primitive 无 VaList 变体、sla-parser 不识别 `args: ...`
+  形参——三处都在本线辖区（sla-checker）之外。现镜像：
+  `current_fn_is_variadic` 字段已携（默认 false，解析程序
+  恒非变参，与 Zig 对一切非变参上下文的判读一致），门序与
+  全部错误路（变参门/arity/标识符/VaList 类型，含 setError
+  原文）已按探针钉死（tests_phase3e 的 variadic 驱动测试
+  直接置位门状态）；成功路的 read-type 映射已备
+  （va_next_ptr → raw_ptr 等六名），候 ast/parser 表面补齐
+  后把「类型 == VaList → 返回 read type」一段接上即全销。
+  阻塞条件（精确）：sla-ast 增 VaList primitive 与 FuncDecl
+  变参标记、sla-parser 识别 `...` 形参，三者任一落地时由
+  协调线定序补接。
+- 反馈候选：本段新发 **FB-053**（构造四谓词不查
+  associated_target，见 docs/feedback/）；号段 FB-054、
+  FB-055 未使用，归还协调线。
