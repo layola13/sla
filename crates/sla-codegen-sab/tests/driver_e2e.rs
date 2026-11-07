@@ -597,8 +597,17 @@ fn driver_test_decl_with_panic_guard() {
 //   0/4/6 — the same shape the real Zig product shows).
 const MODEL_P1_LEN: usize = 334;
 const MODEL_P1_SHA256: &str = "2ab9401221af90e79d2d278992bd87b54c856a59804e4e7a880a8a853455d148";
-const MODEL_P2_LEN: usize = 1184;
-const MODEL_P2_SHA256: &str = "93e9cc6ace723d9ad5595a10acd9367a76962b76e33fabc862dd5c02aa7b106a";
+const MODEL_P2_LEN: usize = 1298;
+// CLI-D5R re-pin (2026-11-07): P2 grew by exactly five Release
+// instructions and nothing else (instruction-level diff vs the
+// pre-D5R stream, verified on the venue): while cond temp at
+// both successors, the `i + 1` literal operand, classify's
+// literal cond operand, and main's two call-result operands of
+// the final add. MODEL_TEST grew by exactly two Releases (the
+// `add(40, 2)` call result and the `42` literal after the `!=`
+// op). P1/P3 are unchanged: their binary operands are all
+// named locals, so no release point fires.
+const MODEL_P2_SHA256: &str = "3c2437b63580a830b588ca4b9ac5d9743d7d9b5d0bec5cc139fce4f6689c7d31";
 const MODEL_P3_LEN: usize = 433;
 const MODEL_P3_SHA256: &str = "ddcc33f7656899c1c4e183e4e5dc6dfda7a533f1f351a0fb7012eaebc9126b96";
-const MODEL_TEST_SHA256: &str = "490503408db5dab65bd140bffc2f0646836b0d23890646f26194c3def4cea733";
+const MODEL_TEST_SHA256: &str = "bda48f542594f29ae3af8406a6ff88fcfd638eeb5d11ec9afe90fd814876ce6d";

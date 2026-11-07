@@ -453,7 +453,21 @@ pub fn compile_to_sab(
     let frontend = run_frontend(file, kind, options.test_filter.as_deref(), stderr)?;
     let info = CheckerInfo(&frontend.checker);
     let start = Instant::now();
-    let bytes = match sla_codegen_sab::generate_from_program(&frontend.root, &info) {
+    // CLI-D4: the SAB tail runs through the F-group entry with a
+    // real StdSnippetFlattener provider — the host `sa` reached
+    // through the delegation seam (sa_flattener.rs). Std-surface
+    // programs (println & friends) therefore lower directly
+    // instead of stopping at the SAB-D31 boundary; a host that
+    // cannot serve a snippet fails loudly through the provider.
+    let flattener = Box::new(crate::sa_flattener::SaHostFlattener::new(
+        crate::delegate::resolve_sa_executable(),
+    ));
+    let bytes = match sla_codegen_sab::generate_from_program_with_flattener(
+        &frontend.root,
+        &info,
+        sla_codegen_sab::surface_load::SurfaceRoots::from_env(),
+        flattener,
+    ) {
         Ok(bytes) => bytes,
         Err(err) => {
             let name = match &err {

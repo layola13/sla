@@ -325,6 +325,15 @@ impl ModuleBuilder {
         &self.symbols[id as usize]
     }
 
+    /// Bounds-checked [`Self::symbol_name`]: register ids that
+    /// arrive from outside this builder (e.g. closure-parameter
+    /// substitution regs in unit harnesses) have no interned
+    /// name here; callers that classify registers by name must
+    /// not panic on them.
+    pub fn symbol_name_opt(&self, id: u32) -> Option<&str> {
+        self.symbols.get(id as usize).map(|s| s.as_str())
+    }
+
     /// Number of instructions emitted so far (Zig
     /// `instructions.items.len`, the `makeInst` expanded-line source).
     pub fn instructions_len(&self) -> usize {

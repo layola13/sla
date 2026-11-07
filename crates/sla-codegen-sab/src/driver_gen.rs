@@ -9,10 +9,70 @@ use sla_lowering::{is_panic_builtin_name, is_println_call, plan_scalar_binary_op
 
 use crate::error::{Error, Result};
 use crate::ir::Operand;
+use crate::release_drop::NoDropFacts;
+use crate::release_emit::{emit_branch_release, emit_release, NoMacroFragments};
+use crate::release_locals::DropEngine;
 use crate::types::Local;
 use crate::driver::{scalar_binary_op_kind, unsupported, Driver};
 
 impl<'c> Driver<'c> {
+    // -- release wiring (CLI-D5R) ------------------------------------
+    // The E-group release engine existed but the driver never
+    // consumed it (SAB-D19 item 1): stock SAB releases every
+    // non-local temporary at its consumption point and runs the
+    // checker's cleanup lists at returns / loop jumps, while the
+    // driver emitted none of those, so `sa test`'s strict verifier
+    // reported MemoryLeak on the first unconsumed temp. The
+    // helpers below wire exactly the consumption points the
+    // scalar subset reaches, mirroring the stock disassembly of
+    // the CLI-D5 repro shape (`while_sum` + panic-guard tests).
+
+    /// A register is a releasable temporary when it is not a
+    /// named local/param: the builder names every such register
+    /// `tmp_<n>` (literals, op results, call results, loads).
+    pub(crate) fn is_tmp_reg(&self, reg: u32) -> bool {
+        // Registers with no interned name in this builder
+        // (foreign substitution regs) are never classified as
+        // temps — they are some other frame's named values.
+        self.state
+            .builder
+            .symbol_name_opt(reg)
+            .map(|name| name.starts_with("tmp_"))
+            .unwrap_or(false)
+    }
+
+    /// A register is a *releasable* temp when it is tmp-named
+    /// and not currently bound as a local: the for-loop
+    /// variable is a tmp-named local, and `is_local_reg` wins
+    /// over the name.
+    pub(crate) fn is_releasable_tmp(&self, reg: u32) -> bool {
+        self.is_tmp_reg(reg) && !crate::captures::is_local_reg(&self.state, reg)
+    }
+
+    /// Zig `emitRelease` at a consumption point: release a
+    /// releasable temporary register (locals/params are
+    /// retired by the checker-cleanup walkers, not here).
+    pub(crate) fn release_tmp(&mut self, reg: u32) -> Result<()> {
+        if self.is_releasable_tmp(reg) {
+            let mut frags = NoMacroFragments;
+            emit_release(&mut self.state, &mut frags, reg)?;
+        }
+        Ok(())
+    }
+
+    /// Zig `releaseCleanupForStmt` via the E5 engine over this
+    /// driver's checker facts: run the checker's cleanup list
+    /// recorded for `stmt` (return / break / continue exits).
+    /// `NoDropFacts` is the registered loud default: a planned
+    /// deep drop is unavailable, so cleanup locals take the
+    /// shallow release path (Zig's `catch return false` shape in
+    /// `emit_planned_local_drop`).
+    pub(crate) fn release_cleanups_for_stmt(&mut self, stmt: &Node) -> Result<()> {
+        static NO_DROPS: NoDropFacts = NoDropFacts;
+        let mut engine = DropEngine::new(self.check, &NO_DROPS);
+        let mut frags = NoMacroFragments;
+        engine.release_cleanup_for_stmt(&mut self.state, &mut frags, stmt)
+    }
     // -- statements -------------------------------------------------
     /// Zig `genBlock` (lines 6764–6783): statements in order, stop
     /// after a terminator.
@@ -81,13 +141,22 @@ impl<'c> Driver<'c> {
                     None => None,
                 };
                 if !self.b().last_is_terminator() {
+                    // CLI-D5R: Zig's return path runs the
+                    // checker's per-statement cleanup list
+                    // (locals/params still active at the exit,
+                    // result root already excluded by the
+                    // checker) before the return itself — stock
+                    // SAB releases the `limit` param of
+                    // `while_sum` exactly here. The text backend
+                    // consumes the same list at the same point.
+                    self.release_cleanups_for_stmt(stmt)?;
                     self.b().emit_return(value);
                 }
                 Ok(())
             }
             Node::WhileStmt(w) => self.gen_while(w),
-            Node::BreakStmt(_) => self.gen_loop_jump(true),
-            Node::ContinueStmt(_) => self.gen_loop_jump(false),
+            Node::BreakStmt(_) => self.gen_loop_jump(stmt, true),
+            Node::ContinueStmt(_) => self.gen_loop_jump(stmt, false),
             Node::ReleaseStmt(r) => Err(unsupported(
                 &format!("explicit release of `{}` (release engine)", r.var_name),
                 "E5 release_locals",
@@ -172,6 +241,16 @@ impl<'c> Driver<'c> {
         self.b().emit_branch(cond, &body_label, &cond_false);
         let saved_locals = self.state.frame.locals.len();
         self.b().emit_label(&body_label);
+        // CLI-D5R: stock SAB releases the condition temp at the
+        // head of *both* successors (body and cond_false) — the
+        // branch form (raw release, no bookkeeping), because the
+        // same register is retired once per path and the head is
+        // re-entered per iteration. A local condition (named
+        // or tmp-named, e.g. a loop variable) is not a temp
+        // and is left to the cleanup walkers.
+        if self.is_releasable_tmp(cond) {
+            emit_branch_release(&mut self.state, cond);
+        }
         self.state.frame.loop_continue_labels.push(head.clone());
         self.state.frame.loop_break_labels.push(exit.clone());
         let result = self.gen_block(&w.body);
@@ -183,30 +262,27 @@ impl<'c> Driver<'c> {
         }
         self.state.frame.pop_locals_to(saved_locals);
         self.b().emit_label(&cond_false);
+        if self.is_releasable_tmp(cond) {
+            emit_branch_release(&mut self.state, cond);
+        }
         self.b().emit_jmp(&exit);
         self.b().emit_label(&exit);
         Ok(())
     }
 
-    /// Zig `genLoopJump`: jmp to the innermost loop's break /
-    /// continue label.
-    pub(crate) fn gen_loop_jump(&mut self, is_break: bool) -> Result<()> {
-        let label = if is_break {
-            self.state.frame.loop_break_labels.last().cloned()
+    /// Zig `genLoopJump`: statement cleanups, then jmp to the
+    /// innermost loop's break / continue label (E5's
+    /// `gen_loop_jump`, wired by CLI-D5R).
+    pub(crate) fn gen_loop_jump(&mut self, stmt: &Node, is_break: bool) -> Result<()> {
+        static NO_DROPS: NoDropFacts = NoDropFacts;
+        let mut engine = DropEngine::new(self.check, &NO_DROPS);
+        let mut frags = NoMacroFragments;
+        let kind = if is_break {
+            crate::types::LoopJumpKind::Break
         } else {
-            self.state.frame.loop_continue_labels.last().cloned()
+            crate::types::LoopJumpKind::Continue
         };
-        match label {
-            Some(label) => {
-                self.b().emit_jmp(&label);
-                Ok(())
-            }
-            None => Err(unsupported(
-                "break/continue outside a loop",
-                "E5 release_locals",
-                "10209",
-            )),
-        }
+        engine.gen_loop_jump(&mut self.state, &mut frags, stmt, kind)
     }
 
     // -- expressions ------------------------------------------------
@@ -273,6 +349,17 @@ impl<'c> Driver<'c> {
                 let dst = self.b().new_tmp();
                 self.b()
                     .emit_op(dst, scalar_binary_op_kind(plan), Operand::Reg(lhs), Operand::Reg(rhs));
+                // CLI-D5R: an SAB `op` reads but does not consume
+                // its operands — stock SAB releases each operand
+                // temp right after the op (loads, literals and
+                // call results alike; named locals/params are
+                // skipped by `release_tmp`). This is the point
+                // that retired the CLI-D5 repro's leaked call
+                // result in the panic-guard tests.
+                self.release_tmp(lhs)?;
+                if rhs != lhs {
+                    self.release_tmp(rhs)?;
+                }
                 Ok(dst)
             }
             Node::CallExpr(call) => self.gen_call(expr, call),
@@ -373,11 +460,10 @@ impl<'c> Driver<'c> {
             return Ok(sentinel);
         }
         if is_println_call(call) {
-            return Err(unsupported(
-                "println call (format/print surface expansion)",
-                "D surface (format_print)",
-                "15190-15192",
-            ));
+            // D group format_print, ported for CLI-D4 in
+            // gen_print.rs (genPrintlnCall family); the two
+            // string-value plans stop loudly there.
+            return self.gen_println_call(call);
         }
         if call.func_name == "str_eq" || call.func_name == "STR_EQ" {
             return Err(unsupported(

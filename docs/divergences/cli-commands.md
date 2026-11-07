@@ -36,18 +36,54 @@ SAB 路与 workspace build 出现）与 `.sla-cache/imports/*.lst`
 语义分歧；其格式属 plugin_reachability / 导入层辖区，本线
 只登记不伪造。
 
-## CLI-D4 (b·覆盖) SAB 直降对 std 表面调用覆盖不足（基线形态）
-凡导入 std 表面（println 格式化、str_eq 等）的程序，sab build /
-build-exe / test(sab) 在基线 d811673c 的
+## CLI-D4 (b·覆盖→五期接通，残留三坐标) SAB 直降对 std 表面调用
+基线形态（四期）：凡导入 std 表面（println 格式化、str_eq 等）的
+程序，sab build / build-exe / test(sab) 在
 `generate_from_program` 上返回
-`SAB Error: direct SLA-to-SAB lowering failed: error.UnsupportedSabDirectFeature`
-（错误行形态与 Zig 同名错误镜像一致、响亮失败）。根因 = std
-片段需要 flattener/fragment 机器（SAB-F 线 sabf.patch 已含
-`StdSnippetFlattener` + `generate_from_program_with_flattener`），
-集成时 sla-cli 应切换到该入口。无 std 导入的程序 SAB 路全通
-（p_main42 build-exe 产物可运行 rc=42、p_tests sab build →
-build-exe 运行 rc=45）。这是本线今晚最大的覆盖缺口，坐标
-精确：sla-codegen-sab 直降入口 × std 表面调用。
+`SAB Error: direct SLA-to-SAB lowering failed: error.UnsupportedSabDirectFeature`。
+根因 = std 片段需要 flattener/fragment 机器而 cli 未接
+`generate_from_program_with_flattener`。
+
+五期接通形态（本线，证据见 p5-deliver/d4/REPORT.md）：
+- `sla-cli/src/pipeline.rs::compile_to_sab` 已切换到
+  `generate_from_program_with_flattener`，provider =
+  `sla-cli/src/sa_flattener.rs::SaHostFlattener`：经 delegate 的
+  sa 解析路调宿主 `sa check <片段.sa> --emit-sab <出.sab>`
+  （sci `executeCheck` = flatten+verify+encodeSabFromFlat，与
+  Zig 的 flattenStdSnippet+verifier+encode 同链），产物以仓内
+  `decode_module` 解码；import 片段源为 Zig 原文
+  `@import "{path}"\n`，provider 内按路径缓存（只查不迭代）。
+  sa 缺失/失败/产物异常一律响亮错误，无静默兜底。
+- gen_call 的 println 臂已移植（`sla-codegen-sab/src/gen_print.rs`：
+  genPrintlnCall/emitPrint* 家族 + planPrintlnArg 的字面量段、
+  字符串字面量洞参、基元、借用/装箱基元计划）。
+- 实证：`sla sab build fixtures/01_hello.sla` 成功，产物
+  build-exe 运行输出 `hello world` rc=0；与 Zig 现头同件产物
+  disasm diff 16 行，D4 辖区（deps extern decl、字符串常量、
+  print 调用体）逐字全等，差在既有主干约定（L_ENTRY 缺失、
+  SAB-D19 尾释放）——非本线辖区。
+- 144 ms 异常同线定层修复：全在前端 load contracts 段（非 SAB、
+  非委派）；根因 = sla-parser 导入宏注册表 Vec 按名线性查找 ×
+  每条 EXPAND 行查询，对 ~6k 宏的 std 闭包二次膨胀。已改为
+  `ImportedMacroRegistry`（records 注册序不变 + 名字索引只查
+  不迭代），load contracts 331ms → 86–93ms（静窗实测）。
+
+残留坐标（均响亮失败、不静默）：
+1. **宏片段的 verified-encode 墙**：Zig 的模板/新鲜片段路用
+   `encodeSabFromFlatUnchecked`，sa CLI 只提供 verified 的
+   `check --emit-sab`；占位寄存器片段（如
+   `EXPAND VEC_NEW __sla_macro_arg_0`）被宿主验证器以
+   MemoryLeak 拒绝——凡经表面规则宏片段的 SAB 程序（Vec 方法
+   等）仍在 provider 处响亮停（宿主 trap 原文上抛）。导入模块
+   路（println/preload deps）全通。解法候选：sci 给 sa check
+   加 unchecked encode 旗标，或 Rust 侧移植 flattener 本体。
+2. **str_eq 臂未移植**：`sla test 01_hello.sla`（TestCodegen
+   形态）死于 gen_call str_eq 桩（driver_gen.rs，D
+   surface_call）；已隔离实证（去 @test 后 test 全通）。
+3. **println 的 String 值计划未移植**：format_string /
+   string_like 两计划在 gen_print.rs 内以计划名响亮止
+   （STRING_BUF_AS_STR/CSTR_LEN 片段 + 字符串绑定物化分类
+   契约未到）。
 
 ## CLI-D5 (b) test-codegen 前置剪枝已移植；残余 MemoryLeak 再定层至 codegen-sab 释放发射
 五期 CLI-D5 线（2026-11-07）处置结果：
@@ -88,6 +124,29 @@ build-exe 运行 rc=45）。这是本线今晚最大的覆盖缺口，坐标
   （post-typecheck syntactic + tc-based
   pruneUnreachableFilteredTestDecls）未移植，Rust 测试 SAB
   可能比 stock 多保留声明（不影响校验、影响字节对拍）。
+- **残余关闭（五期 CLI-D5R 线，2026-11-07，本条闭合）**：
+  定层链坐实——泄漏寄存器 tmp_13/tmp_7 是测试函数内被
+  `!=` 比较消费的 call 结果临时量；SAB 的 op/call/assign
+  消费语义互不相同（op 不消费操作数、call 消费实参、
+  assign 消费源），而 driver（B4 子集）从未接 E 组释放
+  引擎（SAB-D19①），三个消费点全缺。修复 = 在
+  driver_gen 的同形发射点接线（镜像 stock 反汇编）：
+  ① 二元 op 后释放非本地操作数临时量（tmp 名 + 非本地
+  双判据，for 循环变量式 tmp 名本地绑定不释放）；
+  ② while 条件临时量在 body 与 cond_false 两后继头各发
+  一条分支形 release；③ ReturnStmt 发射前经 E5
+  DropEngine 消费 checker cleanups（releaseCleanupForStmt，
+  与文本后端同点同表）；④ break/continue 经 E5
+  gen_loop_jump 同形消费。验收：p_tests `sla test` 全量
+  2 passed、--filter alpha 1 passed、无 MemoryLeak；
+  build-exe 仍 rc=45；workspace 全绿（见 D5R REPORT）。
+  既有 SAB 字节变化仅三处、均为释放补齐（指令级 diff
+  核验为纯 Release 新增）：driver_e2e 的 P2 模型（+5 条）
+  与 panic-guard TEST 模型（+2 条）重钉、driver_e2e_h 的
+  if-value 手工模型补两条释放；P1/P3 与其余 fixture 逐字
+  不变。残留登记不变：L_ENTRY 与标量落槽（SAB-D19②③）
+  未动——stock 的落槽形在本子集以 assign 消费语义等价
+  通过校验，落槽本体仍候 SAB 子集扩展时按需接线。
 
 ## CLI-D6 (b·覆盖→已接通，五期 CLI-D6 线) sla_std 薄包根解析 + 正文衔接
 新探针 p_sla_std.sla（`@import "sla_std/wrap/fmt.sla"`）：

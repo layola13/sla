@@ -11,8 +11,16 @@
 //! `ImportedMacroInfo` has no `assigned_output_mask` field — that
 //! mask is carried in the record and dropped at the registration
 //! boundary, registered as IMP-2, the same shape as INT2-2/INT2-3).
-//! The registry is a Vec scanned linearly by name: registration
-//! order is deterministic and no hash iteration reaches any output.
+//! The registry keeps its records in a Vec in registration
+//! order (the order every consumer observes) plus a name → slot
+//! index used ONLY for lookups — the index is never iterated, so
+//! no hash order reaches any output. (CLI-D4 timing fix: the
+//! original port scanned the Vec linearly by name; Zig's checker
+//! table is a hash map. With the std contract closure carrying
+//! ~6k macros and ~6k `EXPAND` lines, the linear scans made
+//! contract loading quadratic — the bulk of the 01_hello
+//! 144 ms anomaly. Lookup complexity only; records, order, and
+//! overwrite-in-place semantics are unchanged.)
 //!
 //! NOT ported: the `.sla-cache/macros/*.idx` disk memo (Wyhash key
 //! + compiler stamp). It memoizes exactly this scan; skipping it
@@ -32,15 +40,41 @@ pub struct ImportedMacroRecord {
     pub direct_callees: Vec<String>,
 }
 
-fn registry_get<'r>(registry: &'r [ImportedMacroRecord], name: &str) -> Option<&'r ImportedMacroRecord> {
-    registry.iter().find(|r| r.name == name)
+/// The ordered imported-macro registry (see the module docs):
+/// records in registration order, name lookups through an index
+/// that is never iterated.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ImportedMacroRegistry {
+    pub records: Vec<ImportedMacroRecord>,
+    index: std::collections::HashMap<String, usize>,
 }
 
-fn registry_put(registry: &mut Vec<ImportedMacroRecord>, record: ImportedMacroRecord) {
-    if let Some(slot) = registry.iter_mut().find(|r| r.name == record.name) {
-        *slot = record;
-    } else {
-        registry.push(record);
+impl ImportedMacroRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn get(&self, name: &str) -> Option<&ImportedMacroRecord> {
+        self.index.get(name).map(|&slot| &self.records[slot])
+    }
+
+    /// Zig `imported_macros.put`: a later definition overwrites
+    /// the earlier one in place; a new name appends.
+    pub fn put(&mut self, record: ImportedMacroRecord) {
+        if let Some(&slot) = self.index.get(&record.name) {
+            self.records[slot] = record;
+        } else {
+            self.index.insert(record.name.clone(), self.records.len());
+            self.records.push(record);
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.records.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
     }
 }
 
@@ -193,7 +227,7 @@ fn tokenize_any<'a>(text: &'a str, delims: &[char]) -> Vec<&'a str> {
 /// scan state: 0 unseen, 1 assigned before any memory reference,
 /// 2 tainted (a deref/address-take preceded the first assignment).
 pub fn mark_assigned_output_macro_params(
-    registry: &[ImportedMacroRecord],
+    registry: &ImportedMacroRegistry,
     param_names: &[String],
     ref_state: &mut [u8],
     line: &str,
@@ -204,7 +238,7 @@ pub fn mark_assigned_output_macro_params(
     if is_expand {
         let mut head = tokenize_any(&line["EXPAND".len()..], &[' ', '\t', ',', '(', ')']).into_iter();
         if let Some(expanded_name) = head.next() {
-            if let Some(expanded) = registry_get(registry, expanded_name) {
+            if let Some(expanded) = registry.get(expanded_name) {
                 expanded_assigned = expanded.assigned_output_mask;
                 expanded_memory =
                     expanded.borrowed_arg_mask | expanded.address_slot_arg_mask;
@@ -262,7 +296,7 @@ pub fn mark_assigned_output_macro_params(
 
 /// Zig `markExpandedImportedMacroParamMasks`.
 pub fn mark_expanded_imported_macro_param_masks(
-    registry: &[ImportedMacroRecord],
+    registry: &ImportedMacroRegistry,
     borrowed_mask: &mut u64,
     address_slot_mask: &mut u64,
     param_names: &[String],
@@ -276,8 +310,8 @@ pub fn mark_expanded_imported_macro_param_masks(
         Some(n) => n,
         None => return,
     };
-    let expanded = match registry_get(registry, expanded_name) {
-        Some(e) => e.clone(),
+    let expanded = match registry.get(expanded_name) {
+        Some(e) => e,
         None => return,
     };
     for (arg_idx, raw_arg) in parts.enumerate() {
@@ -337,7 +371,7 @@ pub fn collect_direct_sla_macro_callees(callees: &mut Vec<String>, line: &str) {
 
 /// Zig `appendExpandedImportedMacroDirectCallees`.
 pub fn append_expanded_imported_macro_direct_callees(
-    registry: &[ImportedMacroRecord],
+    registry: &ImportedMacroRegistry,
     callees: &mut Vec<String>,
     line: &str,
 ) {
@@ -349,9 +383,9 @@ pub fn append_expanded_imported_macro_direct_callees(
         Some(n) => n,
         None => return,
     };
-    if let Some(expanded) = registry_get(registry, expanded_name) {
-        for callee in expanded.direct_callees.clone() {
-            append_unique_direct_callee(callees, &callee);
+    if let Some(expanded) = registry.get(expanded_name) {
+        for callee in &expanded.direct_callees {
+            append_unique_direct_callee(callees, callee);
         }
     }
 }
@@ -365,7 +399,7 @@ pub fn append_expanded_imported_macro_direct_callees(
 pub fn load_imported_macros_from_expanded_source(
     expanded_source: &str,
     import_path: Option<&str>,
-    registry: &mut Vec<ImportedMacroRecord>,
+    registry: &mut ImportedMacroRegistry,
 ) -> Vec<ImportedMacroRecord> {
     let mut defined = Vec::new();
     if !expanded_source_may_contain_imported_macros(expanded_source) {
@@ -448,7 +482,7 @@ pub fn load_imported_macros_from_expanded_source(
             assigned_output_mask,
             direct_callees,
         };
-        registry_put(registry, record.clone());
+        registry.put(record.clone());
         defined.push(record);
     }
     defined
@@ -459,7 +493,7 @@ pub fn load_imported_macros_from_expanded_source(
 pub fn load_imported_macros(
     source: &str,
     import_path: Option<&str>,
-    registry: &mut Vec<ImportedMacroRecord>,
+    registry: &mut ImportedMacroRegistry,
 ) -> Result<Vec<ImportedMacroRecord>, crate::source_expand::SourceExpandError> {
     let expanded = crate::source_expand::expand(source)?;
     Ok(load_imported_macros_from_expanded_source(
@@ -474,7 +508,7 @@ mod tests {
     use super::*;
 
     fn load(source: &str) -> Vec<ImportedMacroRecord> {
-        let mut registry = Vec::new();
+        let mut registry = ImportedMacroRegistry::new();
         let defined = load_imported_macros_from_expanded_source(source, Some("m.sa"), &mut registry);
         assert_eq!(defined.len(), registry.len());
         defined
@@ -521,7 +555,7 @@ mod tests {
 
     #[test]
     fn expand_propagates_masks_and_callees() {
-        let mut registry = Vec::new();
+        let mut registry = ImportedMacroRegistry::new();
         load_imported_macros_from_expanded_source(
             "[MACRO] INNER %out, %ptr\n    store %ptr+0, 1\n[END_MACRO]\n",
             Some("inner.sa"),
@@ -546,7 +580,7 @@ mod tests {
 
     #[test]
     fn no_macro_source_registers_nothing() {
-        let mut registry = Vec::new();
+        let mut registry = ImportedMacroRegistry::new();
         let defined =
             load_imported_macros_from_expanded_source("fn main() {}\n", None, &mut registry);
         assert!(defined.is_empty());

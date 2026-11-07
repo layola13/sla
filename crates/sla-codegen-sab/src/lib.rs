@@ -139,6 +139,7 @@ pub mod decode_sigs;
 pub mod driver;
 pub mod driver_gen;
 pub mod driver_types;
+pub mod gen_print;
 pub mod gen_struct;
 pub mod emit;
 pub mod encode;

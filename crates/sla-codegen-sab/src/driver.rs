@@ -37,9 +37,12 @@
 //!
 //! Emission conventions inside the subset follow the phase-1 hand
 //! model (`fixture01.rs`): the `ModuleBuilder` trunk interns in
-//! emission order, no `L_ENTRY` label is emitted, and scalar Copy
-//! temporaries get no release instructions (the E-group release
-//! engine is not wired yet; registered as SAB-D19). Two Zig
+//! emission order and no `L_ENTRY` label is emitted. Release
+//! emission was unwired at first (SAB-D19 item 1); CLI-D5R wired
+//! the E-group engine into the points the scalar subset reaches:
+//! binary-op operand temps, the while condition temp on both
+//! branch successors, checker cleanups at return statements, and
+//! loop-jump cleanups (see `driver_gen.rs`). Two Zig
 //! conventions the model did not exercise are ported faithfully
 //! here: function symbols are lowered (`main` stays `main`, other
 //! user functions become `sla__<name>`, Zig `loweredFuncSymbol`

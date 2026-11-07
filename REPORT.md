@@ -574,3 +574,71 @@ FB-035（sla_compile_handler 出货缺失）：产品形态裁定后对 Rust 线
 - IMP-1（函数体内联展开的其余组合响亮未接线）。
 
 四期快照 id 见本次提交；推送归主会话。
+
+## 12 五期（后四期接线批，2026-11-07 晚）
+
+用户 17:55 令派发（禁止等待空转、Rust 优先），五项辖区：CLI-D4 / CLI-D5 / CLI-D6 / FB 确认批 1 / A+K2 预备（非门）。四条子线 + 一条跟进线（D5R）并行、协调线逐线合入（集成检查点 991e435 一次、D5R 与 D4 经三方合并收尾）。终验与快照口径见 12.7。
+
+### 12.1 结果总表
+
+| 项 | 结果 |
+|---|---|
+| CLI-D4 | **接通**（SAB 直降 + flattener provider + println 臂）；144 ms 异常定层出乎意料、在前端不在 SAB（12.2） |
+| CLI-D5 | **全闭合**（阶段序移植 + D5R 释放发射跟进，12.3） |
+| CLI-D6 | **接通**（定层修正为祖先 walk 起点缺陷，12.4）；CLI 前端正文展开残留经协调线裁断登记（12.8） |
+| FB 确认批 1 | FB-025 / FB-045 Rust 侧各查实一处镜像缺口并修复销账、Zig 侧现头证据入单保持开放；确定性家族跨侧 **8/8 同 sha 闭合**（12.5） |
+| A+K2 预备 | 设计条目入仓 `docs/phase5/AK2-DESIGN.md`，载体对接点摸清（12.6，非门） |
+
+### 12.2 CLI-D4：144 ms 的真定层与 SAB 直降接通
+
+- **分段定层（先于动手）**：SLA_PROFILE 实测 01_hello 的异常全在前端 `load contracts` 段，不在 SAB 尝试、不在委派（`sla build` 本无委派）——§11.6 注记①的猜测构成（自家前端尝试 + 委派接缝）就此否证。内层根因：sla-parser 导入宏注册表为 Vec 按名线性查找，被闭包内每条 EXPAND 行查询，对 string.sa 闭包（31 文件 ≈2.1 MB、~6k 宏）呈二次膨胀；Zig 同表为哈希表。修复 = `ImportedMacroRegistry` 名字索引（records 登记序/覆写语义不变、索引只查不迭代）：该段 331 → 86–93 ms（静窗）；余量为闭包解析本体成本。
+- **SAB 直降接通**：pipeline 的 compile_to_sab 切 `generate_from_program_with_flattener`；新 provider `SaHostFlattener`（crates/sla-cli/src/sa_flattener.rs）经 delegate 的 sa 解析路调用宿主 `sa check <片段.sa> --emit-sab`（= flatten+verify+encodeSabFromFlat，与 Zig flattenStdSnippet 同链），仓内 decode_module 解码，按 import_path 进程内缓存，sa 缺失/失败全响亮。
+- **println 臂有界移植**：新文件 gen_print.rs（genPrintlnCall/emitPrint* + planPrintlnArg 的字面量段、字符串洞参、基元、借用/装箱基元计划）；format_string / string_like 两计划响亮止、坐标登记。F 组 e2e pin 随接通翻转为生成断言。
+- **实证**：`sla sab build fixtures/01_hello.sla` rc=0，产物经宿主 build-exe 运行输出 `hello world` rc=0（协调线终验复跑坐实）；与 Zig 现头同件产物 disasm diff 16 行、D4 辖区逐字全等（差在 L_ENTRY 缺失、SAB-D19 尾释放等既有主干约定）；ORCP 8 件语料 build+sab 全通。
+
+### 12.3 CLI-D5 + D5R：阶段序移植与释放发射跟进（全闭合）
+
+- **D5（阶段序）**：Zig 原文钉版（盒 sa_plugin_sla @ 2cc12ea8）——runSlaFrontend 的 test_codegen 序 = filter 剪枝（monomorphize 前）→ 可达剪枝（checkProgram 前），check 后无 filter 剪枝。移植 = test_prune.rs + test_reach.rs（句法可达、单模块形、BTree 确定序）+ run_frontend 增 test_filter 参、两道剪枝落 parse 后/check 前、删后置剪枝；非 TestCodegen 路径逐字不变。范围差响亮登记：SyntacticFactSet 未移植 → 可达集为 Zig 超集（只多留不多剪）；SAB 尾两道 check 后可达剪枝未移植（字节对拍面、非校验面）。
+- **残余再定层（D5 线止损停线、证据交付）**：剪枝生效（tmp_15→13、tmp_9→7）但 SAB 仍漏；三方反汇编对拍钉死残余不在阶段序——checker cleanups 完好（文本后端同表消费全过），sla-codegen-sab 未按 cleanups 发射释放（while_sum 纯 assign 形零 release；普通 build SAB 同形，sa build-exe 容忍、sa test 严格校验独有暴露）。
+- **D5R（跟进线闭合）**：定层 = B4 driver 从未接 E 组释放引擎（SAB-D19①），四个消费点全缺。修复（仅动 codegen-sab 发射面、镜像 stock 反汇编）：① 二元 op 后释放非本地操作数临时量（判据 = tmp 名 + 非本地双条件；首轮只按名被 for_range 模型抓出误放循环变量，已修）；② while 条件量在 body/cond_false 双后继各发分支形 release；③ ReturnStmt 前经 E5 DropEngine 消费 checker cleanups；④ break/continue 改走 E5 gen_loop_jump。验收：p_tests 全量 2 passed / --filter alpha 1 passed / 无 MemoryLeak（协调线终验复跑坐实）、build-exe 仍 rc=45；字节变化仅三处、指令级 diff 核验为纯 Release 新增（pin 重钉附理由），余逐字不变；残留 SAB-D19②③（L_ENTRY/落槽）未动仍登记。
+
+### 12.4 CLI-D6：定层修正与薄包接通
+
+- **定层修正**：派单坐标「contract_load 无 sla_std 祖先根解析」复核不成立——contract_load 与展开层共用 `imports::resolve_import_files`，根解析本已在册；plugin 管线（expand+contract_load+check）在绝对路径下对薄包本已全通。真缺陷 = 祖先 walk 的**起点**：原对拍以裸文件名运行（cwd=案目录、sla_std 在上两级祖先），裸文件名 parent 为空路径、`real_path("")` 规范化失败回退 ""，walk 起步即终止；直引 .sai 同病但被对拍脚本的 SA_STD_DIR 救回，sla_std 无此根故独红，与原登记 FileNotFound 逐字同。
+- **修复**：imports.rs 的 real_path 空路径归 cwd 规范路径（一处共享 helper，未镜像第二份解析；contract_load / sla_expand / sla-cli 三方同受益；根解析优先序不变，两解析器同语义由共用函数构造性保证）。contract_load 正文衔接（扫描 wrap 正文、跟随其对 .sai 的再导入、重导出 extern 以嵌套先行序登记、visited 闭包完整）以测试钉死。
+- **双形式 fixture**：裸文件名回归（pristine 红→修复绿）+ contract_load 双形式闭包测试（薄包/直引 extern 集逐字同）+ plugin 管线双形式 check（薄包主调 sla_fmt_i64、直引主调 sa_fmt_i64）全绿。
+
+### 12.5 FB 确认批 1
+
+- **FB-025**：Zig 现头 08fabac6 双路（build / sab build）× 双形态（div / mod）**仍全部 rc=136 SIGFPE**——单保持开放，现头证据已入单（候 Zig 轨修复线）。Rust 侧：SAB 锚点 prescan_consts 的 checked_div/rem 无误，但 lowering 侧第二折叠点 `int_constant_expr_value` 用 wrapping_div/rem、MIN/-1 会静默错折——已改 checked 形态（新断言修复前失败、修复后通过）；Rust 端到端双路 rc=1 响亮 UndefinedVariable（放弃折叠的既有口径，与 add 溢出对照组同形），协调线终验以合并树 sab build 复跑坐实（rc=1、无崩溃）。Rust 侧销账。
+- **FB-045**：Zig 现头两表现仍在（A：rc=1 InvalidExpandTuple；B：产物字符串被改写），单保持开放。Rust 根文件路不经 expand、不复现；但 expand() 镜像缺陷经导入 .sla 模块端到端可达（修复前 InvalidExpandTuple in probemod_a.sla）——已修顶层扫描词法感知（跳字符串含转义 + // 注释），单测红→绿，修复后与良性对照行为一致。Rust 侧销账。
+- **确定性家族**：ORCP 3 件异 sha（e2e_a / 02_arith / 07_functions）对现头 Zig（det 已落地）复测 **3/3 跨侧同 sha**（38c71fab… / fe38d48e… / d61ed5d9…），连同四期已同 5 件 = **8/8 同值**，FB-016/020 家族跨侧闭合；协调线终验的 01_hello 同窗产物亦逐字同 sha（0d6375ac…）。
+
+### 12.6 A+K2 预备（非门）
+
+设计条目已入仓 `docs/phase5/AK2-DESIGN.md`：裁定原文三条、本仓预定镜像面（parser/checker 的 unsafe 上下文追踪、双 codegen 的资格发射、SAB 编码不丢资格形的端到端证明）、实现子线开启条件（Zig A 线 RESULT 定版 + 正负语料对落 Zig 主线）。对接点现状（协调线只读所见、以 RESULT 为准）：Zig A 线 WIP 的载体方向 = 专用展开名 PTR_ADDR_PUBLISH（普通 PTR_ADDR 永不打标）+ sci referee 的 published_escape 登记 + 语料三形（publish_expr/stmt/spawn）。
+
+### 12.7 终验（合并终树，盒 /content/rust5/final，flock 串行）
+
+- **workspace：500 passed / 0 failed**（基线 483 → +17，只增不减；增量归属：D4 +3、D5 +5、D5R +2、D6 +6、FB +1）。per-crate：abi 5、ast 0、checker 175、sla-cli 40、codegen-sab 173（lib 117 + e2e 群 53 + golden 3）、codegen-text 5（fixture_parity）、lexer 5、lowering 9、oracle 2、parser 52、plugin 34。
+- **行数门**：195 个 .rs 文件全 ≤700。
+- **验收抽查（合并树 release 二进制、盒 canonical 装配）**：sab build 01_hello rc=0 且产物运行 hello world rc=0；p_tests 全量 2 passed / --filter alpha 1 passed；divmin sab build rc=1 响亮不崩；01_hello `sla build` 同窗交错计时（n=5 中位数、盒负载窗、flock）：Rust 162 ms / Zig 146 ms，产物逐字同 sha——四期「Rust 144 独大」的异常结构已消除（其内因二次膨胀已修，见 12.2；本窗绝对值受盒上并行门线负载支配，只作同窗比值记录：约 1.1×）。
+- 口径注记：终验树与快照树的代码与测试逐字一致；快照树其后仅多纯文档（本 §12、PHASE5_STATUS 收官行）。
+
+### 12.8 残留总表（均响亮登记）
+
+- **CLI 前端 .sla 正文展开未接线**（D6 线登记、协调线裁断）：sla-cli 二进制前端至今未调用任何 .sla 正文展开（pipeline.rs 头注在册的未移植阶段，对一切 .sla 导入同然、非 sla_std 独有）——薄包 check 案已由 Import Error 推进至 Undefined call 阶段。展开本体在 sla-plugin，接线涉拓扑抉择（展开下沉共享 crate vs 授权新依赖边），报主会话定批。
+- **宏片段 verified-encode 墙**（D4）：Zig 模板路用 encodeSabFromFlatUnchecked，sa CLI 只有 verified encode，占位寄存器片段（VEC_NEW 等）被宿主以 MemoryLeak 拒绝——Vec 方法等表面规则的片段路仍停 provider（导入模块路全通）。解法候选在 sci 侧加 unchecked 旗标或 Rust 侧移植 flattener，非本批辖区。
+- **str_eq 臂未移植**（D4）：`sla test 01_hello.sla`（TestCodegen 形态）死于此（已隔离实证：去 @test 后 test 全通）。
+- **println String 值两计划**（format_string / string_like）响亮未移植（D4）。
+- SAB-D19②③（L_ENTRY / 落槽）未动（D5R 范围外）；D5 的两项范围差（SyntacticFactSet 超集、SAB 尾 check 后可达剪枝）登记在册。
+- FB-025 / FB-045 对 Zig 侧保持开放（现头证据入单，候 Zig 轨修复）。
+
+### 12.9 场地注记
+
+- 派发指定的 sla-08fabac6.bundle 本体损坏（inflate -5 @98099）且仅含旧头 2cc12ea8（本机与盒上同名副本皆然）——FB 线现头证据改由只读克隆盒上 /content/fnesc/sla 仓取得（HEAD=08fabac6、status 干净、源仓未触碰）；此事已请协调线知会 A 线（其 bundle 即损坏源）。
+- 盒主机钥匙中途轮换一次，FB 线已重登记、同一盒文件完好。
+- 本机无 cargo；工具链在盒 plhome-rust4（cargo/rustc 1.99.1），五期各线以 CARGO_HOME/RUSTUP_HOME 指回该缓存、HOME 各自隔离（rust5 用 plhome-rust5）。
+- 争用：盒上 Zig 门线全程在跑、未驱逐；重套件 flock /content/rust5/heavy.lock 串行；堵路线点名未触发。
+
+五期快照 id 见本次提交；推送归主会话。

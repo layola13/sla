@@ -28,6 +28,7 @@ mod init_cmd;
 mod options;
 mod out;
 mod pipeline;
+mod sa_flattener;
 mod sab_paths;
 mod skills_cmd;
 mod stability;

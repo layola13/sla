@@ -9,9 +9,9 @@
 //!   `cachedStdImportModule` → `flattenStdSnippet` (SAB-D31) —
 //!   not at the old gen_call D-group stop;
 //! - with a working flattener, the same program passes step 2
-//!   (the deps are really appended) and dies one level later,
-//!   at the gen_call `println` arm (group D format_print — the
-//!   expansion itself, which is D-group work, not F);
+//!   (the deps are really appended) and — since CLI-D4 ported
+//!   the gen_call `println` literal path (group D format_print,
+//!   gen_print.rs) — generates end to end;
 //! - the decoded-module splice hygienically renames fragment
 //!   registers/labels and keeps stable names stable;
 //! - the cached-template fragment path substitutes
@@ -215,24 +215,36 @@ fn f_println_dies_at_step2_flatten_boundary_by_default() {
 }
 
 #[test]
-fn f_println_with_flattener_passes_step2_and_dies_at_gen_call() {
+fn f_println_with_flattener_passes_step2_and_generates() {
+    // CLI-D4 flip: the D-group format_print arm is ported for
+    // the literal path (gen_print.rs), so with a working
+    // flattener the println program now generates end to end:
+    // step-2 deps appended, the literal printed through
+    // @sa_print_bytes call bodies, and the module encodes.
     let program = println_program();
     let check = type_all_i32(&program);
-    match generate_from_program_with_flattener(
+    let bytes = generate_from_program_with_flattener(
         &program,
         &check,
         empty_roots(),
         Box::new(FakeFlattener),
-    ) {
-        Err(Error::UnsupportedSabDirectFeature(msg)) => {
-            assert!(msg.contains("println"), "gen_call names println: {msg}");
-            assert!(
-                msg.contains("format_print"),
-                "death point moved past F to the D format_print arm: {msg}"
-            );
-        }
-        other => panic!("expected D-group gen_call stop after F passed, got {other:?}"),
-    }
+    )
+    .expect("println literal program generates with a flattener");
+    assert!(!bytes.is_empty(), "SAB bytes produced");
+    let module = sla_codegen_sab::decode_module(&bytes).expect("generated SAB decodes");
+    let bodies: Vec<String> = module
+        .instructions
+        .iter()
+        .flat_map(|inst| inst.operands.iter())
+        .filter_map(|op| match op {
+            Operand::Text(text) => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        bodies.iter().any(|b| b.contains("@sa_print_bytes(&SLA_STR_")),
+        "print call bodies present: {bodies:?}"
+    );
 }
 
 #[test]

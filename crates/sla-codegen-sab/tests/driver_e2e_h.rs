@@ -317,6 +317,19 @@ fn model_if_value() -> Vec<u8> {
     b.emit_assign_int(rhs, 2, false);
     let cond = b.new_tmp();
     b.emit_op(cond, OpKind::Slt, Operand::Reg(lhs), Operand::Reg(rhs));
+    // CLI-D5R: the comparison's literal operand temps are
+    // released right after the op (the op does not consume
+    // them) — the hand model gains exactly these two releases.
+    push_inst(
+        &mut b,
+        InstKind::Release,
+        [Operand::Reg(lhs), Operand::None, Operand::None, Operand::None],
+    );
+    push_inst(
+        &mut b,
+        InstKind::Release,
+        [Operand::Reg(rhs), Operand::None, Operand::None, Operand::None],
+    );
     let slot = b.new_tmp();
     b.record_reg(slot);
     push_inst(

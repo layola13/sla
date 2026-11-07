@@ -43,7 +43,9 @@
 //!     carried in the report, not dropped (INT2-3).
 
 use crate::contract::{parse_sai, parse_sal, ContractParseError, ExternalFunction, LayoutDefine};
-use crate::imported_macros::{load_imported_macros_from_expanded_source, ImportedMacroRecord};
+use crate::imported_macros::{
+    load_imported_macros_from_expanded_source, ImportedMacroRecord, ImportedMacroRegistry,
+};
 use crate::imports::{
     expanded_source_may_contain_imports, import_path_from_line, resolve_import_files, ImportError,
 };
@@ -135,7 +137,7 @@ impl From<ImportError> for ContractLoadError {
 
 struct LoadState {
     visited: Vec<String>,
-    macro_registry: Vec<ImportedMacroRecord>,
+    macro_registry: ImportedMacroRegistry,
     report: LoadReport,
 }
 
@@ -156,14 +158,14 @@ pub fn load_imported_contracts(
     let source_abs = crate::imports::real_path(source_file);
     let mut state = LoadState {
         visited: Vec::new(),
-        macro_registry: Vec::new(),
+        macro_registry: ImportedMacroRegistry::new(),
         report: LoadReport::default(),
     };
     for import_path in decl_import_paths {
         load_recursive(&source_dir, import_path, Some(&source_abs), &mut state)?;
     }
     state.report.visited = state.visited;
-    state.report.imported_macro_registry = state.macro_registry;
+    state.report.imported_macro_registry = std::mem::take(&mut state.macro_registry.records);
     Ok(state.report)
 }
 
