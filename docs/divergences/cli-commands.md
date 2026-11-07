@@ -36,7 +36,7 @@ SAB 路与 workspace build 出现）与 `.sla-cache/imports/*.lst`
 语义分歧；其格式属 plugin_reachability / 导入层辖区，本线
 只登记不伪造。
 
-## CLI-D4 (b·覆盖→五期接通，残留三坐标) SAB 直降对 std 表面调用
+## CLI-D4 (b·覆盖→五期接通，残留两坐标；坐标 1 六期 provider 切换已闭合) SAB 直降对 std 表面调用
 基线形态（四期）：凡导入 std 表面（println 格式化、str_eq 等）的
 程序，sab build / build-exe / test(sab) 在
 `generate_from_program` 上返回
@@ -51,7 +51,11 @@ SAB 路与 workspace build 出现）与 `.sla-cache/imports/*.lst`
   sa 解析路调宿主 `sa check <片段.sa> --emit-sab <出.sab>`
   （sci `executeCheck` = flatten+verify+encodeSabFromFlat，与
   Zig 的 flattenStdSnippet+verifier+encode 同链），产物以仓内
-  `decode_module` 解码；import 片段源为 Zig 原文
+  `decode_module` 解码；六期起片段路分家（见残留坐标 1 的闭合
+  记录）：`flatten_and_decode` 改走 `sa encode-fragment` +
+  SAFRAG 容器，导入模块路仍走本 verified 路（Zig
+  `cachedStdImportModule` 本就是 flatten+verify+encode，同链
+  不变）；import 片段源为 Zig 原文
   `@import "{path}"\n`，provider 内按路径缓存（只查不迭代）。
   sa 缺失/失败/产物异常一律响亮错误，无静默兜底。
 - gen_call 的 println 臂已移植（`sla-codegen-sab/src/gen_print.rs`：
@@ -69,14 +73,26 @@ SAB 路与 workspace build 出现）与 `.sla-cache/imports/*.lst`
   不迭代），load contracts 331ms → 86–93ms（静窗实测）。
 
 残留坐标（均响亮失败、不静默）：
-1. **宏片段的 verified-encode 墙**：Zig 的模板/新鲜片段路用
-   `encodeSabFromFlatUnchecked`，sa CLI 只提供 verified 的
-   `check --emit-sab`；占位寄存器片段（如
-   `EXPAND VEC_NEW __sla_macro_arg_0`）被宿主验证器以
-   MemoryLeak 拒绝——凡经表面规则宏片段的 SAB 程序（Vec 方法
-   等）仍在 provider 处响亮停（宿主 trap 原文上抛）。导入模块
-   路（println/preload deps）全通。解法候选：sci 给 sa check
-   加 unchecked encode 旗标，或 Rust 侧移植 flattener 本体。
+1. **宏片段的 verified-encode 墙 —— 六期 provider 切换已闭合**：
+   Zig 的模板/新鲜片段路用 `encodeSabFromFlatUnchecked`，而
+   sa CLI 的 `check --emit-sab` 只提供 verified 编码，占位
+   寄存器片段（如 `EXPAND VEC_NEW __sla_macro_arg_0`）曾被
+   宿主验证器以 MemoryLeak 拒绝、凡经表面规则宏片段的 SAB
+   程序（Vec 方法等）在 provider 处响亮停。解法最终形态（非
+   当年列的两个候选）：sci 落地专用子命令 `sa encode-fragment`
+   （f624f793：`#fragment` 契约头对展平体校验 + 同一 unchecked
+   编码器 + SAFRAG 1.0 带版本容器；裸片段单独运行被两层具名
+   拦下 SA-CLI-022 SabFragmentNotAProgram）。Rust 侧
+   `SaHostFlattener::flatten_and_decode` 已切换至该路：
+   provider 按机器片段形状合成契约头（种子取 sci 金样本形态：
+   arg_0 = owns+returns、其余占位符 = reads），再按宿主契约
+   校验逐名转写修正（宿主逐轮具名一个集合事实：undeclared_own /
+   unused_read 等，provider 只转写不猜测），至宿主重算集合恰合
+   后解容器取 payload，以仓内 `decode_module` 解码；不收敛 /
+   非集合类违规一律响亮停，无任何静默兜底。导入模块路
+   （println/preload deps）不变，仍走 verified 的
+   check --emit-sab。证据（探针、被挡语料名单与复跑、Zig 同件
+   差分对拍）见本线 RESULT（rust-provider-switch）。
 2. **str_eq 臂未移植**：`sla test 01_hello.sla`（TestCodegen
    形态）死于 gen_call str_eq 桩（driver_gen.rs，D
    surface_call）；已隔离实证（去 @test 后 test 全通）。
