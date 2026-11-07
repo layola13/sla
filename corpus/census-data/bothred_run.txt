@@ -1,0 +1,16 @@
+tests/test_error.sla	sa
+tests/test_error.sla	sab
+tests/test_unit_reg1_dns_client_a.sla	sa
+tests/test_unit_reg1_dns_client_a.sla	sab
+tests/test_unit_reg2d3_mutex_test_body.sla	sab
+tests/test_unit_wrap_growvec_smoke.sla	sa
+tests/test_unit_wrap_http_client_smoke.sla	sa
+tests/test_unit_wrap_http_client_smoke.sla	sab
+tests/test_unit_wrap_net_smoke.sla	sa
+tests/test_unit_wrap_net_smoke.sla	sab
+tests/test_unit_wrap_process_smoke.sla	sa
+tests/test_unit_wrap_process_smoke.sla	sab
+tests/test_unit_wrap_regex_smoke.sla	sa
+tests/test_unit_wrap_regex_smoke.sla	sab
+tests/test_unit_wrap_task_smoke.sla	sa
+tests/test_unit_wrap_task_smoke.sla	sab

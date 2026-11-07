@@ -1,0 +1,132 @@
+{
+ "run": {
+  "files": 567,
+  "runs": 1134,
+  "pass_runs": 23,
+  "files_both_green": 7,
+  "files_one_green": 9,
+  "test_pass_by_backend": {
+   "sa": 17,
+   "sab": 19
+  }
+ },
+ "run_gap_classes": {
+  "UNDEF-STD": 611,
+  "PARSE": 124,
+  "UNDEF-MODULE": 107,
+  "TYPE-MISMATCH": 70,
+  "UNSUPPORTED-SAB": 61,
+  "UNSUPPORTED-TEXT": 53,
+  "CHECKER-OTHER": 26,
+  "CODEGEN-OTHER": 9,
+  "IMPORT": 8,
+  "HOST-UndefinedMacro": 7,
+  "HOST-MemoryLeak": 6,
+  "USEAFTERMOVE": 4,
+  "HOST-UseAfterMove": 4,
+  "HOST-RegisterRedefinition": 3,
+  "HOST-LLVMBackend": 1,
+  "HOST-ForbiddenSyntax": 1
+ },
+ "run_gap_class_layer": {
+  "UNDEF-STD|chk-fail": 428,
+  "UNDEF-STD|chk-pass": 183,
+  "PARSE|chk-fail": 114,
+  "UNDEF-MODULE|chk-pass": 91,
+  "UNSUPPORTED-SAB|chk-pass": 61,
+  "UNSUPPORTED-TEXT|chk-pass": 53,
+  "TYPE-MISMATCH|chk-fail": 42,
+  "TYPE-MISMATCH|chk-pass": 28,
+  "UNDEF-MODULE|chk-fail": 16,
+  "CHECKER-OTHER|chk-pass": 14,
+  "CHECKER-OTHER|chk-fail": 12,
+  "PARSE|chk-pass": 10,
+  "CODEGEN-OTHER|chk-pass": 9,
+  "IMPORT|chk-fail": 8,
+  "HOST-UndefinedMacro|chk-pass": 7,
+  "HOST-MemoryLeak|chk-pass": 6,
+  "USEAFTERMOVE|chk-fail": 4,
+  "HOST-UseAfterMove|chk-pass": 4,
+  "HOST-RegisterRedefinition|chk-pass": 3,
+  "HOST-LLVMBackend|chk-pass": 1,
+  "HOST-ForbiddenSyntax|chk-pass": 1
+ },
+ "check": {
+  "files": 2022,
+  "green": 1045,
+  "fail": 977,
+  "on_gate_list": {
+   "files": 2005,
+   "green": 1040,
+   "both_red": 144,
+   "rust_only_red": 821,
+   "zig_only_red": 17
+  }
+ },
+ "check_gap_classes": {
+  "UNDEF-STD": 670,
+  "PARSE": 65,
+  "TYPE-MISMATCH": 38,
+  "UNDEF-MODULE": 26,
+  "CHECKER-OTHER": 16,
+  "IMPORT": 4,
+  "USEAFTERMOVE": 2
+ },
+ "check_gap_class_split": {
+  "UNDEF-STD|demos": 448,
+  "UNDEF-STD|tests": 222,
+  "PARSE|tests": 44,
+  "TYPE-MISMATCH|tests": 22,
+  "PARSE|demos": 21,
+  "TYPE-MISMATCH|demos": 16,
+  "UNDEF-MODULE|demos": 15,
+  "UNDEF-MODULE|tests": 11,
+  "CHECKER-OTHER|tests": 8,
+  "CHECKER-OTHER|demos": 8,
+  "IMPORT|tests": 4,
+  "USEAFTERMOVE|tests": 2
+ },
+ "neg": {
+  "total": 151,
+  "rejected_with_kind": 68,
+  "rejected_no_kind": 63,
+  "accepted": 20
+ },
+ "demos": {
+  "units": 1258,
+  "groups": {
+   "basic": [
+    925,
+    196
+   ],
+   "rosetta": [
+    315,
+    4
+   ],
+   "syntax_sugar": [
+    5,
+    0
+   ],
+   "cxu": [
+    8,
+    0
+   ],
+   "cxu-nomain": [
+    4,
+    0
+   ],
+   "workspace": [
+    1,
+    1
+   ]
+  },
+  "first_failing_stage": {
+   "test": 556,
+   "check": 496,
+   "build-exe": 5
+  },
+  "steps_pass_run_bad": [
+   "rosetta/79_metrics"
+  ]
+ }
+}

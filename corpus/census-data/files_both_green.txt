@@ -1,0 +1,7 @@
+tests/test_unit_boolean_logic.sla
+tests/test_unit_box_from_raw_direct.sla
+tests/test_unit_det_order_return_cleanup.sla
+tests/test_unit_p0_builtin_panic.sla
+tests/test_unit_panic.sla
+tests/test_unit_param_cleanup_after_main_direct.sla
+tests/test_unit_println_direct.sla
