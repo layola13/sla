@@ -141,11 +141,44 @@ arena/index 方案送协调线裁决，不得先斩后奏。与六家拆分裁�
   导入展开段 crate 图无主（println 等 std 调用无从注册，二期立项）。
   INT-1 清零后无 std 依赖程序先行逐字节对拍；计时随后。
 
+- **子系统线 D（lowering+text）交付收讫（2026-11-07，四线全齐）**：
+  分歧登记 divergences/lowering-text.md（D-T1..D-T14）合编入
+  DIVERGENCES.md；D-C4/D-C5 经其定层**双结案**（协调线先前的
+  test 可达性假设证伪、已更正）。候复验命令
+  `cargo test -p sla-codegen-text --test fixture_parity` 已在场地三
+  跑定：**5/5 fixture 逐字节全等**。
+- **接线裁定三件（协调线，2026-11-07）**：① sla-lowering 的未用
+  sla-checker 路径依赖**删除**——CheckInfo trait 边界已取代之，
+  保留只会误记 crate 图方向且未来成环（Cargo.toml 内有注记）；
+  ② reachability.rs 桩**归 sla-lowering 所有**，一期保持契约桩、
+  实现列二期（text 线未消费真实可达集即完成对拍）；③ CheckInfo
+  地址键契约（D-T10）对一切接线方生效：喂入树不得 clone/搬动；
+  @test 体清空（D-T7）属流水线职责，对拍台/oracle 以空体喂入
+  匹配 build 模式 golden。
+- **反馈环第二批（FB-003..FB-009）**：lowering/text 线 (c) 类七条
+  （D-T9 genStmt 静默吞语句最重、D-T3 sum 硬编码、D-T4 未知被调用
+  名假定 EXPAND、D-T5 println 1 字节、D-T6 长度口径、D-T7 @test
+  流水线裁剪、D-T8 死分支）已按常设政策落单，随本轮报告回主会话。
+- **round5 格局（2026-11-07，场地三，清单校验过的树）**：
+  `cargo test --workspace --no-fail-fast` = **64 passed / 0 failed**
+  （round4 为 59；增量含 fixture_parity 5/5 定谳）。D-CK1 另以
+  现头 sla 6002b386 在场地三复证：floor/control rc=1、shadow
+  rc=0，与 699f13d4 口径一致，FB-001 证据升级为现头口径。
+- **同步协议硬化（2026-11-07 事故后）**：场地三预置旧快照与覆盖式
+  解压交叠，一度留下 3 个旧版/缺失文件（println.rs、
+  fixture_parity.rs、lowering-text.md）而文件计数仍相同——
+  sync_to_venue.sh 已改三跳形态（擦除同步路径 → 已证形态解压 →
+  md5 清单全量校验，BAD≠0 即红停）。教训与主线「双确认」同源：
+  计数对上不等于内容对上。
+
 ## 7. 场地连续性
 
-- 现场地：Kaggle 场地二，hop 入口 `bash ~/workspace/kaggle-venue-tunnel/hop_vpsdirect.sh 2201`，
-  名义 hold 至 2026-11-07 约 09:15；09:20 盘点时仍存活（已超时，随时可能断）。
+- 现场地：Kaggle 场地三（kernel icbnsk/muse-kaggle-venue-vpsdirect3），
+  hop 入口 `bash ~/workspace/kaggle-venue-tunnel/hop_vpsdirect.sh 2202`，
+  hold 至 2026-11-07 约 19:43 CST（12h 硬顶约 20:43）；场地内为现头
+  （sci e82d2865、sla 6002b386、sa 0.1.8、INSTALL OK）+ Rust 1.99.1。
+  同步脚本默认端口已切 2202。场地二（2201）已到期弃守。
 - 后继场地（VPS 直连形态、新回环端口、预装 Rust）由场地线预建，入口候主会话发放。
 - 热切换规程：切换前先把本地主本（唯一真源）git 快照；新场地到后先同步
-  （scripts/sync_to_venue.sh 改端口参数）跑一轮 `cargo test --workspace` 复现当前
+  （scripts/sync_to_venue.sh 改端口参数，含清单校验）跑一轮 `cargo test --workspace` 复现当前
   红/绿格局，再继续各线工作。**场地死亡不回落本机构建**（用户定规），在 REPORT 登记候新场地。

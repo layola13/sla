@@ -8,12 +8,15 @@
 编号命名空间（防撞号）：`D-C1..D-C5` 是协调线（ABI/宿主侧）条目；
 checker 线的同名 `D-C1..D-C10` 是另一个命名空间，合编中一律写作
 「checker D-Cx」，其头号条目另有主线候选名 **D-CK1**；parser 线为
-`D-P1..D-P13`，SAB 线为 `SAB-D01..D16`，lexer/ast 线为 `D-L*`/`D-A*`。
+`D-P1..D-P13`，SAB 线为 `SAB-D01..D16`，lexer/ast 线为 `D-L*`/`D-A*`，
+lowering/text 线为 `D-T1..D-T14`（全文 divergences/lowering-text.md）。
 
 反馈环（用户 2026-11-07 常设政策）：分类为 Zig 侧缺陷候选且定案者，
-当轮在 `docs/feedback/` 落反馈单（FB-001 = D-CK1、FB-002 = DEF-LEX-ESCAPE-EOF，
-均已实证），主会话据此派 Zig 侧修复线与移植并行；Rust 侧永远只
-镜像 + 登记，不替 Zig 改行为。
+当轮在 `docs/feedback/` 落反馈单，主会话据此派 Zig 侧修复线与移植
+并行；Rust 侧永远只镜像 + 登记，不替 Zig 改行为。已发反馈单：
+FB-001 = D-CK1、FB-002 = DEF-LEX-ESCAPE-EOF（均已实证确认）；
+FB-003..FB-009 = lowering/text 线 (c) 类七条 D-T9/D-T3/D-T4/D-T5/
+D-T6/D-T7/D-T8（源码机制定案，候主会话确认派线）。
 
 ## 已知有意分歧（不迁就）
 
@@ -72,22 +75,27 @@ checker 线的同名 `D-C1..D-C10` 是另一个命名空间，合编中一律写
 - Rust 侧只保留 SA_STD_DIR / SCI_ROOT / 祖先目录三条有据路径，
   硬编码个人路径不移植（登记为有意分歧候选，候裁决）。
 
-### D-C4 (a) 输出 @import 列表不是源 import 的纯函数（待 codegen 线定层）
-- 同为 demos 输入：03/04 的输出 import 列表为 7 行同一集合，
-  01 多出一行 `sa_std/string.sa`（01 的 @test 体引用 str_eq，而 build
-  产出中 @test 体被剪为空桩——被剪内容仍影响了 import 展开集）。
-- 影响：切片对拍的 import 发射必须按「展开后程序」建模，不能按源文件
-  import 列表直译。分类暂挂 (a)，归因候选：展开阶段按可达性收集时
-  把 test 体的引用计入，而剪枝发生在展开之后。
+### D-C4 (a) 输出 @import 列表 —— **已结案**（lowering/text 线 D-T1 定层）
+- 原疑问：01 比其余 fixture 多一行输出 import，疑似与 @test 体可达性
+  有关（被剪的 test 体引用仍计入展开集）。
+- **裁决：假设不成立。** 发射导入 = 程序（展开后）导入声明按序 + 5 条
+  固定导入（string.sa、string_format.sa、io/print.sai、fmt.sai、
+  core/panic.sa）。01 多一行仅因其源码有第 3 条导入
+  （`sa_std/string.sa`）；其余 fixture 均为 2 条源导入 → 7 行。
+  导入列表是源导入的纯函数，与 test 体无关。
+- Rust 已按此模型实现（program.rs），fixture 01 逐字节通过、02/03/
+  04/07 亦于 2026-11-07 在场地三复验全等（5/5）。
 
-### D-C5 (a) 全局计数器的两处不可见消耗（待 codegen 线定层）
-- tmp 计数全程序连续，但 07 中 fact 结束于 tmp_6、add 却始于 tmp_8
-  （tmp_7 被不可见地消耗）；标签计数同理：07 的 if 分配了
-  THEN_0/ELSE_1 与未发射的 MERGE_2，@test 入口标签因此为
-  L_TEST_ENTRY_3（03 中 MERGE 被发射、序号吻合；02/01 无标签消耗时
-  TEST_ENTRY 为 0）。
-- 分类暂挂 (a)：疑似 if 表达式结果槽/MERGE 标签先分配后丢弃；
-  codegen 线复现时须给出确切分配点，否则按本移植缺陷处理。
+### D-C5 (a) 全局计数器的两处不可见消耗 —— **已结案**（lowering/text 线 D-T2 定层）
+- `tmp_7`：codegen.zig:15871 —— 无结果槽的 if（void if）在 genExpr
+  末尾 `return try self.newTmp()`，分配一个从不发射的临时寄存器
+  作为丢弃结果；fact 的 if 双分支均 return，add 因此从 tmp_8 起号。
+- `L_MERGE_2`：codegen.zig 约 15744 —— 普通 if 路径无条件
+  `newLabel("L_MERGE")`，仅当 `needs_merge` 为真才发射标签行；
+  fact 的 if 双分支终止且有 else，标签被分配但不出现，test 入口
+  因此是 L_TEST_ENTRY_3。
+- Rust 已逐字镜像两点（expr_if.rs，含丢弃 tmp 的分配）。本条自
+  「待定层」销账：不是缺陷，是 Zig 的确定性计数器行为，差分须知。
 
 ## 子系统线 B（parser）合编 — 全文见 divergences/parser.md
 
@@ -179,6 +187,63 @@ AST 入口现响亮报 UnsupportedSabDirectFeature。
   于 00:52:58 被改（31 秒后）——改在书面裁决之前，程序上先行了一步；
   但改动方向经独立探针证明正确、实现本身从未被迁就修改，
   故不构成「改测试迁就实现」的实质违规，仅记程序瑕疵备查。
+
+## 子系统线 D（lowering/text）合编 — 全文见 divergences/lowering-text.md
+
+参照源：lowering_rules.zig（9,705 行）、codegen.zig（16,288 行）、
+control_flow_rules.zig。对拍状态：fixture 01 先行全等，02/03/04/07
+两处根因（D-T10 的实参 clone 破地址键、walker 未登记字面量/标识符
+类型）修复后，2026-11-07 场地三复验 **5/5 逐字节全等**
+（`cargo test -p sla-codegen-text --test fixture_parity` 全 ok）。
+
+- **D-T1 (a) = D-C4 结案**：导入列表是源导入纯函数（+5 固定），见上。
+- **D-T2 (a) = D-C5 结案**：tmp_7 / L_MERGE 两处确定性计数器消耗，见上。
+- **D-T3 (c) ★ `sum` 硬编码跳过实参释放**：codegen.zig:9830-9832，
+  `emitLoweredCallArgCleanups` 对名为 sum 的调用整段跳过全部实参
+  释放，无注释无支撑；同名用户函数同样中招（名字碰撞改语义）。
+  静默兜底族。→ **FB-004**。Rust 逐字镜像候裁决。
+- **D-T4 (c) 未知被调用名静默假定宏 EXPAND**：codegen.zig 约 15540，
+  函数表/外部表/内建全未命中时不报错、直接发射 EXPAND；拼写错误
+  静默变宏展开，错误推迟到汇编/链接层甚至永不暴露。→ **FB-005**。
+- **D-T5 (c) println 未知类型实参只打印 1 字节**：codegen.zig 约
+  2397-2417 兜底臂发射 `sa_print_bytes(&{ptr}, 1)`，无诊断，
+  格式化输出静默截断为单字节。→ **FB-006**。
+- **D-T6 (c) println 长度口径不一致**：字面段用原始跨度（约 2185）、
+  字符串实参用转义后长度（约 2195）；格式串段含转义序列时段路径
+  多打字节。→ **FB-007**。
+- **D-T7 (c) @test 空壳来自流水线前置裁剪**：genTestDecl（7610）
+  忠实生成所给体；golden 中空体是 plugin_compile 构建模式在
+  codegen 前清空 test 体所致——构建产物里的 @test 只是空壳，
+  「产物即已测」的读法会高估实际执行断言数。流水线口径问题。
+  → **FB-008**。接线注记：对拍台以空体喂入匹配 build 模式 golden，
+  清空动作属流水线（oracle）职责。
+- **D-T8 (c) 死分支（轻微）**：lowering_rules.zig:6221-6226
+  `shouldAutoBorrowReceiverArg` 内层 borrow 判定后无条件 return
+  true，判定对结果无影响，疑似重构残留。行为等价，仅登记。
+  → **FB-009**（严重度：琐细）。
+- **D-T9 (c) ★★ genStmt 静默吞未处理语句**：codegen.zig:10650 的
+  genStmt switch 以 `else => {}` 收尾——未覆盖语句种类不产出、
+  不报错，程序静默缺失整段语句。与 SAB 吞错族、主线「禁止静默
+  兜底」同科，本批最重。→ **FB-003**。Rust **有意不迁就**：
+  未覆盖语句响亮报错（D-T12），对拍口径下触发即红。
+- **D-T10 (b) ★ CheckInfo 地址键契约**：Zig 以 `*Node` 为键的
+  检查器侧表，在 Rust 显式化为 `sla_lowering::CheckInfo` trait
+  （键 = node_key，与 checker 线地址公式逐字一致）。**接线契约：
+  喂入 codegen 的树必须与登记事实时是同一棵、其后不得 clone/
+  搬动节点**——一处实参 clone 曾使 println 实参丢失类型事实、
+  落入 D-T5 的 1 字节兜底臂（已改全程借用）。oracle 接线现合此约。
+- **D-T11 (b)**：hoisted_allocs 由参数穿线改发射器状态，产出不可见。
+- **D-T12 (b)**：未移植发射域（for/switch/if-let/字面量族/宏族/
+  async/dyn 等，清单在 sla-lowering/src/deferred.rs 的
+  DEFERRED_FAMILIES）在 Rust 侧一律响亮 Unsupported（含 Zig 行号
+  参照），不产部分文本——与 D-T9 对应的有意分歧。
+- **D-T13 (a) 风险登记**：浮点常量格式化未验证（Zig `{d}` vs Rust
+  Display 最短回环）；切片内无浮点未触发，含浮点 fixture 落地时
+  须专项对拍。
+- **D-T14 (a) 归因不可分辨**：fixture 04 出口清理（!i/!limit）挂
+  while 尾随清理表或 return 清理表字节完全相同；本线对拍台挂在
+  return 上。真实归属候 checker 线边界转储对账（若不同，仅测试台
+  事实登记调整，发射代码不变）。
 
 ## 协调线集成发现（2026-11-07，全管线接通后）
 

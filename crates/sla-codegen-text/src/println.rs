@@ -47,8 +47,10 @@ impl<'c> Codegen<'c> {
                     self.emit_print_segment(&fmt_text[start..i], i - start)?;
                 }
                 if arg_index < call.args.len() {
-                    let arg = call.args[arg_index].clone();
-                    self.emit_print_arg(&arg)?;
+                    // No clone: checker facts are keyed by node
+                    // address, so the argument must stay the exact
+                    // node from the program tree.
+                    self.emit_print_arg(&call.args[arg_index])?;
                     arg_index += 1;
                 }
                 i += 2;

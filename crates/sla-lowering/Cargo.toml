@@ -5,4 +5,7 @@ edition = "2021"
 
 [dependencies]
 sla-ast = { path = "../sla-ast" }
-sla-checker = { path = "../sla-checker" }
+# NOTE (coordinator ruling 2026-11-07): no sla-checker dependency.
+# Checker facts reach lowering only through the CheckInfo trait defined
+# in this crate (see docs/divergences/lowering-text.md D-T10); a path
+# dependency would misstate the crate graph and invite a future cycle.

@@ -1,8 +1,8 @@
 # REPORT.md — Rust 版 sa_plugin_sla 差分实验 · 一期报告
 
-状态时刻：2026-11-07 约 09:45 CST（第二任协调线更新）。本报告是**阶段性**的：
-四条子系统线已交付三条半，未完成项逐项明示，不把中间状态说成验收结果。
-本地仓仅本地 git，不建远端、不推送。
+状态时刻：2026-11-07 约 09:50 CST（第二任协调线更新）。本报告是**阶段性**的：
+四条子系统线**已全部交付**，集成轮在场地三（2202）推进；未完成项逐项明示，
+不把中间状态说成验收结果。本地仓仅本地 git，不建远端、不推送。
 
 ## 0. 本实验的目的（用户定调）
 
@@ -15,14 +15,14 @@
 | 交付 | 状态 |
 |---|---|
 | ABI 摸底 docs/ABI_MAP.md | **完成**：双描述符符号（数据 + fn）、PluginDescriptor 64B 逐字段、宿主加载/校验/命令分发路径、Context 约 88B 手工镜像面、handler ABI（state field 40B / options 16B / result 48B、返回码语义、result_free 所有权）、命令面全表 |
-| 分歧登记 docs/DIVERGENCES.md + docs/divergences/&lt;lane&gt;.md | **合编完成**：协调线 5（D-C1..C5）+ lexer/ast 9 + parser 13（D-P1..P13）+ checker 10（D-C1..D-C10）+ SAB 16（SAB-D01..D16），合计 53 条在册；两条头号候选已实证并入反馈环（FB-001/FB-002） |
+| 分歧登记 docs/DIVERGENCES.md + docs/divergences/&lt;lane&gt;.md | **合编完成**：协调线 5（D-C1..C5）+ lexer/ast 9 + parser 13（D-P1..P13）+ checker 10（D-C1..D-C10）+ SAB 16（SAB-D01..D16）+ lowering/text 14（D-T1..D-T14），合计 67 条在册；反馈环已发 9 单（FB-001/FB-002 已实证，FB-003..FB-009 为 lowering/text 的 (c) 类七条） |
 | Crate 图定案 | **完成**：六家裁断 Q1=A+ / Q2=A（全文 ~/workspace/consult-rust-split/VERDICT.md），10 成员已落根 Cargo.toml，见 docs/COORDINATION.md §1 |
 | sla-abi 全量镜像 + sla-plugin 锚点 | **完成（协调线欠账已补）**：abi 四模块镜像（布局按场地探针实测钉死，测试 5/5）；plugin 描述符双锚点已接线 + skills 静态表逐字镜像（其测试与 .so 符号验活候 workspace 全量编译放行，见 §7） |
 | sla-oracle 边界转储 | **已跑通**：D-P3 seed 预扫描（协调线职责）+ seed/tokens/AST/checked/lowering/SAB 模型字节/文本六段转储 + 分阶段计时；generate 已接通（CheckInfo 适配） |
-| 垂直切片对拍（3–5 程序逐字节） | **管线已接通、对拍未过**：workspace 全量构建通过、oracle 端到端可跑；五件 fixtures 与探针全数止于 checker 的 INT-1 误报（在场 return 被报 missing return，3 行最小复现已备，见 §7.1），其后还有 INT-2 合同段缺口挡 std 调用——这是本报告最大的未完成项 |
-| 分阶段计时对比 | **半成**：Zig 侧基线已实测（§5）；Rust 侧管线虽接通但无成功端到端产物，未测（不拿失败路径计时冒充） |
-| 700 行纪律 | **达标（盘点时刻）**：check_file_lines.sh 通过，78 个 .rs 全 ≤700 |
-| 全 workspace 构建 | **10/10 crate 构建通过**；round4 全量测试全绿（59 passed / 0 failed，§4）；plugin .so 描述符双锚点 nm -D 验活 |
+| 垂直切片对拍（3–5 程序逐字节） | **text 路已定谳 5/5**：lowering/text 线自有对拍台（parser→CheckInfo 桩→text 发射）在场地三复验，五件 fixtures 逐字节全等。oracle 全管线对拍仍卡两处：checker 的 INT-1 误报（在场 return 被报 missing return，3 行最小复现已备，见 §7.1）与 INT-2 合同段缺口——这是本报告最大的未完成项 |
+| 分阶段计时对比 | **半成**：Zig 侧基线已实测（§5）；Rust 侧无成功端到端产物（INT-1 挡），未测（不拿失败路径计时冒充） |
+| 700 行纪律 | **达标（盘点时刻）**：check_file_lines.sh 通过，全部 .rs 全 ≤700 |
+| 全 workspace 构建 | **10/10 crate 构建通过**；round5 全量测试（场地三、清单校验过的树）**64 passed / 0 failed**（§4）；plugin .so 描述符双锚点 nm -D 验活 |
 
 ## 2. 这条差分线已经照出了什么
 
@@ -49,11 +49,19 @@
    每一个 Zig 的无检查切片/兜底，在 Rust 镜像时都会被迫表态。
 3. **D-C3**：std 导入解析的兜底链末端硬编码了个人机器路径（`/home/vscode/projects/...`），
    环境相关行为被写死进发布代码；Rust 侧只保留 env/祖先根解析（有意分歧候选，待裁决）。
-4. **D-C4 / D-C5（对拍驱动出的行为学发现）**：期望输出的 @import 列表不是源导入的纯函数
-   （疑似剪枝前的 @test 体引用也计入展开）；全局 tmp/label 计数器有**不可见消耗点**
-   （未发射的 MERGE 标签也占号、07 中 tmp_7 被无声吞掉）。这类「输出不可由局部规则
-   复现」的点正是字节对拍的核心猎物：集成轮若 codegen 找不到确切分配点，即立移植缺陷
-   并反推 Zig 行为。
+4. **D-C4 / D-C5（对拍驱动出的行为学发现）——已双结案**：lowering/text 线定层：
+   导入列表是源导入的纯函数（按序 + 5 条固定导入，协调线先前的 test 可达性
+   假设证伪、已在合编中更正）；两个「不可见消耗点」均有确切分配点——tmp_7 是
+   void if 在 genExpr 末尾丢弃的 newTmp()（codegen.zig:15871），L_MERGE 是
+   无条件分配、按需发射的标签（约 15744）。不是缺陷，是必须逐字镜像的确定性
+   行为；这类点正是字节对拍的核心猎物，猎法（先红、定层、销账）全程留痕。
+4b. **lowering/text 线 (c) 类七条（FB-003..FB-009）**：最重一条是 genStmt 的
+   `else => {}` **静默吞未处理语句**（codegen.zig:10650，整段语句无声消失，
+   与 SAB 吞错族同科）；其余含 `sum` 硬编码跳过实参释放（9830）、未知被调用
+   名静默假定宏 EXPAND（约 15540）、println 未知类型只打 1 字节（约 2397）、
+   println 长度双口径（约 2185/2195）、@test 空壳的流水线口径（7610 上游）、
+   一处死分支（lowering_rules 6221）。text 发射面是 16k 行 codegen 的总入口层，
+   静默兜底在此密度最高——与 D-C2 同为「成建制发现机制」的兑现。
 5. **sleb128 向量分歧（已结案）**：裁决为**本移植缺陷（测试向量笔误）**——
    原期望 `[179,159,127]` 是 -12365 的编码、被误作 -12345；实现产出
    `[199,159,127]` 经协调线场地探针（原 sci 编码器同输入）证实与 Zig
@@ -91,7 +99,14 @@
   lexer 5 / parser 12 / checker 16 / lowering 各套件 / sab 各套件全绿；
   abi 先 4 红（协调线镜像 Option<裸指针> 之误）改后 5/5；codegen-text
   未过编译（20 错误，见 §7.1）使 workspace 未合拢。
-- 集成轮注意：全量测试须 `cargo test --workspace --no-fail-fast`，否则首红遮蔽全格局。
+- round4（场地二）：workspace 构建 10/10、测试 59 passed / 0 failed。
+- round5（2026-11-07，**场地三 2202**，同步后 md5 清单全量校验 0 差异的树，
+  日志 workspace-test-20261107-round5-venue3.log）：**64 passed / 0 failed**；
+  其中 lane D 候复验命令 `cargo test -p sla-codegen-text --test fixture_parity`
+  = **5/5 fixture 逐字节全等**（01/02/03/04/07）。同轮 D-CK1 以现头
+  sla 6002b386 复证（floor/control rc=1、shadow rc=0），FB-001 证据升现头口径。
+- 集成轮注意：全量测试须 `cargo test --workspace --no-fail-fast`，否则首红遮蔽全格局；
+  同步必须带清单校验（场地三曾现「计数同、内容旧」的混合树，见 COORDINATION 同步协议注）。
 
 ## 5. 性能节（次要；只报实测，口径：场地 Kaggle 同机、热缓存、切片小文件 287–729B）
 
@@ -108,10 +123,10 @@
 - Zig 参照总量：src 39 文件 83,206 行（含 plugin_tests 9,544；实现约 73,662）。
   大文件：sab_codegen 20,024 / codegen 16,288 / lowering_rules 9,705 /
   type_checker 6,098 / parser 4,478。
-- Rust 现况（盘点时刻、仍在增长）：78 个 .rs、约 17,572 行。其中 lexer+ast 两 crate
-  为全量镜像已交付，parser（3,173 行）/checker（3,648 行）已交付，
-  lowering 与 codegen-text 合计约 6,800 行已落盘（text 待过编译），
-  sla-abi/sla-plugin/sla-oracle 为协调线体量（约 1,900 行）。
+- Rust 现况（2026-11-07 盘点）：84 个 .rs、18,235 行，最大单文件 581 行
+  （全 ≤700）。lexer+ast / parser（3,173 行）/ checker（3,648 行）/
+  lowering+text / sab（编码器 + emit 主干）四线均已交付；
+  sla-abi/sla-plugin/sla-oracle 为协调线体量。
 - 拆分图：sab_codegen 的 20k 行按裁断 Q2=A 落为**单 crate 内模块族**
   （format/ registry/ dispatch/ layout/ drop_cleanup/ emit/，职责一级轴 + std 域二级轴，
   registry 按 std 域分文件卡 700 行）——互递归事实决定拆成子 crate 必须引入 Zig 中
@@ -131,19 +146,25 @@
 2. 第二 ABI 锚点（sla_compile_handler / result_free）按设计**未导出**：
    handler 编译器尚无端口，导出桩会虚构原实现没有的行为；类型面已在
    sla-abi 备齐，候 handler 移植时接线。
-3. parser/checker 的正式交付已收；lowering+text 线的 divergences/
-   lowering-text.md 尚未落盘（代码已落、登记在途），合编候其补齐。
-4. 场地：Kaggle 场地二（hop 2201）今日多次探针/构建均存活（已超名义
-   hold），仍属随时可断；后继场地候主会话发放。场地一断，本线按规程
-   停手登记、**不回落本机构建**。本机主本为唯一真源，已做 git 快照。
+3. 四线交付已全齐（lowering/text 的 divergences/lowering-text.md 已落盘
+   并合编，D-T1..D-T14；其接线注记五条已由协调线逐项处置：CheckInfo
+   地址键契约生效、reachability 桩归 lowering 所有列二期、未用 checker
+   依赖已删、主索引已补行、@test 清空职责已注记）。
+4. 场地：**已热切换至场地三**（hop 2202，hold 至约 19:43 CST，现头
+   sci e82d2865 / sla 6002b386 + Rust 1.99.1 预装）；切换中发现并修复
+   同步协议漏洞（覆盖解压 + 预置旧快照交叠 → 3 文件旧版/缺失而计数
+   仍同），sync_to_venue.sh 已加擦除 + md5 清单全量校验。场地二
+   （2201）已到期弃守。场地断仍按规程停手登记、**不回落本机构建**。
+   本机主本为唯一真源，已做 git 快照。
 
 ## 8. 结论与建议依据
 
 - 这条线**已经挣回了成本**：在尚未跑通端到端对拍时，仅 lexer/abi 两处的镜像与审读
   就产出 1 个主线级缺陷候选（K-1）+ 一族静默兜底登记 + 若干行为学发现——差分参照
-  的价值在一期早期即实证成立，不是预期。本轮又添 checker 的 D-CK1 全管线
-  实证：两条头号候选均已按用户新政入**反馈环**（FB-001/FB-002），
-  Zig 侧修复与 Rust 移植自此并行，不再等移植收官。
+  的价值在一期早期即实证成立，不是预期。本轮再添：checker 的 D-CK1 全管线
+  实证（现头复证）、lowering/text 的 (c) 类七条、text 路 5/5 逐字节对拍定谳。
+  反馈环累计 **9 单**（FB-001..FB-009），Zig 侧修复与 Rust 移植自此并行，
+  不再等移植收官。
 - 建议（候用户决定，不自动进二期）：继续推进的优先序 = 先完成集成轮（字节对拍 +
   边界转储 + 计时补测）拿到全管线差分基线，再按 §3 的价值序把语料面对 SAB 与
   checker 扩面；crate 图已按裁断定版，二期不再动拓扑，只在数据说话时重议 SAB 子 crate 化。

@@ -1,0 +1,32 @@
+# workspace round5 — Kaggle venue 3 (port 2202), 2026-11-07
+# Tree: local master, md5-manifest verified identical on venue (0 diffs)
+# after hardened sync (see COORDINATION sync protocol note).
+# NOTE: venue-side tee failed (sync had wiped docs/build-logs); this log
+# is transcribed verbatim from the coordinator's hop transcript.
+
+## Priority command (lane D pending verification):
+##   cargo test -p sla-codegen-text --test fixture_parity
+test fixture_01_hello ... ok
+test fixture_03_if_else ... ok
+test fixture_04_while_sum ... ok
+test fixture_02_arith ... ok
+test fixture_07_functions ... ok
+test result: ok. 5 passed; 0 failed
+
+## cargo test --workspace --no-fail-fast (suite totals)
+5 passed / 0 failed   (sla-abi)
+16 passed / 0 failed  (sla-checker)
+12 passed / 0 failed  (sla-parser)
+9 passed / 0 failed   (sla-lowering)
+7 passed / 0 failed   (sla-codegen-sab suites)
+5 passed / 0 failed   (sla-codegen-text fixture_parity)
+5 passed / 0 failed   (sla-lexer)
+3 passed / 0 failed   (sla-oracle + sla-plugin suites, incl. plugin 2)
+2 passed / 0 failed   (sla-plugin)
+remaining suites: 0 tests, ok
+TOTAL: 64 passed / 0 failed
+
+## Ancillary verifications in the same round (venue 3, current head):
+- D-CK1 re-run on sla 6002b386: dc1_floor rc=1, dc1_control rc=1,
+  dc1_shadow rc=0 (identical to 699f13d4 result) — FB-001 evidence
+  upgraded to current-head caliber.
