@@ -246,6 +246,63 @@ pub fn types_structurally_equal(a: &Type, b: &Type) -> bool {
     }
 }
 
+/// Mirrors Zig `normalizeUsingPath`: every `::` pair in a `using`
+/// path becomes `__` (byte-wise scan, as in Zig).
+pub fn normalize_using_path(path: &str) -> String {
+    let bytes = path.as_bytes();
+    let mut out = String::with_capacity(path.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if i + 1 < bytes.len() && bytes[i] == b':' && bytes[i + 1] == b':' {
+            out.push_str("__");
+            i += 2;
+        } else {
+            out.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+    out
+}
+
+/// Mirrors lowering_rules `isStringType` for the checker's
+/// purposes: the user-defined `String` type.
+pub fn is_string_type(ty: &Type) -> bool {
+    matches!(ty, Type::UserDefined(u) if u.name == "String")
+}
+
+/// Mirrors lowering_rules `isStringLikeType` (venue
+/// lowering_rules.zig:5201): after a borrow/pointer peel, a
+/// raw_ptr primitive, any array, or the user-defined `String`
+/// type. String literals type as raw_ptr in this checker, so
+/// they qualify — as do array values (venue probe: `str_eq` on
+/// `[u8; 3]` parameters checks rc=0).
+pub fn is_string_like_type(ty: &Type) -> bool {
+    match peel_borrow_pointer(ty) {
+        Type::Primitive(Primitive::RawPtr) => true,
+        Type::Array(_) => true,
+        Type::UserDefined(u) => u.name == "String",
+        _ => false,
+    }
+}
+
+/// The Zig `@tagName` of an `ast.Type` value, as used by the
+/// `using`-ambiguity diagnostic for non-user-defined receivers
+/// (venue probe: an `i32` receiver reports type `primitive`).
+pub fn type_tag_name(ty: &Type) -> &'static str {
+    match ty {
+        Type::Infer => "infer",
+        Type::Primitive(_) => "primitive",
+        Type::Pointer(_) => "pointer",
+        Type::Borrow(_) => "borrow",
+        Type::Array(_) => "array",
+        Type::Tuple(_) => "tuple",
+        Type::UserDefined(_) => "user_defined",
+        Type::Future(_) => "future",
+        Type::Closure(_) => "closure",
+        Type::FnPtr(_) => "fn_ptr",
+    }
+}
+
 /// Mirrors Zig `valueAssignableTo` (type_checker.zig:891): the
 /// checker's assignment compatibility = `typesEqual`, plus a raw
 /// pointer expected type accepts any pointer actual.

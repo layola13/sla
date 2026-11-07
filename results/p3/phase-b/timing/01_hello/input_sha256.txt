@@ -1,0 +1,1 @@
+d1b05644cab65721361bf2e16b153560c5feab041e23cd74b4cb759604ecaad2  fixtures/01_hello.sla

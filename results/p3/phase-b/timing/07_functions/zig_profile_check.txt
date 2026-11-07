@@ -1,0 +1,21 @@
+[sla-profile] import expand resolve roots: 0ms
+[sla-profile] import expand ordered modules=0
+[sla-profile] import expand buildReachable skipped (include_all_imported_decls)
+[sla-profile] import expand reachable materialize: 0ms
+[sla-profile] import expand macro contracts: 0ms
+[sla-profile] import type scan cache entries=0 hits=0
+[sla-profile] import source reuse hits=0
+[sla-profile] import expanded source reuse hits=0
+[sla-profile] import expand selective append: 0ms
+[sla-profile] import expand selective append decls=6 primary=6
+[sla-profile] load contracts summary: roots=2 visited=2 elapsed=0ms
+Sla Compiler: Successfully parsed and verified syntax and types of 07_functions.sla.
+note[SA-PLUGIN]: 'sa sla check' is deprecated: language frontends are dispatched by file extension, so run the host verb directly (e.g. 'sa check <file.sla>'). The 'sa sla' form keeps working during the transition.
+[sla-profile] check read source: 0ms
+[sla-profile] check source expand: 0ms
+[sla-profile] check parse: 0ms
+[sla-profile] check import expand: 0ms
+[sla-profile] check monomorphize: 0ms
+[sla-profile] check load contracts: 0ms
+[sla-profile] check import aliases: 0ms
+[sla-profile] check type check: 0ms

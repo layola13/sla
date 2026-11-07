@@ -1,0 +1,91 @@
+   Compiling sla-lexer v0.1.0 (/root/sla-plugin-rust/crates/sla-lexer)
+   Compiling sla-abi v0.1.0 (/root/sla-plugin-rust/crates/sla-abi)
+warning: `extern` fn uses type `Option<*mut u8>`, which is not FFI-safe
+  --> crates/sla-abi/src/context.rs:36:16
+   |
+36 |       pub alloc: extern "C" fn(
+   |  _________________________
+37 | |         ctx: *mut c_void,
+38 | |         len: usize,
+39 | |         alignment_log2: u8,
+40 | |         ret_addr: usize,
+41 | |     ) -> Option<*mut u8>,
+   | |________________________^ not FFI-safe
+   |
+   = help: consider adding a `#[repr(C)]`, `#[repr(transparent)]`, or integer `#[repr(...)]` attribute to this enum
+   = note: enum has no representation hint
+   = note: `#[warn(improper_ctypes_definitions)]` on by default
+
+warning: `extern` fn uses type `Option<*mut u8>`, which is not FFI-safe
+  --> crates/sla-abi/src/context.rs:50:16
+   |
+50 |       pub remap: extern "C" fn(
+   |  _________________________
+51 | |         ctx: *mut c_void,
+52 | |         memory: *mut u8,
+53 | |         memory_len: usize,
+...  |
+56 | |         ret_addr: usize,
+57 | |     ) -> Option<*mut u8>,
+   | |________________________^ not FFI-safe
+   |
+   = help: consider adding a `#[repr(C)]`, `#[repr(transparent)]`, or integer `#[repr(...)]` attribute to this enum
+   = note: enum has no representation hint
+
+   Compiling sla-ast v0.1.0 (/root/sla-plugin-rust/crates/sla-ast)
+warning: `sla-abi` (lib) generated 2 warnings
+   Compiling sla-lowering v0.1.0 (/root/sla-plugin-rust/crates/sla-lowering)
+   Compiling sla-parser v0.1.0 (/root/sla-plugin-rust/crates/sla-parser)
+   Compiling sla-checker v0.1.0 (/root/sla-plugin-rust/crates/sla-checker)
+   Compiling sla-codegen-text v0.1.0 (/root/sla-plugin-rust/crates/sla-codegen-text)
+warning: method `type_is_copy_struct` is never used
+   --> crates/sla-codegen-text/src/codegen.rs:217:19
+    |
+ 59 | impl<'c> Codegen<'c> {
+    | -------------------- method in this implementation
+...
+217 |     pub(crate) fn type_is_copy_struct(&self, ty: &Type) -> bool {
+    | -------------------- ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `ret_type_string` is never used
+   --> crates/sla-codegen-text/src/codegen.rs:290:15
+    |
+290 | pub(crate) fn ret_type_string(ty: &Type) -> &'static str {
+    |               ^^^^^^^^^^^^^^^
+
+warning: methods `emit_branch_scoped_cleanup_list` and `emit_branch_scoped_cleanup_for_node` are never used
+   --> crates/sla-codegen-text/src/release.rs:125:19
+    |
+ 26 | impl<'c> Codegen<'c> {
+    | -------------------- methods in this implementation
+...
+125 |     pub(crate) fn emit_branch_scoped_cleanup_list(&mut self, list: &[String]) -> Result<()> {
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+135 |     pub(crate) fn emit_branch_scoped_cleanup_for_node(&self, node: &Node) -> Result<()> {
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `as_call` is never used
+   --> crates/sla-codegen-text/src/stmt.rs:512:15
+    |
+512 | pub(crate) fn as_call(expr: &Node) -> Option<&CallExpr> {
+    |               ^^^^^^^^
+
+   Compiling sla-codegen-sab v0.1.0 (/root/sla-plugin-rust/crates/sla-codegen-sab)
+warning: field `ret_prim` is never read
+   --> crates/sla-codegen-sab/src/driver.rs:178:16
+    |
+177 | pub(crate) struct FuncShape {
+    | -------------------- ^^^^^^^^^^^^^^^^
+178 |     pub(crate) ret_prim: PrimType,
+    |                ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `sla-codegen-text` (lib) generated 4 warnings
+warning: `sla-codegen-sab` (lib) generated 1 warning
+   Compiling sla-oracle v0.1.0 (/root/sla-plugin-rust/crates/sla-oracle)
+   Compiling sla-plugin v0.1.0 (/root/sla-plugin-rust/crates/sla-plugin)
+    Finished `release` profile [optimized] target(s) in 14.75s

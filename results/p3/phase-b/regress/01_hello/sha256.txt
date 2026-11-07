@@ -1,0 +1,6 @@
+d1b05644cab65721361bf2e16b153560c5feab041e23cd74b4cb759604ecaad2  fixtures/01_hello.sla
+0d6375acf0acca14a8824b8f96a91da3e8e16dba6bb335f46e03b06367817b26  results/p3/phase-b/regress/01_hello/rust1.sa
+0d6375acf0acca14a8824b8f96a91da3e8e16dba6bb335f46e03b06367817b26  results/p3/phase-b/regress/01_hello/rust2.sa
+0d6375acf0acca14a8824b8f96a91da3e8e16dba6bb335f46e03b06367817b26  results/p3/phase-b/regress/01_hello/zigwork1/01_hello.sa
+0d6375acf0acca14a8824b8f96a91da3e8e16dba6bb335f46e03b06367817b26  results/p3/phase-b/regress/01_hello/zigwork2/01_hello.sa
+0d6375acf0acca14a8824b8f96a91da3e8e16dba6bb335f46e03b06367817b26  fixtures/expected/01_hello.sa

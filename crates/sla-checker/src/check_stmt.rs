@@ -67,6 +67,16 @@ impl Checker {
                 }
                 Ok(())
             }
+            Node::UsingDecl(u) => {
+                // Zig checkStmt using arm (:2814): append the
+                // NORMALIZED path to the CURRENT scope's list.
+                let normalized =
+                    crate::types_util::normalize_using_path(&u.path);
+                if let Some(frame) = self.scopes.frames.last_mut() {
+                    frame.using_modules.push(normalized);
+                }
+                Ok(())
+            }
             Node::ReleaseStmt(r) => self.check_release(&r.var_name),
             Node::LetElseStmt(l) => self.check_let_else(l),
             Node::LetDestructureStmt(l) => self.check_let_destructure(l),

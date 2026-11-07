@@ -28,7 +28,9 @@ pub mod scope;
 pub mod types_util;
 
 mod check_binary;
+mod check_builtin;
 mod check_call;
+mod check_method;
 mod check_literal;
 mod check_expr;
 mod check_macro;
@@ -51,6 +53,14 @@ mod tests_phase2b;
 mod tests_phase2c;
 #[cfg(test)]
 mod tests_phase2d;
+#[cfg(test)]
+mod tests_phase3;
+#[cfg(test)]
+mod tests_phase3b;
+#[cfg(test)]
+mod tests_phase3c;
+#[cfg(test)]
+mod tests_phase3d;
 
 pub use checker::{
     Checker, EnumVariantInfo, ExternSig, FuncSig, ImportedMacroInfo, ParamSig,

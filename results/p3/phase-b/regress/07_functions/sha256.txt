@@ -1,0 +1,6 @@
+6434df391eddb1cb3ce13bb4435c717df60e50da6621ea5bd790b342cc9c67c7  fixtures/07_functions.sla
+d61ed5d980fe34cc2d638d679638276ef67358596cab9b44cc1475555034047c  results/p3/phase-b/regress/07_functions/rust1.sa
+d61ed5d980fe34cc2d638d679638276ef67358596cab9b44cc1475555034047c  results/p3/phase-b/regress/07_functions/rust2.sa
+774e41d678658ff8a5308201c2349a1767b5bf4748971fc6fab1b5ba018d2dcc  results/p3/phase-b/regress/07_functions/zigwork1/07_functions.sa
+774e41d678658ff8a5308201c2349a1767b5bf4748971fc6fab1b5ba018d2dcc  results/p3/phase-b/regress/07_functions/zigwork2/07_functions.sa
+774e41d678658ff8a5308201c2349a1767b5bf4748971fc6fab1b5ba018d2dcc  fixtures/expected/07_functions.sa

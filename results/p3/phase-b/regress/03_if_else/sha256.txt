@@ -1,0 +1,6 @@
+13c97b3918764f30069bc6575b2f02bff3e213d53446231e33a9df42cd886d21  fixtures/03_if_else.sla
+5a92ee8240d1a1660bed6ba2be93af5e840298a8d0e26e5faf87c0f3fcf064a7  results/p3/phase-b/regress/03_if_else/rust1.sa
+5a92ee8240d1a1660bed6ba2be93af5e840298a8d0e26e5faf87c0f3fcf064a7  results/p3/phase-b/regress/03_if_else/rust2.sa
+5a92ee8240d1a1660bed6ba2be93af5e840298a8d0e26e5faf87c0f3fcf064a7  results/p3/phase-b/regress/03_if_else/zigwork1/03_if_else.sa
+5a92ee8240d1a1660bed6ba2be93af5e840298a8d0e26e5faf87c0f3fcf064a7  results/p3/phase-b/regress/03_if_else/zigwork2/03_if_else.sa
+5a92ee8240d1a1660bed6ba2be93af5e840298a8d0e26e5faf87c0f3fcf064a7  fixtures/expected/03_if_else.sa

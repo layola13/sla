@@ -1,0 +1,13 @@
+== provenance ==
+utc 2026-11-07T02:19:28Z
+66cf9c74eaf1
+sa: sa 0.1.8
+sci head: e82d286567ddd67630a7285684c6987f7e3c389b
+sla head: 6002b386c1a1a10057ce1c477c5b7573db447506
+rustc: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+installed plugin: /root/.local/share/sa_plugins/installed/sla/current/libsla.so
+099ac8fb42897f0427f6926330ffc2a65a6a033030863f2da6fae58c4e8d8f70  /root/.local/share/sa_plugins/installed/sla/current/libsla.so
+size 37150096 mtime 2026-11-07 01:02:55.893702559 +0000
+== cargo build --release ==
+   Compiling sla-plugin v0.1.0 (/root/sla-plugin-rust/crates/sla-plugin)
+    Finished `release` profile [optimized] target(s) in 5.75s

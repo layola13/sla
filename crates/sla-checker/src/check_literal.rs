@@ -5,7 +5,7 @@
 
 use crate::checker::Checker;
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
-use crate::types_util::{array_type_of, type_desc, types_equal};
+use crate::types_util::{type_desc, types_equal};
 use sla_ast::exprs::{EnumLiteral, Literal, SliceExpr};
 use sla_ast::node::Node;
 use sla_ast::types::Type;

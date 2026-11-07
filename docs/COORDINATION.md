@@ -201,3 +201,92 @@ arena/index 方案送协调线裁决，不得先斩后奏。与六家拆分裁�
 - 热切换规程：切换前先把本地主本（唯一真源）git 快照；新场地到后先同步
   （scripts/sync_to_venue.sh 改端口参数，含清单校验）跑一轮 `cargo test --workspace` 复现当前
   红/绿格局，再继续各线工作。**场地死亡不回落本机构建**（用户定规），在 REPORT 登记候新场地。
+
+## 8. 三期开工（2026-11-07，第三任协调线）
+
+开工核查（本线执行）：本地主本 = 快照 `1b0518c`、工作树干净；场地三（2202）
+存活（hostname 66cf9c74eaf1、sa 0.1.8、sla 树在位）；全量同步后清单校验经
+场地侧人工复核 **0 差异**（注记：sync_to_venue.sh 的校验步在 BAD=0 时因
+`grep -cv` 退出码 1 与 `set -e` 相撞假失败、未打印 SYNC_VERIFY_FAILED，
+树本身经 `md5sum -c` 直查 463 文件全 OK——脚本瑕疵登记在案，各线同步后
+一律以 md5sum -c 直查为准）；基线复现 `cargo test --workspace
+--no-fail-fast` = **137 passed / 0 failed**，与二期收编口径一致后开线。
+
+### 裁决 D-A2（INT-2 合同段归属，协调线裁决，2026-11-07）
+
+六家 A+ 图 10 成员不动、不新增依赖边，合同段按 Zig 原拓扑归位：
+
+- **.sai 合同解析 → sla-parser 新模块族**（镜像 contract_parser.zig，
+  产出 ast 层合同声明）。sla-parser 禁依赖 sla-checker（方向锁不变），
+  合同声明以 ast 形态流动。
+- **导入展开编排 → sla-plugin 接线层**（镜像 plugin_import_expand.zig 的
+  loadImportedContracts 切片：路径解析、合同加载、prescan 种子、注册表
+  填充）；sla-oracle 经同一接线消费，**禁止 oracle 私设第二套展开**。
+- **注册动作**经 sla-checker 既有 `register_extern_func`（checker.rs:294）；
+  INT-2 线不改 checker 源码，注册面不足即停下登记、候协调线定序。
+- SAB D 组表面（sab_codegen 内的 surface_load 等）仍归 sla-codegen-sab
+  按拆分图 D 组自理，与本裁决的合同段是两套不同机器（合同 = .sai →
+  extern 注册；表面 = SAB 规则文件 → lowering 规则），勿混。
+
+### 三期线位（并行，路径互斥）
+
+| 线 | 辖区（只许动这些路径） | 任务 |
+|---|---|---|
+| INT-2 | crates/sla-parser/**、crates/sla-plugin/**、crates/sla-oracle/src/** | 合同段立项：5/5 fixtures 过 check 段并逐件销账（println 族 + 01 的 str_eq 第二挡），全管线对拍推进 |
+| SAB-C | crates/sla-codegen-sab/** | 拆分图 C 组（prescan_consts/prescan_bindings/symbols）；INT-2 解锁后接 D 组 |
+| CHK3 | crates/sla-checker/** | 剩余 3 项：关联调用接收者推导全形态、match 守卫绑定可见性/消费、plain-if 条件收 integer |
+| HND | 只读 + docs/phase3/handler-eval.md | handler 活体对拍（第二 ABI 锚点）接线评估，先评估后定是否纳入三期 |
+| ORC | scripts/**、results/p3/**、docs/phase3/oracle-timing.md | 计时同口径协议 + Zig 基线先行；Rust 侧测量候 INT-2 落地后启动（协调线通知） |
+
+接线口径（三期操作注记，承 §4.5）：各线可改**自家 crate 的 lib.rs** 增删
+mod 声明（交付注记中逐条列明）；**Cargo.toml 依赖边仍只归协调线**，
+新依赖边需求停下登记。反馈单号段：INT-2 = FB-021..024、SAB-C =
+FB-025..028、CHK3 = FB-029..032、ORC = FB-033..034、HND = FB-035；
+号段用尽或越界先报协调线。各线不 git commit，协调线在集成点统一快照。
+
+## 9. 三期收编（2026-11-07，第三任协调线）
+
+线组七条全交付：INT-2（合同段 + A0 切片）、SAB-C（C 组）、CHK3
+（checker 余 3 项）、HND（评估）、ORC 阶段 A（协议 + Zig 基线）、
+INT21（名字特判臂，INT-2 跨线移交）、SAB-D（D 组，INT-2 解锁后
+开线）；ORC 阶段 B（同口径对比）随收编启动、结果入 REPORT §10。
+
+- **集成终局**：协调线全量同步（md5 清单直查 0 差异）后场地
+  `cargo test --workspace --no-fail-fast` = **294 passed / 0
+  failed**（二期基线 137 → 三期净 +157）；129 个 .rs 全 ≤700 行。
+- **集成期协调线自办四件**：① 过期 pin 更新（sla-plugin
+  contracts_pipeline 的 println 阻断 pin 改为关闭态，INT-2 自
+  登记的预定动作）；② driver_e2e.rs 拆分（765 → 600 + 新
+  driver_e2e2.rs 362，测试名与计数 11 不变，纯行数纪律）；
+  ③ ABI_MAP §1 更正注（FB-035）；④ HND 四候选收编落单
+  FB-035..FB-038。
+- **集成发现（cargo 陈旧二进制，登记防复发）**：擦除重解压同步
+  后，源文件 mtime（tar 保留的本地时刻）可能旧于场地既有构建
+  指纹，cargo 静默复用旧测试二进制——本次 pin 更新险被误判为
+  红（实跑旧测试名）。规程：全量同步后、跑门前先
+  `find crates -name '*.rs' -exec touch {} +`，或以输出特征
+  （测试名/版本串）自证二进制新鲜度。此与一期同步事故同源：
+  同步的「内容真」之外还要「构建真」。
+- **裁决三件（协调线，登记候四期/主线）**：① INT2-2
+  （ExternSig.return_fallible）不阻塞、原子落地条件已登记，
+  三期不做跨 crate 手术；② oracle 内 5 行登记垫片（oracle→
+  plugin 边）与 ③ SAB 烘焙目录 build.rs 注入（现经
+  SLA_SAB_BAKED_SA_STD_DIR 环境槽）同为接线清理项，非阻塞、
+  候四期一并处理；面 B（compile_handler）候 FB-035 主线裁定。
+- **三期总账**：分歧在册 **106 条**（82 + 24）；反馈环累计
+  **24 单**（三期新发 FB-025/FB-026/FB-035..FB-038 六单）；
+  对拍面：fixtures 5/5 全管线（3 件逐字节全等 + 2 件仅 Zig
+  哈希序差）、e2e_b/e2e_c 维持全等、A0 命令矩阵 33/33 活体
+  全等、SAB 无表面程序发射中性实证。剩余响亮未接线：SAB
+  E–I 组、导入宏/workspace 包/@expand_tuple、`.sla` 正文展开、
+  描述符管线命令、关联块前裸名段（D-C22）。
+
+### 计时证据口径（用户 2026-11-07 10:11 裁决，三期完工交付物）
+
+全部修复后 Zig 版打 tag，等 Rust 分支完成做速度对比：Rust 全面超越或
+超 10% 即召六家裁决 Rust 替代 Zig。本线计时自此是该裁决的**正式证据**：
+三期完工报告必须同批交付同口径对比报告（同场地、同语料集、冷/暖各多轮
+取中位数；编译速度 = 端到端墙钟含启动段拆分；运行速度口径如实定义——
+产物逐字节全等处运行速度由构造相等、逐件列明，不全等件排除出运行
+结论）。**Rust 侧缺段（如合同段未补齐前）必须明说「尚非同口径」并给
+缺段清单**；二期 3–4 ms vs 26 ms 只登记为初步观测、不作结论引用。

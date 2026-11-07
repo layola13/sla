@@ -167,6 +167,24 @@ impl ModuleBuilder {
         name
     }
 
+    /// Append a fully built const decl (Zig `const_decls.append` at
+    /// the C1/C3 emission sites: global array consts, vtable
+    /// consts). Interning the decl's name is the *caller's* job —
+    /// the Zig sites intern at different points relative to the
+    /// append, and the order is part of the emitted bytes.
+    pub fn append_const_decl(&mut self, decl: ConstDecl) {
+        self.const_decls.push(decl);
+    }
+
+    /// Zig `finishFunctionRegs` (sab_codegen.zig:3052–3056) in
+    /// trunk terms: a copy of the registers recorded for the
+    /// function currently being built, in record order. (The full
+    /// C2 ledger semantics, including the released-set interplay,
+    /// live in `prescan_bindings::RegLedger`.)
+    pub fn finish_function_regs(&self) -> Vec<u32> {
+        self.recorded_regs.clone()
+    }
+
     /// Const label for a source string literal, deduplicated by the
     /// literal's source text (Zig `stringLiteralConstLabel`).
     /// `literal_source` is the text between the quotes, escapes intact.

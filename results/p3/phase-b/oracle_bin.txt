@@ -1,0 +1,5 @@
+95af0d4eae85a40e67a050160b18ce26f8ef26e33c940d0d074a274cecf60f16  target/release/sla-oracle
+size 2097280 mtime 2026-11-07 03:14:35.623187687 +0000
+selfproof rc 0
+fe1902818c4a175e630cbe0d362f215693b0aeb7efbd6efdf7a5109d59b47ada  results/p3/phase-b/selfproof_e2e_c.sa
+expected e2e_c gold fe1902818c4a175e630cbe0d362f215693b0aeb7efbd6efdf7a5109d59b47ada

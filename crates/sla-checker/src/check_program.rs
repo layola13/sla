@@ -88,6 +88,17 @@ impl Checker {
                         }
                     }
                 }
+                Node::UsingDecl(u) => {
+                    // Zig checkProgram (:2142): a top-level `using`
+                    // registers its NORMALIZED path on the global
+                    // scope, where the `using` static-extension
+                    // resolver later collects it.
+                    let normalized =
+                        crate::types_util::normalize_using_path(&u.path);
+                    self.scopes.frames[0]
+                        .using_modules
+                        .push(normalized);
+                }
                 Node::TraitDecl(t) => {
                     if !type_names.insert(t.name.clone()) {
                         return Err(redecl(&t.name));

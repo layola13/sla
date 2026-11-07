@@ -74,7 +74,23 @@ impl Checker {
             return Ok(ret);
         }
         if let Some(target) = &call.associated_target {
-            return self.check_associated_call(target, call);
+            // Associated forms that resolve (or hard-fail, as in
+            // Zig) return here; a miss FALLS THROUGH to the plain
+            // resolution stages, exactly as Zig's associated block
+            // falls through to them (check_method.rs).
+            if let Some(result) = self.check_associated_call(target, call) {
+                return result;
+            }
+        }
+        // Name-special arms (INT2-1, check_builtin.rs): in Zig
+        // the bare-name block (venue :8805-8895) sits immediately
+        // after the associated block and BEFORE closure/fn-ptr
+        // locals, user functions, externs and macros, so these
+        // names cannot be shadowed. (This crate's `sum` / extern
+        // / macro stages below keep their phase-1 relative order;
+        // the arms precede all of them, as in Zig.)
+        if let Some(result) = self.check_name_special_call(call) {
+            return result;
         }
         let name = call.func_name.as_str();
 
@@ -327,14 +343,23 @@ impl Checker {
             return Ok((*f.ret).clone());
         }
 
-        // Zig's wrapper synthesizes exactly this message for calls it
-        // cannot resolve (checkExpr fallback, type_checker.zig:3143).
+        // Receiver-inferred resolution (inherent -> trait -> dyn
+        // -> using extensions), mirroring the venue block at
+        // :9669-9725: it runs after plain functions, struct
+        // constructors and fn-ptr locals, as in Zig.
+        if let Some(result) = self.check_receiver_call(call) {
+            return result;
+        }
+
+        // Zig's bottom fallback for ANY call that reached the end
+        // of the call arm sets "Undefined call: {name}" and returns
+        // UndefinedVariable (venue :9982) — plain, dot and
+        // associated forms alike (venue probes: `v.double()`
+        // without `using`, `b.get()` on the wrong type, and
+        // `Box2::nope(b)` all report exactly this).
         Err(Diagnostic::new(
-            ErrorKind::CompileError,
-            format!(
-                "checkExpr failed at call {name} with {} args",
-                call.args.len()
-            ),
+            ErrorKind::UndefinedVariable,
+            format!("Undefined call: {name}"),
         ))
     }
 
@@ -418,102 +443,215 @@ impl Checker {
         Ok(sig.ret_ty.clone())
     }
 
-    /// Associated-target calls (`Target::name(...)` / receiver-style
-    /// recorded with a target). Consumption specials first, then
-    /// qualified-name resolution (`Target__name`, then `Target.name`
-    /// style keys, then the plain name).
+    /// Associated-target calls (`Target::name(...)`), mirroring
+    /// the venue associated block (:8438-8810). Returns `None` on
+    /// a plain miss so the caller falls through to the remaining
+    /// resolution stages, as Zig does; forms that hard-fail in Zig
+    /// (trait-target with no impl, arity errors) return
+    /// `Some(Err(..))`. Consumption specials first.
+    ///
+    /// Order inside the block (Zig): trait target -> `ptr` leaves
+    /// -> inherent `{Target}_{name}` in funcs ONLY -> the
+    /// `Option::None` unit constructor -> trait fallback for the
+    /// target type. (The name-keyed static-constructor leaves —
+    /// `Vec::new` and kin — are std-surface leaves, not part of
+    /// this machinery; see checker.md remaining list.)
     fn check_associated_call(
         &mut self,
         target: &str,
         call: &CallExpr,
-    ) -> CheckResult<Type> {
+    ) -> Option<CheckResult<Type>> {
         let name = call.func_name.as_str();
         match (target, name) {
             ("mem", "forget") => {
-                if call.args.len() != 1 {
-                    return Err(Diagnostic::new(
-                        ErrorKind::InvalidArgsCount,
-                        "mem::forget expects 1 argument",
-                    ));
-                }
-                let arg_ty = self.check_expr(&call.args[0])?;
-                if let Node::Identifier(arg_name) = &call.args[0] {
-                    if !self.type_is_copy(&arg_ty)
-                        && !crate::types_util::is_borrow_like_type(&arg_ty)
-                    {
-                        self.consume_binding(arg_name, "mem::forget")?;
+                return Some((|| {
+                    if call.args.len() != 1 {
+                        return Err(Diagnostic::new(
+                            ErrorKind::InvalidArgsCount,
+                            "mem::forget expects 1 argument",
+                        ));
                     }
-                }
-                return Ok(void_ty());
+                    let arg_ty = self.check_expr(&call.args[0])?;
+                    if let Node::Identifier(arg_name) = &call.args[0] {
+                        if !self.type_is_copy(&arg_ty)
+                            && !crate::types_util::is_borrow_like_type(&arg_ty)
+                        {
+                            self.consume_binding(arg_name, "mem::forget")?;
+                        }
+                    }
+                    Ok(void_ty())
+                })());
             }
             ("Box", "into_raw") => {
-                if call.args.len() != 1 {
-                    return Err(Diagnostic::new(
-                        ErrorKind::InvalidArgsCount,
-                        "Box::into_raw expects 1 argument",
-                    ));
-                }
-                self.check_expr(&call.args[0])?;
-                if let Node::Identifier(arg_name) = &call.args[0] {
-                    self.consume_binding(arg_name, "Box::into_raw")?;
-                }
-                return Ok(raw_ptr_ty());
+                return Some((|| {
+                    if call.args.len() != 1 {
+                        return Err(Diagnostic::new(
+                            ErrorKind::InvalidArgsCount,
+                            "Box::into_raw expects 1 argument",
+                        ));
+                    }
+                    self.check_expr(&call.args[0])?;
+                    if let Node::Identifier(arg_name) = &call.args[0] {
+                        self.consume_binding(arg_name, "Box::into_raw")?;
+                    }
+                    Ok(raw_ptr_ty())
+                })());
             }
             ("ManuallyDrop", "into_inner") => {
-                if call.args.len() != 1 {
-                    return Err(Diagnostic::new(
-                        ErrorKind::InvalidArgsCount,
-                        "ManuallyDrop::into_inner expects 1 argument",
-                    ));
-                }
-                let arg_ty = self.check_expr(&call.args[0])?;
-                if let Node::Identifier(arg_name) = &call.args[0] {
-                    self.consume_binding(arg_name, "ManuallyDrop::into_inner")?;
-                }
-                return Ok(match arg_ty {
-                    Type::UserDefined(u) if !u.generics.is_empty() => {
-                        u.generics[0].clone()
+                return Some((|| {
+                    if call.args.len() != 1 {
+                        return Err(Diagnostic::new(
+                            ErrorKind::InvalidArgsCount,
+                            "ManuallyDrop::into_inner expects 1 argument",
+                        ));
                     }
-                    other => other,
-                });
+                    let arg_ty = self.check_expr(&call.args[0])?;
+                    if let Node::Identifier(arg_name) = &call.args[0] {
+                        self.consume_binding(
+                            arg_name,
+                            "ManuallyDrop::into_inner",
+                        )?;
+                    }
+                    Ok(match arg_ty {
+                        Type::UserDefined(u) if !u.generics.is_empty() => {
+                            u.generics[0].clone()
+                        }
+                        other => other,
+                    })
+                })());
             }
             _ => {}
         }
-        let candidates = [
-            format!("{target}__{name}"),
-            format!("{target}_{name}"),
-            name.to_string(),
-        ];
-        for cand in &candidates {
-            let sig = self
-                .funcs
-                .get(cand)
-                .cloned()
-                .or_else(|| self.imported_funcs.get(cand).cloned());
-            if let Some(sig) = sig {
-                return self.check_call_args_against_sig(cand, &sig, &call.args);
-            }
+
+        // Trait target: `Trait::method(recv, ...)` (venue :8438).
+        if self.traits.contains_key(target) {
+            return Some(self.check_trait_associated_call(target, call));
         }
-        // Trait-method symbols `{Type}__{Trait}_{name}` registered
-        // by trait impls: the receiver type is the target, the
-        // trait segment is whatever impl provided the method.
-        let prefix = format!("{target}__");
-        let suffix = format!("_{name}");
-        let trait_symbols: Vec<String> = self
-            .funcs
-            .keys()
-            .filter(|k| k.starts_with(&prefix) && k.ends_with(&suffix))
-            .cloned()
-            .collect();
-        for cand in &trait_symbols {
-            let sig = self.funcs.get(cand).cloned();
-            if let Some(sig) = sig {
-                return self.check_call_args_against_sig(cand, &sig, &call.args);
-            }
+
+        // `ptr` leaves (venue :8457): `null` only; `read_volatile`
+        // needs the unsafe-depth counter this crate does not carry
+        // and falls through (checker.md remaining list).
+        if (target == "ptr" || target == "std__ptr") && name == "null" {
+            return Some((|| {
+                if !call.args.is_empty() {
+                    return Err(Diagnostic::new(
+                        ErrorKind::InvalidArgsCount,
+                        "ptr::null expects 0 arguments",
+                    ));
+                }
+                if call.generics.len() != 1 {
+                    return Err(Diagnostic::new(
+                        ErrorKind::InvalidArgsCount,
+                        "ptr::null expects 1 generic argument",
+                    ));
+                }
+                Ok(Type::Pointer(Box::new(call.generics[0].clone())))
+            })());
         }
-        Err(Diagnostic::new(
-            ErrorKind::UndefinedVariable,
-            format!("UndefinedVariable: `{target}::{name}`"),
-        ))
+
+        // Inherent: `{Target}_{name}` in funcs ONLY (Zig does not
+        // consult imported signatures on this path).
+        let method_key = format!("{target}_{name}");
+        if let Some(sig) = self.funcs.get(&method_key).cloned() {
+            return Some(self.check_method_args(
+                name,
+                &sig,
+                &call.args,
+                false,
+            ));
+        }
+
+        // `Option::None()` unit constructor (venue :8790).
+        if target == "Option" && name == "None" {
+            return Some((|| {
+                if !call.args.is_empty() {
+                    return Err(Diagnostic::new(
+                        ErrorKind::InvalidArgsCount,
+                        "Option::None expects 0 arguments",
+                    ));
+                }
+                Ok(Type::UserDefined(sla_ast::types::UserDefined {
+                    name: "Option".to_string(),
+                    generics: vec![Type::Infer],
+                }))
+            })());
+        }
+
+        // Trait fallback for the target type (venue :8796): the
+        // symbol must live in funcs (an imported-only symbol is an
+        // UndefinedVariable in Zig, whose `funcs.get` is the only
+        // fetch on this path).
+        match self.resolve_trait_method_symbol(
+            target,
+            None,
+            name,
+            call.args.len(),
+        ) {
+            Err(e) => Some(Err(e)),
+            Ok(Some(symbol)) => Some(match self.funcs.get(&symbol).cloned() {
+                Some(sig) => {
+                    self.check_method_args(name, &sig, &call.args, false)
+                }
+                None => Err(Diagnostic::new(
+                    ErrorKind::UndefinedVariable,
+                    format!("UndefinedVariable: `{symbol}`"),
+                )),
+            }),
+            Ok(None) => None,
+        }
+    }
+
+    /// The trait-target associated form (venue :8438):
+    /// `Trait::method(recv, ...)` — args[0]'s concrete type must
+    /// implement the trait; the declaring trait names the symbol.
+    fn check_trait_associated_call(
+        &mut self,
+        trait_name: &str,
+        call: &CallExpr,
+    ) -> CheckResult<Type> {
+        let name = call.func_name.as_str();
+        if call.args.is_empty() {
+            return Err(Diagnostic::new(
+                ErrorKind::InvalidArgsCount,
+                format!(
+                    "Trait associated call {trait_name}::{name} needs an implementing value argument"
+                ),
+            ));
+        }
+        let recv_ty = self.check_expr(&call.args[0])?;
+        let concrete = crate::types_util::concrete_type_name(&recv_ty)
+            .ok_or_else(|| {
+                Diagnostic::new(
+                    ErrorKind::TypeMismatch,
+                    format!(
+                        "TypeMismatch: trait associated call receiver has no concrete type, actual {}",
+                        crate::types_util::type_desc(&recv_ty)
+                    ),
+                )
+            })?
+            .to_string();
+        let symbol = self
+            .resolve_trait_method_symbol(
+                &concrete,
+                Some(trait_name),
+                name,
+                call.args.len(),
+            )?
+            .ok_or_else(|| {
+                Diagnostic::new(
+                    ErrorKind::UndefinedVariable,
+                    format!(
+                        "Type `{concrete}` does not implement trait method `{trait_name}::{name}`"
+                    ),
+                )
+            })?;
+        // Zig fetches the callee from funcs only on this path.
+        let sig = self.funcs.get(&symbol).cloned().ok_or_else(|| {
+            Diagnostic::new(
+                ErrorKind::UndefinedVariable,
+                format!("UndefinedVariable: `{symbol}`"),
+            )
+        })?;
+        self.check_method_args(name, &sig, &call.args, false)
     }
 }

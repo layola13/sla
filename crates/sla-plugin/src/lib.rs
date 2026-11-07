@@ -1,17 +1,32 @@
 //! sla-plugin: cdylib top level — the exported descriptor anchors and
 //! (eventually) the pipeline wiring. Nobody depends on this crate.
 //!
-//! Phase-1 state, honestly: the descriptor pair
+//! State, honestly: the descriptor pair
 //! (`saasm_plugin_descriptor_v1` data + `saasm_plugin_descriptor_v1_fn`)
 //! is exported with the same field values as the Zig original
-//! (plugin.zig's static descriptor over plugin_skills.zig's table), and
-//! `handle_command` points at a stub that FAILS LOUDLY — the Rust
-//! pipeline is not wired into the cdylib yet, so every command returns
-//! `AbiStatus::Failed` with exit code 1 rather than pretending to work.
-//! The second ABI (`sla_compile_handler` /
+//! (plugin.zig's static descriptor over plugin_skills.zig's table).
+//! `handle_command` dispatches through `commands::dispatch`: the A0
+//! slice — the commands that do not drive the compile pipeline
+//! (`help`, `init`, `skills`, `stability`, the `sab` dispatcher's
+//! help/error paths, and every command's `-h/--help` and
+//! option-error paths) — is implemented for real, mirrored from
+//! plugin_commands.zig / plugin_cli.zig at the venue head. Pipeline
+//! commands (`build`, `check`, `test`, the SAB builders, …) still
+//! return `AbiStatus::Failed` once their options parse — loud by
+//! design; a silent `Ok` there would fake a working compiler. The
+//! second ABI (`sla_compile_handler` /
 //! `sla_compile_handler_result_free`) is NOT exported yet: it belongs
 //! to the handler compiler, which has no port yet, and fabricating a
 //! stub there would invent behavior the original does not have.
+
+pub mod cli_help;
+pub mod cmdio;
+pub mod commands;
+pub mod contracts;
+pub mod init_cmd;
+pub mod skills_cmd;
+pub mod stability;
+pub mod stability_validate;
 
 use sla_abi::{
     AbiStatus, Context, HandleCommandFn, HostStream, PluginDescriptor, SkillSection,
@@ -52,22 +67,63 @@ static SKILLS: [SkillSection; 1] = [SkillSection {
     items: StrSliceList::from_static_slice(&SKILL_ITEMS),
 }];
 
-/// Phase-1 command entry: the pipeline is not wired into the cdylib
-/// yet. Returning `Failed` makes the host print a diagnostic — loud by
-/// design; a silent `Ok` here would fake a working compiler.
+/// Command entry, mirroring `runSlaCommandAbi` (plugin.zig): the
+/// dispatch result maps onto (status, out_code) as — a command code
+/// -> (Ok, code); an unknown command -> (UnknownCommand, 0); an
+/// invocation failure -> (Failed, 0). Note the failure path writes
+/// out_code 0, exactly as plugin.zig does; the phase-1 stub wrote 1
+/// there, which no Zig code path produces.
 extern "C" fn run_sla_command_abi(
-    _ctx: *const Context,
-    _argv: *const *const c_char,
-    _argv_len: usize,
-    _stdout: HostStream,
-    _stderr: HostStream,
+    ctx: *const Context,
+    argv: *const *const c_char,
+    argv_len: usize,
+    stdout: HostStream,
+    stderr: HostStream,
     out_code: *mut u8,
 ) -> u32 {
     if !out_code.is_null() {
         // SAFETY: the host always passes a writable out_code slot.
-        unsafe { *out_code = 1 };
+        unsafe { *out_code = 0 };
     }
-    AbiStatus::Failed.code()
+    let json_mode = if ctx.is_null() {
+        false
+    } else {
+        // SAFETY: the host hands in a live Context for the call.
+        unsafe { (*ctx).json_mode }
+    };
+    // Decode argv exactly as the host built it: argv_len
+    // NUL-terminated strings (program name first).
+    let mut args: Vec<Vec<u8>> = Vec::with_capacity(argv_len);
+    if argv.is_null() && argv_len > 0 {
+        return AbiStatus::Failed.code();
+    }
+    for i in 0..argv_len {
+        // SAFETY: argv/argv[i] follow the host's argv contract.
+        let arg_ptr = unsafe { *argv.add(i) };
+        if arg_ptr.is_null() {
+            return AbiStatus::Failed.code();
+        }
+        let bytes = unsafe { std::ffi::CStr::from_ptr(arg_ptr) }.to_bytes();
+        args.push(bytes.to_vec());
+    }
+    let mut out_sink = cmdio::HostSink(stdout);
+    let mut err_sink = cmdio::HostSink(stderr);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        commands::dispatch(json_mode, &args, &mut out_sink, &mut err_sink)
+    }));
+    match result {
+        Ok(Ok(commands::DispatchResult::Code(code))) => {
+            if !out_code.is_null() {
+                // SAFETY: as above.
+                unsafe { *out_code = code };
+            }
+            AbiStatus::Ok.code()
+        }
+        Ok(Ok(commands::DispatchResult::Unknown)) => AbiStatus::UnknownCommand.code(),
+        Ok(Ok(commands::DispatchResult::Fail)) | Ok(Err(())) | Err(_) => {
+            AbiStatus::Failed.code()
+        }
+    }
 }
 
 const HANDLE_COMMAND: HandleCommandFn = run_sla_command_abi;

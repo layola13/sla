@@ -1,0 +1,9 @@
+60f814780a050c896d21fff3e46d04b1cb4bfae3164f0e0e7b941dd0768937dd  results/p3/phase-b/work/zig/04_while_sum/04_while_sum.sa
+60f814780a050c896d21fff3e46d04b1cb4bfae3164f0e0e7b941dd0768937dd  results/p3/phase-b/work/zig/04_while_sum/04_while_sum.sa
+60f814780a050c896d21fff3e46d04b1cb4bfae3164f0e0e7b941dd0768937dd  results/p3/phase-b/work/zig/04_while_sum/04_while_sum.sa
+60f814780a050c896d21fff3e46d04b1cb4bfae3164f0e0e7b941dd0768937dd  results/p3/phase-b/work/zig/04_while_sum/04_while_sum.sa
+60f814780a050c896d21fff3e46d04b1cb4bfae3164f0e0e7b941dd0768937dd  results/p3/phase-b/work/zig/04_while_sum/04_while_sum.sa
+60f814780a050c896d21fff3e46d04b1cb4bfae3164f0e0e7b941dd0768937dd  results/p3/phase-b/work/zig/04_while_sum/04_while_sum.sa
+60f814780a050c896d21fff3e46d04b1cb4bfae3164f0e0e7b941dd0768937dd  results/p3/phase-b/work/zig/04_while_sum/04_while_sum.sa
+60f814780a050c896d21fff3e46d04b1cb4bfae3164f0e0e7b941dd0768937dd  results/p3/phase-b/work/zig/04_while_sum/04_while_sum.sa
+60f814780a050c896d21fff3e46d04b1cb4bfae3164f0e0e7b941dd0768937dd  results/p3/phase-b/work/zig/04_while_sum/04_while_sum.sa

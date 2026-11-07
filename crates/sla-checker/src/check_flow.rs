@@ -36,11 +36,23 @@ impl Checker {
             return self.check_if_let(expr);
         }
         let cond_ty = self.check_expr(&expr.cond)?;
-        if !matches!(cond_ty, Type::Primitive(sla_ast::types::Primitive::Boolean)) {
+        // Zig plain-if arm (type_checker.zig, venue :10150):
+        // comparisons produce legacy `integer` (0/1) in SA, so the
+        // condition accepts boolean / legacy integer / infer (the
+        // macro-parameter case); every other type — sized integers
+        // included — is a TypeMismatch with NO setError (the outer
+        // wrapper synthesizes the diagnostic text).
+        let cond_ok = matches!(
+            cond_ty,
+            Type::Infer
+                | Type::Primitive(sla_ast::types::Primitive::Boolean)
+                | Type::Primitive(sla_ast::types::Primitive::Integer)
+        );
+        if !cond_ok {
             return Err(Diagnostic::new(
                 ErrorKind::TypeMismatch,
                 format!(
-                    "if condition must be boolean, actual {}",
+                    "if condition must be boolean or integer, actual {}",
                     type_desc(&cond_ty)
                 ),
             ));

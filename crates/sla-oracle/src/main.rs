@@ -25,6 +25,16 @@
 //! keeps the full bodies for diagnosis; compare/bench runs must use
 //! the default so they measure the same program the plugin builds.
 //!
+//! Contracts stage (INT-2): between pruning and checking, the
+//! program's `@import` contract closure is loaded through the ONE
+//! shared machinery (`sla_parser::contract_load`, the
+//! loadImportedContracts mirror) and every `.sai` extern is
+//! registered into the checker — the same registration the plugin
+//! wiring layer performs (`sla_plugin::contracts`), consumed here
+//! directly because the frozen Cargo graph gives this crate no edge
+//! to sla-plugin. A load failure is fatal (exit 5), mirroring the
+//! Zig plugin's "Import Error: failed to load @import contracts".
+//!
 //! Exit codes: 0 full pipeline produced output; 2 usage / IO error;
 //! 3 text codegen failed loudly (unported emission path) after
 //! successful parse+check; 4 parse error; 5 check diagnostic.
@@ -179,13 +189,46 @@ fn main() -> ExitCode {
 
     dump("02_ast.txt", &format!("{root:#?}\n"));
 
-    // -- stage: check ---------------------------------------------------------
+    // -- stage: contracts (INT-2) ---------------------------------------------
+    // Load the @import contract closure and register its externs
+    // before checking (Zig: loadImportedContracts runs ahead of
+    // checkProgram). The dump lists everything the load touched —
+    // including the parts that have no registration home yet
+    // (layout defines, INT2-3) or are phase-remaining (imported
+    // macros, .sla body expansion) — loudly, never silently.
     let t = Instant::now();
     let Node::Program(program) = &root else {
         eprintln!("sla-oracle: parser root is not a Program node");
         return ExitCode::from(3);
     };
     let mut checker = Checker::new();
+    let import_paths = sla_plugin_contract_paths(program);
+    match sla_parser::contract_load::load_imported_contracts(&import_paths, &input) {
+        Ok(report) => {
+            for func in &report.externs {
+                checker.register_extern_func(
+                    &func.name,
+                    sla_checker::ExternSig {
+                        move_params: func.params.iter().map(|p| p.is_move).collect(),
+                        ret_abi: func.ret_ty.clone(),
+                    },
+                );
+            }
+            dump("03a_contracts.txt", &contracts_dump_text(&report));
+        }
+        Err(e) => {
+            eprintln!("sla-oracle: contract load failed: {e}");
+            dump(
+                "03a_contracts.txt",
+                &format!("# INT-2 contract load\nCONTRACT LOAD ERROR: {e}\n"),
+            );
+            return ExitCode::from(5);
+        }
+    }
+    stage_done(profile, "contracts", t);
+
+    // -- stage: check ---------------------------------------------------------
+    let t = Instant::now();
     let mut checked_text = String::new();
     // Dump caliber (D-O2): in build mode the checker saw emptied @test
     // bodies; say so on the checked dump so a missing test-body fact is
@@ -338,6 +381,82 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
     // walks the program node for declarations. If a fixture shows this
     // default costing output, it becomes a registered divergence, not
     // a silent workaround.
+}
+
+/// The program's `@import` paths in declaration order — the same
+/// extraction the plugin wiring performs
+/// (`sla_plugin::contracts::decl_import_paths`); the load itself is
+/// the shared `sla_parser::contract_load` machinery, so this is a
+/// call-site shim, not a second expansion implementation.
+fn sla_plugin_contract_paths(program: &sla_ast::Program) -> Vec<String> {
+    program
+        .decls
+        .iter()
+        .filter_map(|decl| match decl {
+            Node::ImportDecl(import) => Some(import.path.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Boundary dump for the contracts stage: everything the load did,
+/// with the not-yet-registrable parts named as such.
+fn contracts_dump_text(report: &sla_parser::contract_load::LoadReport) -> String {
+    let mut text = String::from("# INT-2 contract load (loadImportedContracts mirror)\n");
+    text.push_str(&format!("visited ({}):\n", report.visited.len()));
+    for path in &report.visited {
+        text.push_str(&format!("  {path}\n"));
+    }
+    text.push_str(&format!(
+        "registered externs ({}):\n",
+        report.externs.len()
+    ));
+    for func in &report.externs {
+        let params: Vec<String> = func
+            .params
+            .iter()
+            .map(|p| {
+                let prefix = if p.is_borrow {
+                    "&"
+                } else if p.is_move {
+                    "^"
+                } else {
+                    ""
+                };
+                format!("{prefix}{}: {}", p.name, p.ty)
+            })
+            .collect();
+        let fallible = if func.return_fallible { "!" } else { "" };
+        text.push_str(&format!(
+            "  {}({}) -> {}{}\n",
+            func.name,
+            params.join(", "),
+            func.ret_ty,
+            fallible
+        ));
+    }
+    text.push_str(&format!(
+        "layout defines ({}) [NO CHECKER TABLE - INT2-3]:\n",
+        report.layout_defines.len()
+    ));
+    for def in &report.layout_defines {
+        text.push_str(&format!("  {} = {} ({})\n", def.name, def.val_str, def.val_int));
+    }
+    text.push_str(&format!(
+        "macro defs NOT registered [phase-remaining] ({} files):\n",
+        report.macro_defs.len()
+    ));
+    for (file, names) in &report.macro_defs {
+        text.push_str(&format!("  {file}: {}\n", names.join(", ")));
+    }
+    text.push_str(&format!(
+        ".sla imports NOT body-expanded [phase-remaining] ({}):\n",
+        report.sla_imports.len()
+    ));
+    for path in &report.sla_imports {
+        text.push_str(&format!("  {path}\n"));
+    }
+    text
 }
 
 /// D-O2 build-mode pruning: empty every top-level `TestDecl` body in

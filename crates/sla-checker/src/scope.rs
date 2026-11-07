@@ -41,12 +41,19 @@ pub struct Binding {
 #[derive(Debug, Clone)]
 pub struct Frame {
     pub bindings: Vec<Binding>,
+    /// `using` module paths visible from this frame (Zig
+    /// `Scope.using_modules`), stored NORMALIZED (`::` already
+    /// rewritten to `__`, as Zig's checkProgram / checkStmt arms
+    /// normalize before appending). Consumed only by the `using`
+    /// static-extension resolution in check_method.rs.
+    pub using_modules: Vec<String>,
 }
 
 impl Frame {
     fn new() -> Frame {
         Frame {
             bindings: Vec::new(),
+            using_modules: Vec::new(),
         }
     }
 

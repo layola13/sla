@@ -1,0 +1,7 @@
+fn main() -> i32 {
+    println("hi");
+    println("{}", 42);
+    println("{}", 1, 2);
+    if !str_eq("a", "a") { panic(1); };
+    return 0;
+}

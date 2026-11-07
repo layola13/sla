@@ -407,11 +407,10 @@ impl<'c> Driver<'c> {
                 arity
             )));
         }
-        let lowered = if sla_lowering::is_main_name(&resolved) {
-            resolved.clone()
-        } else {
-            format!("sla__{resolved}")
-        };
+        // C3 `loweredFuncSymbol` (Zig 953–963) over the checker
+        // facts: main / extern / no-mangle / `sa_`-prefixed names
+        // stay as-is, other user functions become `sla__<name>`.
+        let lowered = crate::symbols::lowered_func_symbol(&resolved, self.check);
         let mut arg_regs = Vec::with_capacity(call.args.len());
         for arg in &call.args {
             arg_regs.push(self.gen_expr(arg)?);

@@ -1,0 +1,3 @@
+Sla Compiler: Successfully compiled e2e_a.sla to e2e_a.sa.
+note[SA-PLUGIN]: 'sa sla build' is deprecated: language frontends are dispatched by file extension, so run the host verb directly (e.g. 'sa build <file.sla>'). The 'sa sla' form keeps working during the transition.
+[sla-profile] freshness gate: hit, front-end skipped

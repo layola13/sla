@@ -1,0 +1,1 @@
+6434df391eddb1cb3ce13bb4435c717df60e50da6621ea5bd790b342cc9c67c7  fixtures/07_functions.sla

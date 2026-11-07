@@ -327,3 +327,204 @@ while-let/await 重复）逐项对齐。
 - plain if 条件接受 integer 一项：一期镜像要求 Boolean，
   Zig 接受 boolean/integer/infer——属一期既有简化，本段
   按任务范围未动，登记在此待后续线处理。
+
+## 三期销账（2026-11-07，CHK3 线）
+
+二期剩余 3 项逐项攻下。真值口径说明（重要）：本机参照树为
+3de91932（type_checker.zig 6,098 行），场地现头 6002b386 的
+同文件为 10,917 行——两树同机器、行号不同；本段行号一律以
+**场地现头**为准，探针（31 件，`sa sla check`，rc + 诊断原文）
+为最终真值。场地实测：`cargo test -p sla-checker` **118/118**
+（80 起点，新增 38：tests_phase3.rs 18 + tests_phase3b.rs 17 +
+tests_phase3c.rs 3）；workspace 全量除 sla-plugin 一件
+INT-2 线测试的文案 pin 外全绿（见 D-C18 跨线注记）。
+
+### 逐项销账
+
+1. **关联调用接收者推导全形态**（新文件 check_method.rs）：
+   逐形态镜像——① 关联 trait 形 `Trait::m(recv, ...)`（:8438，
+   args[0] 具体类型选 impl、declaring trait 命名符号、funcs-only
+   取符号）；② 关联固有形 `{Target}_{m}`（:8787，funcs-only）+
+   `Option::None` 构造 + 关联 trait 回退（:8796，funcs-only）；
+   ③ 接收者推断固有形（:9669，peel borrow/pointer → `{T}_{m}`，
+   funcs + imported、auto_borrow_receiver=true）；④ 接收者推断
+   trait 形（:9688，`resolveTraitMethodSymbolForType` 全量移植：
+   target-trait 支 + 全 impl 扫描支、多符号歧义 = TypeMismatch
+   且文案逐字）；⑤ dyn 接收者（`__dyn_` 载体 → trait 声明方法、
+   params[1..] 核）；⑥ `using` 静态扩展（:9703-9725 + resolver
+   :2922 + checkUsingExtensionCall :2978：固有 → trait → using
+   的 DEF-E0 定序、仅 pub、extensionReceiverParamMatches 含
+   借用型首参、歧义 = AmbiguousCall 且文案逐字、接收者名
+   primitive 探针形态）。方法路径共用实参检查器
+   `check_method_args` = `checkCallArgsAgainstSignature` 忠实
+   移植（auto-borrow 支、借用型参数支、capability 门、
+   plainCallArgMatches、数组宽度严格规则）。关键探针真值：
+   `&T`/`*T` 类型接收者调 plain-self 方法 rc=1 TypeMismatch
+   （peel 只定 key、不定实参——标识符的借用类型不解包、只有
+   借用表达式解包）；固有优先于 trait（返回类型探针判别）；
+   关联 miss 回落到后续解析级（与接收者推断级衔接，imported
+   静态形因此不可达而点调用形可达——非对称性已钉测试）。
+   using 状态基建：Frame 加 using_modules（规范化路径）、
+   checkProgram 全局登记 + checkStmt 作用域登记、
+   FuncSig 加 is_pub。
+2. **match 守卫绑定可见性/消费语义**：源码 + 10 探针核清后
+   判定——二期「同帧近似」在状态语义上与 Zig **结构等价**
+   （Zig pattern_scope 为 case 体块作用域之父、Rust 图案帧
+   同位），无代码改动、以探针形态单测钉死：守卫见图案绑定
+   rc=0；守卫 `^v` 消费图案绑定 → 体内复用 rc=1 UseAfterMove
+   （Option 与 enum 两路）；守卫 try 消费外层绑定 → 体内复用
+   rc=1、且消费进入 case 活状态经多路合并使 match 后复用
+   rc=1（**守卫假路径无回滚**——检查器根本不建模守卫失败
+   分支，守卫与体同序检查、效应同账）；跨 case 绑定不可见
+   rc=1 UndefinedVariable；图案绑定不逃逸 match rc=1；
+   守卫类型 boolean/legacy-integer 之外（i32、整数字面量）
+   rc=1 TypeMismatch。
+3. **plain-if 条件**：check_flow.rs 改为 Zig 原形三形态
+   （boolean / legacy integer / infer 通过，其余 TypeMismatch
+   无 setError）。探针附带定性：源级 `int`/`integer` 注解与
+   整数字面量在现头检查器里都**不**产出 legacy integer 类型
+   （rc=1），legacy integer 实际只由比较表达式与宏参数
+   （infer）到达——注解层事实、非检查器分歧，登记备查。
+
+### 三期新登记分歧
+
+- **D-C18 (a) 未解析调用的回退诊断已对齐**（本移植缺陷，已修）：
+  原镜像对一切未解析调用合成 CompileError「checkExpr failed
+  at call …」；Zig 调用臂底回退（:9982）对 plain/点/关联三形
+  一律 setError「Undefined call: {name}」+ UndefinedVariable
+  （三形探针实证）。已改齐。**跨线注记**：sla-plugin 的 INT-2
+  线测试 `println_remains_blocked_by_missing_checker_builtin_arm`
+  的文案 pin 钉的正是旧回退串，本项落地后该 pin 需由该线改为
+  「Undefined call: println」（其意图——println 仍被阻断——
+  不变，仍是错误）；本线辖区外，未动其文件，候协调线转达。
+- **D-C19 (a) 接收者级在分派序中的位置差**（剩余近似）：
+  Zig 接收者级位于 plain 函数/构造器之后、extern/宏之前；
+  Rust 分派序中 extern/宏在前、接收者级殿后。仅当同一调用名
+  同时命中宏/extern 与方法形时判读不同（名字碰撞面），
+  已登记候后续线按 Zig 序重排分派时一并处理。
+- **D-C20 (b) FuncSig 不载 is_async**：Zig 方法/关联路径对
+  async 被调用方把返回型包成 future；Rust FuncSig 无此字段，
+  方法路径不包装（与 plain 调用路径的既有同一缺口，非本段
+  新增）。候签名面统一补 is_async 时一并销。
+- **D-C21 (b) 方法路径的侧表与强转缺口**：check_method_args
+  未 port 的 Zig 侧表/谓词三件——dyn_borrow_args 侧表（判定
+  已 port、记录缺）、array_to_slice_borrow_args 及其
+  borrow-array→slice 强转（方法实参处不识别）、
+  `ptr::read_volatile`（本 crate 无 unsafe_depth 计数器，
+  关联形回落到未解析）。均为判定外围/记录面，不影响已钉
+  探针的 rc 口径，逐件登记在此。
+- 观察（不立单）：match 守卫的 TypeMismatch 在 Zig 无
+  setError、靠包裹层合成「checkExpr failed at node tag
+  match_expr」——与 D-C9 同族的诊断面缺口，既有登记覆盖。
+
+### 三期剩余未覆盖清单（确切）
+
+- 接收者形状键控的 std 叶级联（Option/Result/Vec/HashMap/
+  BTree/Cell/Atomic 等 `isXCall` 方法叶 + push/pop/remove +
+  iter/copied/collect/join/map/filter/fold 叶）：按名字键控的
+  std 合同叶、非接收者推导机器本体；sum 叶已在一期 port。
+- 静态构造叶（`Vec::new`/`HashMap::new`/`VecDeque::from` 等
+  关联形）与 `str::from_utf8` 叶：同上，std 表面叶。
+- plain 调用路径的实参检查仍为一期简化形
+  （check_call_args_against_sig）；忠实形只落方法路径
+  （check_method_args）——两形并存的收敛候后续线。
+- D-C19 / D-C20 / D-C21 三条（见上）。
+
+### 反馈单
+
+本段无新 Zig 侧缺陷候选：三项的 Zig 行为经探针核清后均
+自洽（守卫无回滚属检查器单遍模型的既定近似、与 D-C4 同族
+已在册）。号段 FB-029..FB-032 未使用，归还协调线。
+
+## 三期 INT21 销账（2026-11-07，INT21 补臂线）
+
+INT2-1 落地：场地现头（6002b386，type_checker.zig 10,917 行）
+`call_expr` 臂中位于关联块之后、用户函数解析之前的裸名特判块
+（:8805-8895）全量镜像于新文件 `check_builtin.rs`，`check_call`
+在关联块后、其余解析级前接入（与 Zig 分派序一致，不可遮蔽 —
+场地探针：用户 `fn println(x: i32)` / `fn len(a, b)` 均不能
+改变臂判定）。逐臂：`vec`（≥1 参、全参 typesEqual、→Vec<T>、
+0 参 setError 原文）、`len`（恰 1 参、**参数类型不查** —
+`len(42)` rc=0、→usize、arity 错带 setError 原文）、`str_eq`
+（恰 2 参、双 string-like — lowering_rules:5201：raw_ptr/
+array/String peel 后判定、字面量与数组均合格、→boolean、
+实参不消费）、`format`（首参须字符串**字面量节点**、变量
+格式串 rc=1 InvalidArgsCount、→String）、`hash`（恰 1 参、
+typeIsHash 门、→u64）、`debug`（恰 1 参、typeIsDebug 门、
+→String）、`println`（任意元数含 0、实参只查不消费、→void）、
+`std__panic__catch_unwind` / `panic::catch_unwind`（恰 1 参、
+0 参闭包且字面量体为直接 panic 调用、否则 setError 原文、
+→Result<i32,i32>）。同块的 `panic` 臂不重复镜像（本 crate
+既有 builtin 步同判读）。typeIsHash/typeIsDebug 按
+type_checker.zig:4807/4819 + lowering_rules 基（hashable：
+primitive 除 raw_ptr/void/浮点；debug 基 = Copy-value：
+除 raw_ptr/void、**含浮点** — 探针 debug(1.5) rc=0 /
+hash(1.5) rc=1）+ std owner 名单 base=false（String 值
+hash/debug 均 rc=1）+ struct derive 门（case-insensitive、
+非 opaque/非 union、字段递归 — String 字段毒化 hash）
+全量移植；Zig 字段递归无界，本移植随 check_binary 的
+type_is_eq_ord 先例带 visiting 集（自引用 derive 结构体
+判 false 而非无限递归）。场地探针 33 件（rc + 诊断原文）
+逐臂钉死，单测 tests_phase3d.rs 28 条（含 parse→check
+全管线 + 五 fixtures 本体逐字）。
+
+### INT21 后新登记分歧
+
+- **D-C22 (a) 关联块之前的裸名特判普查余项**：同一 `call_expr`
+  臂在关联块之前还有一段裸名特判（:8212-8436）：`Some`/`None`/
+  `Ok`/`Err` 构造形、`monitor`、`ptr__null`、
+  `future__*` / `poll__*` / `RAW_WAKER_*` / `WAKER_*` 运行时叶、
+  `va_next_*`、`ptr__read_volatile`。本线未镜像（INT2-1 定层
+  与 INT-2 §7 的补臂清单均只含关联块之后一段；`None` 标识符
+  形与 `Option::None` 关联形已在册）。登记为覆盖缺口候四期：
+  阻塞条件 = 语料/fixture 出现这些名字的**调用形**且 Rust
+  侧落到 Undefined call 回退（现 fixtures 与 e2e 均未触达 —
+  Option/Result 构造在现有管线走 enum 字面量/模式路）。
+- **D-C23 (a) 02/07 全管线残差 = D-C6 的端到端实形**：补臂后
+  五 fixtures 经 oracle（build 模式）全 rc=0，01/03/04 与
+  expected **逐字节全等**；02_arith 与 07_functions 各只剩
+  **一处清理序对位差**：函数出口清理名单中首对参数的释放序
+  与 Zig 相反（07 `add`：Rust `!a !b` vs Zig `!b !a`；02
+  `arith_values`：Rust `!a !b !c !d` vs Zig `!b !a !c !d`），
+  字节数与行多重集完全相同。即 D-C6（Zig `checkBlock` 出口
+  遍历 StringHashMap valueIterator 的哈希序）在全管线上的
+  首个实证：Zig 序既非声明序也非逆序（四绑定时仅首对交换），
+  是哈希布局序。处置候协调线裁定：复刻哈希序须模拟 Zig
+  StringHashMap 布局（跨构建稳定性未证），或推动 Zig 侧改
+  声明序（与 FB 方向一致）；本线不以「交换首对」式近似迁就
+  （名字集变化即失效，且属为对拍改形）。归 codegen/checker
+  清理序议题，非 INT2-1 残留。
+- 观察（不立单）：`tests.rs::imported_println_in_test_block`
+  的注释仍称 println 来自 imported 签名表；补臂后该测试经
+  println 臂通过（断言不变、仍绿）——归因注释候 checker 线
+  后续顺手更正，不影响判读。
+
+### 附带项裁定（INT2-2 / INT2-3，详见 contracts.md 销账注记）
+
+- INT2-2（ExternSig 缺 return_fallible）：**不阻塞**五 fixtures
+  后段 — Zig 侧读者只有 codegen.zig:2989/19043 与
+  sab_codegen.zig（均读 extern 条目作代码生成），检查时行为
+  不读；五 fixtures 源码不直调任何 fallible extern（其调用
+  只有 println/str_eq），codegen 对 sa_* 的发射走 lowering
+  规则而非 checker extern 表。字段补齐本身只差一行，但构造点
+  在辖区外（sla-plugin/src/contracts.rs 的 `extern_sig_of` 与
+  sla-oracle/src/main.rs 的 shim 字面量）——在本线单方面加
+  字段会使两 crate 编译失败、workspace 倒退，故登记精确
+  阻塞条件候协调线原子落地：当任一 fixture/语料出现「源码
+  直调 fallible extern 且须经 checker ExternSig 把 fallible
+  传到 codegen」时触发。
+- INT2-3（checker 无 layout_defines 表）：**不阻塞任何段** —
+  场地现头全仓 grep 实证：`layout_defines` 在 Zig 侧只有
+  写入（loadContracts，type_checker.zig:6064）与 deinit，
+  **没有任何读者**（checker/lowering/codegen 全无 get）；
+  它是惰性登记面，缺席不改变任何判读。Rust 侧 323 条 defines
+  已由 LoadReport 携带可见。不为补而补：候 Zig 侧出现首个
+  读者时再镜像登记面。
+
+### 反馈单
+
+本线无新 Zig 侧缺陷候选：逐臂行为经探针核清后均自洽
+（len 不查参数类型、debug 含浮点而 hash 不含、String 不可
+hash/debug 等均为一贯设计口径）；D-C23 的哈希序清理属
+D-C6 已在册候选的实形确认，不重复立单。号段 FB-029..
+FB-032 未使用，归还协调线。

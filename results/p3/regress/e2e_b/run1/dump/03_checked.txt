@@ -1,0 +1,4 @@
+mode: build (@test bodies pruned before check: 1)
+OK
+structs(0): 
+enums(0): 

@@ -523,6 +523,7 @@ fn imported_println_in_test_block() {
                 is_move: false,
             }],
             ret_ty: void_ty(),
+            is_pub: true,
         },
     );
     let program = Program {

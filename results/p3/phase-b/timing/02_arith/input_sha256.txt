@@ -1,0 +1,1 @@
+a30a4cd35e8d83257010260c4101d46a8a6baee78e247afe7fd94aaee78663ae  fixtures/02_arith.sla

@@ -1,0 +1,179 @@
+Program(
+    Program {
+        decls: [
+            FuncDecl(
+                FuncDecl {
+                    name: "while_sum",
+                    is_pub: false,
+                    is_extern: false,
+                    abi: None,
+                    no_mangle: false,
+                    is_decl_only: false,
+                    generics: [],
+                    params: [
+                        Param {
+                            name: "limit",
+                            ty: Primitive(
+                                I32,
+                            ),
+                            is_borrow: false,
+                            is_move: false,
+                        },
+                    ],
+                    ret_ty: Primitive(
+                        I32,
+                    ),
+                    body: [
+                        LetStmt(
+                            LetStmt {
+                                name: "t",
+                                ty: Some(
+                                    Primitive(
+                                        I32,
+                                    ),
+                                ),
+                                value: Literal(
+                                    IntVal(
+                                        0,
+                                    ),
+                                ),
+                            },
+                        ),
+                        LetStmt(
+                            LetStmt {
+                                name: "i",
+                                ty: Some(
+                                    Primitive(
+                                        I32,
+                                    ),
+                                ),
+                                value: Literal(
+                                    IntVal(
+                                        0,
+                                    ),
+                                ),
+                            },
+                        ),
+                        WhileStmt(
+                            WhileStmt {
+                                cond: BinaryExpr(
+                                    BinaryExpr {
+                                        op: Lt,
+                                        left: Identifier(
+                                            "i",
+                                        ),
+                                        right: Identifier(
+                                            "limit",
+                                        ),
+                                    },
+                                ),
+                                let_pattern: None,
+                                body: [
+                                    AssignStmt(
+                                        AssignStmt {
+                                            target: Identifier(
+                                                "t",
+                                            ),
+                                            value: BinaryExpr(
+                                                BinaryExpr {
+                                                    op: Add,
+                                                    left: Identifier(
+                                                        "t",
+                                                    ),
+                                                    right: Identifier(
+                                                        "i",
+                                                    ),
+                                                },
+                                            ),
+                                        },
+                                    ),
+                                    AssignStmt(
+                                        AssignStmt {
+                                            target: Identifier(
+                                                "i",
+                                            ),
+                                            value: BinaryExpr(
+                                                BinaryExpr {
+                                                    op: Add,
+                                                    left: Identifier(
+                                                        "i",
+                                                    ),
+                                                    right: Literal(
+                                                        IntVal(
+                                                            1,
+                                                        ),
+                                                    ),
+                                                },
+                                            ),
+                                        },
+                                    ),
+                                ],
+                            },
+                        ),
+                        ReturnStmt(
+                            ReturnStmt {
+                                value: Some(
+                                    Identifier(
+                                        "t",
+                                    ),
+                                ),
+                            },
+                        ),
+                    ],
+                    is_inline: false,
+                    is_async: false,
+                    operator: None,
+                },
+            ),
+            FuncDecl(
+                FuncDecl {
+                    name: "main",
+                    is_pub: false,
+                    is_extern: false,
+                    abi: None,
+                    no_mangle: false,
+                    is_decl_only: false,
+                    generics: [],
+                    params: [],
+                    ret_ty: Primitive(
+                        I32,
+                    ),
+                    body: [
+                        ReturnStmt(
+                            ReturnStmt {
+                                value: Some(
+                                    CallExpr(
+                                        CallExpr {
+                                            func_name: "while_sum",
+                                            associated_target: None,
+                                            generics: [],
+                                            args: [
+                                                Literal(
+                                                    IntVal(
+                                                        10,
+                                                    ),
+                                                ),
+                                            ],
+                                            callee: None,
+                                        },
+                                    ),
+                                ),
+                            },
+                        ),
+                    ],
+                    is_inline: false,
+                    is_async: false,
+                    operator: None,
+                },
+            ),
+            TestDecl(
+                TestDecl {
+                    name: "probe while",
+                    is_ignored: false,
+                    should_panic: false,
+                    body: [],
+                },
+            ),
+        ],
+    },
+)

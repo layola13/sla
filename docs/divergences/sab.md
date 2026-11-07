@@ -253,10 +253,103 @@
  代码被替换，无诊断。静默兜底家族（与 SAB-D14 同科）。
 - 端口方针：driver 字节级镜像（同为代码 1）+ 落单 FB-017。
 
+## 三期 C 组新增登记（2026-11-07，SAB-C 线）
+
+### SAB-D23 borrowed_bindings 是每函数扫描、且依赖未移植的导入宏计划（b 类）
+- 原文：`collectBorrowedBindingsInBlock/InNode`（2954–3043）
+ 不在 `generate` 预扫内，而是每个函数/测试入口路径在
+ `prepareMultiLetBindings` 之后调用（6060、6117、6152、6212、
+ 6477、7690、7909、7950），集合由 `beginFunction` 先行清空。
+ 本端口初版登记曾据截断的 grep 输出误判其为死代码——已更正，
+ 谨记：全文件检索不许带 head 截断下结论。
+- 移植形态：C2 walker 逐字移植（prescan_bindings.rs），driver
+ 在 gen_func_decl / gen_test_decl 同一点接线。walker 内的
+ `planImportedMacroCall`（lowering_rules 3109–3123）sla-lowering
+ 尚未移植，端口以 `ImportedMacroPlans` trait + 拒绝一切的
+ 默认 provider 占位：driver 子集内导入宏调用在 gen_call 处
+ 本就响亮拒绝，但「仅在借用扫描中出现导入宏地址实参」的
+ 程序会少收集——待 lowering 补 plan 后销此项。
+
+### SAB-D24 C3 的 trait 事实来源与 CheckInfo 面（b 类）
+- 原文：`appendTraitVTableEntries` 读 `tc.traits`（含导入展开
+ 填充的 trait）与 `tc.funcs` 的 decl-only 标记。
+- 移植形态：CheckInfo 未暴露 trait 表，driver 侧的 TraitFacts
+ 由程序自身声明组装（TraitDecl 节点 + impl 方法的 decl-only
+ 形态按 mangle 名登记），另以 `check.func(mangled)` 复核。
+ 程序本地 trait 与 Zig 逐项一致（场地真产物 vt 探针对照：
+ 字面量 `vtable { name = @sla__Sprite__Named_name }` 与
+ `VT_Sprite_Named` 逐字同）；**导入 trait** 在端口侧会响亮报
+ 「unknown trait」（与 Zig 的 tc.traits 未命中同为
+ UnsupportedSabDirectFeature，但触发面更宽）——待 INT-2 合同
+ 段把 trait 事实接进 CheckInfo 后收窄。
+
+### SAB-D25 顶层常量折叠 MIN/-1 除法击穿编译器（c 类，已落 FB-025）
+- 原文：`foldTopLevelBinaryConst`（785–835）的 div/mod 臂仅防
+ 除零（`if (ri == 0) return null`），不防 i64::MIN / -1 溢出，
+ 与同函数 add/sub/mul 的 `catch return null` 口径不一；
+ lowering_rules 的 `intConstantExprValue` 同形。
+- 实证（2026-11-07 场地三现头插件）：四行 const 链把 MIN 与
+ -1 折到一起后，`sa sla sab build` 与 `sa sla build` **双路
+ rc=136 SIGFPE 核心转储**、无诊断。详见 FB-025。
+- 端口方针：checked_div/checked_rem 放弃折叠（与既有溢出
+ 口径一致），不复刻陷阱。
+
+## 三期 D 组新增登记（2026-11-07，SAB-D 线）
+
+### SAB-D26 dep 确保的排队分支被无条件采用（b 类）
+- 原文：`ensureStdDeps`（6108–6136）按 `in_function_body`
+  分流——函数体内排队进 `pending_std_deps`（由
+  `flushPendingStdDeps` 在函数收尾时 append），函数体外
+  （正是 `generate` 的 preload 时点）走 `appendStdDepsNow`
+  立即经 F 组解码模块机器 append。
+- 移植形态：F 组未落地，本端口的 ensurer 无条件走排队分支
+  （`surface_query::PendingStdDeps`），preload 发现的全部
+  deps 以请求序入队、可观测、不丢弃；与 Zig 的差异仅在
+  append 的**时点**（延后到 F 组接上 `flushPendingStdDeps`
+  消费端为止）。下游 gen_call 的表面展开本就响亮拒绝，
+  故当前不可观察于任何输出字节。
+
+### SAB-D27 浅拷贝枚举臂因 CheckInfo 无枚举表不可达（b 类）
+- 原文：`typeIsShallowCopyCallArgValue` 的 user_defined 臂
+  有 `tc.enums.contains(name) → true`（纯枚举 POD 形）。
+- 移植形态：Rust `CheckInfo` 表面未暴露枚举表，D3
+  （`copy_facts.rs`）的该臂不可达，枚举型嵌套调用实参落到
+  struct-decl 路径并答 false——触发面比 Zig **窄**（仅
+  「用户枚举型作为嵌套 call-arg 值」一形），从不更宽。
+  待 INT-2/CHK 线把枚举事实接进 CheckInfo 后补齐销账。
+
+### SAB-D28 表面规则文件缺失静默零规则（c 类，SAB-D02 家族新实例，已落 FB-026）
+- 原文：`loadStdSurfaceRules`（1551–1554）
+  `const source = (try self.readStdSurfaceFile()) orelse return;`
+  ——四级回退链全空时静默以零规则继续，其后一切表面查询
+  查无规则、统一以无 payload 的 Unsupported 失败，与「表面
+  本就不支持」不可区分。同文件 `resolveSaStdRoot` 全败时
+  却 `return error.FileNotFound` 响亮失败，两条定位链口径
+  不一。
+- 端口方针：控制流与零规则结果原样镜像；回退链每根候选
+  的成败与最终落点写入 `SurfaceLoadLog` 随程序状态保留
+  （D02 既定方针的响亮记录），不改任何发射字节。
+
 ## 已核查排除（checked & cleared，不计入分歧数）
 
 - foldTopLevelBinaryConst 溢出返回 null（796–798）：只是放弃
  常量折叠、回退正常发射，方向安全。
+- hex 字面量的反斜杠数（2026-11-07 三期实证）：emitGlobalArrayConst
+ 的格式串在源码中写作 `"\\\\x{x:0>2}"`（双反斜杠），但 sci 的
+ `sio.managedPrint` 将其折叠——真产物池文本为**单**反斜杠
+ （`hex:\x01...`，字节列实证 [104,101,120,58,92,120,48,49]）。
+ 本端口初版按 std.fmt 直读写成双反斜杠（本移植缺陷），经
+ 场地真产物字节对照抓出并修正；Zig 侧行为本身与 SA 文本
+ 形态一致，不作分歧。
+- 移位折叠的溢出位模式（同轮实证）：`3 << 62` 真产物折叠为
+ -4611686018427387904（位模式截断），与端口 wrapping_shl 一致。
+- arr 探针的段级对拍（同轮实证）：`const TABLE: [i32; 3] =
+ [1, 2, 16909060]; fn main() -> i32 { return 1; }` 真产物
+ 225 B（sha256 a114ec03…）与端口输出 197 B（sha256
+ 01862628…）逐段比对——签名段同长（19 B）、常量段同长
+ （21 B，C1 数组常量 decl 逐字节同），差异仅 `L_ENTRY`
+ （池 +8 B、指令段 +20 B），即 SAB-D19② 的既登记省略面，
+ 非 C 组新分歧。
 - profile 打印处 `catch {}`（40/41/54/55）：仅调试输出，失败
  无语义后果。
 - sci 编码器池查找严格报错：sab.zig `poolId`/writeOperand 的
@@ -271,8 +364,18 @@
 - (a) 输出分歧：**2**（SAB-D01，已修正并复测全同；SAB-D17，
  sig.id 双轨已按真产物逐字镜像、driver 输出与 Zig 在该字段
  一致，Zig 侧气味仍挂 FB-015）
-- (b) 结构性重构：**8**（D06、D08、D09、D15、D16、D19、
- D20、D21）
-- (c) 可疑构造：**12**（D02、D03、D04、D05、D07、D10、D11、
- D12、D13、D14、D18、D22；其中 D10/D11 标「嫌疑」待复核定性）
-- 合计登记 **22** 条；另已核查排除 4 项。
+- (b) 结构性重构：**12**（D06、D08、D09、D15、D16、D19、
+ D20、D21、D23、D24、D26、D27）
+- (c) 可疑构造：**14**（D02、D03、D04、D05、D07、D10、D11、
+ D12、D13、D14、D18、D22、D25、D28；其中 D10/D11 标「嫌疑」待复核定性）
+- 合计登记 **28** 条；另已核查排除 7 项。
+- D 组核查附记（2026-11-07，SAB-D 线）：`resolveSaStdRoot`
+  的烘焙目录优先序与主线「SAB 优先插件烘焙目录」实证一致，
+  非分歧；现头 `std_surface.sla_meta` 全量 57 条规则
+  （associated 16 / method 23 / function 5 / constructor 4 /
+  fallible_method 1 / index 3 / index_address 3 /
+  index_assign 2）均在 D1 解析器覆盖内；场地真插件对照：
+  println 探针产物 1002 B（sha256 `f7ef7511…`）、Vec::new
+  探针产物 798 B（sha256 `131c90aa…`）——两程序在本端口均
+  死于 gen_call 表面展开（D 组）/ 其后 F 组片段机器，
+  死点已在 driver_e2e_d 中钉死。

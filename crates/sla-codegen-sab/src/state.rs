@@ -88,6 +88,10 @@ pub struct ProgramState {
     pub explicit_ptr_string_locals: HashSet<String>,
     /// Zig `std_surface_rules` (D group; loaded by D1, queried by D4).
     pub std_surface_rules: Vec<StdSurfaceRule>,
+    /// D1's loud walk record for the surface-file chain
+    /// (SAB-D02 porting rule: attempts + landing point are kept,
+    /// never silently dropped). Diagnostic only.
+    pub surface_load_log: Option<crate::surface_load::SurfaceLoadLog>,
     /// Zig `included_imports`.
     pub included_imports: HashSet<String>,
     /// Zig `pending_std_deps` (insertion order = preload order).

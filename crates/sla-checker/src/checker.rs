@@ -29,6 +29,12 @@ use std::collections::HashMap;
 pub struct FuncSig {
     pub params: Vec<ParamSig>,
     pub ret_ty: Type,
+    /// Zig `FuncDecl.is_pub`. Only consulted by the `using`
+    /// static-extension resolver, which registers exclusively the
+    /// target module's pub functions (venue type_checker.zig
+    /// `resolveUsingMethodSymbolForType`). Imported signatures
+    /// default to `true` (the resolver never consults that table).
+    pub is_pub: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -257,6 +263,7 @@ impl Checker {
         let sig = FuncSig {
             params: func.params.iter().map(ParamSig::from).collect(),
             ret_ty: (*func.ret_ty).clone(),
+            is_pub: func.is_pub,
         };
         self.funcs.insert(symbol.to_string(), sig);
         if !func.generics.is_empty() {
@@ -332,6 +339,18 @@ impl Checker {
 
     pub fn lookup_ty(&self, name: &str) -> Option<Type> {
         self.scopes.lookup(name).map(|b| b.ty.clone())
+    }
+
+    /// Mirrors Zig `currentUsingModules`: every `using` path in
+    /// the scope chain, innermost frame first, each frame's list in
+    /// append order. Paths are stored pre-normalized (see
+    /// [`crate::types_util::normalize_using_path`]).
+    pub fn current_using_modules(&self) -> Vec<String> {
+        let mut mods = Vec::new();
+        for frame in self.scopes.frames.iter().rev() {
+            mods.extend(frame.using_modules.iter().cloned());
+        }
+        mods
     }
 
     pub fn lookup_state(&self, name: &str) -> Option<ValueState> {

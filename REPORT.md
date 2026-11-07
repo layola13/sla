@@ -262,3 +262,180 @@ D-O2 接线）。场地三（2202）全程承载，开工前全量同步 md5 清
   全管线 + SAB D 组表面）→ SAB C 组预扫/符号 → checker 剩余
   3 项 → SAB-D21 的 test llvm_name → handler 活体对拍
   （§3 价值序第 3 位，一期 §7.2 的第二 ABI 锚点候此接线）。
+
+## 10. 三期收编（2026-11-07，三期协调线）
+
+三期线组：INT-2 合同段线（+ 后续 INT21 检查器臂线）、SAB-C 线、
+SAB-D 线、CHK3 检查器线、HND 接线评估线、ORC 计时线（阶段 A
+协议 + 阶段 B 实测）。场地三（2202）全程承载；协调裁决 D-A2
+先行定 crate 归属：不开新 crate、不加新依赖边——.sai 合同解析
+归 sla-parser 新模块、import 展开编排归 sla-plugin 接线（oracle
+消费同一接线）、注册只走既有 `Checker::register_extern_func`。
+集成轮由协调线亲跑：全量同步 md5 清单 463 文件 0 差异、过时
+钉子测试按 INT-2 预登记更新、driver_e2e.rs 765 行按 700 行规
+拆为 600 + 362 两文件（测试名/数不变）。
+
+### 10.1 INT-2 合同段（INT-2 + INT21 两线）
+
+- 落地：parser `contract.rs`（340 行）+ `imports.rs`（512 行，
+  解析序照 Zig 镜像；硬编码 `/home/vscode/...` 根按 D-C3 有意
+  不移植）+ `contract_load.rs`（326 行）；plugin `contracts.rs`
+  只经 register_extern_func 注册、checker 本体未动；oracle 管线
+  增合同段（`03a_contracts.txt` 转储，加载失败 → 退出码 5，
+  对齐 Zig「Import Error」）。
+- **关键分层发现 INT2-1**：`println`/`str_eq` 不是合同 extern，
+  而是 Zig 检查器的**名字特判臂**（isPrintlnCall 任意元数
+  ~:4268、isStrEqCall 恰 2 参 string-like ~:4240，先于用户函数
+  解析、不可遮蔽；场地探针实证）。INT-2 线拒绝以 extern 伪注册
+  （会伪造元数/类型语义），登记为检查器辖区缺口；INT21 线随后
+  以 `check_builtin.rs`（398 行）把全部名字特判臂镜像落地
+  （vec/len/str_eq/format/hash/debug/println/catch_unwind，怪癖
+  逐条探针钉死：如 `len(42)` 在 Zig rc=0、实参类型不查）。
+- **fixtures 5/5 全管线 rc=0**：01/03/04 与真插件产物**逐字节
+  全等**（sha 0d6375ac… / 5a92ee82… / 60f81478…，双侧核验）；
+  02/07 各差恰一处清理序对位（`!a!b` 对 Zig `!b!a`，字节数与
+  行多重集相等）= **D-C23**，即 D-C6/FB-020 的端到端实形（Zig
+  哈希序不确定性，Rust 按纪律守声明序）。01 全模式亦 rc=0
+  （str_eq 第二挡销账）。二期 §9.3 的 INT-2 阻挡清单逐件销账。
+- **A0 描述符活体对拍完成**：handle_command 对 help / skills
+  [--json] / stability schema|verify / init / 未知命令的真实
+  实现，在真 sa 0.1.8 宿主双沙盒矩阵 **33/33 零差异**（金值同
+  窗复产：skills --json sha256 efbe756e…、stability schema
+  99bf7d04…、init 三文件 sha 全同）。
+- 协调裁决登记（四期接线项，均已证非阻挡）：INT2-2
+  ExternSig.return_fallible 原子落地条件；INT2-3 Zig 的
+  layout_defines 表全仓无读者（只写 + deinit，惰性元数据）；
+  oracle 5 行注册垫片待删（oracle→plugin 边图上已许可）。
+
+### 10.2 SAB 线（C 组 + D 组）
+
+- C 组落地：C1 prescan_consts（657 行）/ C2 prescan_bindings
+  （582）/ C3 symbols（541），D19 在册 C 组响亮点在驱动内全关。
+- D 组落地（INT-2 解锁后）：D1 surface_load（672）/ D2 layout
+  （593）/ D3 copy_facts（436）/ D4 surface_query（533）/
+  D5 surface_preload+scan（447+353），驱动步 2/3 接线；无表面
+  程序在规则开/关下逐字节同（接线发射中立已证）。端到端死亡
+  点现精确位于 gen_call 表面展开 → F 组片段机器（已以 trait +
+  响亮默认隔离）。真插件金值在册（println 探针 1002 B
+  f7ef7511…、Vec::new 798 B 131c90aa…）。sab **73/0**。
+- 反馈单：**FB-025**——顶层 const 折叠 `i64::MIN / -1` 无守卫，
+  真插件在**文本路与 SAB 路双双 SIGFPE 核心转储 rc=136**
+  （sab_codegen 与 lowering_rules 机制双生）；Rust 用 checked
+  运算拒绝折叠。**FB-026**——零规则静默（D02 家族）。新分歧
+  SAB-D23..D28（D23/D24 移植类已修、D25/D28 Zig 候选、D26/D27
+  移植类）。
+
+### 10.3 checker 线（CHK3）
+
+- checker **118/0**（80 → +38），后随 INT21 臂线达 **146/146**。
+  关联调用接收者推导全形态落地（新 check_method.rs，6 形态族，
+  探针钉死）；match 守卫裁定为**结构等价、无代码变更**（10 探针：
+  Zig 无守卫失败回滚、效应进多路合并，二期同帧近似语义相等，
+  9 条管线测试钉死）；plain-if 三形态（boolean / legacy-integer /
+  infer）完成，附带发现：现头 `int` 注解从不产生 legacy integer
+  （注解层事实）。新分歧 D-C18..D-C23。**无新反馈单**——FB-029..
+  032 两轮未用退回（所探 Zig 行为全部自洽）。
+
+### 10.4 handler 接线评估线（HND）
+
+- **重大发现 FB-035**：第二 ABI `sla_compile_handler` 在现头
+  **出货插件中不存在**（场地三法实证：装机 + zig-out 两份
+  libsla.so 的 nm -D 只有 2 个描述符锚点、strings 计数 0、
+  dlopen False；sci/src grep 消费者 0；plugin_handler.zig 只有
+  一个 part1 提交、唯一消费者是其自家单测）。此与本仓 ABI_MAP
+  §1「实测」表矛盾——协调线亲验 zig-out 后已在 ABI_MAP 加带
+  日期更正注（原文保留）。两读法候主线裁断：A = 预期 ABI 在
+  构建中静默丢失；B = 遗迹、应退役。
+- 另落 **FB-036**（handler_bridge 把 IO/解析失败吞成
+  InvalidHandlerOutput）、**FB-037**（硬编码 extern 前缀 3 符号，
+  未声明表面上限，观察级）、**FB-038**（check 命令内联复刻管线
+  与 plugin_compile 双路漂移面，结构级、未证实）。
+- 裁决：面 B（compile_handler 活体对拍）**不入三期**（无活体
+  参照侧、依赖 monomorphizer/source_expand 未移植），候 FB-035
+  主线裁断、四期候选；面 A 切片 A0 入三期并已由 INT-2 线完成
+  （见 §10.1）。
+
+### 10.5 同口径对比报告（ORC 阶段 A 协议 + 阶段 B 实测）
+
+用户 2026-11-07 10:11 裁决的正式证据节。全文与原始数据：
+docs/phase3/oracle-timing.md §1（协议）+ §6（阶段 B），
+results/p3/phase-b/（231 文件）。阶段 A 方法学捕获：`sa` 前端
+新鲜度门使朴素复跑整段跳过前端（日志「freshness gate: hit,
+front-end skipped」）——协议定暖口径 = `SLA_NO_FRESHNESS_CACHE=1`
+实跑，普通复跑另列 repeat-hit 系列、永不引作编译时间。
+
+阶段 B：场地三单窗（2026-11-07 03:14:20–03:14:45 UTC）双侧
+全重测（头未变 sci e82d2865 / sla 6002b386、装机插件 sha 与
+A 基线逐字同 099ac8fb…；A 阶段数字按协议降为历史）。语料扩
+至 8 件（e2e_a/b/c + fixtures 01/02/03/04/07，源 sha 入档）。
+对拍回归先行：8/8 rc=0、两侧双跑确定性成立、36 轮/件产物
+sha 全程单一；逐字节全等 5 件（e2e_b 8623e8d0…、e2e_c
+fe190281…、01 0d6375ac…、03 5a92ee82…、04 60f81478…），差
+一处 3 件均为同一 {!a,!b} 清理对位换位（e2e_a = D-O1、02/07
+= D-C23），无新差。
+
+编译速度（中位数，ms；IQR/全距与原始轮次在原文 §6.3/§6.4）：
+
+| 件 | Zig 暖 | Rust 暖 | Zig 冷 | Rust 冷 |
+|---|---|---|---|---|
+| e2e_a | 25 | 2 | 26 | 3 |
+| e2e_b | 25 | 3 | 27 | 3 |
+| e2e_c | 25 | 2 | 26 | 2 |
+| 01_hello | 37 | 12 | 89 | 12 |
+| 02_arith | 26 | 3 | 27 | 3 |
+| 03_if_else | 25 | 3 | 26 | 3 |
+| 04_while_sum | 26 | 3 | 27 | 3 |
+| 07_functions | 26 | 3 | 26 | 3 |
+| **全集（中位数之和）** | **215** | **31（−85.6%，6.94×）** | **274** | **32（−88.3%，8.56×）** |
+
+分段拆分：Zig 宿主基线 `sa --version` 22 ms；Rust 启动代理
+（usage 退出）3 ms。本体段：Zig 1 ms 分辨率下全 0、唯 01 合同
+加载 9 ms；Rust 七段合计 0.11–0.54 ms、01 为 9.23 ms（合同段
+9.10）——**差值主体是启动形态而非管线本体**，两侧本体同量级。
+
+运行速度结论（§1.4 口径：产物逐字节全等 ⇒ 由构造相等）：
+覆盖 5 件（e2e_b、e2e_c、01、03、04，sha 如上）；排除 e2e_a
+（D-O1/FB-020）、02/07（D-C23）——其差异属分歧面、不作运行
+结论。
+
+**口径缺口清单（结论与之绑定，原文 §6.5）**：① 进程形态不同
+（最大不对称）：Zig = 宿主 + 插件加载 + 宿主 machinery（地板
+22 ms）；Rust = oracle 开发线束单体进程、合同段已含（地板
+3 ms）。② 冷口径不对称：Zig 冷清两处磁盘缓存；Rust 无磁盘
+缓存、冷 = 新进程（协议预写明列）。③ Zig 插件加载段无计时
+工具、测不到，只作残差描述（端到端 − 宿主 ≈ 3 ms，含 CLI
+分发与 IO）。④ 分段分辨率不对称（Zig 1 ms vs Rust 0.001 ms）。
+⑤ 构建形态各异（ReleaseFast 装机件 vs cargo release），各为
+现行形态。⑥ 语料 34–729 B、启动主导，不外推大程序；禁止单侧
+数字单独摘引作「超越」；二期 26 ms / 3–4 ms 仅作初步观测、
+非同口径，不作结论引用。
+
+**本节结论口径（如实）**：Rust 侧段面已补齐（合同段在内），
+不存在「缺段」意义上的非同口径；但进程形态差使端到端差值
+主要度量的是启动形态而非管线本体——在此语料规模上，**不能**
+据本表宣称「Rust 全面超越 Zig」或据以直接触发替代裁决；本表
+是该裁决的正式计时证据，其有效结论为：同机同窗同语料下
+Rust 线束端到端显著更低（暖 −85.6% / 冷 −88.3%）、本体段两侧
+同量级（01 合同段 9 ms 对 9.23 ms）、运行速度在 5 件逐字节
+全等件上由构造相等。产品形态（Rust 版宿主/插件）的同口径
+复测候四期。
+
+### 10.6 三期总账与剩余面
+
+- 测试：workspace **294 passed / 0 failed**（137 → +157）；
+  129 个 .rs 文件全 ≤700 行。分线：checker 146/146、sab 73/0、
+  A0 活体矩阵 33/33、fixtures 5/5（3 件逐字节全等 + 2 件
+  D-C23）。
+- 分歧在册 **106 条**（82 → +24：SAB-D23..D28、D-C18..D-C23、
+  INT2-1..INT2-8、A0-1..A0-4）；反馈环累计 **24 单**，三期
+  新增 6 单：FB-025（const 折叠 SIGFPE 双路）、FB-026（零规则
+  静默）、FB-035（handler ABI 不存在）、FB-036、FB-037、
+  FB-038，全部候主会话确认后入主线队列（常设政策）。
+- 剩余响亮未接线面（如实登记）：SAB E–I 组（当前端到端死亡
+  点 = F 组片段机器，gen_call 表面展开处）、import 宏 /
+  workspace 包 / @expand_tuple、`.sla` 函数体内联展开、描述符
+  管线命令、D-C22 关联块前裸名段（Some/Ok/Err/monitor/
+  future__/poll__/waker/va_next，无 fixture 触达）、handler 面 B
+  （候 FB-035 裁断）。协调裁决延后项 3 件见 §10.1 末。
+- 场地注记：场地三 hold 至 2026-11-07 约 19:43 CST；全部交付
+  物在本地主本，场地消亡不丢成果。三期快照 id 见本次提交。

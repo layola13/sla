@@ -1,0 +1,7 @@
+stage seed 0.005ms
+stage lex 0.031ms
+stage parse 0.030ms
+stage build_mode_prune 0.001ms
+stage contracts 0.052ms
+stage check 0.018ms
+stage codegen_text 0.079ms

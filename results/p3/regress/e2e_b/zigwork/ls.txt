@@ -1,0 +1,9 @@
+total 28
+drwxr-xr-x 2 root root 4096 Nov  7 02:19 .
+drwxr-xr-x 6 root root 4096 Nov  7 02:19 ..
+-rw-r--r-- 1 root root 1067 Nov  7 02:19 e2e_b.sa
+-rw-r----- 1 root root  275 Nov  7 02:19 e2e_b.sla
+-rw-r--r-- 1 root root    0 Nov  7 02:19 ls.txt
+-rw-r--r-- 1 root root    2 Nov  7 02:19 rc
+-rw-r--r-- 1 root root  215 Nov  7 02:19 stderr.txt
+-rw-r--r-- 1 root root   59 Nov  7 02:19 stdout.txt

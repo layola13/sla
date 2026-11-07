@@ -1,0 +1,6 @@
+@import "sa_std/io/print.sai"
+
+fn main() -> i32 {
+    sa_print_bytes("hi", 2);
+    return 0;
+}

@@ -18,10 +18,20 @@
 //! Coverage boundary for this phase: the fixture01-level subset —
 //! user function declarations, inter-function calls, literals,
 //! scalar binary operations, `if` / `while` forms, `let` / assign /
-//! return / break / continue, and the `panic(code)` builtin. Every
-//! call point into a group this phase does not implement (C prescan
-//! shapes beyond scalar consts, D std surface, F fragments, G
-//! macros, H async, I closures/impls) fails loudly with
+//! return / break / continue, and the `panic(code)` builtin. The
+//! C group (pre-scan and symbols) is wired as of phase 3: global
+//! scalar consts fold (aliases and binary expressions included),
+//! checker-typed global array consts materialize as hex consts,
+//! assigned bindings are collected by the full C2 walker, trait
+//! vtable decls are emitted for program-local traits, and
+//! decl-only extern prototypes with a concrete twin are
+//! suppressed. The D group (std surface infrastructure) is wired
+//! as of the SAB-D slice: step 2 loads the surface rules (D1)
+//! and preloads surface deps into the pending queue (D5/D4,
+//! SAB-D26); surface *expansion* at call sites still belongs to
+//! the F-group fragment machinery. Every call point into a group
+//! this phase does not implement (F fragments, G macros,
+//! H async, I closures/impls) fails loudly with
 //! `UnsupportedSabDirectFeature` naming the group and the Zig line
 //! range — never a silent skip, never a text-backend fallback.
 //!
@@ -50,7 +60,14 @@ use sla_lowering::{
 use crate::encode::encode_module;
 use crate::error::{Error, Result};
 use crate::ir::{CapPrefix, FunctionKind, FunctionSig, OpKind, ParamSpec, PrimType};
+use crate::prescan_bindings;
+use crate::prescan_consts;
 use crate::state::CodegenState;
+use crate::surface_load::{self, SurfaceRoots};
+use crate::surface_preload::SurfacePreloader;
+use crate::surface_query::PendingStdDeps;
+use crate::surface_scan;
+use crate::symbols;
 use crate::types::Local;
 
 /// A loud, group-attributed unsupported error (SAB-D15: the reason
@@ -151,45 +168,9 @@ pub(crate) fn scalar_binary_op_kind(plan: ScalarBinaryOp) -> OpKind {
     }
 }
 
-/// Whether any node in the tree calls into the future/task runtime
-/// (Zig `programUsesFutureTaskRuntime` gate for step 3). The subset
-/// recognizes the call names the H group keys on; finding one is a
-/// loud H-group stop, not a silent skip.
-fn scan_future_use(node: &Node) -> Option<String> {
-    match node {
-        Node::CallExpr(call) => {
-            if matches!(
-                call.func_name.as_str(),
-                "spawn" | "join" | "select" | "future_ready" | "future_pending"
-            ) || call.associated_target.as_deref() == Some("Task")
-            {
-                return Some(call.func_name.clone());
-            }
-            call.args.iter().find_map(scan_future_use)
-        }
-        Node::FuncDecl(f) => f.body.iter().find_map(scan_future_use),
-        Node::TestDecl(t) => t.body.iter().find_map(scan_future_use),
-        Node::BinaryExpr(b) => scan_future_use(&b.left).or_else(|| scan_future_use(&b.right)),
-        Node::LetStmt(l) => scan_future_use(&l.value),
-        Node::ConstStmt(c) => scan_future_use(&c.value),
-        Node::AssignStmt(a) => scan_future_use(&a.target).or_else(|| scan_future_use(&a.value)),
-        Node::ExprStmt(e) => scan_future_use(e),
-        Node::ReturnStmt(r) => r.value.as_ref().and_then(|v| scan_future_use(v)),
-        Node::BlockStmt(b) => b.body.iter().find_map(scan_future_use),
-        Node::WhileStmt(w) => {
-            scan_future_use(&w.cond).or_else(|| w.body.iter().find_map(scan_future_use))
-        }
-        Node::IfExpr(i) => scan_future_use(&i.cond)
-            .or_else(|| i.then_block.iter().find_map(scan_future_use))
-            .or_else(|| {
-                i.else_block
-                    .as_ref()
-                    .and_then(|b| b.iter().find_map(scan_future_use))
-            }),
-        Node::Program(p) => p.decls.iter().find_map(scan_future_use),
-        _ => None,
-    }
-}
+// The step-3 future scan is D5's full walker,
+// `surface_scan::program_uses_future_task_runtime` — Zig's
+// `programUsesFutureTaskRuntime`, lines 2247–2253.
 
 /// One user function's callable shape, collected before emission
 /// (calls may reference functions declared later in the program).
@@ -202,6 +183,9 @@ pub(crate) struct FuncShape {
 pub struct Driver<'c> {
     pub(crate) state: CodegenState,
     pub(crate) check: &'c dyn CheckInfo,
+    /// D1 surface-location roots for step 2 (defaults to the
+    /// process environment; harnesses may substitute fixtures).
+    pub surface_roots: SurfaceRoots,
     pub(crate) funcs: HashMap<String, FuncShape>,
     /// C2 per-function repeated-let names for the function currently
     /// being emitted (Zig `multi_let_bindings` is program-global
@@ -215,6 +199,7 @@ impl<'c> Driver<'c> {
         Driver {
             state: CodegenState::new(),
             check,
+            surface_roots: SurfaceRoots::from_env(),
             funcs: HashMap::new(),
             multi_let: std::collections::HashSet::new(),
         }
@@ -224,25 +209,27 @@ impl<'c> Driver<'c> {
         &mut self.state.builder
     }
 
-    /// Zig `loweredFuncSymbol` (lines 953–961) for the subset:
-    /// `main`, extern and no-mangle functions keep their name; other
-    /// user functions are prefixed `sla__`.
+    /// Zig `loweredFuncSymbol` (lines 953–963), via C3
+    /// (`symbols::lowered_func_symbol_with`): `main`, extern and
+    /// no-mangle functions keep their name; checker-known extern
+    /// functions and `sa_`-prefixed names keep theirs; other user
+    /// functions are prefixed `sla__`. The AST declaration supplies
+    /// the extern/no-mangle fact (in the full pipeline the same
+    /// declaration is what `tc.funcs` holds).
     fn lowered_symbol(&self, f: &FuncDecl) -> String {
-        if sla_lowering::is_main_name(&f.name) || f.is_extern || f.no_mangle {
-            f.name.clone()
-        } else {
-            format!("sla__{}", f.name)
-        }
+        symbols::lowered_func_symbol_with(
+            &f.name,
+            Some(f.is_extern || f.no_mangle),
+            self.check.is_extern_func(&f.name),
+        )
     }
 
-    /// Zig `bindingReg` (lines 948–951): repeated-let names get a
-    /// fresh tmp register per binding site.
+    /// Zig `bindingReg` (lines 948–951), via C3
+    /// (`symbols::binding_reg`): repeated-let names get a fresh
+    /// tmp register per binding site.
     pub(crate) fn binding_reg(&mut self, name: &str) -> u32 {
-        if self.multi_let.contains(name) {
-            self.b().new_tmp()
-        } else {
-            self.b().intern(name)
-        }
+        let is_multi = self.multi_let.contains(name);
+        symbols::binding_reg(self.b(), name, is_multi)
     }
 
     // -- B4 orchestration (Zig 535-632) ---------------------------
@@ -262,34 +249,98 @@ impl<'c> Driver<'c> {
         // Step 1: pre-scan (C1/C2 call points).
         self.prescan(prog)?;
 
-        // Step 2: std surface load + preload (D1/D5 call points).
-        // The subset carries no surface rules; a program that needs
-        // them stops loudly at the call site that needs a rule
-        // (gen_call / gen_expr), attributed to group D there.
-        if prog.decls.iter().any(|d| matches!(d, Node::ImportDecl(_))) {
-            // Imports name std surface files; with no D-group loader
-            // wired, any *use* of an imported surface fails at its
-            // call site. The decl itself emits nothing, as in Zig.
+        // Step 2: std surface load + preload (Zig 606–613), via
+        // D1 (`surface_load::load_std_surface_rules`) and D5
+        // (`SurfacePreloader`). The load's fallback walk is
+        // recorded in the program state (SAB-D02's loud log);
+        // a missing surface file leaves zero rules, as in Zig.
+        // Preload discovers every surface dep and queues it in
+        // `pending_std_deps` through D4's ensurer (SAB-D26: the
+        // F-group append that Zig performs here is not ported
+        // yet). Zig wraps preload errors with a trace and
+        // re-raises; the port's errors carry their reasons
+        // (SAB-D15), so propagation is direct. Surface *calls*
+        // still stop loudly at their gen_call sites (group D).
+        {
+            let roots = self.surface_roots.clone();
+            let log = surface_load::load_std_surface_rules(
+                &mut self.state.program.std_surface_rules,
+                &roots,
+            )?;
+            self.state.program.surface_load_log = Some(log);
+            let rules = self.state.program.std_surface_rules.clone();
+            let check = self.check;
+            let mut ensurer = PendingStdDeps::new(
+                &mut self.state.program.included_imports,
+                &mut self.state.program.pending_std_deps,
+            );
+            let preloader = SurfacePreloader::new(check, &rules);
+            preloader.preload_std_surface_deps(&mut ensurer, program)?;
         }
 
-        // Step 3: future helpers (H call point).
-        if let Some(name) = scan_future_use(program) {
+        // Step 3: future helpers (H call point). The gate is
+        // D5's full scan (`programUsesFutureTaskRuntime`, Zig
+        // 614–617); helper *emission* is H-group and not ported,
+        // so a positive scan is a loud H stop, as before.
+        if surface_scan::program_uses_future_task_runtime(program) {
             return Err(unsupported(
-                &format!("program uses future/task runtime via `{name}`; helper emission not ported"),
+                "program uses future/task runtime; helper emission not ported",
                 "H async",
-                "545-548",
+                "614-617",
             ));
         }
 
-        // Step 4: trait vtables (I call point).
-        for decl in &prog.decls {
-            if let Node::ImplDecl(i) = decl {
-                if i.trait_name.is_some() {
-                    return Err(unsupported(
-                        "trait vtable decl for impl block",
-                        "I closures/impls",
-                        "550-556",
-                    ));
+        // Step 4: trait vtable decls (Zig 550–556), via C3
+        // (`symbols::emit_trait_vtable_decl`): one vtable const
+        // per trait impl, emitted before any function. Trait and
+        // decl-only facts come from the program's own declarations
+        // (plus the checker's function table under mangled names);
+        // an impl of a trait the program does not declare fails
+        // loudly inside C3, as Zig's `tc.traits` miss does. The
+        // impl *methods* themselves remain I-group (step 5).
+        {
+            let mut traits: std::collections::HashMap<String, sla_ast::TraitDecl> =
+                std::collections::HashMap::new();
+            let mut decl_only: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            for decl in &prog.decls {
+                match decl {
+                    Node::TraitDecl(t) => {
+                        traits.insert(t.name.clone(), t.clone());
+                    }
+                    Node::ImplDecl(i) => {
+                        if let Some(type_name) = symbols::concrete_type_name(&i.target_ty) {
+                            for method in &i.methods {
+                                if let Node::FuncDecl(f) = method {
+                                    if f.is_decl_only {
+                                        if let Some(trait_name) = &i.trait_name {
+                                            decl_only.insert(
+                                                symbols::mangle_trait_method_name(
+                                                    type_name, trait_name, &f.name,
+                                                ),
+                                            );
+                                        }
+                                        decl_only.insert(symbols::mangle_method_name(
+                                            type_name, &f.name,
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let facts = symbols::TraitFacts {
+                traits: &traits,
+                decl_only_funcs: &decl_only,
+            };
+            let check = self.check;
+            for decl in &prog.decls {
+                if let Node::ImplDecl(i) = decl {
+                    if i.trait_name.is_some() {
+                        symbols::emit_trait_vtable_decl(self.b(), &facts, check, i)?;
+                    }
                 }
             }
         }
@@ -317,7 +368,13 @@ impl<'c> Driver<'c> {
             match decl {
                 Node::FuncDecl(f) => {
                     if f.is_decl_only {
-                        if f.is_extern {
+                        // Zig generate: an extern prototype with a
+                        // concrete definition in the same program
+                        // emits nothing (C3
+                        // `hasConcreteFunctionSymbol`, 965–973).
+                        if f.is_extern
+                            && !symbols::has_concrete_function_symbol(&prog.decls, &f.name)
+                        {
                             self.gen_extern_decl(f)?;
                         }
                         // A decl-only non-extern emits nothing.
@@ -370,73 +427,28 @@ impl<'c> Driver<'c> {
         encode_module(&module)
     }
 
-    /// C1/C2 pre-scan call points (Zig 538–541 + 633–934).
+    /// C1/C2 pre-scan (Zig generate lines 538–541, calling
+    /// 633–934): scalar consts first, then array consts (which
+    /// *emit* their hex const decls at this point, ahead of every
+    /// function), then assigned bindings via the full C2 walker.
+    /// Borrowed bindings are not part of this pre-scan in Zig
+    /// either: they are collected per function at its entry
+    /// (see `gen_func_decl`), as in the original (SAB-D23).
     fn prescan(&mut self, prog: &sla_ast::Program) -> Result<()> {
-        for decl in &prog.decls {
-            match decl {
-                Node::ConstStmt(c) => match &*c.value {
-                    Node::Literal(_) => {
-                        self.state
-                            .program
-                            .global_scalar_consts
-                            .insert(c.name.clone(), (*c.value).clone());
-                    }
-                    Node::Identifier(_) => {
-                        return Err(unsupported(
-                            "global const alias folding (collectGlobalScalarConsts fixpoint)",
-                            "C1 prescan_consts",
-                            "633-720",
-                        ))
-                    }
-                    _ => {
-                        return Err(unsupported(
-                            "global array/non-scalar const collection",
-                            "C1 prescan_consts",
-                            "721-854",
-                        ))
-                    }
-                },
-                Node::FuncDecl(f) => self.collect_assigned(&f.body),
-                Node::TestDecl(t) => self.collect_assigned(&t.body),
-                _ => {}
-            }
-        }
+        self.state.program.global_scalar_consts =
+            prescan_consts::collect_global_scalar_consts(&prog.decls);
+        let check = self.check;
+        let mut array_consts = std::collections::HashMap::new();
+        prescan_consts::collect_global_array_consts(
+            self.b(),
+            &prog.decls,
+            check,
+            &mut array_consts,
+        )?;
+        self.state.program.global_array_consts = array_consts;
+        self.state.program.assigned_bindings =
+            prescan_bindings::collect_assigned_bindings(&prog.decls);
         Ok(())
-    }
-
-    /// C2 `collectAssignedBindings`: identifier assignment targets,
-    /// recursively. Membership only — never iterated for emission.
-    fn collect_assigned(&mut self, body: &[Node]) {
-        for node in body {
-            self.collect_assigned_node(node);
-        }
-    }
-
-    fn collect_assigned_node(&mut self, node: &Node) {
-        match node {
-            Node::AssignStmt(a) => {
-                if let Node::Identifier(name) = &*a.target {
-                    self.state.program.assigned_bindings.insert(name.clone());
-                }
-                self.collect_assigned_node(&a.value);
-            }
-            Node::BlockStmt(b) => self.collect_assigned(&b.body),
-            Node::WhileStmt(w) => self.collect_assigned(&w.body),
-            Node::IfExpr(i) => {
-                self.collect_assigned(&i.then_block);
-                if let Some(e) = &i.else_block {
-                    self.collect_assigned(e);
-                }
-            }
-            Node::LetStmt(l) => self.collect_assigned_node(&l.value),
-            Node::ExprStmt(e) => self.collect_assigned_node(e),
-            Node::ReturnStmt(r) => {
-                if let Some(v) = &r.value {
-                    self.collect_assigned_node(v);
-                }
-            }
-            _ => {}
-        }
     }
 
     // -- declarations ---------------------------------------------
@@ -544,7 +556,18 @@ impl<'c> Driver<'c> {
             ));
         }
         self.state.frame.begin_function();
-        self.multi_let = sla_lowering::collect_repeated_let_bindings(&f.body);
+        self.multi_let = prescan_bindings::prepare_multi_let_bindings(&f.body);
+        // C2 per-function borrowed scan (Zig genFuncDeclNamed
+        // 6211–6212, immediately after prepareMultiLetBindings).
+        self.state.program.borrowed_bindings = {
+            let mut set = std::collections::HashSet::new();
+            prescan_bindings::collect_borrowed_bindings_in_block(
+                &f.body,
+                &prescan_bindings::NoImportedMacroPlans,
+                &mut set,
+            );
+            set
+        };
         let lowered = self.lowered_symbol(f);
         let _sig_index = self.begin_sig(&lowered, FunctionKind::Normal, &f.params, &f.ret_ty, false, false)?;
 
@@ -586,7 +609,17 @@ impl<'c> Driver<'c> {
     /// is also registered in `test_sigs`.
     fn gen_test_decl(&mut self, t: &TestDecl) -> Result<()> {
         self.state.frame.begin_function();
-        self.multi_let = sla_lowering::collect_repeated_let_bindings(&t.body);
+        self.multi_let = prescan_bindings::prepare_multi_let_bindings(&t.body);
+        // C2 per-function borrowed scan (Zig genTestDecl 6476–6477).
+        self.state.program.borrowed_bindings = {
+            let mut set = std::collections::HashSet::new();
+            prescan_bindings::collect_borrowed_bindings_in_block(
+                &t.body,
+                &prescan_bindings::NoImportedMacroPlans,
+                &mut set,
+            );
+            set
+        };
         let quoted = format!("\"{}\"", t.name);
         let void_ty = Type::Primitive(Primitive::VoidType);
         let sig_index =
@@ -639,4 +672,15 @@ impl<'c> Driver<'c> {
 /// and encode the resulting module.
 pub fn generate_from_program(program: &Node, check: &dyn CheckInfo) -> Result<Vec<u8>> {
     Driver::new(check).generate(program)
+}
+
+/// [`generate_from_program`] with explicit D1 surface roots.
+pub fn generate_from_program_with_roots(
+    program: &Node,
+    check: &dyn CheckInfo,
+    roots: SurfaceRoots,
+) -> Result<Vec<u8>> {
+    let mut driver = Driver::new(check);
+    driver.surface_roots = roots;
+    driver.generate(program)
 }

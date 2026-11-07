@@ -1,0 +1,15 @@
+fn arith_values() -> i32 {
+    let a = 2 + 3 * 4;
+    let b = (20 - 8) / 3;
+    let c = 17 % 5;
+    let d = -(2 + 3);
+    return a + b * 10 + c * 100 + d;
+}
+
+fn main() -> i32 {
+    return arith_values();
+}
+
+@test "probe arith"() {
+    if arith_values() != 249 { panic(205); };
+}
