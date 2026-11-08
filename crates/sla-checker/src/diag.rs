@@ -37,6 +37,48 @@ pub enum ErrorKind {
     GenericOverloadConflict,
     FallibleResultDiscarded,
     FalliblePayloadUnsupported,
+    // R-3 additions: the arena domain diagnostics (F2-A C1 design;
+    // the feature postdates the mirrored Zig tree, so these names
+    // come from the design + corpus `// expect:` lines).
+    ArenaUnsafe,
+    ArenaEscape,
+    ArenaDomain,
+    ArenaGoroutine,
+    // R-3 (J-4): expression-position use of a macro whose leading
+    // output parameter declares no type.
+    MacroExpressionOutputUntyped,
+    // R-3 (A_min): the `T!` sugar in parameter position.
+    FallibleSugarParam,
+    // R-3 (borrow origins, E_res corpus): the five origin gates.
+    BorrowAnnotationInvalid,
+    BorrowEscape,
+    BorrowOriginNotABinding,
+    BorrowOriginMerge,
+    BorrowUseAfterInvalidation,
+    // R-3 (goroutine batch, go_diag_* corpus): the spawn/select
+    // shape gates. Judged by standalone `sla check` rejection
+    // (sala doc 13); kind names are form-named in this port.
+    GoAsyncCallee,
+    GoNonVoidCallee,
+    GoArity,
+    GoClosureCallee,
+    GoMethodCallee,
+    GoBorrowPayload,
+    GoAsyncSelect,
+    DeferNonCall,
+    // R-3 closing: a syntax sugar whose callee shape the
+    // desugarer cannot clone (corpus neg_desugar_failed).
+    DesugarFailed,
+    // R-3 (J-5 check hooks): unknown hook name, and the
+    // macro_param_audit finding for an unreferenced parameter.
+    UnknownCheckHook,
+    MacroParamUnused,
+    // R-3 (J-1 shader sublanguage): the sublanguage gates.
+    SublanguageNotBound,
+    ShaderDuplicateName,
+    ShaderDimensionMismatch,
+    ShaderStageViolation,
+    Overflow,
 }
 
 impl ErrorKind {
@@ -59,6 +101,37 @@ impl ErrorKind {
             ErrorKind::GenericOverloadConflict => "GenericOverloadConflict",
             ErrorKind::FallibleResultDiscarded => "FallibleResultDiscarded",
             ErrorKind::FalliblePayloadUnsupported => "FalliblePayloadUnsupported",
+            ErrorKind::ArenaUnsafe => "ArenaUnsafe",
+            ErrorKind::ArenaEscape => "ArenaEscape",
+            ErrorKind::ArenaDomain => "ArenaDomain",
+            ErrorKind::ArenaGoroutine => "ArenaGoroutine",
+            ErrorKind::MacroExpressionOutputUntyped => {
+                "MacroExpressionOutputUntyped"
+            }
+            ErrorKind::FallibleSugarParam => "FallibleSugarParam",
+            ErrorKind::BorrowAnnotationInvalid => "BorrowAnnotationInvalid",
+            ErrorKind::BorrowEscape => "BorrowEscape",
+            ErrorKind::BorrowOriginNotABinding => "BorrowOriginNotABinding",
+            ErrorKind::BorrowOriginMerge => "BorrowOriginMerge",
+            ErrorKind::BorrowUseAfterInvalidation => {
+                "BorrowUseAfterInvalidation"
+            }
+            ErrorKind::GoAsyncCallee => "GoAsyncCallee",
+            ErrorKind::GoNonVoidCallee => "GoNonVoidCallee",
+            ErrorKind::GoArity => "GoArity",
+            ErrorKind::GoClosureCallee => "GoClosureCallee",
+            ErrorKind::GoMethodCallee => "GoMethodCallee",
+            ErrorKind::GoBorrowPayload => "GoBorrowPayload",
+            ErrorKind::GoAsyncSelect => "GoAsyncSelect",
+            ErrorKind::DeferNonCall => "DeferNonCall",
+            ErrorKind::DesugarFailed => "DesugarFailed",
+            ErrorKind::UnknownCheckHook => "UnknownCheckHook",
+            ErrorKind::MacroParamUnused => "MacroParamUnused",
+            ErrorKind::SublanguageNotBound => "SublanguageNotBound",
+            ErrorKind::ShaderDuplicateName => "ShaderDuplicateName",
+            ErrorKind::ShaderDimensionMismatch => "ShaderDimensionMismatch",
+            ErrorKind::ShaderStageViolation => "ShaderStageViolation",
+            ErrorKind::Overflow => "Overflow",
         }
     }
 }

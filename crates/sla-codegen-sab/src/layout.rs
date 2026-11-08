@@ -152,6 +152,7 @@ pub fn prim_type(ty: &Type) -> Result<PrimType> {
             Primitive::Boolean => PrimType::I1,
             Primitive::RawPtr => PrimType::Ptr,
             Primitive::VoidType => PrimType::Void,
+            Primitive::VaList => PrimType::Ptr,
         }),
         _ => {
             if is_file_type(ty) {

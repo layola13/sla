@@ -54,6 +54,7 @@ impl<'c> Codegen<'c> {
                 }
             }
             Node::BlockStmt(blk) => self.collect_assigned_bindings(&blk.body),
+            Node::ArenaStmt(blk) => self.collect_assigned_bindings(&blk.body),
             Node::ForStmt(f) => {
                 self.collect_assigned_bindings_in_node(&f.start);
                 if let Some(end) = &f.end {
@@ -191,6 +192,7 @@ impl<'c> Codegen<'c> {
                 self.collect_addressable_bindings(&w.body);
             }
             Node::BlockStmt(blk) => self.collect_addressable_bindings(&blk.body),
+            Node::ArenaStmt(blk) => self.collect_addressable_bindings(&blk.body),
             _ => {}
         }
     }
@@ -432,6 +434,7 @@ impl<'c> Codegen<'c> {
                 }
                 Node::WhileStmt(w) => self.collect_loop_counter_slots(&w.body, list),
                 Node::BlockStmt(blk) => self.collect_loop_counter_slots(&blk.body, list),
+                Node::ArenaStmt(blk) => self.collect_loop_counter_slots(&blk.body, list),
                 Node::LetElseStmt(l) => self.collect_loop_counter_slots(&l.else_block, list),
                 Node::ExprStmt(expr) => self.collect_loop_counter_slots_in_expr(expr, list),
                 Node::LetStmt(l) => self.collect_loop_counter_slots_in_expr(&l.value, list),

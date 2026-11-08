@@ -84,6 +84,7 @@ fn collect_assigned_in_node(node: &Node, out: &mut HashSet<String>) {
             }
         }
         Node::BlockStmt(b) => collect_assigned_in_block(&b.body, out),
+        Node::ArenaStmt(b) => collect_assigned_in_block(&b.body, out),
         Node::BinaryExpr(b) => {
             collect_assigned_in_node(&b.left, out);
             collect_assigned_in_node(&b.right, out);
@@ -345,6 +346,7 @@ fn collect_borrowed_in_node(node: &Node, plans: &dyn ImportedMacroPlans, out: &m
             }
         }
         Node::BlockStmt(b) => collect_borrowed_bindings_in_block(&b.body, plans, out),
+        Node::ArenaStmt(b) => collect_borrowed_bindings_in_block(&b.body, plans, out),
         _ => {}
     }
 }
@@ -430,6 +432,7 @@ mod tests {
 
     fn func(name: &str, body: Vec<Node>) -> Node {
         Node::FuncDecl(FuncDecl {
+            is_variadic: false,
             name: name.to_string(),
             is_pub: false,
             is_extern: false,
@@ -443,6 +446,9 @@ mod tests {
             is_inline: false,
             is_async: false,
             operator: None,
+            is_arena: false,
+            ret_fallible_sugar: false,
+            ret_borrow_origin: None,
         })
     }
 

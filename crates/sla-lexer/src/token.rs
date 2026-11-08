@@ -69,6 +69,9 @@ pub enum Tag {
     KeywordMacro,
     KeywordMut,
     KeywordType,
+    KeywordGo,
+    KeywordDefer,
+    KeywordSelect,
 
     // Symbols
     Plus,           // +
@@ -98,6 +101,7 @@ pub enum Tag {
     GreaterGreater, // >>
     Spaceship,      // <=>
     Dot,            // .
+    DotDotDot,      // ...
     Comma,          // ,
     Semicolon,      // ;
     Colon,          // :

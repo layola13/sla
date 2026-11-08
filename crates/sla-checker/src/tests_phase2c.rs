@@ -56,6 +56,8 @@ fn param(name: &str, ty: Type) -> Param {
         ty: Box::new(ty),
         is_borrow: false,
         is_move: false,
+        fallible_sugar: false,
+        is_var: false,
     }
 }
 
@@ -72,8 +74,12 @@ fn func(name: &str, params: Vec<Param>, ret_ty: Type, body: Vec<Node>) -> Node {
         ret_ty: Box::new(ret_ty),
         body,
         is_inline: false,
-        is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     })
 }
 

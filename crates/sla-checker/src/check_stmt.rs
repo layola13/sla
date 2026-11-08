@@ -39,8 +39,18 @@ impl Checker {
                 }
                 Ok(())
             }
-            Node::AssignStmt(a) => self.check_assign(&a.target, &a.value),
+            Node::AssignStmt(a) => {
+                self.arena_check_assign(&a.target, &a.value)?;
+                self.check_assign(&a.target, &a.value)
+            }
             Node::BlockStmt(b) => self.check_block(&b.body),
+            Node::ArenaStmt(b) => self.check_arena_block(&b.body),
+            Node::GoStmt(g) => {
+                // Statement position: the handle is discarded.
+                self.check_go_stmt(g).map(|_| ())
+            }
+            Node::DeferStmt(d) => self.check_defer_stmt(d),
+            Node::SelectStmt(s) => self.check_select_stmt(s),
             Node::ExprStmt(inner) => {
                 let ty = self.check_expr(inner)?;
                 // R-6 (F1): a bare statement that discards a
@@ -187,11 +197,9 @@ impl Checker {
             }
             None => val_ty.clone(),
         };
-        // Borrow-source bookkeeping: a borrow-like value taken from a
-        // bare identifier records its origin binding (issue013 guard
-        // at block exit consults this).
+        // Borrow-source bookkeeping (issue013 guard consults this).
         let borrow_source = if is_borrow_like_type(&expected) {
-            root_identifier(value).map(|s| s.to_string())
+            crate::check_stmt_util::root_identifier(value).map(|s| s.to_string())
         } else {
             None
         };
@@ -203,24 +211,25 @@ impl Checker {
                 ValueState::Active,
                 borrow_source,
             )?;
+            // R-3: arena domain gates for the new binding.
+            self.arena_on_let(name, &expected, value)?;
+            // R-3: borrow-origin registration for view bindings.
+            self.origin_on_bind(name, value, &expected)?;
         }
-        // The implicit-move consumption exists only in the `let`
-        // arm; the Zig const arm never consumes its initializer's
-        // source (the phase-1 mirror consumed for both).
+        // Implicit-move consumption exists only in the `let` arm.
         if !is_const {
             if let Node::Identifier(src) = value {
                 if !self.type_is_copy(&val_ty) && !is_borrow_like_type(&val_ty)
                 {
-                    // R-6 (F3): moving a root whose field is
-                    // borrowed live is a BorrowConflict.
+                    // R-6 (F3): BorrowConflict gate.
                     self.check_let_move_root_free(src, name)?;
+                    // R-3: moving an owner invalidates its views.
+                    self.origin_on_move(src);
                     self.consume_binding(src, "implicit let move")?;
                 }
             }
         }
-        // R-6 (F3): a let bound to a borrowed place registers the
-        // field borrow against the new binding (Zig gates this on
-        // the declared type being borrow-like).
+        // R-6 (F3): register the field borrow on the new binding.
         if !is_const && !is_discard_name(name) {
             self.register_borrow_from_value(name, value, &expected);
         }
@@ -438,6 +447,8 @@ impl Checker {
                     ),
                 ));
             }
+            // R-3: borrow-origin merge/rebind gate.
+            self.origin_on_assign(name, value, &val_ty)?;
             if let Node::Identifier(src) = value {
                 if !self.type_is_copy(&val_ty) && !is_borrow_like_type(&val_ty) {
                     self.consume_binding(src, "assignment move")?;
@@ -485,6 +496,12 @@ impl Checker {
                 ))
             }
         };
+        // R-3: arena escape gate on the return value (route 1).
+        self.arena_check_return(value)?;
+        // R-3: borrow-origin return gate.
+        if let Some(func) = self.current_func.clone() {
+            self.origin_check_return(&func, value)?;
+        }
         if let Some(v) = value {
             let val_ty = self.check_expr(v)?;
             let ret_is_void = matches!(ret_ty, Type::Primitive(Primitive::VoidType));
@@ -644,25 +661,6 @@ impl Checker {
         result
     }
 
-    /// `release x` (the `!x` statement): explicit consumption with
-    /// state pre-checks, mirroring the release arm.
-    fn check_release(&mut self, name: &str) -> CheckResult<()> {
-        match self.lookup_state(name) {
-            None => Err(Diagnostic::new(
-                ErrorKind::UndefinedVariable,
-                format!("UndefinedVariable: `{name}`"),
-            )),
-            Some(ValueState::Consumed) => Err(Diagnostic::new(
-                ErrorKind::UseAfterMove,
-                format!("UseAfterMove: `{name}` was already consumed"),
-            )),
-            Some(ValueState::Uninitialized) => Err(Diagnostic::new(
-                ErrorKind::UseBeforeInit,
-                format!("UseBeforeInit: `{name}` is not initialized"),
-            )),
-            Some(ValueState::Active) => self.consume_binding(name, "explicit release"),
-        }
-    }
 
     /// Cleanup names for break/continue: active bindings from the
     /// innermost frame down to (and including) the loop frame.
@@ -683,15 +681,5 @@ impl Checker {
             }
         }
         names
-    }
-}
-
-/// Root identifier of an expression through borrow/move wrappers.
-fn root_identifier(node: &Node) -> Option<&str> {
-    match node {
-        Node::Identifier(name) => Some(name.as_str()),
-        Node::BorrowExpr(b) => root_identifier(&b.expr),
-        Node::MoveExpr(m) => root_identifier(&m.expr),
-        _ => None,
     }
 }

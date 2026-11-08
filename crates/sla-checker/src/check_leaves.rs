@@ -96,6 +96,11 @@ fn result_ty(ok: Type, err: Type) -> Type {
 /// and the tuple recursion).
 pub(crate) fn is_copy_value(checker: &Checker, ty: &Type) -> bool {
     match ty {
+        // R-3: a raw pointer crosses by copy (the pointee is
+        // shared, never moved into the callee) — without this
+        // arm every `f(job)` inside a loop tripped the
+        // LoopConditionalConsume gate.
+        Type::Pointer(_) => true,
         Type::UserDefined(u) if u.name == "Chan" => true,
         Type::Array(a) => is_copy_value(checker, &a.elem),
         Type::FnPtr(_) => true,

@@ -71,6 +71,8 @@ fn param(name: &str, ty: Type) -> Param {
         ty: Box::new(ty),
         is_borrow: false,
         is_move: false,
+        fallible_sugar: false,
+        is_var: false,
     }
 }
 
@@ -80,6 +82,8 @@ fn borrow_param(name: &str, ty: Type) -> Param {
         ty: Box::new(ty),
         is_borrow: true,
         is_move: false,
+        fallible_sugar: false,
+        is_var: false,
     }
 }
 
@@ -101,8 +105,12 @@ fn func(
         ret_ty: Box::new(ret_ty),
         body,
         is_inline: false,
-        is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     })
 }
 
@@ -240,6 +248,8 @@ fn borrow_typed_receiver_rejected_for_plain_self() {
             ty: Box::new(Type::Borrow(Box::new(user("Box2")))),
             is_borrow: false,
             is_move: false,
+            fallible_sugar: false,
+            is_var: false,
         }],
         i32_ty(),
         vec![ret_stmt(dot_call(ident("b"), "get", vec![]))],
@@ -259,6 +269,8 @@ fn pointer_typed_receiver_rejected_for_plain_self() {
             ty: Box::new(Type::Pointer(Box::new(user("Box2")))),
             is_borrow: false,
             is_move: false,
+            fallible_sugar: false,
+            is_var: false,
         }],
         i32_ty(),
         vec![ret_stmt(dot_call(ident("b"), "get", vec![]))],
@@ -576,6 +588,8 @@ fn using_extension_with_borrow_type_param() {
             ty: Box::new(Type::Borrow(Box::new(user("Num")))),
             is_borrow: false,
             is_move: false,
+            fallible_sugar: false,
+            is_var: false,
         }],
         i32_ty(),
         vec![ret_stmt(field_of("n", "v"))],

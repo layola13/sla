@@ -33,6 +33,9 @@ impl<'a> Parser<'a> {
             Tag::KeywordConst => self.parse_const_stmt(),
             Tag::KeywordVar => self.parse_var_stmt(),
             Tag::KeywordReturn => self.parse_return_stmt(),
+            Tag::KeywordGo => self.parse_go_stmt(),
+            Tag::KeywordDefer => self.parse_defer_stmt(),
+            Tag::KeywordSelect => self.parse_select_stmt(),
             Tag::KeywordFor => self.parse_for_stmt(),
             Tag::KeywordWhile => self.parse_while_stmt(),
             Tag::KeywordBreak => {
@@ -58,6 +61,17 @@ impl<'a> Parser<'a> {
     /// assignment (with the multi-target chain desugar), compound
     /// assignment, and `??=`.
     fn parse_expr_stmt(&mut self) -> Result<Node, ParseError> {
+        // R-3: `arena { ... }` block statement (F2-A C1). `arena`
+        // is not a lexer keyword; it is an identifier immediately
+        // followed by `{`.
+        if self.peek() == Tag::Identifier
+            && self.cur_text() == "arena"
+            && self.token_at(self.snapshot() + 1).tag == Tag::LBrace
+        {
+            self.advance();
+            let body = self.parse_block()?;
+            return Ok(Node::ArenaStmt(sla_ast::stmts::BlockStmt { body }));
+        }
         // `name:` at statement level would be a loop label; the Zig
         // parser rejects those loudly with guidance.
         if self.peek() == Tag::Identifier && self.token_at(self.snapshot() + 1).tag == Tag::Colon {

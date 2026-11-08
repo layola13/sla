@@ -242,6 +242,7 @@ fn main() -> ExitCode {
                             .collect::<Vec<_>>(),
                         &func.ret_ty,
                         func.return_fallible,
+                        func.is_variadic,
                     ),
                 );
             }

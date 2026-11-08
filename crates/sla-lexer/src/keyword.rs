@@ -37,6 +37,9 @@ pub fn check_keyword(text: &[u8]) -> Tag {
         b"inline" => Tag::KeywordInline,
         b"macro" => Tag::KeywordMacro,
         b"mut" => Tag::KeywordMut,
+        b"go" => Tag::KeywordGo,
+        b"defer" => Tag::KeywordDefer,
+        b"select" => Tag::KeywordSelect,
         b"type" => Tag::KeywordType,
         _ => Tag::Identifier,
     }

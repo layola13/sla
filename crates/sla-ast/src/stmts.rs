@@ -100,3 +100,38 @@ pub struct ContinueStmt;
 pub struct ReleaseStmt {
     pub var_name: String,
 }
+
+/// R-3 goroutine batch: `go call;` spawn statement. The call is
+/// kept whole; the checker gates its shape (named non-async void
+/// callee, at most one argument, no borrow payloads).
+#[derive(Debug, Clone, PartialEq)]
+pub struct GoStmt {
+    pub call: Box<Node>,
+}
+
+/// R-3 goroutine batch: `defer call;` — the target must be a
+/// call expression (checked); execution is block-scoped LIFO in
+/// the codegens.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeferStmt {
+    pub call: Box<Node>,
+}
+
+/// One arm of a `select` statement.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelectArm {
+    /// `Some((binding, Option<closed_binding>))` for the
+    /// `case let (v, closed) = ch.recv() { ... }` and
+    /// `case let v = ch.recv() { ... }` arm forms.
+    pub pattern: Option<(String, Option<String>)>,
+    /// The receive call for a case arm; `None` for `default`.
+    pub recv: Option<Box<Node>>,
+    pub body: Vec<Node>,
+    pub is_default: bool,
+}
+
+/// R-3 goroutine batch: `select { case ... default ... }`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelectStmt {
+    pub arms: Vec<SelectArm>,
+}

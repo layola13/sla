@@ -56,6 +56,8 @@ fn param(name: &str, ty: Type) -> Param {
         ty: Box::new(ty),
         is_borrow: false,
         is_move: false,
+        fallible_sugar: false,
+        is_var: false,
     }
 }
 
@@ -72,8 +74,12 @@ fn func(name: &str, params: Vec<Param>, ret: Type, body: Vec<Node>) -> Node {
         ret_ty: Box::new(ret),
         body,
         is_inline: false,
-        is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     })
 }
 
@@ -166,7 +172,7 @@ fn check(decls: Vec<Node>) -> Result<(), crate::diag::Diagnostic> {
 
 fn fallible_extern(payload_spelling: &str) -> ExternSig {
     let parts = vec![("value".to_string(), "i32".to_string(), false, false)];
-    let mut sig = extern_sig_from_parts(&parts, payload_spelling, true);
+    let mut sig = extern_sig_from_parts(&parts, payload_spelling, true, false);
     sig.ret_abi = payload_spelling.to_string();
     sig
 }
@@ -259,6 +265,7 @@ fn r6_f2_macro_param_redeclaration() {
     let mac = Node::MacroDecl(MacroDecl {
         name: "dup".to_string(),
         params: vec!["value".to_string(), "value".to_string()],
+        param_tys: vec![None],
         body: vec![let_stmt("result", None, ident("value"))],
     });
     let result = check(vec![mac]);

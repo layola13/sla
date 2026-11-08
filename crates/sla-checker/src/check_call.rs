@@ -1,22 +1,12 @@
-//! Call checking, mirroring the dispatch order of the `call_expr`
-//! arm of `type_checker.zig` (arms located at 5050-5140 and ~4341):
-//!   1. name-keyed specials (`sum`);
-//!   2. `extern_funcs` — the FFI bypass: argument expressions are
-//!      checked but their types are IGNORED; only arity, `^` move
-//!      contracts, and the ABI return string matter;
-//!   3. builtins `stack_alloc` / `panic` / `panic_msg`;
-//!   4. user macros — consumption decided by static analysis of the
-//!      macro body (rules::macro_param_consumption);
-//!   5. user functions and imported signatures — by-value
-//!      arguments follow the R-6 consumption discipline
-//!      (check_call_consume.rs): preserved shallow copies stay
-//!      live (uncloneable closures are rejected), ownership-
-//!      transferring arguments consume their source binding;
-//!   6. struct constructors and fn-ptr locals.
-//! Associated-target specials with consumption (`mem::forget`,
-//! `Box::into_raw`, `ManuallyDrop::into_inner`) sit in the Zig
-//! method-call machinery (type_checker.zig:3903/3921/4068) and are
-//! handled before generic associated resolution.
+//! Call checking, mirroring the `call_expr` dispatch order of
+//! `type_checker.zig` (5050-5140, ~4341): 1. `sum` specials;
+//! 2. `extern_funcs` FFI bypass (types ignored; arity/`^`/ABI only);
+//! 3. builtins `stack_alloc`/`panic`/`panic_msg`; 4. user macros
+//! (consumption via rules::macro_param_consumption); 5. user /
+//! imported functions (R-6 discipline, check_call_consume.rs);
+//! 6. struct constructors and fn-ptr locals. Associated-target
+//! consumption specials (`mem::forget`, `Box::into_raw`,
+//! `ManuallyDrop::into_inner`) precede generic associated resolution.
 
 use crate::checker::{Checker, FuncSig};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
@@ -31,6 +21,21 @@ use sla_ast::types::Type;
 
 impl Checker {
     pub fn check_call(&mut self, node: &Node, call: &CallExpr) -> CheckResult<Type> {
+        // R-3: arena call gates (routes 3/5/6); receiver = args[0].
+        if crate::check_arena::arena_active() {
+            let recv_ty = if !call.args.is_empty() && call.associated_target.is_none() {
+                match &call.args[0] {
+                    Node::Identifier(recv) => self.lookup_ty(recv),
+                    other => self.expr_types.get(&crate::types_util::node_key_of(other)).cloned(),
+                }
+            } else {
+                None
+            };
+            let is_method = recv_ty.is_some();
+            if is_method || call.associated_target.is_none() {
+                self.arena_check_call(call, recv_ty.as_ref())?;
+            }
+        }
         let _ = node;
         if let Some(callee) = &call.callee {
             // Immediately-invoked closure: the callee must type as a
@@ -151,11 +156,38 @@ impl Checker {
             return result;
         }
 
+        // 3c. `__slice_view(ptr, len)` — the intrinsic the
+        // generated sla_std wrappers (gen_wrap.py E_res form) use
+        // to build a `&[u8]` view from a raw data pointer + length.
+        // Its result is a byte-slice borrow; the borrow-origin
+        // annotation on the enclosing function gives it provenance.
+        if name == "__slice_view" {
+            for arg in &call.args {
+                self.check_expr(arg)?;
+            }
+            // Same shape the parser gives `&[u8]`: Borrow(Slice<u8>).
+            return Ok(Type::Borrow(Box::new(
+                sla_ast::types::Type::UserDefined(
+                    sla_ast::types::UserDefined {
+                        name: "Slice".to_string(),
+                        generics: vec![crate::types_util::prim(
+                            sla_ast::types::Primitive::U8,
+                        )],
+                    },
+                ),
+            )));
+        }
+
         // 4. User macros.
         if let Some(mac) = self.macros.get(name).cloned() {
             for arg in &call.args {
                 self.check_expr(arg)?;
             }
+            // R-3 (J-3/J-4): arity discipline, declared-type
+            // argument checks, and the expression-output form.
+            // Runs before the consumption ledger so a mis-typed or
+            // mis-counted call reports its J-3/J-4 diagnostic.
+            let macro_result = self.check_user_macro_typed_call(&mac, call)?;
             // macro_call_try_cleanups (Zig :5095): when the macro
             // can `?`-propagate, the caller-side cleanup is every
             // active non-internal binding EXCEPT the roots of
@@ -227,7 +259,7 @@ impl Checker {
                     }
                 }
             }
-            return Ok(void_ty());
+            return Ok(macro_result);
         }
 
         // 4b. Local closure / fn-pointer variables shadow function
@@ -272,6 +304,16 @@ impl Checker {
 
         // 5. User functions / imported signatures / overload sets.
         if let Some(result) = self.resolve_user_call(name, call) {
+            // R-3: borrow-origin bookkeeping. The non-place gate
+            // runs BEFORE the wrapped result is returned: a
+            // BorrowOriginNotABinding fault replaces an otherwise
+            // successful call verdict (argument-kind rules precede
+            // type rules for the annotated parameter). Passing
+            // owners to arbitrary calls invalidates their views.
+            if result.is_ok() {
+                self.origin_call_owner(call)?;
+                self.origin_after_call(call);
+            }
             return result;
         }
 
@@ -366,88 +408,6 @@ impl Checker {
         ))
     }
 
-    /// Mirrors Zig `checkCallArgsAgainstSignature`
-    /// (type_checker.zig:703): arity, capability-form discipline
-    /// (`is_move` params require `^` arguments; capability arguments
-    /// to plain parameters are rejected), borrow coercions, and the
-    /// width-STRICT array element rule that coexists with the
-    /// width-insensitive `typesEqual` (D-C8).
-    pub fn check_call_args_against_sig(
-        &mut self,
-        name: &str,
-        sig: &FuncSig,
-        args: &[Node],
-    ) -> CheckResult<Type> {
-        if sig.params.len() != args.len() {
-            return Err(Diagnostic::new(
-                ErrorKind::InvalidArgsCount,
-                format!(
-                    "InvalidArgsCount: `{name}` expects {} args, got {}",
-                    sig.params.len(),
-                    args.len()
-                ),
-            ));
-        }
-        for (param, arg) in sig.params.iter().zip(args.iter()) {
-            let is_capability_arg =
-                matches!(arg, Node::MoveExpr(_) | Node::BorrowExpr(_));
-            if param.is_move && !matches!(arg, Node::MoveExpr(_)) {
-                return Err(Diagnostic::new(
-                    ErrorKind::TypeMismatch,
-                    format!(
-                        "TypeMismatch: parameter `{}` of `{name}` requires a move argument",
-                        param.name
-                    ),
-                ));
-            }
-            if is_capability_arg
-                && !param.is_borrow
-                && !param.is_move
-                && !matches!(param.ty, Type::Pointer(_))
-            {
-                return Err(Diagnostic::new(
-                    ErrorKind::TypeMismatch,
-                    format!(
-                        "Call to {name} passes capability argument to plain parameter {}",
-                        param.name
-                    ),
-                ));
-            }
-            let arg_ty = self.check_expr(arg)?;
-            // Borrow parameters accept the bare value (auto-borrow) or
-            // an explicit borrow of the parameter type.
-            let matched = if param.is_borrow {
-                types_equal(&param.ty, &arg_ty)
-                    || types_equal(
-                        &Type::Borrow(Box::new(param.ty.clone())),
-                        &arg_ty,
-                    )
-            } else if let Type::Borrow(inner) = &arg_ty {
-                types_equal(&param.ty, inner)
-            } else if let (Type::Array(a), Type::Array(b)) = (&param.ty, &arg_ty) {
-                // Width-strict for array elements (Zig comment: reject
-                // silent integer-width array mismatches).
-                a.len == b.len && types_structurally_equal(&a.elem, &b.elem)
-            } else {
-                types_equal(&param.ty, &arg_ty)
-            };
-            if !matched {
-                return Err(Diagnostic::new(
-                    ErrorKind::TypeMismatch,
-                    format!(
-                        "TypeMismatch: argument for parameter `{}` expects {}, actual {}",
-                        param.name,
-                        type_desc(&param.ty),
-                        type_desc(&arg_ty)
-                    ),
-                ));
-            }
-            // R-6 (F5/F7): the UncloneableCopy preserved gate and
-            // by-value argument consumption (check_call_consume.rs).
-            self.check_call_arg_consumption(name, param, arg, &arg_ty)?;
-        }
-        Ok(sig.ret_ty.clone())
-    }
 
     /// Associated-target calls (`Target::name(...)`), mirroring
     /// the venue associated block (:8438-8810). Returns `None` on
@@ -497,11 +457,18 @@ impl Checker {
                             "Box::into_raw expects 1 argument",
                         ));
                     }
-                    self.check_expr(&call.args[0])?;
+                    let arg_ty = self.check_expr(&call.args[0])?;
                     if let Node::Identifier(arg_name) = &call.args[0] {
                         self.consume_binding(arg_name, "Box::into_raw")?;
                     }
-                    Ok(raw_ptr_ty())
+                    // The raw pointer keeps the box's content
+                    // type: `*T` for `Box<T>` (the untyped
+                    // raw_ptr_ty() here used to erase payload
+                    // shapes the go borrow-payload gate walks).
+                    match crate::types_util::box_inner_type(&arg_ty) {
+                        Some(inner) => Ok(Type::Pointer(Box::new(inner))),
+                        None => Ok(raw_ptr_ty()),
+                    }
                 })());
             }
             ("ManuallyDrop", "into_inner") => {
@@ -631,57 +598,4 @@ impl Checker {
         }
     }
 
-    /// The trait-target associated form (venue :8438):
-    /// `Trait::method(recv, ...)` — args[0]'s concrete type must
-    /// implement the trait; the declaring trait names the symbol.
-    fn check_trait_associated_call(
-        &mut self,
-        trait_name: &str,
-        call: &CallExpr,
-    ) -> CheckResult<Type> {
-        let name = call.func_name.as_str();
-        if call.args.is_empty() {
-            return Err(Diagnostic::new(
-                ErrorKind::InvalidArgsCount,
-                format!(
-                    "Trait associated call {trait_name}::{name} needs an implementing value argument"
-                ),
-            ));
-        }
-        let recv_ty = self.check_expr(&call.args[0])?;
-        let concrete = crate::types_util::concrete_type_name(&recv_ty)
-            .ok_or_else(|| {
-                Diagnostic::new(
-                    ErrorKind::TypeMismatch,
-                    format!(
-                        "TypeMismatch: trait associated call receiver has no concrete type, actual {}",
-                        crate::types_util::type_desc(&recv_ty)
-                    ),
-                )
-            })?
-            .to_string();
-        let symbol = self
-            .resolve_trait_method_symbol(
-                &concrete,
-                Some(trait_name),
-                name,
-                call.args.len(),
-            )?
-            .ok_or_else(|| {
-                Diagnostic::new(
-                    ErrorKind::UndefinedVariable,
-                    format!(
-                        "Type `{concrete}` does not implement trait method `{trait_name}::{name}`"
-                    ),
-                )
-            })?;
-        // Zig fetches the callee from funcs only on this path.
-        let sig = self.funcs.get(&symbol).cloned().ok_or_else(|| {
-            Diagnostic::new(
-                ErrorKind::UndefinedVariable,
-                format!("UndefinedVariable: `{symbol}`"),
-            )
-        })?;
-        self.check_method_args(name, &sig, &call.args, false)
-    }
 }

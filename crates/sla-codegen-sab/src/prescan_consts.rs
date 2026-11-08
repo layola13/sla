@@ -257,6 +257,7 @@ pub fn storage_prim_type(ty: &Type) -> Result<PrimType> {
                 P::F32 => PrimType::F32,
                 P::F64 | P::Float => PrimType::F64,
                 P::VoidType => PrimType::Void,
+                P::VaList => PrimType::Ptr,
             })
         }
         _ if abi_passes_as_pointer(ty) => Ok(PrimType::Ptr),

@@ -24,6 +24,7 @@ fn i64_ty() -> Type {
 
 fn func(name: &str, body: Vec<Node>) -> Node {
     Node::FuncDecl(FuncDecl {
+        is_variadic: false,
         name: name.to_string(),
         is_pub: false,
         is_extern: false,
@@ -37,6 +38,9 @@ fn func(name: &str, body: Vec<Node>) -> Node {
         is_inline: false,
         is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
     })
 }
 

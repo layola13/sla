@@ -49,6 +49,9 @@ pub struct Parser<'a> {
     known_enums: Vec<String>,
     known_modules: Vec<String>,
     current_impl_target: Option<Box<Type>>,
+    /// R-3 (J-1): sublanguage kinds registered by
+    /// `@sublanguage <name>;` so far in this file.
+    pub(crate) registered_sublanguages: Vec<String>,
     synth_counter: usize,
     function_body_spans: Vec<(usize, usize)>,
     options: ParserOptions,
@@ -78,6 +81,7 @@ impl<'a> Parser<'a> {
             known_enums: Vec::new(),
             known_modules: Vec::new(),
             current_impl_target: None,
+            registered_sublanguages: Vec::new(),
             synth_counter: 0,
             function_body_spans: Vec::new(),
             options,
@@ -94,6 +98,11 @@ impl<'a> Parser<'a> {
     /// Tag of the current token (Zig `self.peek()`).
     pub fn peek(&self) -> Tag {
         self.tok().tag
+    }
+
+    /// Tag of the token AFTER the current one.
+    pub fn peek2(&self) -> Tag {
+        self.token_at(self.pos + 1).tag
     }
 
     /// Token at an absolute stream index; `Eof` past the end.
@@ -296,11 +305,67 @@ impl<'a> Parser<'a> {
         let start = self.tok().loc.start;
         let mut depth: usize = 0;
         let mut idx = self.pos;
+        // Full lexer template-state mirror (Zig peekBlockSpan):
+        // `${` leaves template mode with interp_depth 1; braces
+        // inside an interpolation move interp_depth, and the `}`
+        // that returns it to 0 re-enters template mode instead of
+        // closing a block level. Nested templates push/pop the
+        // saved interp_depth on a small stack.
+        let mut in_template = false;
+        let mut interp_depth: u16 = 0;
+        let mut tmpl_stack: [u16; 8] = [0; 8];
+        let mut tmpl_sp: usize = 0;
         loop {
             let tok = self.token_at(idx);
+            idx += 1;
+            if tok.tag == Tag::TemplateStart {
+                if tmpl_sp >= tmpl_stack.len() {
+                    return Err(self.err_here(ParseErrorKind::SyntaxError));
+                }
+                tmpl_stack[tmpl_sp] = interp_depth;
+                tmpl_sp += 1;
+                interp_depth = 0;
+                in_template = true;
+                continue;
+            }
+            if in_template {
+                match tok.tag {
+                    Tag::TemplateInterp => {
+                        in_template = false;
+                        interp_depth = 1;
+                    }
+                    Tag::TemplateEnd => {
+                        if tmpl_sp == 0 {
+                            return Err(self.err_here(ParseErrorKind::SyntaxError));
+                        }
+                        tmpl_sp -= 1;
+                        interp_depth = tmpl_stack[tmpl_sp];
+                        in_template = false;
+                    }
+                    Tag::Eof => return Err(self.err_here(ParseErrorKind::SyntaxError)),
+                    _ => {}
+                }
+                continue;
+            }
             match tok.tag {
-                Tag::LBrace => depth += 1,
+                Tag::TemplateInterp => {
+                    in_template = false;
+                    interp_depth = 1;
+                }
+                Tag::LBrace => {
+                    if interp_depth > 0 {
+                        interp_depth += 1;
+                    }
+                    depth += 1;
+                }
                 Tag::RBrace => {
+                    if interp_depth > 0 {
+                        interp_depth -= 1;
+                        if interp_depth == 0 {
+                            in_template = true;
+                            continue;
+                        }
+                    }
                     depth -= 1;
                     if depth == 0 {
                         return Ok((start, tok.loc.end));
@@ -309,32 +374,27 @@ impl<'a> Parser<'a> {
                 Tag::Eof => return Err(self.err_here(ParseErrorKind::SyntaxError)),
                 _ => {}
             }
-            idx += 1;
         }
     }
 
     /// Consume the `{ ... }` block at the current token without parsing it
     /// (Zig `skipBlockSpan`); returns its byte span.
     pub fn skip_block(&mut self) -> Result<(usize, usize), ParseError> {
+        // The span comes from block_span (which carries the full
+        // template-state mirror); skipping is then a pure token
+        // count over the same span, located by byte offset.
         let span = self.block_span()?;
-        let mut depth: usize = 0;
-        loop {
-            let tok = self.tok();
-            match tok.tag {
-                Tag::LBrace => depth += 1,
-                Tag::RBrace => {
-                    depth -= 1;
-                    self.advance();
-                    if depth == 0 {
-                        return Ok(span);
-                    }
-                    continue;
-                }
-                Tag::Eof => return Err(self.err_here(ParseErrorKind::SyntaxError)),
-                _ => {}
+        while self.tok().loc.start < span.1 {
+            if self.peek() == Tag::Eof {
+                return Err(self.err_here(ParseErrorKind::SyntaxError));
             }
+            let before = self.pos;
             self.advance();
+            if self.pos == before {
+                break;
+            }
         }
+        Ok(span)
     }
 
     pub fn should_parse_fn_body(&self, name: &str) -> bool {
@@ -429,6 +489,9 @@ pub fn tag_name(tag: Tag) -> &'static str {
         Tag::KeywordMacro => "keyword_macro",
         Tag::KeywordMut => "keyword_mut",
         Tag::KeywordType => "keyword_type",
+        Tag::KeywordGo => "keyword_go",
+        Tag::KeywordDefer => "keyword_defer",
+        Tag::KeywordSelect => "keyword_select",
         Tag::Plus => "plus",
         Tag::PlusEqual => "plus_equal",
         Tag::MinusEqual => "minus_equal",
@@ -456,6 +519,7 @@ pub fn tag_name(tag: Tag) -> &'static str {
         Tag::GreaterGreater => "greater_greater",
         Tag::Spaceship => "spaceship",
         Tag::Dot => "dot",
+        Tag::DotDotDot => "dotdotdot",
         Tag::Comma => "comma",
         Tag::Semicolon => "semicolon",
         Tag::Colon => "colon",

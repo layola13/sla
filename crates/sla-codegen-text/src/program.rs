@@ -496,6 +496,11 @@ impl<'c> Codegen<'c> {
                         walk(check, s, out);
                     }
                 }
+                Node::ArenaStmt(b) => {
+                    for s in &b.body {
+                        walk(check, s, out);
+                    }
+                }
                 Node::WhileStmt(w) => {
                     walk(check, &w.cond, out);
                     for s in &w.body {

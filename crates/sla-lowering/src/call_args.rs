@@ -411,10 +411,12 @@ mod tests {
 
     fn i32_param() -> Param {
         Param {
+            is_var: false,
             name: "x".to_string(),
             ty: Box::new(Type::Primitive(Primitive::I32)),
             is_borrow: false,
             is_move: false,
+            fallible_sugar: false,
         }
     }
 

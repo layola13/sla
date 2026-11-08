@@ -42,6 +42,8 @@ fn param(name: &str, ty: Type) -> Param {
         ty: Box::new(ty),
         is_borrow: false,
         is_move: false,
+        fallible_sugar: false,
+        is_var: false,
     }
 }
 
@@ -58,8 +60,12 @@ fn func(name: &str, params: Vec<Param>, ret_ty: Type, body: Vec<Node>) -> Node {
         ret_ty: Box::new(ret_ty),
         body,
         is_inline: false,
-        is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     })
 }
 
@@ -536,6 +542,7 @@ fn macro_try_call_records_cleanup_and_consumes() {
     let mac = Node::MacroDecl(MacroDecl {
         name: "m".to_string(),
         params: vec!["x".to_string()],
+        param_tys: vec![None],
         body: vec![expr_stmt(Node::TryExpr(TryExpr {
             expr: Box::new(ident("x")),
         }))],

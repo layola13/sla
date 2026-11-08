@@ -11,7 +11,7 @@ use sla_ast::exprs::{
     CallExpr, EnumLiteral, EnumLiteralField, GenericFuncRef, StructLiteral, StructLiteralField,
 };
 use sla_ast::node::Node;
-use sla_ast::types::Type;
+use sla_ast::types::{Primitive, Type};
 use sla_lexer::Tag;
 
 use crate::error::ParseError;
@@ -179,6 +179,28 @@ impl<'a> Parser<'a> {
     // -- calls -----------------------------------------------------------------
 
     /// `(expr, ...)` argument list; the `(` is consumed here.
+    /// R-3 (var Phase-2): one call argument. A `var <ident>`
+    /// argument is the out-parameter shape (`fill(var x)`): it
+    /// becomes a VarStmt node over the bare binding so the checker
+    /// can recognize it against a `var` parameter. Anything else
+    /// falls back to a plain expression (snapshot/restore).
+    pub fn parse_call_arg(&mut self) -> Result<Node, ParseError> {
+        if self.peek() == Tag::KeywordVar {
+            let snap = self.snapshot();
+            self.advance();
+            if self.peek() == Tag::Identifier {
+                let vname = self.cur_text().to_string();
+                self.advance();
+                return Ok(Node::VarStmt(sla_ast::stmts::VarStmt {
+                    name: vname.clone(),
+                    ty: Box::new(Type::Primitive(Primitive::I32)),
+                }));
+            }
+            self.restore(snap);
+        }
+        self.parse_expr(0)
+    }
+
     pub fn parse_call_args(&mut self) -> Result<Vec<Node>, ParseError> {
         self.expect(Tag::LParen)?;
         let mut args = Vec::new();
@@ -186,7 +208,7 @@ impl<'a> Parser<'a> {
             return Ok(args);
         }
         loop {
-            args.push(self.parse_expr(0)?);
+            args.push(self.parse_call_arg()?);
             if self.eat(Tag::Comma) {
                 if self.eat(Tag::RParen) {
                     break;

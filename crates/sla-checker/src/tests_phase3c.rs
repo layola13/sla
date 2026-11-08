@@ -43,6 +43,8 @@ fn param(name: &str, ty: Type) -> Param {
         ty: Box::new(ty),
         is_borrow: false,
         is_move: false,
+        fallible_sugar: false,
+        is_var: false,
     }
 }
 
@@ -64,8 +66,12 @@ fn func(
         ret_ty: Box::new(ret_ty),
         body,
         is_inline: false,
-        is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     })
 }
 
@@ -124,6 +130,7 @@ fn psig(name: &str, ty: Type) -> ParamSig {
         ty,
         is_borrow: false,
         is_move: false,
+        is_var: false,
     }
 }
 
@@ -133,6 +140,9 @@ fn imported_sig(params: Vec<ParamSig>, ret_ty: Type) -> FuncSig {
         ret_ty,
         is_pub: true,
         ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     }
 }
 
@@ -226,16 +236,22 @@ fn generic_receiver_key_uses_base_name() {
         is_decl_only: false,
         generics: vec![],
         params: vec![Param {
+            is_var: false,
             name: "b".to_string(),
             ty: Box::new(bag_i32),
             is_borrow: false,
             is_move: false,
+            fallible_sugar: false,
         }],
         ret_ty: Box::new(i32_ty()),
         body: vec![ret_stmt(dot_call(ident("b"), "get", vec![]))],
         is_inline: false,
-        is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     });
     let result = checker.check_program(&Program { decls: vec![host] });
     assert!(result.is_ok(), "{result:?}");

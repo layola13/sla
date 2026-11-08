@@ -34,6 +34,8 @@ pub struct ExternalFunction {
     pub params: Vec<ContractParam>,
     pub ret_ty: String,
     pub return_fallible: bool,
+    /// R-3: the parameter list ends with a C-variadic `...`.
+    pub is_variadic: bool,
 }
 
 /// One `#def` layout define (Zig `contract_parser.LayoutDefine`).
@@ -154,9 +156,16 @@ fn parse_extern_line(line: &str) -> Result<ExternalFunction, ContractParseError>
     // Parameter list: `splitScalar ','`, then per parameter
     // `splitScalar ':'` reading only name and type segments.
     let mut params = Vec::new();
+    let mut is_variadic = false;
     for p_raw in params_str.split(',') {
         let p_trim = trim_space_tab(p_raw);
         if p_trim.is_empty() {
+            continue;
+        }
+        // R-3: a bare `...` segment is the C-variadic marker, not
+        // a name:type parameter.
+        if p_trim == "..." {
+            is_variadic = true;
             continue;
         }
         let mut colon_split = p_trim.split(':');
@@ -193,6 +202,7 @@ fn parse_extern_line(line: &str) -> Result<ExternalFunction, ContractParseError>
         params,
         ret_ty: ret_ty.to_string(),
         return_fallible,
+        is_variadic,
     })
 }
 

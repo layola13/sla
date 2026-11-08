@@ -199,7 +199,7 @@ impl<'a> Parser<'a> {
             return Ok(args);
         }
         loop {
-            args.push(self.parse_expr(0)?);
+            args.push(self.parse_call_arg()?);
             if self.eat(Tag::Comma) {
                 if self.eat(Tag::RParen) {
                     break;

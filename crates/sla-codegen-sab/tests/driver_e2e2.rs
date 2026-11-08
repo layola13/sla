@@ -89,15 +89,18 @@ fn i32_ty() -> Type {
 
 fn param(name: &str) -> Param {
     Param {
+        is_var: false,
         name: name.to_string(),
         ty: Box::new(i32_ty()),
         is_borrow: false,
         is_move: false,
+        fallible_sugar: false,
     }
 }
 
 fn func(name: &str, params: Vec<Param>, body: Vec<Node>) -> Node {
     Node::FuncDecl(FuncDecl {
+        is_variadic: false,
         name: name.to_string(),
         is_pub: false,
         is_extern: false,
@@ -111,6 +114,9 @@ fn func(name: &str, params: Vec<Param>, body: Vec<Node>) -> Node {
         is_inline: false,
         is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
     })
 }
 
@@ -324,6 +330,7 @@ fn driver_real_product_array_const_parity() {
 #[test]
 fn driver_extern_prototype_with_concrete_twin_is_suppressed() {
     let prototype = Node::FuncDecl(FuncDecl {
+        is_variadic: false,
         name: "dup".to_string(),
         is_pub: false,
         is_extern: true,
@@ -337,6 +344,9 @@ fn driver_extern_prototype_with_concrete_twin_is_suppressed() {
         is_inline: false,
         is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
     });
     let with_proto = Node::Program(Program {
         decls: vec![

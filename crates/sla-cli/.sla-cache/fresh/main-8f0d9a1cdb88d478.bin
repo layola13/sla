@@ -1,0 +1,36 @@
+@import "sa_std/string.sa"
+@import "sa_std/string_format.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/core/panic.sa"
+
+[MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
+    call @sa_mem_set(&%array_ptr, %value, %length)
+[END_MACRO]
+@import "sa_std/vec.sa"
+@test "t"():
+L_TEST_ENTRY_0:
+    EXPAND VEC_NEW tmp_0
+    v = tmp_0
+    tmp_1 = 40
+    EXPAND VEC_PUSH v, tmp_1, 8
+    ^tmp_1
+    EXPAND VEC_LEN tmp_2, v
+    tmp_3 = 1
+    tmp_4 = ne tmp_2, tmp_3
+    !tmp_2
+    !tmp_3
+    br tmp_4 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_4
+    panic(1)
+
+L_ELSE_2:
+    !tmp_4
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    !v
+    return
+

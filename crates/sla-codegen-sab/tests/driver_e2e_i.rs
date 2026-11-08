@@ -38,6 +38,7 @@ fn ud_ty(name: &str) -> Type {
 
 fn func(name: &str, body: Vec<Node>) -> Node {
     Node::FuncDecl(FuncDecl {
+        is_variadic: false,
         name: name.to_string(),
         is_pub: false,
         is_extern: false,
@@ -51,6 +52,9 @@ fn func(name: &str, body: Vec<Node>) -> Node {
         is_inline: false,
         is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
     })
 }
 
@@ -525,10 +529,12 @@ fn i_option_none_is_a_loud_fragment_stop() {
 fn closure_add_one() -> Node {
     Node::ClosureLiteral(ClosureLiteral {
         params: vec![Param {
+            is_var: false,
             name: "x".to_string(),
             ty: Box::new(i32_ty()),
             is_borrow: false,
             is_move: false,
+            fallible_sugar: false,
         }],
         body: Box::new(Node::BinaryExpr(BinaryExpr {
             op: BinaryOp::Add,
@@ -614,6 +620,7 @@ fn i_bare_closure_literal_is_loud_like_zig() {
 fn i_impl_and_overload_decls_generate() {
     let method = |name: &str| {
         Node::FuncDecl(FuncDecl {
+            is_variadic: false,
             name: name.to_string(),
             is_pub: false,
             is_extern: false,
@@ -628,16 +635,21 @@ fn i_impl_and_overload_decls_generate() {
             // not I-group. The dispatch is what is pinned here,
             // so the method takes a primitive parameter.
             params: vec![Param {
+                is_var: false,
                 name: "v".to_string(),
                 ty: Box::new(i32_ty()),
                 is_borrow: false,
                 is_move: false,
+                fallible_sugar: false,
             }],
             ret_ty: Box::new(i32_ty()),
             body: vec![ret(int(7))],
             is_inline: false,
             is_async: false,
             operator: None,
+            is_arena: false,
+            ret_fallible_sugar: false,
+            ret_borrow_origin: None,
         })
     };
     let program = Node::Program(Program {

@@ -127,6 +127,19 @@ pub struct FuncDecl {
     pub is_async: bool,
     /// Zig default: null.
     pub operator: Option<crate::exprs::BinaryOp>,
+    /// R-3: `@arena fn` sugar — the whole body is one arena domain.
+    /// Zig default: false.
+    pub is_arena: bool,
+    /// R-3 (A_min producer): the return was written `-> T!`;
+    /// `ret_ty` already holds the desugared `Result<T, i32>`.
+    /// Zig: `FuncDecl.ret_fallible_sugar`.
+    pub ret_fallible_sugar: bool,
+    /// R-3 (borrow origins): the name inside a trailing
+    /// `-> &[T][name]` return annotation, when present.
+    pub ret_borrow_origin: Option<String>,
+    /// R-3: extern declaration ends with a C-variadic `...`
+    /// marker parameter.
+    pub is_variadic: bool,
 }
 
 /// Mirrors Zig `Param`.
@@ -138,6 +151,14 @@ pub struct Param {
     pub is_borrow: bool,
     /// Zig default: false.
     pub is_move: bool,
+    /// R-3 (A_min scope limit): the parameter type was written
+    /// with the `T!` sugar, which is return-position only; the
+    /// checker rejects it with FallibleSugarParam.
+    pub fallible_sugar: bool,
+    /// R-3 (var Phase-2): the parameter was declared `var name: T`
+    /// (or the callee is extern-variadic and this param is the
+    /// trailing marker handled at FuncDecl level).
+    pub is_var: bool,
 }
 
 /// Mirrors Zig `MacroDecl`.
@@ -145,6 +166,10 @@ pub struct Param {
 pub struct MacroDecl {
     pub name: String,
     pub params: Vec<String>,
+    /// R-3 (J-3 typed macro params): parallel to `params`; the
+    /// declared type of each parameter, or `None` for a bare
+    /// (untyped) parameter. Untyped everywhere for pre-J-3 macros.
+    pub param_tys: Vec<Option<Type>>,
     pub body: Vec<Node>,
 }
 
@@ -152,6 +177,13 @@ pub struct MacroDecl {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportDecl {
     pub path: String,
+}
+
+/// R-3 (J-5): `@check_hook <name>;` — attaches a registered
+/// read-only check hook to the whole file.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CheckHookDecl {
+    pub name: String,
 }
 
 /// Mirrors Zig `UsingDecl`.
@@ -167,4 +199,50 @@ pub struct TestDecl {
     pub is_ignored: bool,
     pub should_panic: bool,
     pub body: Vec<Node>,
+}
+/// R-3 (J-1): `@sublanguage <name>;` — registers a declaration
+/// sublanguage kind for this file (see SublanguageDecl below).
+// R-3 (J-1): shader sublanguage AST shapes (DESIGN.md 6.2 subset).
+// A `shader Name { ... }` declaration after `@sublanguage shader;`
+// registration. Bodies are kept as raw source text: the shader
+// checker (checker-side) lexes and validates them per stage;
+// the SLA codegens treat shader declarations as declarations
+// with no SLA body (the sublanguage owns its lowering).
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShaderDecl {
+    pub name: String,
+    pub priority: Option<i64>,
+    pub globals: Vec<ShaderGlobalStruct>,
+    pub inputs: Vec<ShaderField>,
+    pub params: Vec<ShaderField>,
+    pub consts: Vec<ShaderConst>,
+    pub vars: Vec<ShaderField>,
+    /// (stage name, raw body source) in declaration order;
+    /// stage is one of "vertex" / "fragment" / "init".
+    pub stages: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShaderGlobalStruct {
+    pub name: String,
+    pub fields: Vec<ShaderField>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShaderField {
+    pub name: String,
+    pub ty: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShaderConst {
+    pub name: String,
+    pub ty: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SublanguageDecl {
+    pub name: String,
 }

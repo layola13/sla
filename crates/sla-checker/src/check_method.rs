@@ -644,6 +644,19 @@ impl Checker {
 /// its inner type; every other argument keeps its checked type
 /// (in particular, an identifier whose TYPE is a borrow does NOT
 /// unwrap — venue probes a_borrow_recv / a_ptr_recv pin this).
+/// Crate-level view of `plain_call_arg_matches` for the plain-call
+/// path (check_call.rs): Zig has ONE plainCallArgMatches shared by
+/// both signature checkers; the plain path consults it only from the
+/// borrow-typed-parameter arm, matching that arm's Zig verdicts.
+pub fn plain_call_arg_matches_pub(
+    checker: &Checker,
+    param_ty: &Type,
+    arg: &Node,
+    arg_ty: &Type,
+) -> bool {
+    checker.plain_call_arg_matches(param_ty, arg, arg_ty)
+}
+
 pub fn unwrap_borrow_for_call_arg(arg: &Node, arg_ty: &Type) -> Type {
     if matches!(arg, Node::BorrowExpr(_)) {
         if let Type::Borrow(inner) = arg_ty {

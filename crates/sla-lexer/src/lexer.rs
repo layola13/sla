@@ -251,6 +251,10 @@ impl<'a> Lexer<'a> {
                     return self.token(Tag::Bang, start);
                 }
                 b'.' => {
+                    if self.at_byte(0) == Some(b'.') && self.at_byte(1) == Some(b'.') {
+                        self.index += 2;
+                        return self.token(Tag::DotDotDot, start);
+                    }
                     if self.at_byte(0) == Some(b'.') {
                         self.index += 1;
                         return self.token(Tag::Range, start);

@@ -26,6 +26,21 @@ impl Checker {
         ext: &ExternSig,
         call: &CallExpr,
     ) -> CheckResult<Type> {
+        // R-3: a variadic contract with zero FIXED parameters
+        // lands here (its params list is empty after the va_list
+        // marker is excluded); calls below the fixed floor are an
+        // arity error, not a silent bypass.
+        if ext.is_variadic && call.args.len() < ext.params.len() {
+            return Err(Diagnostic::new(
+                ErrorKind::InvalidArgsCount,
+                format!(
+                    "call to variadic function {name} needs at least {} arguments ({} fixed), got {}",
+                    ext.params.len(),
+                    ext.params.len(),
+                    call.args.len()
+                ),
+            ));
+        }
         for arg in &call.args {
             self.check_expr(arg)?;
         }

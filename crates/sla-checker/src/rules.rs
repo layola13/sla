@@ -151,7 +151,18 @@ fn branch_consumption(
 
 fn consumption_of_name(name: &str, param: &str) -> MacroParamConsumption {
     if name == param {
-        MacroParamConsumption::Always
+        // R-3: an output-shaped name (the shared leading-output
+        // rule) denotes a caller PLACE the body writes through,
+        // not a value it consumes — a bare mention of `out` in a
+        // body is the assignment target (see the AssignStmt arm),
+        // never a move. Value-consumption of such a parameter is
+        // still caught when it flows into a consuming position
+        // whose analysis names it (call forwarding, `move`, `?`).
+        if crate::check_macro_typed::is_leading_output_param(name) {
+            MacroParamConsumption::Never
+        } else {
+            MacroParamConsumption::Always
+        }
     } else {
         MacroParamConsumption::Never
     }
@@ -227,10 +238,20 @@ fn node_consumption(node: &Node, param: &str) -> MacroParamConsumption {
         Node::ExprStmt(inner) => node_consumption(inner, param),
         Node::LetStmt(l) => node_consumption(&l.value, param),
         Node::ConstStmt(c) => node_consumption(&c.value, param),
-        Node::AssignStmt(a) => sequence_consumption(
-            node_consumption(&a.target, param),
-            node_consumption(&a.value, param),
-        ),
+        Node::AssignStmt(a) => {
+            // R-3: assigning TO the parameter place writes through
+            // it; it does not consume the caller's binding (the
+            // `out = ...` macro idiom). Only the value side can
+            // consume.
+            if matches!(&*a.target, Node::Identifier(t) if t == param) {
+                node_consumption(&a.value, param)
+            } else {
+                sequence_consumption(
+                    node_consumption(&a.target, param),
+                    node_consumption(&a.value, param),
+                )
+            }
+        }
         Node::BlockStmt(b) => block_consumption(&b.body, param),
         Node::ReleaseStmt(r) => consumption_of_name(&r.var_name, param),
         _ => MacroParamConsumption::Never,

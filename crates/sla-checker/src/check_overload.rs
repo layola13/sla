@@ -31,6 +31,9 @@ pub(crate) fn sig_of_decl(func: &FuncDecl) -> FuncSig {
         ret_ty: (*func.ret_ty).clone(),
         is_pub: func.is_pub,
         ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: func.is_async,
+        is_variadic: func.is_variadic,
     }
 }
 
@@ -172,11 +175,28 @@ impl Checker {
         name: &str,
         call: &CallExpr,
     ) -> Option<CheckResult<Type>> {
+        // R-3: an extern set for the name means the unified
+        // resolver owns the call even when a plain-func set also
+        // exists (mixed plain + extern-variadic sets resolve
+        // across sources; the func-set-only path below cannot see
+        // extern members and would misjudge their arity).
+        if self.extern_overload_sets.contains_key(name) {
+            return self.try_resolve_unified_call(name, call);
+        }
         if let Some(set) = self.func_overload_sets.get(name).cloned() {
             return Some(self.resolve_overload_set_call(name, &set, call));
         }
-        if self.imported_overload_sets.contains_key(name)
-            || self.extern_overload_sets.contains_key(name)
+        if self.imported_overload_sets.contains_key(name) {
+            return self.try_resolve_unified_call(name, call);
+        }
+        // R-3: a name claimed by BOTH a plain function and a
+        // singleton extern contract (the mixed plain +
+        // extern-variadic shape) resolves through the unified
+        // pool, where the extern competes instead of being
+        // shadowed by the plain signature.
+        if self.extern_funcs.contains_key(name)
+            && (self.funcs.contains_key(name)
+                || self.func_overload_sets.contains_key(name))
         {
             return self.try_resolve_unified_call(name, call);
         }
@@ -185,7 +205,7 @@ impl Checker {
             .get(name)
             .cloned()
             .or_else(|| self.imported_funcs.get(name).cloned());
-        sig.map(|sig| self.check_call_args_against_sig(name, &sig, &call.args))
+        sig.map(|sig| self.check_call_args_against_sig(name, &sig, &call.args, &call.generics))
     }
 
     fn resolve_overload_set_call(
@@ -260,7 +280,7 @@ impl Checker {
                         .join("; ")
                 ),
             )),
-            1 => self.check_call_args_against_sig(name, winners[0], &call.args),
+            1 => self.check_call_args_against_sig(name, winners[0], &call.args, &call.generics),
             _ => Err(Diagnostic::new(
                 ErrorKind::AmbiguousCall,
                 format!(

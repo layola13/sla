@@ -28,6 +28,12 @@ mod f03;
 mod f04;
 #[path = "fixture_parity/f07.rs"]
 mod f07;
+#[path = "fixture_parity/f08.rs"]
+mod f08;
+#[path = "fixture_parity/f09.rs"]
+mod f09;
+#[path = "fixture_parity/f10.rs"]
+mod f10;
 
 // -- small constructors -------------------------------------------------
 
@@ -113,6 +119,7 @@ pub fn assign(target: &str, value: Node) -> Node {
 
 pub fn func(name: &str, params: &[&str], body: Vec<Node>) -> Node {
     Node::FuncDecl(FuncDecl {
+        is_variadic: false,
         name: name.to_string(),
         is_pub: false,
         is_extern: false,
@@ -123,10 +130,12 @@ pub fn func(name: &str, params: &[&str], body: Vec<Node>) -> Node {
         params: params
             .iter()
             .map(|name| Param {
+                is_var: false,
                 name: name.to_string(),
                 ty: Box::new(i32t()),
                 is_borrow: false,
                 is_move: false,
+                fallible_sugar: false,
             })
             .collect(),
         ret_ty: Box::new(i32t()),
@@ -134,6 +143,9 @@ pub fn func(name: &str, params: &[&str], body: Vec<Node>) -> Node {
         is_inline: false,
         is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
     })
 }
 
@@ -344,3 +356,20 @@ fn fixture_07_functions() {
     let (program, info) = f07::build();
     check_fixture("07_functions", &program, &info);
 }
+
+#[test]
+fn fixture_08_map_insert_macro_body() {
+    f08::assert_insert_macro_body();
+}
+
+#[test]
+fn fixture_09_map_len_dispatch() {
+    f09::assert_map_len_dispatch();
+}
+
+#[test]
+fn fixture_10_copied_dispatch() {
+    f10::assert_copied_dispatch();
+    f10::assert_unwrap_or_default_dispatch();
+}
+

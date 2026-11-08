@@ -317,6 +317,9 @@ impl<'c> Driver<'c> {
                 | Node::TraitDecl(_)
                 | Node::TypeAliasDecl(_)
                 | Node::MacroDecl(_)
+                | Node::CheckHookDecl(_)
+                | Node::SublanguageDecl(_)
+                | Node::ShaderDecl(_)
                 | Node::ImportDecl(_)
                 | Node::UsingDecl(_)
                 | Node::ConstStmt(_) => {}

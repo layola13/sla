@@ -42,6 +42,8 @@ fn param(name: &str, ty: Type) -> Param {
         ty: Box::new(ty),
         is_borrow: false,
         is_move: false,
+        fallible_sugar: false,
+        is_var: false,
     }
 }
 
@@ -58,8 +60,12 @@ fn func(name: &str, params: Vec<Param>, ret: Type, body: Vec<Node>) -> Node {
         ret_ty: Box::new(ret),
         body,
         is_inline: false,
-        is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     })
 }
 
@@ -93,6 +99,7 @@ fn extern_sig(spelling: &str, ret: &str) -> ExternSig {
     extern_sig_from_parts(
         &[("x".to_string(), spelling.to_string(), false, false)],
         ret,
+        false,
         false,
     )
 }
@@ -153,6 +160,7 @@ fn r6_unify_imported_set_resolves() {
     let mut checker = Checker::new();
     let sig_i32 = crate::checker::FuncSig {
         params: vec![crate::checker::ParamSig {
+            is_var: false,
             name: "x".to_string(),
             ty: i32_ty(),
             is_borrow: false,
@@ -161,16 +169,21 @@ fn r6_unify_imported_set_resolves() {
         ret_ty: i32_ty(),
         is_pub: true,
         ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     };
     let sig_pair = crate::checker::FuncSig {
         params: vec![
             crate::checker::ParamSig {
+                is_var: false,
                 name: "x".to_string(),
                 ty: i32_ty(),
                 is_borrow: false,
                 is_move: false,
             },
             crate::checker::ParamSig {
+                is_var: false,
                 name: "y".to_string(),
                 ty: i32_ty(),
                 is_borrow: false,
@@ -180,6 +193,9 @@ fn r6_unify_imported_set_resolves() {
         ret_ty: i32_ty(),
         is_pub: true,
         ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     };
     checker.register_imported_overload_member("imp_pick", sig_i32);
     checker.register_imported_overload_member("imp_pick", sig_pair);

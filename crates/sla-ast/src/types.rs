@@ -44,6 +44,8 @@ pub enum Primitive {
     Boolean,
     RawPtr,
     VoidType,
+    /// R-3: C va_list (a named `args: ...` variadic parameter).
+    VaList,
 }
 
 /// Mirrors Zig `UserDefined`.

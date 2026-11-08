@@ -40,6 +40,7 @@ pub(crate) fn prim_type(ty: &Type) -> Result<PrimType> {
             Primitive::Boolean => PrimType::I1,
             Primitive::RawPtr => PrimType::Ptr,
             Primitive::VoidType => PrimType::Void,
+            Primitive::VaList => PrimType::Ptr,
         }),
         Type::Pointer(_) | Type::Borrow(_) | Type::FnPtr(_) | Type::Closure(_) => {
             Ok(PrimType::Ptr)

@@ -52,6 +52,7 @@ pub fn extern_sig_of(func: &ExternalFunction) -> ExternSig {
             .collect::<Vec<_>>(),
         &func.ret_ty,
         func.return_fallible,
+        func.is_variadic,
     )
 }
 
@@ -145,6 +146,7 @@ mod tests {
             }],
             ret_ty: "i32".to_string(),
             return_fallible: false,
+            is_variadic: false,
         };
         let sig = extern_sig_of(&func);
         assert_eq!(sig.move_params, vec![true]);

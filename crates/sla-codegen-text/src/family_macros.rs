@@ -28,8 +28,6 @@ L_SLA_MAP_INSERT_SOME_%out_opt:
     __sla_map_insert_old_value_%out_opt = load __sla_map_insert_old_ptr_%out_opt+0 as u64
     EXPAND OPTION_NEW_SOME %out_opt, __sla_map_insert_old_value_%out_opt
     !__sla_map_insert_old_value_%out_opt
-    __sla_map_insert_free_%out_opt = add __sla_map_insert_old_ptr_%out_opt, 0
-    call @sa_mem_free(^__sla_map_insert_free_%out_opt)
     !__sla_map_insert_old_ptr_%out_opt
     !__sla_map_insert_replaced_%out_opt
     jmp L_SLA_MAP_INSERT_END_%out_opt

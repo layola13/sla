@@ -56,6 +56,8 @@ fn param(name: &str, ty: Type) -> Param {
         ty: Box::new(ty),
         is_borrow: false,
         is_move: false,
+        fallible_sugar: false,
+        is_var: false,
     }
 }
 
@@ -72,8 +74,12 @@ fn func(name: &str, params: Vec<Param>, ret: Type, body: Vec<Node>) -> Node {
         ret_ty: Box::new(ret),
         body,
         is_inline: false,
-        is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     })
 }
 
@@ -517,6 +523,7 @@ fn macro_conditional_consume_rejected() {
     let mac = Node::MacroDecl(MacroDecl {
         name: "m".to_string(),
         params: vec!["x".to_string()],
+        param_tys: vec![None],
         body: vec![expr_stmt(Node::IfExpr(IfExpr {
             cond: Box::new(ident("flag")),
             let_chain: None,
@@ -627,6 +634,7 @@ fn imported_println_in_test_block() {
         "println",
         FuncSig {
             params: vec![ParamSig {
+                is_var: false,
                 name: "s".to_string(),
                 ty: Type::Primitive(Primitive::RawPtr),
                 is_borrow: false,
@@ -635,6 +643,9 @@ fn imported_println_in_test_block() {
             ret_ty: void_ty(),
             is_pub: true,
             ret_fallible_sugar: false,
+            ret_borrow_origin: None,
+            is_async: false,
+            is_variadic: false,
         },
     );
     let program = Program {

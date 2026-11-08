@@ -66,6 +66,7 @@ pub fn node_uses_future_task_runtime(node: &Node) -> bool {
             .map(|v| node_uses_future_task_runtime(v))
             .unwrap_or(false),
         Node::BlockStmt(b) => block_uses_future_task_runtime(&b.body),
+        Node::ArenaStmt(b) => block_uses_future_task_runtime(&b.body),
         Node::AwaitExpr(_) => true,
         Node::BinaryExpr(b) => {
             node_uses_future_task_runtime(&b.left) || node_uses_future_task_runtime(&b.right)
@@ -245,6 +246,7 @@ mod tests {
 
     fn func(name: &str, body: Vec<Node>) -> Node {
         Node::FuncDecl(FuncDecl {
+            is_variadic: false,
             name: name.to_string(),
             is_pub: false,
             is_extern: false,
@@ -258,6 +260,9 @@ mod tests {
             is_inline: false,
             is_async: false,
             operator: None,
+            is_arena: false,
+            ret_fallible_sugar: false,
+            ret_borrow_origin: None,
         })
     }
 

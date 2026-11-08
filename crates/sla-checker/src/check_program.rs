@@ -25,6 +25,11 @@ impl Checker {
     /// Mirrors Zig `checkProgram`. Registration happens in passes so
     /// declarations may reference each other in any order.
     pub fn check_program(&mut self, program: &Program) -> CheckResult<()> {
+        // R-3 (J-5): check-hook validation + the macro_param_audit
+        // run before any other pass names a fault.
+        self.apply_check_hooks(program)?;
+        // R-3 (J-1): sublanguage binding + shader body checks.
+        self.apply_sublanguage_checks(program)?;
         // Pass 1: type-level names (structs / enums / aliases /
         // traits), with cross-kind collision detection
         // (`ensureTopLevelNameUnused`).
@@ -47,6 +52,7 @@ impl Checker {
                             derives: s.derives.clone(),
                             is_union: s.is_union,
                             is_opaque: s.is_opaque,
+                            generics: s.generics.clone(),
                         },
                     );
                 }
@@ -63,6 +69,7 @@ impl Checker {
                         e.variants
                             .iter()
                             .map(|v| crate::checker::EnumVariantInfo {
+                                generics: e.generics.clone(),
                                 name: v.name.clone(),
                                 fields: v
                                     .fields
@@ -164,7 +171,7 @@ impl Checker {
                 // and promote into extern overload sets
                 // (check_overload2.rs), exactly as contract
                 // declarations do. They never enter fn_groups.
-                if !(f.is_extern && f.abi.is_some()) {
+                if !(f.is_extern && (f.abi.is_some() || f.is_variadic)) {
                     fn_groups.entry(f.name.clone()).or_default().push(f);
                 }
             }
@@ -174,7 +181,7 @@ impl Checker {
         for decl in &program.decls {
             match decl {
                 Node::FuncDecl(f) => {
-                    if f.is_extern && f.abi.is_some() {
+                    if f.is_extern && (f.abi.is_some() || f.is_variadic) {
                         // Source-level extern declaration
                         // (prototype or @no_mangle definition):
                         // register under the contract discipline.
@@ -276,6 +283,23 @@ impl Checker {
                             ),
                         ));
                     }
+                    // R-3: the const must also be VISIBLE as a
+                    // value — registration above only claimed the
+                    // name, so bodies referencing the const hit
+                    // UndefinedVariable. Define it in the program
+                    // frame with its declared (or value-inferred)
+                    // type.
+                    let cty = match &c.ty {
+                        Some(t) => (**t).clone(),
+                        None => self.check_expr(&c.value)?,
+                    };
+                    self.define_symbol_with_state(
+                        &c.name,
+                        cty,
+                        true,
+                        crate::rules::ValueState::Active,
+                        None,
+                    )?;
                 }
                 Node::ImplDecl(imp) => {
                     let target_name = target_type_name(&imp.target_ty)?;
@@ -361,6 +385,46 @@ impl Checker {
                 _ => {}
             }
         }
+        // Pass 2.5 (R-4): register top-level consts into the global
+        // scope so functions/tests can use them — Zig checkProgram
+        // (type_checker.zig:2271-2290) does this after the macro
+        // bodies and before function checking: each const's value
+        // expression is checked in the global scope, the declared
+        // type (or the value's type) must accept the value type,
+        // and the const is defined as an immutable global symbol.
+        // Without this pass every top-level const use fell to
+        // UndefinedVariable on the test-codegen form (the Check
+        // form's decl-only parser skips bodies, which is why
+        // `sla check` accepted these programs while `sla test`
+        // rejected them). Name collision with a function, macro or
+        // earlier const is the Pass-2 Redeclaration above.
+        for decl in &program.decls {
+            if let Node::ConstStmt(c) = decl {
+                let val_ty = self.check_expr(&c.value)?;
+                let declared_ty = match &c.ty {
+                    Some(t) => (**t).clone(),
+                    None => val_ty.clone(),
+                };
+                if c.ty.is_some() {
+                    if let (Type::Array(_), Type::Array(_)) = (&declared_ty, &val_ty) {
+                        self.expr_types
+                            .insert(node_key_of(&c.value), declared_ty.clone());
+                    }
+                }
+                if !value_assignable_to(&declared_ty, &val_ty) {
+                    return Err(Diagnostic::new(
+                        ErrorKind::TypeMismatch,
+                        format!(
+                            "TypeMismatch in const {}: declared tag={}, val tag={}",
+                            c.name,
+                            crate::types_util::type_desc(&declared_ty),
+                            crate::types_util::type_desc(&val_ty),
+                        ),
+                    ));
+                }
+                self.define_symbol(&c.name, declared_ty, true)?;
+            }
+        }
         // Pass 3: check bodies. Impl blocks go through the trait
         // contract check (`check_impl`); overload bodies check as
         // regular functions, as in Zig.
@@ -372,6 +436,9 @@ impl Checker {
                     }
                 }
                 Node::TestDecl(t) => self.check_test(t)?,
+                // R-3 (J-3): typed macro bodies are checked with
+                // their declared parameter types visible.
+                Node::MacroDecl(m) => self.check_macro_body(m)?,
                 Node::ImplDecl(imp) => self.check_impl(imp)?,
                 Node::OverloadDecl(o) => {
                     for method in &o.methods {
@@ -390,13 +457,27 @@ impl Checker {
 
     /// Mirrors Zig `checkFunc` (type_checker.zig:2573).
     pub fn check_func(&mut self, func: &FuncDecl) -> CheckResult<()> {
+        // R-3: borrow-origin declaration gates + per-function
+        // ledger reset; the current function is remembered for
+        // the return gate.
+        self.origin_check_decl(func)?;
+        self.origin_reset();
+        self.current_func = Some(func.clone());
         let ret_ty = (*func.ret_ty).clone();
         let frame = self.scopes.push_frame();
         let saved_root = self.fn_root_depth;
         let saved_ret = self.current_ret_ty.replace(ret_ty.clone());
         self.fn_root_depth = frame;
 
-        let mut result = self.check_func_body(func, &ret_ty);
+        let mut result = if func.is_arena {
+            let frame = self.scopes.depth();
+            crate::check_arena::push_arena_frame(frame);
+            let r = self.check_func_body(func, &ret_ty);
+            crate::check_arena::pop_arena_frame();
+            r
+        } else {
+            self.check_func_body(func, &ret_ty)
+        };
         if result.is_ok() {
             result = self.check_tail_type(func, &ret_ty);
         }

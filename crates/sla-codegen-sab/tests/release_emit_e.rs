@@ -92,10 +92,12 @@ use sla_lowering::MapCheckInfo;
     fn param_capability_borrow_param() {
         let check = MapCheckInfo::new();
         let param = Param {
+            is_var: false,
             name: "p".to_string(),
             ty: Box::new(Type::Borrow(Box::new(Type::Primitive(Primitive::I32)))),
             is_borrow: true,
             is_move: false,
+            fallible_sugar: false,
         };
         assert_eq!(param_capability(&check, &param), CapPrefix::Borrow);
     }

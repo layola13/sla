@@ -24,6 +24,8 @@ use sla_ast::node::Node;
 use sla_ast::types::Type;
 use std::collections::HashMap;
 
+pub use crate::checker_util::{extern_ret_type, is_panic_builtin_name, make_borrow_type};
+
 /// One callable signature (user function or imported signature).
 #[derive(Debug, Clone)]
 pub struct FuncSig {
@@ -43,6 +45,13 @@ pub struct FuncSig {
     /// (R-3); the field exists so the provenance predicate has the
     /// same three sources as Zig's `isFallibleProvenanceCall`.
     pub ret_fallible_sugar: bool,
+    /// R-3: trailing `-> &[T][name]` borrow-origin annotation.
+    pub ret_borrow_origin: Option<String>,
+    /// R-3 goroutine batch: the declaration is an `async fn`
+    /// (spawn gate GoAsyncCallee consults this).
+    pub is_async: bool,
+    /// R-3: the declaration is extern-variadic (`...` marker).
+    pub is_variadic: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +60,9 @@ pub struct ParamSig {
     pub ty: Type,
     pub is_borrow: bool,
     pub is_move: bool,
+    /// R-3 (var Phase-2): declared `var name: T` — callee writes
+    /// flow back to the caller's `var` argument binding.
+    pub is_var: bool,
 }
 
 impl From<&Param> for ParamSig {
@@ -60,6 +72,7 @@ impl From<&Param> for ParamSig {
             ty: (*p.ty).clone(),
             is_borrow: p.is_borrow,
             is_move: p.is_move,
+            is_var: p.is_var,
         }
     }
 }
@@ -109,6 +122,8 @@ pub struct StructInfo {
     pub derives: Vec<String>,
     pub is_union: bool,
     pub is_opaque: bool,
+    /// R-3: decl-site generic params (arena closure substitution).
+    pub generics: Vec<String>,
 }
 
 impl StructInfo {
@@ -124,13 +139,12 @@ impl StructInfo {
     }
 }
 
-/// One enum variant's shape, for pattern binding and enum literals.
-/// The legacy `Checker::enums` table keeps only variant NAMES (its
-/// public shape predates this line); this table carries the fields.
+/// One enum variant's shape (fields), beside the name-only `enums` table.
 #[derive(Debug, Clone)]
 pub struct EnumVariantInfo {
     pub name: String,
     pub fields: Vec<(String, Type)>,
+    pub generics: Vec<String>, // R-3: owning enum's decl-site generics
 }
 
 /// A registered trait: supertraits plus its declared methods, for
@@ -191,11 +205,9 @@ pub struct Checker {
     pub enum_variants: HashMap<String, Vec<EnumVariantInfo>>,
     /// Registered traits by name (Zig `traits`).
     pub traits: HashMap<String, TraitInfo>,
-    /// `"trait|type"` pairs for every registered trait impl
-    /// (Zig `trait_impls`).
+    /// `"trait|type"` pairs for every registered trait impl.
     pub trait_impls: std::collections::HashSet<String>,
-    /// Operator overload lists keyed `"{Type}|{op_name}"`, values
-    /// are mangled symbols `"{Type}__{op_name}"` (Zig `overloads`).
+    /// Operator overload lists keyed `"{Type}|{op_name}"` (Zig `overloads`).
     pub overloads: HashMap<String, Vec<String>>,
     /// Generic parameter names per function (Zig `FuncDecl.generics`;
     /// the checker stores but never substitutes them — D-C11).
@@ -205,22 +217,24 @@ pub struct Checker {
     /// Single-`Ty` component aliases, for name resolution.
     pub aliases: HashMap<String, Type>,
     pub funcs: HashMap<String, FuncSig>,
-    /// R-6: Zig `func_overload_sets` — names declared by two or more
-    /// DISTINCT signatures. Resolution happens at the call site
-    /// (check_overload.rs); a bare reference to a set name is an
-    /// AmbiguousCall. Declaration order is preserved in the Vec —
-    /// candidate lists render in this order, never in hash order.
+    /// R-6: Zig `func_overload_sets` — names with 2+ DISTINCT
+    /// signatures; resolved at the call site (check_overload.rs).
+    /// Declaration order preserved (never hash order).
     pub func_overload_sets: HashMap<String, Vec<FuncSig>>,
-    /// R-6 follow-up: Zig `extern_overload_sets` / the imported
-    /// analogue — a name enters only when a second DISTINCT
-    /// declaration arrives. Registration order preserved.
+    /// R-6: Zig `extern_overload_sets` (+ imported analogue);
+    /// registration order preserved.
     pub extern_overload_sets: HashMap<String, Vec<ExternSig>>,
     pub imported_overload_sets: HashMap<String, Vec<FuncSig>>,
-    /// R-6: stage-1 field-borrow ledger (check_field_borrow.rs),
-    /// mirroring Zig's `field_borrows` list. Append order is
-    /// registration order; conflict queries return the FIRST live
-    /// overlapping entry, as in Zig.
+    /// R-6: stage-1 field-borrow ledger (check_field_borrow.rs);
+    /// append = registration order; conflicts return FIRST live hit.
     pub field_borrows: Vec<crate::check_field_borrow::FieldBorrow>,
+    /// R-3: live borrow-origin views, function-local
+    /// (check_borrow_origin.rs): view binding -> owner binding.
+    pub origin_views: Vec<(String, String)>,
+    /// R-3: borrow-origin views invalidated by a may-invalidate
+    /// event on their owner; reading one is
+    /// BorrowUseAfterInvalidation.
+    pub origin_invalidated: std::collections::HashSet<String>,
     pub extern_funcs: HashMap<String, ExternSig>,
     pub imported_funcs: HashMap<String, FuncSig>,
     pub macros: HashMap<String, MacroDecl>,
@@ -256,6 +270,10 @@ pub struct Checker {
     /// around unsafe blocks; the `ptr::read_volatile` arms gate
     /// on it (D-C21's missing counter, now carried).
     pub unsafe_depth: usize,
+    /// R-3: inside a `go` spawn's whole shape check the
+    /// ownership gates (consumption / loop-consume) are
+    /// skipped — the payload handle crosses threads by copy.
+    pub no_consume_depth: u32,
     /// Zig `current_fn_is_variadic_def`: whether the function
     /// under check is an exported extern "C" variadic
     /// definition, the `va_next_*` gate. No sla-ast surface can
@@ -266,9 +284,23 @@ pub struct Checker {
     pub current_fn_is_variadic: bool,
     /// Frame index of the current function's root scope.
     pub fn_root_depth: usize,
+    /// R-3: deferred arena escape message recorded by the
+    /// post-resolution plain-call gate (check_arena.rs); raised by
+    /// the `check_call` wrapper once the call's own checking is done.
+    pub arena_pending_escape: Option<String>,
     /// The current function's return type (Zig: the
     /// `return_ty_sentinel` symbol; here a field — D-C5).
     pub current_ret_ty: Option<Type>,
+    /// R-3: the impl target type of the method currently being
+    /// checked (`Self` resolution). Zig keeps the parser-side
+    /// `Self` type and resolves it in the checker wherever a method
+    /// is checked under its impl (checkImpl -> checkFunc); here
+    /// check_impl sets this around each method check and the
+    /// struct-literal / Self-comparison sites consult it.
+    pub current_self_ty: Option<Type>,
+    /// R-3: the function currently being checked (borrow-origin
+    /// return gate consults its annotation).
+    pub current_func: Option<sla_ast::decls::FuncDecl>,
 }
 
 impl Default for Checker {
@@ -294,6 +326,8 @@ impl Checker {
             extern_overload_sets: HashMap::new(),
             imported_overload_sets: HashMap::new(),
             field_borrows: Vec::new(),
+            origin_views: Vec::new(),
+            origin_invalidated: std::collections::HashSet::new(),
             extern_funcs: HashMap::new(),
             imported_funcs: HashMap::new(),
             macros: HashMap::new(),
@@ -308,9 +342,13 @@ impl Checker {
             loop_ctx: Vec::new(),
             monitor_calls: std::collections::HashSet::new(),
             unsafe_depth: 0,
+            no_consume_depth: 0,
             current_fn_is_variadic: false,
             fn_root_depth: 0,
             current_ret_ty: None,
+            arena_pending_escape: None,
+            current_self_ty: None,
+            current_func: None,
         }
     }
 
@@ -341,7 +379,10 @@ impl Checker {
             params: func.params.iter().map(ParamSig::from).collect(),
             ret_ty: (*func.ret_ty).clone(),
             is_pub: func.is_pub,
-            ret_fallible_sugar: false,
+            ret_fallible_sugar: func.ret_fallible_sugar,
+            ret_borrow_origin: func.ret_borrow_origin.clone(),
+            is_async: func.is_async,
+            is_variadic: func.is_variadic,
         };
         self.funcs.insert(symbol.to_string(), sig);
         if !func.generics.is_empty() {
@@ -454,6 +495,9 @@ impl Checker {
     /// line 112). Here frame indices compare directly — same question,
     /// no chain walk.
     pub fn consume_binding(&mut self, name: &str, context: &str) -> CheckResult<()> {
+        if self.no_consume_depth > 0 {
+            return Ok(());
+        }
         let frame = self.scopes.frame_of(name).ok_or_else(|| {
             Diagnostic::new(
                 ErrorKind::UndefinedVariable,
@@ -649,52 +693,7 @@ impl Checker {
             .insert(types_util::node_key_of(try_node), names);
     }
 
-    /// Resolve a user-defined name through the alias table.
-    pub fn resolve_alias<'a>(&'a self, ty: &'a Type) -> &'a Type {
-        if let Type::UserDefined(u) = ty {
-            if u.generics.is_empty() {
-                if let Some(target) = self.aliases.get(&u.name) {
-                    return target;
-                }
-            }
-        }
-        ty
-    }
 }
 
-/// Map an `.sai` ABI return spelling to a type (Zig
-/// `setTypeFromAbiReturn`). Unknown spellings degrade to `infer`,
-/// which the Zig helper likewise leaves unset/wildcard in practice.
-pub fn extern_ret_type(abi: &str) -> Type {
-    use sla_ast::types::Primitive as P;
-    match abi {
-        "" | "void" => types_util::prim(P::VoidType),
-        "ptr" | "*u8" | "*const u8" => types_util::prim(P::RawPtr),
-        "bool" => types_util::prim(P::Boolean),
-        "i8" => types_util::prim(P::I8),
-        "i16" => types_util::prim(P::I16),
-        "i32" => types_util::prim(P::I32),
-        "i64" | "isize" => types_util::prim(P::I64),
-        "u8" => types_util::prim(P::U8),
-        "u16" => types_util::prim(P::U16),
-        "u32" => types_util::prim(P::U32),
-        "u64" | "usize" => types_util::prim(P::U64),
-        "f32" => types_util::prim(P::F32),
-        "f64" => types_util::prim(P::F64),
-        _ => Type::Infer,
-    }
-}
 
-/// Zig `makeBorrowType`: wrap a parameter type in a borrow unless it
-/// already is one.
-pub fn make_borrow_type(ty: &Type) -> Type {
-    match ty {
-        Type::Borrow(_) => ty.clone(),
-        _ => Type::Borrow(Box::new(ty.clone())),
-    }
-}
 
-/// Zig `isPanicBuiltinName` (lowering_rules.zig:4108).
-pub fn is_panic_builtin_name(name: &str) -> bool {
-    name == "panic" || name == "panic_msg"
-}

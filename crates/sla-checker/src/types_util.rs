@@ -125,6 +125,7 @@ pub fn primitive_tag(p: Primitive) -> &'static str {
         Primitive::Boolean => "boolean",
         Primitive::RawPtr => "raw_ptr",
         Primitive::VoidType => "void_type",
+        Primitive::VaList => "va_list",
     }
 }
 
@@ -612,6 +613,9 @@ pub fn node_tag(node: &Node) -> &'static str {
         Node::OverloadDecl(_) => "overload_decl",
         Node::FuncDecl(_) => "func_decl",
         Node::MacroDecl(_) => "macro_decl",
+        Node::CheckHookDecl(_) => "check_hook_decl",
+        Node::SublanguageDecl(_) => "sublanguage_decl",
+        Node::ShaderDecl(_) => "shader_decl",
         Node::ImportDecl(_) => "import_decl",
         Node::UsingDecl(_) => "using_decl",
         Node::TestDecl(_) => "test_decl",
@@ -622,6 +626,7 @@ pub fn node_tag(node: &Node) -> &'static str {
         Node::VarStmt(_) => "var_stmt",
         Node::AssignStmt(_) => "assign_stmt",
         Node::BlockStmt(_) => "block_stmt",
+        Node::ArenaStmt(_) => "arena_stmt",
         Node::ExprStmt(_) => "expr_stmt",
         Node::ReturnStmt(_) => "return_stmt",
         Node::ForStmt(_) => "for_stmt",
@@ -629,6 +634,9 @@ pub fn node_tag(node: &Node) -> &'static str {
         Node::BreakStmt(_) => "break_stmt",
         Node::ContinueStmt(_) => "continue_stmt",
         Node::ReleaseStmt(_) => "release_stmt",
+        Node::GoStmt(_) => "go_stmt",
+        Node::DeferStmt(_) => "defer_stmt",
+        Node::SelectStmt(_) => "select_stmt",
         Node::Literal(_) => "literal",
         Node::Identifier(_) => "identifier",
         Node::GenericFuncRef(_) => "generic_func_ref",

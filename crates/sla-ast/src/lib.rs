@@ -10,7 +10,8 @@ pub mod stmts;
 pub mod types;
 
 pub use decls::{
-    EnumDecl, EnumVariant, Field, FuncDecl, ImplDecl, ImportDecl, MacroDecl, OverloadDecl,
+    CheckHookDecl, EnumDecl, EnumVariant, Field, FuncDecl, ImplDecl, ImportDecl, MacroDecl,
+    OverloadDecl, ShaderConst, ShaderDecl, ShaderField, ShaderGlobalStruct, SublanguageDecl,
     Param, Program, StructDecl, TestDecl, TraitDecl, TraitMethod, TypeAliasComponent,
     TypeAliasDecl, UsingDecl,
 };

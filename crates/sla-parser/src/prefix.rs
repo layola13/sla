@@ -47,10 +47,17 @@ impl<'a> Parser<'a> {
                     string_literal_inner(&raw).to_string(),
                 )))
             }
-            Tag::TemplateStart => Err(self.err_expected(
-                ParseErrorKind::SyntaxError,
-                "template literals are not covered by the sla-parser slice yet".to_string(),
-            )),
+            Tag::TemplateStart => self.parse_template_literal(),
+            Tag::KeywordGo => {
+                // `go` in expression position (let bindings,
+                // returns): the spawn is an expression whose
+                // value is the join handle.
+                self.advance();
+                let call = self.parse_expr(6)?;
+                Ok(Node::GoStmt(sla_ast::stmts::GoStmt {
+                    call: Box::new(call),
+                }))
+            }
             Tag::Identifier => self.parse_identifier_prefix(),
             Tag::Ampersand => {
                 self.advance();
@@ -217,6 +224,21 @@ impl<'a> Parser<'a> {
             return self.parse_struct_literal(ty);
         }
 
+        if name == "Self" && self.peek() == Tag::LBrace {
+            // `Self { ... }` inside an impl/trait body. Zig's parser
+            // keeps the literal's type as `Self` (a user-defined type
+            // named "Self") and the CHECKER resolves it against the
+            // impl target of the method being checked
+            // (structDeclForType / typeEqualsWithSelf). Mirror that
+            // split exactly: only the live-impl-target gate lives
+            // here (outside an impl body `Self` is not a type head);
+            // the name stays "Self" in the AST.
+            if self.current_impl_target().is_some() {
+                let ty = Parser::make_user_defined_type("Self", Vec::new());
+                return self.parse_struct_literal(ty);
+            }
+        }
+
         match name.as_str() {
             "true" => Ok(Node::Literal(Literal::BoolVal(true))),
             "false" => Ok(Node::Literal(Literal::BoolVal(false))),
@@ -338,6 +360,8 @@ impl<'a> Parser<'a> {
                     ty: Box::new(ty),
                     is_borrow: false,
                     is_move: false,
+                    fallible_sugar: false,
+                    is_var: false,
                 });
                 if !self.eat(Tag::Comma) {
                     self.expect(Tag::Pipe)?;

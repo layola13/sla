@@ -348,6 +348,7 @@ mod tests {
 
     fn func_decl(name: &str, is_extern: bool, no_mangle: bool, decl_only: bool) -> FuncDecl {
         FuncDecl {
+            is_variadic: false,
             name: name.to_string(),
             is_pub: false,
             is_extern,
@@ -361,6 +362,9 @@ mod tests {
             is_inline: false,
             is_async: false,
             operator: None,
+            is_arena: false,
+            ret_fallible_sugar: false,
+            ret_borrow_origin: None,
         }
     }
 

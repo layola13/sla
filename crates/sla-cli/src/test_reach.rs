@@ -448,6 +448,7 @@ impl<'a> Collector<'a> {
                     self.collect_expr(&assign.value, caller);
                 }
                 Node::BlockStmt(block_stmt) => self.collect_block(&block_stmt.body, caller),
+                Node::ArenaStmt(block_stmt) => self.collect_block(&block_stmt.body, caller),
                 Node::ExprStmt(expr) => self.collect_expr(expr, caller),
                 Node::ReturnStmt(ret) => {
                     if let Some(value) = &ret.value {

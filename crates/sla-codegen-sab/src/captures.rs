@@ -180,6 +180,10 @@ pub fn collect_escaped_captures_in_block(
                 let mut child = locals.clone();
                 collect_escaped_captures_in_block(state, check, &blk.body, captures, &mut child)?;
             }
+            Node::ArenaStmt(blk) => {
+                let mut child = locals.clone();
+                collect_escaped_captures_in_block(state, check, &blk.body, captures, &mut child)?;
+            }
             Node::ExprStmt(expr) => {
                 collect_escaped_captures_in_expr(state, check, expr, captures, locals)?;
             }
@@ -366,10 +370,12 @@ mod tests {
         });
         let closure = ClosureLiteral {
             params: vec![Param {
+                is_var: false,
                 name: "a".to_string(),
                 ty: Box::new(i32_ty()),
                 is_borrow: false,
                 is_move: false,
+                fallible_sugar: false,
             }],
             body: Box::new(body),
         };

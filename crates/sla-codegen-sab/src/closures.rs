@@ -343,10 +343,12 @@ mod tests {
 
     fn param(name: &str) -> Param {
         Param {
+            is_var: false,
             name: name.to_string(),
             ty: Box::new(i32_ty()),
             is_borrow: false,
             is_move: false,
+            fallible_sugar: false,
         }
     }
 

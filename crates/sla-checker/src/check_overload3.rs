@@ -14,6 +14,7 @@ pub fn extern_sig_from_parts(
     params: &[(String, String, bool, bool)],
     ret_abi: &str,
     fallible: bool,
+    is_variadic: bool,
 ) -> ExternSig {
     ExternSig {
         move_params: params.iter().map(|p| p.3).collect(),
@@ -27,7 +28,7 @@ pub fn extern_sig_from_parts(
                 is_raw: false,
             })
             .collect(),
-        is_variadic: false,
+        is_variadic,
         ret_abi: ret_abi.to_string(),
         fallible,
     }

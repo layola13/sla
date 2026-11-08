@@ -43,6 +43,13 @@ impl<'c> Codegen<'c> {
             }
             Node::AssignStmt(_) => self.gen_assign_stmt(stmt)?,
             Node::BlockStmt(blk) => self.gen_scoped_block(&blk.body)?,
+            Node::ArenaStmt(blk) => self.gen_scoped_block(&blk.body)?,
+            // R-3 goroutine batch: spawn/defer/select lower in
+            // the runtime batch; the check-level slice passes the
+            // statements through scope-only so unrelated codegen
+            // fixtures keep compiling (full lowering is R-4
+            // jurisdiction).
+            Node::GoStmt(_) | Node::DeferStmt(_) | Node::SelectStmt(_) => {},
             Node::ExprStmt(expr) => self.gen_expr_stmt(expr)?,
             Node::ReturnStmt(_) => self.gen_return_stmt(stmt)?,
             Node::WhileStmt(_) => self.gen_while_stmt(stmt)?,

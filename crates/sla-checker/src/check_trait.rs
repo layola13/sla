@@ -178,6 +178,9 @@ impl Checker {
 
     /// Mirrors Zig `checkImpl`: the trait contract (when the impl
     /// names a trait) plus a normal function check of every method.
+    /// Each method is checked with `current_self_ty` set to the impl
+    /// target so the parser-preserved `Self` type resolves exactly
+    /// where Zig resolves it (inside the method check).
     pub fn check_impl(&mut self, imp: &ImplDecl) -> CheckResult<()> {
         if let Some(trait_name) = &imp.trait_name {
             self.check_trait_impl(trait_name, imp)?;
@@ -190,7 +193,12 @@ impl Checker {
                 ));
             };
             if !f.is_decl_only && !f.is_extern {
-                self.check_func(f)?;
+                let saved = self
+                    .current_self_ty
+                    .replace((*imp.target_ty).clone());
+                let r = self.check_func(f);
+                self.current_self_ty = saved;
+                r?;
             }
         }
         Ok(())

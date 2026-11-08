@@ -214,7 +214,7 @@ pub fn run_frontend(
     let prefix = if kind == FrontendKind::Check { "check " } else { "" };
 
     let start = Instant::now();
-    let content = match std::fs::read(file) {
+    let mut content = match std::fs::read(file) {
         Ok(bytes) => {
             if bytes.len() > MAX_SOURCE_BYTES {
                 let _ = writeln!(
@@ -244,6 +244,24 @@ pub fn run_frontend(
         }
     };
     stage_done(stderr, profile, &format!("{prefix}read source"), start);
+
+    // R-3 (restored): @expand_tuple source expansion runs BEFORE
+    // prescan/parse — the Zig front-end expands the root source,
+    // so the parser never sees the directive. An invalid
+    // directive fails loudly as error.InvalidExpandTuple. (This
+    // wiring was the expand_tuple slice's core change; it must
+    // not be dropped — the corpus expand_tuple family is its
+    // regression anchor.)
+    match sla_parser::source_expand::expand(&content) {
+        Ok(expanded) => content = expanded,
+        Err(_) => {
+            let _ = writeln!(
+                stderr,
+                "Error: failed to expand {file}: error.InvalidExpandTuple"
+            );
+            return None;
+        }
+    }
 
     let start = Instant::now();
     let (seed_types, seed_enums) = prescan_sla_imports(Path::new(file), &content);
@@ -368,6 +386,7 @@ pub fn run_frontend(
                     .collect::<Vec<_>>(),
                 &func.ret_ty,
                 func.return_fallible,
+                func.is_variadic,
             ),
         ) {
             let zig_err = diag.kind.name();

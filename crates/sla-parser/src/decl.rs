@@ -2,8 +2,9 @@
 //! function/macro/import/using/test declarations, extern blocks and
 //! modules, mirroring the declaration half of `src/parser.zig`.
 //!
-//! Slice scope: `trait`, `impl` and `@overload` declarations are NOT
-//! covered yet and fail loudly (see `docs/divergences/parser.md`).
+//! Slice scope: `@overload` declarations are NOT covered yet and
+//! fail loudly (see `docs/divergences/parser.md`); `impl` and
+//! `trait` declarations are covered by the R-3 impl/trait slices.
 
 use sla_ast::decls::{
     FuncDecl, ImportDecl, MacroDecl, Program, TestDecl, UsingDecl,
@@ -88,6 +89,16 @@ impl<'a> Parser<'a> {
         if self.peek() == Tag::At {
             return self.parse_at_decl();
         }
+        // R-3 (J-1): a bare `shader` declaration is only a
+        // declaration when the shader sublanguage was
+        // registered earlier in this file; otherwise it is not
+        // recognised at all (ExpectedDeclaration).
+        if self.peek() == Tag::Identifier
+            && self.cur_text() == "shader"
+            && self.sublanguage_registered("shader")
+        {
+            return self.parse_shader_decl();
+        }
         let mut mods = DeclMods::default();
         mods.is_pub = self.eat(Tag::KeywordPub);
         if self.eat(Tag::KeywordExtern) {
@@ -121,9 +132,9 @@ impl<'a> Parser<'a> {
                 if mods.is_inline {
                     return Err(self.err_here(ParseErrorKind::InlineImplNotAllowed));
                 }
-                Err(self.not_covered("impl declarations"))
+                self.parse_impl_decl()
             }
-            Tag::KeywordTrait => Err(self.not_covered("trait declarations")),
+            Tag::KeywordTrait => self.parse_trait_decl(),
             Tag::KeywordFn => self.parse_func_decl(&mods, false),
             Tag::KeywordConst => self.parse_const_stmt(),
             Tag::KeywordMacro => {
@@ -137,14 +148,72 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Zig `startsDecl` gate for `@`-prefixed declarations: the
+    /// token after `@` must name a known @-declaration (Zig's
+    /// fixed set plus this port's own additions: `arena`,
+    /// `check_hook`, `sublanguage`). Anything else means the
+    /// `@` does not start a declaration at all.
+    pub fn at_decl_starts_decl(&mut self) -> bool {
+        if self.peek() != Tag::At {
+            return false;
+        }
+        self.advance();
+        if self.peek() == Tag::KeywordOverload {
+            self.advance();
+            return true;
+        }
+        if self.peek() != Tag::Identifier {
+            return false;
+        }
+        let name = self.cur_text().to_string();
+        matches!(
+            name.as_str(),
+            "test"
+                | "import"
+                | "arena"
+                | "check_hook"
+                | "sublanguage"
+                | "no_mangle"
+                | "derive"
+                | "intrinsic"
+               
+        )
+        // NOTE: Zig also admits imported-macro names and
+        // @expand_tuple template names here; this port has no
+        // equivalent registry query yet (source_expand handles
+        // @expand_tuple at the source level, before parsing),
+        // so those two arms are deferred — registered in
+        // RESULT as a known gate gap.
+    }
+
+    /// Zig `parseAtDecl`: `@test`, `@import`, `@no_mangle`, `@derive`.
+    /// Zig `parseAtDecl`: `@test`, `@import`, `@no_mangle`, `@derive`.
+
+    /// Zig `parseAtDecl`: `@test`, `@import`, `@no_mangle`, `@derive`.
+    /// Zig `parseAtDecl`: `@test`, `@import`, `@no_mangle`, `@derive`.
+    /// Zig `parseAtDecl`: `@test`, `@import`, `@no_mangle`, `@derive`.
+    /// Zig `parseAtDecl`: `@test`, `@import`, `@no_mangle`, `@derive`.
+    /// Zig `parseAtDecl`: `@test`, `@import`, `@no_mangle`, `@derive`.
     /// Zig `parseAtDecl`: `@test`, `@import`, `@no_mangle`, `@derive`.
     pub fn parse_at_decl(&mut self) -> Result<Node, ParseError> {
         self.expect(Tag::At)?;
         if self.peek() == Tag::KeywordOverload {
-            return Err(self.not_covered("@overload declarations"));
+            // R-3 overload slice: `@overload Type { fn <op> ... }`.
+            return self.parse_overload_decl();
         }
         let name = self.expect_identifier()?;
         match name.as_str() {
+            "check_hook" => {
+                // R-3 (J-5): `@check_hook <name>;` attaches a
+                // registered read-only hook; the checker validates
+                // the name and applies the audit.
+                let hook = self.expect_identifier()?;
+                self.expect(Tag::Semicolon)?;
+                Ok(Node::CheckHookDecl(sla_ast::CheckHookDecl {
+                    name: hook,
+                }))
+            }
+            "sublanguage" => self.parse_sublanguage_decl(),
             "test" => self.parse_test_decl(),
             "import" => self.parse_import_decl(),
             "no_mangle" => {
@@ -163,6 +232,23 @@ impl<'a> Parser<'a> {
                 }
                 self.advance();
                 self.parse_func_decl_rest(&mods, false)
+            }
+            "arena" => {
+                // R-3: `@arena fn` sugar (F2-A C1, Jev U1 = C) — the
+                // whole function body is one arena domain.
+                let mut mods = DeclMods::default();
+                mods.is_pub = self.eat(Tag::KeywordPub);
+                mods.is_inline = self.eat(Tag::KeywordInline);
+                mods.is_async = self.eat(Tag::KeywordAsync);
+                if self.peek() != Tag::KeywordFn {
+                    return Err(self.err_here(ParseErrorKind::ExpectedDeclaration));
+                }
+                self.advance();
+                let mut node = self.parse_func_decl_rest(&mods, false)?;
+                if let Node::FuncDecl(f) = &mut node {
+                    f.is_arena = true;
+                }
+                Ok(node)
             }
             "derive" => {
                 self.expect(Tag::LParen)?;
@@ -235,15 +321,53 @@ impl<'a> Parser<'a> {
         let generics = self.parse_generic_params()?;
         self.expect(Tag::LParen)?;
         let mut params = Vec::new();
+        let mut is_variadic_decl = false;
         loop {
             if self.eat(Tag::RParen) {
                 break;
             }
+            // R-3 (extern variadic): a trailing `...` marker.
+            if self.peek() == Tag::DotDotDot {
+                self.advance();
+                is_variadic_decl = true;
+                self.expect(Tag::RParen)?;
+                break;
+            }
+            // R-3 (named variadic): `args: ...` — a named C
+            // va_list parameter (the body reads it via va_next_*).
+            if self.peek() == Tag::Identifier && self.peek2() == Tag::Colon {
+                let save = self.snapshot();
+                let candidate = self.cur_text().to_string();
+                self.advance();
+                self.advance();
+                if self.peek() == Tag::DotDotDot {
+                    self.advance();
+                    params.push(sla_ast::decls::Param {
+                        name: candidate,
+                        ty: Box::new(Type::Primitive(Primitive::VaList)),
+                        is_borrow: false,
+                        is_move: false,
+                        fallible_sugar: false,
+                        is_var: false,
+                    });
+                    is_variadic_decl = true;
+                    self.eat(Tag::Comma);
+                    self.expect(Tag::RParen)?;
+                    break;
+                }
+                self.restore(save);
+            }
+            let is_var = self.eat(Tag::KeywordVar);
             let is_borrow = self.eat(Tag::Ampersand);
             let is_move = !is_borrow && self.eat(Tag::Caret);
             let param_name = self.expect_identifier()?;
             self.expect(Tag::Colon)?;
             let ty = self.parse_type()?;
+            // R-3 (A_min scope limit): `T!` in parameter position
+            // parses (so the checker can name it) and is rejected
+            // there with FallibleSugarParam — the sugar exists only
+            // in return position.
+            let fallible_sugar = self.eat(Tag::Bang);
             if self.peek() == Tag::Equal {
                 return Err(self.err_expected(
                     ParseErrorKind::SyntaxError,
@@ -255,14 +379,41 @@ impl<'a> Parser<'a> {
                 ty: Box::new(ty),
                 is_borrow,
                 is_move,
+                fallible_sugar,
+                is_var,
             });
             if !self.eat(Tag::Comma) {
                 self.expect(Tag::RParen)?;
                 break;
             }
         }
+        // R-3: return-position suffixes — the A_min fallible
+        // sugar `-> T!` (desugars to `Result<T, i32>`, extern
+        // declarations and ordinary functions alike per the
+        // corpus) and the borrow-origin annotation `-> &[T][name]`
+        // (recorded verbatim; the origin gates live in the
+        // checker). Both suffixes attach AFTER the return type.
+        let mut ret_fallible_sugar = false;
+        let mut ret_borrow_origin: Option<String> = None;
         let ret_ty = if self.eat(Tag::Arrow) {
-            self.parse_type()?
+            let base = self.parse_type()?;
+            if self.eat(Tag::Bang) {
+                ret_fallible_sugar = true;
+                Type::UserDefined(sla_ast::types::UserDefined {
+                    name: "Result".to_string(),
+                    generics: vec![
+                        base,
+                        Type::Primitive(Primitive::I32),
+                    ],
+                })
+            } else {
+                if self.eat(Tag::LBracket) {
+                    ret_borrow_origin =
+                        Some(self.expect_identifier()?);
+                    self.expect(Tag::RBracket)?;
+                }
+                base
+            }
         } else {
             Type::Primitive(Primitive::VoidType)
         };
@@ -292,6 +443,10 @@ impl<'a> Parser<'a> {
             is_inline: mods.is_inline,
             is_async: mods.is_async,
             operator: None,
+            is_arena: false,
+            ret_fallible_sugar,
+            ret_borrow_origin,
+            is_variadic: is_variadic_decl,
         }))
     }
 
@@ -303,11 +458,19 @@ impl<'a> Parser<'a> {
         let name = self.expect_identifier()?;
         self.expect(Tag::LParen)?;
         let mut params = Vec::new();
+        let mut param_tys = Vec::new();
         loop {
             if self.eat(Tag::RParen) {
                 break;
             }
             params.push(self.expect_identifier()?);
+            // R-3 (J-3): a parameter may declare a type
+            // (`name: Type`); untyped parameters stay `None`.
+            param_tys.push(if self.eat(Tag::Colon) {
+                Some(self.parse_type()?)
+            } else {
+                None
+            });
             if !self.eat(Tag::Comma) {
                 self.expect(Tag::RParen)?;
                 break;
@@ -319,7 +482,12 @@ impl<'a> Parser<'a> {
             self.skip_block()?;
             Vec::new()
         };
-        Ok(Node::MacroDecl(MacroDecl { name, params, body }))
+        Ok(Node::MacroDecl(MacroDecl {
+            name,
+            params,
+            param_tys,
+            body,
+        }))
     }
 
     // -- import / using --------------------------------------------------------
@@ -485,3 +653,4 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 }
+

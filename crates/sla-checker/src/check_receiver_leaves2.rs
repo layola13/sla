@@ -94,6 +94,34 @@ impl Checker {
                 );
             }
         }
+        // R-3 goroutine batch: the `Chan<T>` handle itself (the
+        // goroutine syntax batch's channel surface). `send`
+        // yields the status word, `recv` yields the payload
+        // (select arms destructure it as `(value, closed)` at
+        // the pattern level), `destroy` releases the handle.
+        if let Some(inner) = ud_inner(recv_ty, "Chan") {
+            return Some(match name {
+                "send" => (|| {
+                    arity(call, 2)?;
+                    let value_ty = self.check_expr(&call.args[1])?;
+                    if !types_equal(&inner, &value_ty) {
+                        return Err(type_mismatch());
+                    }
+                    Ok(i32_ty())
+                })(),
+                // `recv` yields the (payload, closed) pair:
+                // call sites destructure `let (v, closed) =
+                // ch.recv();` (the select pattern form binds
+                // the same pair at the pattern level).
+                "recv" => arity(call, 1).map(|_| {
+                    Type::Tuple(sla_ast::types::TupleType {
+                        elems: vec![inner.clone(), crate::types_util::bool_ty()],
+                    })
+                }),
+                "destroy" => arity(call, 1).map(|_| void_ty()),
+                _ => return None,
+            });
+        }
         None
     }
 

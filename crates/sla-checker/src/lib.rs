@@ -27,10 +27,15 @@ pub mod rules;
 pub mod scope;
 pub mod types_util;
 
+pub mod check_arena;
 mod check_assoc_helpers;
 mod check_binary;
 mod check_builtin;
 mod check_call_consume;
+mod check_borrow_origin;
+mod check_go;
+mod check_hook;
+mod check_shader;
 mod check_field_borrow;
 mod check_leaves;
 mod check_preassoc;
@@ -44,7 +49,17 @@ mod check_method;
 mod check_literal;
 mod check_overload;
 mod check_expr;
+mod check_expr_util;
+mod check_stmt_util;
+mod check_stmt_release;
+mod checker_util;
+mod checker_alias;
+mod check_arena_tail;
+mod check_call_assoc;
+mod check_call_sig;
+mod check_overload_extern;
 mod check_macro;
+mod check_macro_typed;
 mod check_flow;
 mod check_match;
 mod check_pattern;
@@ -87,6 +102,11 @@ mod tests_phase3e;
 mod tests_r6;
 #[cfg(test)]
 mod tests_r6b;
+#[cfg(test)]
+mod tests_r3;
+
+#[cfg(test)]
+mod tests_r4;
 
 pub use checker::{
     Checker, EnumVariantInfo, ExternParam, ExternSig, FuncSig, ImportedMacroInfo,

@@ -212,11 +212,54 @@ impl<'c> Codegen<'c> {
                 _ => return Ok(None),
             }
         }
+        // ---- `copied` on Option (codegen.zig:14018) ----
+        if call.func_name == "copied" && call.args.len() == 1 {
+            // Zig: when the argument's type is Option<T>, emit
+            // OPTION_COPIED_U64 and release the receiver temp when
+            // it needs release; otherwise pass the argument through
+            // unchanged. Returning None here would drop the call to
+            // the generic catch-all as a bare `EXPAND copied`.
+            let arg_ty = self.expr_type(&call.args[0]);
+            let is_option = matches!(
+                arg_ty.as_ref().and_then(|ty| peel_name(ty)),
+                Some((name, generics)) if name == "Option" && generics.len() == 1
+            );
+            if is_option {
+                let recv = self.gen_expr(&call.args[0])?;
+                let reg = self.new_tmp();
+                self.ins(&format!("EXPAND OPTION_COPIED_U64 {reg}, {recv}"));
+                if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                    self.emit_release(&recv)?;
+                }
+                return Ok(Some(SurfaceCall::Value(reg)));
+            }
+            let reg = self.gen_expr(&call.args[0])?;
+            return Ok(Some(SurfaceCall::Value(reg)));
+        }
+        // ---- `unwrap_or_default` on Option (codegen.zig:14523) ----
+        if call.func_name == "unwrap_or_default" && call.args.len() == 1 {
+            let arg_ty = self.expr_type(&call.args[0]);
+            let is_option = matches!(
+                arg_ty.as_ref().and_then(|ty| peel_name(ty)),
+                Some((name, generics)) if name == "Option" && generics.len() == 1
+            );
+            if is_option {
+                let recv = self.gen_expr(&call.args[0])?;
+                let reg = self.new_tmp();
+                self.ins(&format!("EXPAND OPTION_UNWRAP_OR_DEFAULT {reg}, {recv}"));
+                if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                    self.emit_release(&recv)?;
+                }
+                return Ok(Some(SurfaceCall::Value(reg)));
+            }
+        }
         // ---- free `len` over the surface containers ----
         if call.func_name == "len" && call.args.len() == 1 && call.callee.is_none() {
             let macro_name = match self.classify_receiver(call) {
                 Some((tname, _)) => match tname.as_str() {
                     "Vec" => "VEC_LEN",
+                    "HashMap" => "MAP_LEN",
+                    "BTreeMap" => "BTREE_MAP_LEN",
                     "HashSet" => "SET_LEN",
                     "BTreeSet" => "BTREE_SET_LEN",
                     "String" => "STRING_BUF_LEN",

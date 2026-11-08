@@ -286,10 +286,14 @@ fn rejects_missing_return_semicolon() {
 
 #[test]
 fn rejects_uncovered_constructs_loudly() {
-    let err = parse_program("trait T { fn m(); }").expect_err("trait is not covered yet");
-    assert_eq!(err.kind, ParseErrorKind::SyntaxError);
+    // R-3: trait declarations are now covered (decl_trait.rs) —
+    // the trait form parses; template literals are covered too
+    // (decl_template.rs desugar). The loudly-rejected set keeps
+    // the unknown @-decl.
+    let ok = parse_ok("trait T { fn m(); }");
+    assert_eq!(ok.decls.len(), 1);
     let err = parse_program("@foo \"x\"").expect_err("unknown @-decl must fail");
     assert_eq!(err.kind, ParseErrorKind::SyntaxError);
-    let err = parse_program("fn f() { let x = `tpl`; }").expect_err("templates not covered");
-    assert_eq!(err.kind, ParseErrorKind::SyntaxError);
+    let ok = parse_ok("fn f() { let x = `tpl`; }");
+    assert_eq!(ok.decls.len(), 1);
 }

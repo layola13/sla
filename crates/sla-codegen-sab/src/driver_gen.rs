@@ -126,6 +126,10 @@ impl<'c> Driver<'c> {
                 Ok(())
             }
             Node::BlockStmt(b) => self.gen_scoped_block(&b.body),
+            Node::ArenaStmt(b) => self.gen_scoped_block(&b.body),
+            // R-3 goroutine batch: check-level slice passthrough
+            // (see sla-codegen-text stmt.rs note).
+            Node::GoStmt(_) | Node::DeferStmt(_) | Node::SelectStmt(_) => Ok(()),
             Node::UsingDecl(_) => Ok(()),
             Node::ExprStmt(e) => {
                 // Zig genStmt expr arm: if/switch/match and panic

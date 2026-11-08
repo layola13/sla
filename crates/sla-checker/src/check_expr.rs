@@ -88,7 +88,7 @@ impl Checker {
             }
             Node::DerefExpr(d) => {
                 let inner = self.check_expr(&d.expr)?;
-                peel_pointer(&inner).ok_or_else(|| {
+                crate::check_expr_util::peel_pointer(&inner).ok_or_else(|| {
                     Diagnostic::new(
                         ErrorKind::DereferenceNonPointer,
                         format!(
@@ -101,7 +101,7 @@ impl Checker {
             Node::CastExpr(c) => {
                 let inner = self.check_expr(&c.expr)?;
                 let target = (*c.ty).clone();
-                if cast_allowed(&inner, &target) {
+                if crate::check_expr_util::cast_allowed(&inner, &target) {
                     Ok(target)
                 } else {
                     Err(Diagnostic::new(
@@ -161,7 +161,7 @@ impl Checker {
                         "index must be an integer",
                     ));
                 }
-                index_result_type(&target).ok_or_else(|| {
+                crate::check_expr_util::index_result_type(&target).ok_or_else(|| {
                     Diagnostic::new(
                         ErrorKind::TypeMismatch,
                         format!("TypeMismatch: {} is not indexable", type_desc(&target)),
@@ -194,7 +194,7 @@ impl Checker {
                     self.record_try_cleanup(node, &t.expr);
                     return Ok(unwrapped);
                 }
-                let peeled = peel_borrow_pointer(&operand_ty).clone();
+                let peeled = crate::check_expr_util::peel_borrow_pointer(&operand_ty).clone();
                 match &peeled {
                     Type::UserDefined(u) => {
                         let info = match self.structs.get(&u.name) {
@@ -315,7 +315,31 @@ impl Checker {
             Node::IfExpr(i) => self.check_if_expr(i),
             Node::SwitchExpr(s) => self.check_switch(s),
             Node::MatchExpr(m) => self.check_match(m),
-            Node::CallExpr(c) => self.check_call(node, c),
+            Node::GoStmt(g) => self.check_go_stmt(g),
+            Node::CallExpr(c) => {
+                // R-3 route-3: plain user calls only (preassoc /
+                // associated / name-special / macro / extern forms
+                // keep their own disciplines).
+                let plain_user = c.callee.is_none()
+                    && c.associated_target.is_none()
+                    && !self.macros.contains_key(&c.func_name)
+                    && !self.extern_funcs.contains_key(&c.func_name)
+                    && self.lookup_ty(&c.func_name).is_none()
+                    && !self.structs.contains_key(&c.func_name);
+                let r = self.check_call(node, c);
+                if plain_user {
+                    self.arena_check_plain_call_args(c);
+                }
+                // R-3: raise a deferred route-3 arena escape.
+                if r.is_ok() {
+                    if let Some(msg) = self.arena_pending_escape.take() {
+                        return Err(Diagnostic::new(ErrorKind::ArenaEscape, msg));
+                    }
+                } else {
+                    self.arena_pending_escape = None;
+                }
+                r
+            }
             Node::UnsafeExpr(u) => {
                 // Zig threads `unsafe_depth` around unsafe blocks
                 // (type_checker.zig:10563): the read_volatile arms
@@ -373,6 +397,8 @@ impl Checker {
             }
         }
         if let Some(binding) = self.scopes.lookup(name) {
+            // R-3: reading an invalidated borrow-origin view.
+            self.origin_check_read(name)?;
             let (state, ty) = (binding.state, binding.ty.clone());
             let consumed_by_literal = binding.consumed_by_literal.clone();
             let consumed_by_call = binding.consumed_by_call.clone();
@@ -429,15 +455,33 @@ impl Checker {
                 return Ok(u64_ty());
             }
         }
-        let peeled = peel_borrow_pointer(&base_ty);
+        let peeled = crate::check_expr_util::peel_borrow_pointer(&base_ty);
         match peeled {
             Type::UserDefined(u) => match self.structs.get(&u.name) {
-                Some(info) => info.field_ty(field_name).cloned().ok_or_else(|| {
-                    Diagnostic::new(
-                        ErrorKind::FieldNotFound,
-                        format!("FieldNotFound: `{}` has no field `{field_name}`", u.name),
-                    )
-                }),
+                Some(info) => {
+                    let raw = info.field_ty(field_name).cloned().ok_or_else(|| {
+                        Diagnostic::new(
+                            ErrorKind::FieldNotFound,
+                            format!("FieldNotFound: `{}` has no field `{field_name}`", u.name),
+                        )
+                    })?;
+                    // Generic instantiation: the field type is
+                    // declared over the struct's parameters and must
+                    // be substituted by the receiver's arguments
+                    // (Query<Pos>.value : Pos) — the struct-literal
+                    // arm already substitutes; field ACCESS did not,
+                    // so `q.value.x` read the raw parameter T and
+                    // failed NotAStruct downstream.
+                    if info.generics.is_empty() {
+                        Ok(raw)
+                    } else {
+                        Ok(crate::check_arena::substitute_generics(
+                            &raw,
+                            &info.generics,
+                            &u.generics,
+                        ))
+                    }
+                }
                 None => Err(Diagnostic::new(
                     ErrorKind::NotAStruct,
                     format!("NotAStruct: {} has no fields", u.name),
@@ -476,6 +520,20 @@ impl Checker {
         lit: &sla_ast::exprs::StructLiteral,
     ) -> CheckResult<Type> {
         let ty = (*lit.ty).clone();
+        // R-3: a `Self { ... }` literal inside an impl method names
+        // the impl target (Zig structDeclForType resolves the
+        // parser-preserved `Self` type through the checker's impl
+        // context). Outside a method check `Self` stays unresolved
+        // and falls to the NotAStruct arm below, as in Zig.
+        let ty = match &ty {
+            Type::UserDefined(u) if u.name == "Self" => {
+                match &self.current_self_ty {
+                    Some(target) => target.clone(),
+                    None => ty.clone(),
+                }
+            }
+            _ => ty,
+        };
         let name = match &ty {
             Type::UserDefined(u) => u.name.clone(),
             _ => {
@@ -518,9 +576,37 @@ impl Checker {
                 ));
             }
             seen.push(f.name.as_str());
+            // R-3: storing a borrow-origin view into a struct
+            // field is an escape.
+            if self.origin_value_is_view(&f.value) {
+                return Err(Diagnostic::new(
+                    ErrorKind::BorrowEscape,
+                    format!(
+                        "BorrowEscape: view stored into struct field `{}.{}`",
+                        name, f.name
+                    ),
+                ));
+            }
             let value_ty = self.check_expr(&f.value)?;
             match info.fields.iter().find(|(n, _)| n == &f.name) {
-                Some((_, expected)) => {
+                Some((_, raw_expected)) => {
+                    // Generic instantiation: fields declared over the
+                    // struct's own parameters are substituted by the
+                    // literal's arguments (Pair<String>.a : String).
+                    let subst;
+                    let expected = if info.generics.is_empty() {
+                        raw_expected
+                    } else {
+                        subst = match &ty {
+                            Type::UserDefined(u) => crate::check_arena::substitute_generics(
+                                raw_expected,
+                                &info.generics,
+                                &u.generics,
+                            ),
+                            _ => raw_expected.clone(),
+                        };
+                        &subst
+                    };
                     if !value_assignable_to(expected, &value_ty) {
                         return Err(Diagnostic::new(
                             ErrorKind::TypeMismatch,
@@ -601,63 +687,3 @@ pub fn fn_ptr_of(sig: &crate::checker::FuncSig) -> Type {
     })
 }
 
-/// Deref peeling: pointers and borrows, plus the smart-pointer /
-/// guard user types Zig peels by name (Rc / Arc / Box / guards).
-fn peel_pointer(ty: &Type) -> Option<Type> {
-    match ty {
-        Type::Pointer(inner) | Type::Borrow(inner) => Some((**inner).clone()),
-        Type::UserDefined(u) => {
-            if matches!(
-                u.name.as_str(),
-                "Rc" | "Arc" | "Box" | "MutexGuard" | "RwLockReadGuard" | "RwLockWriteGuard"
-            ) && !u.generics.is_empty()
-            {
-                Some(u.generics[0].clone())
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}
-
-fn peel_borrow_pointer(ty: &Type) -> &Type {
-    match ty {
-        Type::Pointer(inner) | Type::Borrow(inner) => inner,
-        other => other,
-    }
-}
-
-fn cast_allowed(inner: &Type, target: &Type) -> bool {
-    if matches!(inner, Type::Infer) || matches!(target, Type::Infer) {
-        return true;
-    }
-    if types_equal(inner, target) {
-        return true;
-    }
-    if is_numeric_type(inner) && is_numeric_type(target) {
-        return true;
-    }
-    let carrier = |t: &Type| {
-        matches!(t, Type::Pointer(_) | Type::Borrow(_))
-            || matches!(t, Type::Primitive(Primitive::RawPtr))
-    };
-    carrier(inner) && carrier(target)
-}
-
-fn index_result_type(target: &Type) -> Option<Type> {
-    match target {
-        Type::Array(a) => Some((*a.elem).clone()),
-        Type::Pointer(inner) => Some((**inner).clone()),
-        Type::UserDefined(u) => {
-            if u.name == "String" || u.name == "str" {
-                Some(Type::Primitive(Primitive::U8))
-            } else if !u.generics.is_empty() {
-                Some(u.generics[0].clone())
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}

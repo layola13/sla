@@ -23,6 +23,9 @@ pub enum Node {
     OverloadDecl(OverloadDecl),
     FuncDecl(FuncDecl),
     MacroDecl(MacroDecl),
+    CheckHookDecl(CheckHookDecl),
+    SublanguageDecl(SublanguageDecl),
+    ShaderDecl(ShaderDecl),
     ImportDecl(ImportDecl),
     UsingDecl(UsingDecl),
     TestDecl(TestDecl),
@@ -35,6 +38,8 @@ pub enum Node {
     VarStmt(VarStmt),
     AssignStmt(AssignStmt),
     BlockStmt(BlockStmt),
+    /// R-3: `arena { ... }` block statement (Zig `arena_stmt`).
+    ArenaStmt(BlockStmt),
     /// Zig: `expr_stmt: *Node`.
     ExprStmt(Box<Node>),
     ReturnStmt(ReturnStmt),
@@ -43,6 +48,10 @@ pub enum Node {
     BreakStmt(BreakStmt),
     ContinueStmt(ContinueStmt),
     ReleaseStmt(ReleaseStmt),
+    /// R-3 goroutine batch statements.
+    GoStmt(GoStmt),
+    DeferStmt(DeferStmt),
+    SelectStmt(SelectStmt),
 
     // Expressions
     Literal(Literal),

@@ -97,10 +97,12 @@ fn if_legacy_integer_condition_passes() {
         is_decl_only: false,
         generics: vec![],
         params: vec![Param {
+            is_var: false,
             name: "v".to_string(),
             ty: Box::new(Type::Primitive(Primitive::Integer)),
             is_borrow: false,
             is_move: false,
+            fallible_sugar: false,
         }],
         ret_ty: Box::new(Type::Primitive(Primitive::VoidType)),
         body: vec![Node::ExprStmt(Box::new(Node::IfExpr(IfExpr {
@@ -114,8 +116,12 @@ fn if_legacy_integer_condition_passes() {
             else_block: None,
         })))],
         is_inline: false,
-        is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     });
     let result = check_ast(Program { decls: vec![func] });
     assert!(result.is_ok(), "{result:?}");
@@ -137,10 +143,12 @@ fn if_infer_condition_passes() {
         is_decl_only: false,
         generics: vec![],
         params: vec![Param {
+            is_var: false,
             name: "v".to_string(),
             ty: Box::new(Type::Infer),
             is_borrow: false,
             is_move: false,
+            fallible_sugar: false,
         }],
         ret_ty: Box::new(Type::Primitive(Primitive::VoidType)),
         body: vec![Node::ExprStmt(Box::new(Node::IfExpr(IfExpr {
@@ -154,8 +162,12 @@ fn if_infer_condition_passes() {
             else_block: None,
         })))],
         is_inline: false,
-        is_async: false,
         operator: None,
+        is_arena: false,
+        ret_fallible_sugar: false,
+        ret_borrow_origin: None,
+        is_async: false,
+        is_variadic: false,
     });
     let result = check_ast(Program { decls: vec![func] });
     assert!(result.is_ok(), "{result:?}");

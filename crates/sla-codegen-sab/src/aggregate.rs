@@ -172,6 +172,7 @@ fn node_uses_identifier(node: &Node, name: &str) -> bool {
                     .unwrap_or(false)
         }
         Node::BlockStmt(b) => b.body.iter().any(|s| node_uses_identifier(s, name)),
+        Node::ArenaStmt(b) => b.body.iter().any(|s| node_uses_identifier(s, name)),
         Node::ExprStmt(e) => node_uses_identifier(e, name),
         Node::LetStmt(l) => node_uses_identifier(&l.value, name),
         Node::ReturnStmt(r) => r
