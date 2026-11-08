@@ -1,0 +1,63 @@
+# Sla std surface lowering metadata.
+#
+# This file is data, not compiler logic. The direct SAB backend reads these
+# rules generically so library surface sugar can lower through imported SA
+# macros without hardcoding ordinary library semantics in Zig.
+
+associated Vec new sa_std/vec.sa VEC_NEW out deps=sa_vec_new
+associated HashSet new sa_std/hashset.sa SET_NEW out deps=sa_set_new,sa_map_new
+associated BTreeSet new sa_std/btree_set.sa BTREE_SET_NEW out deps=sa_btree_set_new,sa_btree_map_new,sa_mem_set
+associated Box new sa_std/core/box.sa BOX_NEW out,value consume_value
+associated Box into_raw sa_std/core/box.sa BOX_INTO_RAW out,value consume_value
+associated Box from_raw sa_std/core/box.sa BOX_FROM_RAW out,value
+associated Rc new sa_std/core/rc.sa RC_NEW out,value consume_value
+associated Rc clone sa_std/core/rc.sa RC_CLONE_OUT out,value
+associated Arc new sa_std/core/arc.sa ARC_NEW out,value consume_value
+associated Arc clone sa_std/core/arc.sa ARC_CLONE_OUT out,value
+associated RefCell new sa_std/core/refcell.sa REFCELL_U64_NEW out,value consume_value
+associated Cell new sa_std/core/cell.sa CELL_NEW_VALUE out,value
+associated HashMap new sa_std/hashmap.sa MAP_NEW out deps=sa_map_new
+associated BTreeMap new sa_std/btree_map.sa BTREE_MAP_NEW out deps=sa_btree_map_new
+associated VecDeque new sa_std/vec_deque.sa VEC_DEQUE_NEW out deps=sa_vec_deque_new
+associated RwLock new sa_std/sync/rwlock.sa RWLOCK_NEW_I32 out,value
+method Cell get sa_std/core/cell.sa CELL_GET out,receiver
+method Cell set sa_std/core/cell.sa CELL_SET receiver,value
+method Box get sa_std/core/box.sa BOX_GET_U64 out,receiver
+method Box as_ptr sa_std/core/box.sa BOX_AS_PTR out,receiver
+method Rc get sa_std/core/rc.sa RC_GET out,receiver
+method Rc as_ptr sa_std/core/rc.sa RC_AS_PTR out,receiver
+method Arc get sa_std/core/arc.sa ARC_GET out,receiver
+method Arc as_ptr sa_std/core/arc.sa ARC_AS_PTR out,receiver
+function len Vec sa_std/vec.sa VEC_LEN out,receiver deps=sa_vec_len
+function len HashSet sa_std/hashset.sa SET_LEN out,receiver deps=sa_set_len
+function len BTreeSet sa_std/btree_set.sa BTREE_SET_LEN out,receiver deps=sa_btree_set_len,sa_btree_map_len
+function len String sa_std/string.sa STRING_BUF_LEN out,receiver deps=sa_vec_len
+method Vec push sa_std/vec.sa VEC_PUSH receiver,value,elem_size deps=sa_vec_push,sa_mem_copy
+method HashSet insert sa_std/hashset.sa SET_INSERT out,receiver,value deps=sa_set_insert,sa_map_put,map_hash_ptr_seed,map_table_probe,map_rehash,map_table_insert,sa_mem_set
+method HashSet contains sa_std/hashset.sa SET_CONTAINS out,receiver,value deps=sa_set_contains,sa_map_get,map_hash_ptr_seed,map_table_probe
+method BTreeSet insert sa_std/btree_set.sa BTREE_SET_INSERT out,receiver,value deps=sa_btree_set_insert,sa_btree_map_len,sa_btree_map_insert,btree_map_find,btree_map_find_at,btree_map_entry_cmp,btree_map_entry_cmp_at,btree_map_grow,sa_mem_copy
+method BTreeSet contains sa_std/btree_set.sa BTREE_SET_CONTAINS out,receiver,value deps=sa_btree_set_contains,sa_btree_map_contains_key,btree_map_find,btree_map_find_at,btree_map_entry_cmp,btree_map_entry_cmp_at
+fallible_method Vec remove sa_std/vec.sa VEC_REMOVE ok,out,receiver,index,elem_size deps=sa_vec_try_remove panic=86
+index Vec sa_std/vec.sa VEC_GET_TYPED_{elem_ty} out,receiver,index,elem_size
+index_address Vec sa_std/vec.sa VEC_GET_MUT_PTR_U64 out,receiver,index
+index_assign Vec sa_std/vec.sa VEC_SET_TYPED receiver,index,value,elem_size,elem_ty
+function len GrowVec sa_std/growvec.sa GROWVEC_LEN out,receiver deps=sa_growvec_len
+method GrowVec push sa_std/growvec.sa GROWVEC_PUSH receiver,value,elem_size deps=sa_growvec_push,sa_mem_copy
+index GrowVec sa_std/growvec.sa GROWVEC_GET_TYPED_{elem_ty} out,receiver,index,elem_size
+index_address GrowVec sa_std/growvec.sa GROWVEC_GET_MUT_PTR_U64 out,receiver,index
+index_assign GrowVec sa_std/growvec.sa GROWVEC_SET_TYPED receiver,index,value,elem_size,elem_ty
+index Slice sa_std/core/slice.sa SLICE_GET_TYPED_{elem_ty} out,receiver,index,elem_size
+index_address Slice sa_std/core/slice.sa SLICE_GET_MUT_PTR_U64 out,receiver,index
+constructor Some Option sa_std/core/option.sa OPTION_NEW_SOME out,value
+constructor None Option sa_std/core/option.sa OPTION_NEW_NONE out
+method Option is_some sa_std/core/option.sa OPTION_IS_SOME out,receiver
+method Option is_none sa_std/core/option.sa OPTION_IS_NONE out,receiver
+method Option get sa_std/core/option.sa OPTION_GET out,receiver
+method Option unwrap sa_std/core/option.sa OPTION_UNWRAP out,receiver
+method Option unwrap_or sa_std/core/option.sa OPTION_UNWRAP_OR out,receiver,value
+constructor Ok Result sa_std/core/result.sa RESULT_NEW_OK out,value
+constructor Err Result sa_std/core/result.sa RESULT_NEW_ERR out,value
+method Result is_ok sa_std/core/result.sa RESULT_IS_OK out,receiver
+method Result is_err sa_std/core/result.sa RESULT_IS_ERR out,receiver
+method Result unwrap sa_std/core/result.sa RESULT_UNWRAP out,receiver
+method Result unwrap_or sa_std/core/result.sa RESULT_UNWRAP_OR out,receiver,value

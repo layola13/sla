@@ -1,0 +1,58 @@
+struct Ordering {
+    value: i64,
+}
+
+impl Ordering {
+    fn less() -> Ordering {
+        return Ordering { value: -1 };
+    }
+
+    fn equal() -> Ordering {
+        return Ordering { value: 0 };
+    }
+
+    fn greater() -> Ordering {
+        return Ordering { value: 1 };
+    }
+
+    fn is_lt(self) -> bool {
+        return self.value == -1;
+    }
+
+    fn is_eq(self) -> bool {
+        return self.value == 0;
+    }
+
+    fn is_gt(self) -> bool {
+        return self.value == 1;
+    }
+
+    fn is_le(self) -> bool {
+        return self.value <= 0;
+    }
+
+    fn is_ge(self) -> bool {
+        return self.value >= 0;
+    }
+
+    fn reverse(self) -> Ordering {
+        if self.value < 0 {
+            return Ordering::greater();
+        };
+        if self.value > 0 {
+            return Ordering::less();
+        };
+        return Ordering::equal();
+    }
+
+    fn then(self, other: Ordering) -> Ordering {
+        if self.value == 0 {
+            return other;
+        };
+        return self;
+    }
+}
+
+fn ordering_value(ordering: Ordering) -> i64 {
+    return ordering.value;
+}
