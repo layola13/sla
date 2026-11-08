@@ -6,3 +6,8 @@ edition = "2021"
 [dependencies]
 sla-ast = { path = "../sla-ast" }
 sla-lowering = { path = "../sla-lowering" }
+
+[dev-dependencies]
+sla-parser = { path = "../sla-parser" }
+sla-checker = { path = "../sla-checker" }
+sla-plugin = { path = "../sla-plugin" }

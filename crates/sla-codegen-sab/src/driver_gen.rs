@@ -100,11 +100,14 @@ impl<'c> Driver<'c> {
         match stmt {
             Node::LetStmt(l) => self.gen_let(&l.name, l.ty.as_deref(), &l.value),
             Node::ConstStmt(c) => self.gen_let(&c.name, c.ty.as_deref(), &c.value),
-            Node::VarStmt(v) => Err(unsupported(
-                &format!("var statement `{}` (stack slot materialization)", v.name),
-                "E2 locals",
-                "10145-10149",
-            )),
+            Node::VarStmt(v) => {
+                // Zig `genStmt` var arm (10145-10149): a fresh tmp
+                // register, a stack alloc of the declared type's
+                // size, and a stack local binding the name.
+                let dst = self.b().new_tmp();
+                crate::release_prim::emit_stack_alloc(&mut self.state, dst, crate::layout::type_size(&v.ty));
+                crate::locals::push_stack_local(&mut self.state, &v.name, dst, &v.ty)
+            }
             Node::AssignStmt(a) => {
                 let name = match &*a.target {
                     Node::Identifier(name) => name.clone(),
@@ -116,12 +119,25 @@ impl<'c> Driver<'c> {
                         ))
                     }
                 };
+                let src = self.gen_expr(&a.value)?;
+                // Zig `assignToIdentifier` (8837-8846): a target
+                // homed in a stack slot is stored through the slot,
+                // not assigned by register.
+                if let Some(slot) = crate::captures::stack_local(&self.state, &name) {
+                    let ty = slot.stack_ty.clone().ok_or_else(|| {
+                        Error::UnsupportedSabDirectFeature(format!(
+                            "assign to stack local `{name}` without a slot type"
+                        ))
+                    })?;
+                    let prim = crate::layout::storage_prim_type(&ty)?;
+                    crate::release_prim::emit_store(&mut self.state, slot.reg, 0, src, prim);
+                    return Ok(());
+                }
                 let dst = self
                     .state
                     .frame
                     .local_reg(&name)
                     .ok_or_else(|| Error::MissingType(format!("assign target `{name}` is not a local")))?;
-                let src = self.gen_expr(&a.value)?;
                 self.b().emit_assign_reg(dst, src);
                 Ok(())
             }
@@ -214,8 +230,30 @@ impl<'c> Driver<'c> {
             return Ok(());
         }
         let dst = self.binding_reg(name);
-        self.b().emit_assign_reg(dst, src);
         let ty = self.check.expr_type(value).cloned();
+        // Zig `genLetFromValue` (6864-6873): a primitive-typed
+        // binding that is assigned again later in the function is
+        // homed in a stack slot (alloc + store + stack local), so
+        // reassignments store through the slot and reads load from
+        // it. Without this the binding register is redefined by
+        // every assignment, which the verifier rejects.
+        if let Some(ty) = &ty {
+            if crate::prescan_bindings::binding_needs_scalar_reassign_slot(
+                name,
+                ty,
+                &self.state.program.assigned_bindings,
+            ) {
+                crate::release_prim::emit_stack_alloc(
+                    &mut self.state,
+                    dst,
+                    crate::layout::type_size(ty),
+                );
+                let prim = crate::layout::storage_prim_type(ty)?;
+                crate::release_prim::emit_store(&mut self.state, dst, 0, src, prim);
+                return crate::locals::push_stack_local(&mut self.state, name, dst, ty);
+            }
+        }
+        self.b().emit_assign_reg(dst, src);
         self.state.frame.push_local(match ty {
             Some(ty) => Local::typed(name, dst, false, ty),
             None => Local::plain(name, dst, false),
@@ -301,6 +339,19 @@ impl<'c> Driver<'c> {
                 // its substituted register before any local.
                 if let Some(&mapped) = self.state.program.closure_param_regs.get(name) {
                     return Ok(mapped);
+                }
+                // Zig genExpr identifier arm (10570-10576): a
+                // stack-homed binding reads through its slot.
+                if let Some(slot) = crate::captures::stack_local(&self.state, name) {
+                    let ty = slot.stack_ty.clone().ok_or_else(|| {
+                        Error::UnsupportedSabDirectFeature(format!(
+                            "read of stack local `{name}` without a slot type"
+                        ))
+                    })?;
+                    let prim = crate::layout::storage_prim_type(&ty)?;
+                    let dst = self.b().new_tmp();
+                    crate::release_prim::emit_load(&mut self.state, dst, slot.reg, 0, prim);
+                    return Ok(dst);
                 }
                 if let Some(reg) = self.state.frame.local_reg(name) {
                     return Ok(reg);

@@ -8,7 +8,10 @@
 //! paths are unchanged.
 
 use sla_ast::{Primitive, Type};
-use sla_lowering::{abi_cap_kind_from_type, AbiCapKind, ScalarBinaryOp};
+use sla_lowering::{
+    abi_cap_kind_from_type, abi_passes_as_pointer, peel_borrow_pointer_type, AbiCapKind,
+    ScalarBinaryOp,
+};
 
 use crate::error::{Error, Result};
 use crate::ir::{CapPrefix, OpKind, PrimType};
@@ -22,8 +25,11 @@ pub(crate) fn unsupported(what: &str, group: &str, zig_ref: &str) -> Error {
 }
 
 /// Zig `primType` (lines 1569–1591), primitive arm. Non-primitive
-/// types route through the D2 layout adapter in Zig; only the
-/// pointer-shaped cases are resolved here, the rest is loud.
+/// types route through the same lowering facts as Zig's
+/// `primType` else arm: a `File` user-defined type is a u64
+/// handle, and every `abiPassesAsPointer` type (pointer / borrow
+/// / fn-ptr / closure / user-defined / tuple / array / future)
+/// is `ptr`; anything else stays loud, exactly as in Zig.
 pub(crate) fn prim_type(ty: &Type) -> Result<PrimType> {
     match ty {
         Type::Primitive(p) => Ok(match p {
@@ -42,14 +48,30 @@ pub(crate) fn prim_type(ty: &Type) -> Result<PrimType> {
             Primitive::VoidType => PrimType::Void,
             Primitive::VaList => PrimType::Ptr,
         }),
-        Type::Pointer(_) | Type::Borrow(_) | Type::FnPtr(_) | Type::Closure(_) => {
-            Ok(PrimType::Ptr)
+        _ => {
+            if is_driver_file_type(ty) {
+                Ok(PrimType::U64)
+            } else if abi_passes_as_pointer(ty) {
+                Ok(PrimType::Ptr)
+            } else {
+                Err(unsupported(
+                    "non-primitive type has no primType in the driver subset",
+                    "D2 layout",
+                    "1569-1591",
+                ))
+            }
         }
-        _ => Err(unsupported(
-            "non-primitive type has no primType in the driver subset",
-            "D2 layout",
-            "1590-1706",
-        )),
+    }
+}
+
+/// Zig `isFileType` via `isUserDefinedNamed` (lowering_rules.zig):
+/// peel borrow/pointer layers, then a user-defined `File` with
+/// no generic arguments. Local copy of layout.rs's predicate so
+/// the driver subset does not depend on the D2 adapter module.
+fn is_driver_file_type(ty: &Type) -> bool {
+    match peel_borrow_pointer_type(ty) {
+        Type::UserDefined(ud) => ud.name == "File" && ud.generics.is_empty(),
+        _ => false,
     }
 }
 
@@ -109,6 +131,53 @@ pub(crate) fn scalar_binary_op_kind(plan: ScalarBinaryOp) -> OpKind {
         ScalarBinaryOp::FCmpLe => OpKind::FcmpLe,
         ScalarBinaryOp::FCmpGt => OpKind::FcmpGt,
         ScalarBinaryOp::FCmpGe => OpKind::FcmpGe,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sla_ast::{ArrayType, TupleType, UserDefined};
+
+    fn prim(p: Primitive) -> Type {
+        Type::Primitive(p)
+    }
+
+    fn ud(name: &str, generics: Vec<Type>) -> Type {
+        Type::UserDefined(UserDefined {
+            name: name.to_string(),
+            generics,
+        })
+    }
+
+    #[test]
+    fn driver_prim_type_matches_zig_else_arm() {
+        // File is a u64 handle; user-defined / tuple / array pass
+        // as pointers, exactly like Zig primType's else arm.
+        assert_eq!(prim_type(&ud("File", vec![])).unwrap(), PrimType::U64);
+        assert_eq!(
+            prim_type(&ud("Vec", vec![prim(Primitive::I32)])).unwrap(),
+            PrimType::Ptr
+        );
+        assert_eq!(
+            prim_type(&Type::Tuple(TupleType {
+                elems: vec![prim(Primitive::U8)]
+            }))
+            .unwrap(),
+            PrimType::Ptr
+        );
+        assert_eq!(
+            prim_type(&Type::Array(ArrayType {
+                elem: Box::new(prim(Primitive::U8)),
+                len: 4,
+            }))
+            .unwrap(),
+            PrimType::Ptr
+        );
+        // A generic File is not the handle type and stays loud,
+        // as do inferred types.
+        assert!(prim_type(&ud("File", vec![prim(Primitive::U8)])).is_err());
+        assert!(prim_type(&Type::Infer).is_err());
     }
 }
 

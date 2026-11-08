@@ -68,11 +68,22 @@ impl<'c> Driver<'c> {
         self.h_push(inst);
     }
 
-    /// Zig `emitStackAlloc` (4732–4748), fresh-temp case: the Zig
-    /// `stack_alloc_emitted` dedup only fires for a repeated id,
-    /// which a fresh temp never is.
+    /// Zig `emitStackAlloc` (3949): records the register in the
+    /// stack-alloc classification and emits at most once per
+    /// register id — register identity is name-keyed and
+    /// function-global, so two sibling-scope bindings of one name
+    /// (e.g. `let str_end` in two `if` blocks, which resolve to
+    /// one interned register) share the slot; a second
+    /// `stack_alloc` for the same id would trip the SAB
+    /// verifier's RegisterRedefinition. Mirrors
+    /// release_prim::emit_stack_alloc.
     pub(crate) fn h_emit_stack_alloc(&mut self, dst: u32, size: usize) {
         self.b().record_reg(dst);
+        self.state.frame.reg_states.insert(dst, crate::state::RegState::StackAlloc);
+        if self.state.frame.stack_alloc_emitted.contains(&dst) {
+            return;
+        }
+        self.state.frame.stack_alloc_emitted.insert(dst);
         let mut inst = self.h_inst(InstKind::StackAlloc);
         inst.operands[0] = Operand::Reg(dst);
         inst.operands[1] = Operand::ImmU64(size as u64);
