@@ -285,3 +285,23 @@ test --test-backend sa 案：两跑之间 [PASS] 行序翻转过一次
   响亮失败；未被调用的模块不再阻塞程序。签名级缺口
   （impl/`&[T][owner]`/`T!`）decl-only 同样不可解析、回退不
   覆盖——那是 R-3 解析面本账。
+
+## 六期模块展开续跑 销账（2026-11-08，rust-module-expand 续跑线）
+
+- **Check 形展开接线（上节「Check/Compile 形的登记面未动」
+  的 Check 半边就此销账）**：`run_frontend` 此前仅 TestCodegen
+  形做 .sla 导入展开，Check 形拿到未展开程序——普通 fn 体
+  裸名调用 sa_std 纯 SLA 模块（time/redis/ip/url/smtp 等）与
+  sla_std/wrap 模块的函数全域 `Undefined call`（现头普查
+  主责族，名单与判读见本线 RESULT-FINAL）。现 Check 形在
+  解析后、合同装载前执行 include-all + decl-only 展开，与
+  Zig `sla check` 的选项组合逐项对应；展开模块并入
+  freshness 闭包。Compile 形仍不展开：其 Zig 组合是
+  plugin_reachability 的选择性展开（IMP-1，未移植），只登记
+  残留，不以 decl-only 接线制造 check 假绿。
+- **IMP-4 签名登记**：展开产物携带根导入组的 .sla 模块
+  （`ExpandedProgram::root_sla_modules`）；登记在合同/extern/
+  宏登记之后、checkProgram 之前（Zig 序），经
+  `pipeline::expand_wire` 注册裸名 + `namespace__name` 别名
+  + impl 方法 mangled 符号（overload 方法不在面内，1:1 镜像
+  Zig）。别名元数据表残留见 import-expand.md IMP-4。

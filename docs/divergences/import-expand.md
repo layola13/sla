@@ -26,6 +26,14 @@ runs, shared installed plugin, read-only use).
   `SlaExpandError::SelectiveUnwired`; the old plugin entry
   `expand_sla_imports_unwired()` remains as the loud default-mode
   refusal. No silent partial expansion anywhere.
+- Update (module-expand continuation, 2026-11-08): the wired
+  include-all combination is now actually invoked by the CLI
+  Check front-end — previously it ran only in the plugin /
+  oracle paths and the CLI's TestCodegen kind, so `sla check`
+  itself still saw unexpanded programs — together with the
+  IMP-4 signature half (see IMP-4). The selective default
+  remains unwired exactly as above, and the Compile kind still
+  runs no expansion; both stay registered residuals here.
 
 ## IMP-2 (b, 注册面不足) `ImportedMacroInfo` cannot carry `assigned_output_mask`
 
@@ -49,16 +57,31 @@ runs, shared installed plugin, read-only use).
   (this lane), so the data the validation needs exists; the
   validation itself is checker-lane work, registered here.
 
-## IMP-4 (a, 覆盖缺口) Namespaced alias registration unwired
+## IMP-4 (a, 覆盖缺口 → 签名半边已接，module-expand 续跑线 2026-11-08) Namespaced alias registration
 
 - Zig `registerImportedFunctionAliasesFromResolvedImports`
   registers imported functions under bare AND `namespace__name`
   symbols for the checker (check path runs it right after contract
-  loading). Not ported: the Rust checker has no alias
-  registrations from this layer, so a root program calling
-  `lib__helper()` by mangled name will not resolve it through this
-  lane's wiring. (The phase-4 pipeline tests cover the bare-name
-  path, which the expanded program itself provides.)
+  loading), plus impl methods under mangled symbols only, with
+  overload-declaration methods outside the surface.
+- Signature half NOW WIRED: the expansion returns the root
+  groups' `.sla` modules (`ExpandedProgram::root_sla_modules`),
+  and the CLI front-end registers their exported signatures in
+  Zig's order — after contract loading, before check_program —
+  via sla-cli's `pipeline::expand_wire`, 1:1 with the Zig
+  surface above. It runs on every kind that expands (Check
+  decl-only, TestCodegen bodies-kept).
+- Residual 1 (alias metadata table): Zig's
+  `registerFunctionAliasWithMetadata` also fills the checker's
+  function-alias metadata tables. Not ported — no Rust consumer
+  reads them; port atomically when a consumer lands (the IMP-2
+  coordinator shape).
+- Residual 2 (Compile kind): the Compile front-end runs no
+  expansion (IMP-1), so it registers nothing either; Zig's
+  standalone entry, which re-resolves root imports without an
+  expansion, is not mirrored. Closing either residual must not
+  wire decl-only data into the Compile path — that would fake
+  check-green against missing bodies (see IMP-1).
 
 ## IMP-5 (b, 近似) Module type prescan is a textual approximation
 

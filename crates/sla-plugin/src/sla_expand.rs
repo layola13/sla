@@ -46,11 +46,10 @@
 //! transitive discovery, body materialization/reparse, reachable
 //! plan caches) and every combination that depends on it
 //! (`prune_for_test_codegen`, `lazy_transitive_sla_imports`,
-//! `load_reachable_imported_bodies_from_registry`). Also unwired:
-//! the checker-facing namespaced-alias registration
-//! (`registerImportedFunctionAliasesFromResolvedImports`) — the
-//! expanded program carries root groups' data for it, but no alias
-//! signatures are registered here (IMP-4).
+//! `load_reachable_imported_bodies_from_registry`). The IMP-4
+//! registration itself lives in the CLI wiring (sla-cli
+//! `pipeline::expand_wire`); this layer only carries the root
+//! groups' modules back in `ExpandedProgram::root_sla_modules`.
 //!
 //! Module parsing approximation (IMP-5): Zig's parser prescans a
 //! module's `.sla` imports from inside the parser
@@ -64,7 +63,10 @@
 use sla_ast::node::Node;
 use sla_ast::{FuncDecl, Program};
 use sla_parser::contract_load::ContractLoadError;
-use sla_parser::imports::{import_path_from_line, resolve_import_files, ImportError, ResolvedImport};
+use sla_parser::imports::{
+    import_path_from_line, module_namespace_from_import_path, resolve_import_files, ImportError,
+    ResolvedImport,
+};
 use sla_parser::{Parser, ParserOptions};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -79,6 +81,15 @@ pub struct SlaImportExpansionOptions {
     pub load_reachable_imported_bodies_from_registry: bool,
     pub lazy_transitive_sla_imports: bool,
     pub include_all_imported_decls: bool,
+}
+
+/// One root-level `.sla` import as parsed by the module table
+/// (IMP-4 surface): output-path file stem + own decls.
+#[derive(Debug)]
+pub struct RootSlaModule {
+    pub namespace: String,
+    pub path: String,
+    pub decls: Vec<Node>,
 }
 
 /// The expansion result. `primary` is parallel to `program.decls`
@@ -96,6 +107,9 @@ pub struct ExpandedProgram {
     /// Module canonical paths in collection order (children before
     /// parents), for boundary dumps.
     pub ordered_modules: Vec<String>,
+    /// Root import groups' `.sla` modules (IMP-4 data), in root
+    /// declaration order; the CLI registers them (expand_wire).
+    pub root_sla_modules: Vec<RootSlaModule>,
     /// Bodies-mode only: modules whose full-body parse failed
     /// (an unported parser surface inside a module body or
     /// signature — impl blocks, `&[T][owner]`, `T!`, `go`) and
@@ -611,6 +625,7 @@ pub fn expand_sla_imports(
 
     // Root import groups + module collection (children first).
     let mut root_groups: Vec<Vec<ResolvedImport>> = Vec::new();
+    let mut root_sla_modules: Vec<RootSlaModule> = Vec::new();
     let mut visited: Vec<String> = Vec::new();
     let mut ordered: Vec<usize> = Vec::new();
     for decl in &program.decls {
@@ -619,6 +634,11 @@ pub fn expand_sla_imports(
             for r in &resolved {
                 if r.path.ends_with(".sla") {
                     let idx = table.get_or_parse(r)?;
+                    root_sla_modules.push(RootSlaModule {
+                        namespace: module_namespace_from_import_path(&r.output_path),
+                        path: r.path.clone(),
+                        decls: table.modules[idx].program.decls.clone(),
+                    });
                     collect_sla_modules_recursive(&mut table, idx, &mut visited, &mut ordered)?;
                 }
             }
@@ -671,6 +691,7 @@ pub fn expand_sla_imports(
         primary,
         contract_imports,
         ordered_modules,
+        root_sla_modules,
         body_fallback_modules: table.body_fallback_modules.clone(),
     })
 }

@@ -7,17 +7,22 @@
 //! the original).
 //!
 //! Stage order: freshness load → read → parse (with the D-P3
-//! seed prescan) → [TestCodegen only: .sla import BODY
-//! expansion (sla_plugin::sla_expand, include-all with bodies
-//! kept — phase-6 census R-2), then filter prune +
-//! reachability prune, the CLI-D5 stages in crate::test_prune]
-//! → contract load + extern registration → type check → tail
+//! seed prescan) → [.sla import expansion
+//! (sla_plugin::sla_expand, include-all: bodies kept on
+//! TestCodegen — phase-6 census R-2 — decl-only on Check, the
+//! combination `sla check` runs in Zig), then, TestCodegen
+//! only, filter prune + reachability prune, the CLI-D5 stages
+//! in crate::test_prune]
+//! → contract load + extern registration + IMP-4 imported-
+//! signature registration (crate::pipeline::expand_wire) →
+//! type check → tail
 //! codegen → freshness store. Stages with no port in
 //! the existing crates — source_expand (@expand_tuple), .sla
-//! import body expansion on the Check/Compile kinds, defer
-//! desugar, monomorphizer, syntax lowering (go/chan/select),
-//! the SAB audit, imported-function alias registration, and
-//! output import-path rewriting — are NOT silently skipped:
+//! import expansion on the Compile kind (IMP-1 selective),
+//! defer desugar, monomorphizer, syntax lowering
+//! (go/chan/select), the SAB audit, the IMP-4 alias metadata
+//! table, and output import-path rewriting — are NOT silently
+//! skipped:
 //! programs needing them either fail loudly in a downstream
 //! ported stage or diverge, and every such surface is
 //! registered in docs/divergences/cli-commands.md. The
@@ -282,31 +287,52 @@ pub fn run_frontend(
     };
     stage_done(stderr, profile, &format!("{prefix}parse"), start);
 
-    // Test-codegen .sla import BODY expansion (phase-6 census
-    // R-2): on the test path the Zig front-end checks the program
-    // with imported module bodies present — `sla test` bodies
-    // call imported module functions, and a decl-only surface
-    // leaves every such call undefined. The expansion runs the
-    // include-all combination with bodies kept
-    // (sla_plugin::sla_expand), BEFORE the CLI-D5 prunes so the
-    // reachability prune sees (and keeps) the module functions
-    // the tests actually reach. Other kinds are untouched: their
-    // stage order is byte-identical to before. The expanded
-    // modules join the freshness closure below.
+    // Root import paths before expansion replaces them (the
+    // contract loader below recurses through them).
+    let root_import_paths: Vec<String> = match &root {
+        Node::Program(p) => p.decls.iter().filter_map(|d| match d {
+            Node::ImportDecl(i) => Some(i.path.clone()), _ => None }).collect(),
+        _ => Vec::new(),
+    };
+
+    // .sla import expansion, include-all combination, on the
+    // two kinds whose Zig front-ends run it:
+    //   * TestCodegen (phase-6 census R-2): bodies kept — on
+    //     the test path the Zig front-end checks the program
+    //     with imported module bodies present, because `sla
+    //     test` bodies call imported module functions and a
+    //     decl-only surface leaves every such call undefined.
+    //     Runs BEFORE the CLI-D5 prunes so the reachability
+    //     prune sees (and keeps) the module functions the
+    //     tests actually reach.
+    //   * Check (module-expand line): decl-only — the exact
+    //     combination `sla check` runs in Zig
+    //     (include_all_imported_decls +
+    //     imported_bodies_decl_only): imported bodies never
+    //     reach the checker, only their declarations.
+    // The Compile kind runs neither: its Zig combination is
+    // the reachability-selective expansion (IMP-1, loudly
+    // unwired), and faking it with the decl-only pass would
+    // turn Compile checks green while every called body goes
+    // missing at codegen. The expanded modules join the
+    // freshness closure below; the root groups' .sla modules
+    // feed the IMP-4 registration in the sequence further down.
     let mut expanded_modules: Vec<String> = Vec::new();
-    if kind == FrontendKind::TestCodegen {
+    let mut root_sla_modules: Vec<sla_plugin::sla_expand::RootSlaModule> = Vec::new();
+    if kind == FrontendKind::TestCodegen || kind == FrontendKind::Check {
         let Node::Program(parsed) = &root else {
             return None;
         };
         let start = Instant::now();
         let options = sla_plugin::sla_expand::SlaImportExpansionOptions {
             include_all_imported_decls: true,
-            imported_bodies_decl_only: false,
+            imported_bodies_decl_only: kind == FrontendKind::Check,
             ..Default::default()
         };
         match sla_plugin::sla_expand::expand_sla_imports(parsed, Path::new(file), &options) {
             Ok(expanded) => {
                 expanded_modules = expanded.ordered_modules.clone();
+                root_sla_modules = expanded.root_sla_modules;
                 root = Node::Program(expanded.program);
             }
             Err(err) => {
@@ -317,7 +343,7 @@ pub fn run_frontend(
                 return None;
             }
         }
-        stage_done(stderr, profile, "sla import body expansion", start);
+        stage_done(stderr, profile, "sla import expansion", start);
     }
 
     // Test-codegen pre-check pruning (plugin_compile.zig
@@ -342,14 +368,17 @@ pub fn run_frontend(
 
     let start = Instant::now();
     let mut checker = Checker::new();
-    let import_paths: Vec<String> = program
-        .decls
-        .iter()
-        .filter_map(|decl| match decl {
-            Node::ImportDecl(import) => Some(import.path.clone()),
-            _ => None,
-        })
-        .collect();
+    // Pre-expansion root imports UNION retained expanded
+    // imports: the loader recurses through `.sla` modules
+    // into pulled-in `.sa`/`.sai` files (macros/contracts).
+    let mut import_paths: Vec<String> = root_import_paths;
+    for decl in &program.decls {
+        if let Node::ImportDecl(import) = decl {
+            if !import_paths.contains(&import.path) {
+                import_paths.push(import.path.clone());
+            }
+        }
+    }
     let report = match sla_parser::contract_load::load_imported_contracts(
         &import_paths,
         Path::new(file),
@@ -423,6 +452,17 @@ pub fn run_frontend(
                 direct_callees: record.direct_callees.clone(),
             },
         );
+    }
+    // IMP-4 (module-expand line): imported-function signature
+    // registration — root .sla modules' exported functions
+    // register under bare names and `namespace__name` aliases,
+    // impl methods under mangled symbols (see
+    // pipeline::expand_wire for the exact surface and the
+    // unported metadata-table residual). Zig's order: after
+    // contract loading, before checkProgram. Kinds that ran no
+    // expansion (Compile) carry no root modules and skip this.
+    if !root_sla_modules.is_empty() {
+        expand_wire::register_imported_signatures(&mut checker, &root_sla_modules);
     }
     stage_done(stderr, profile, &format!("{prefix}load contracts"), start);
 
@@ -652,6 +692,8 @@ pub fn test_filter_selects_no_tests(file: &str, filter: Option<&str>, stderr: &m
     }
     Some(true)
 }
+
+mod expand_wire;
 
 #[cfg(test)]
 mod tests;

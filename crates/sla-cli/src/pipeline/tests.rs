@@ -93,3 +93,78 @@
         assert!(text.contains("EXPAND VEC_PUSH"), "{text}");
         assert!(text.contains("EXPAND VEC_LEN"), "{text}");
     }
+
+    /// Module-expand line: the Check front-end runs the
+    /// decl-only include-all expansion (the combination Zig's
+    /// `sla check` runs). A plain function body calling an
+    /// imported module function by bare name was
+    /// `Undefined call: lib_add` at the baseline, because Check
+    /// never expanded. (The R-2 test above could not see this:
+    /// its call sits in a test body, which Check does not
+    /// parse.)
+    #[test]
+    fn check_frontend_expands_imported_module_decls() {
+        let tree = TempTree::new("checkexpand");
+        tree.write(
+            "lib.sla",
+            "fn lib_add(a: i32, b: i32) -> i32 { return a + b; }\n",
+        );
+        let main = tree.write(
+            "main.sla",
+            "@import \"lib.sla\"\nfn use_it() -> i32 { return lib_add(1, 2); }\n",
+        );
+        let mut sink: Vec<u8> = Vec::new();
+        let checked = run_frontend(&main, FrontendKind::Check, None, &mut sink);
+        assert!(
+            checked.is_some(),
+            "Check front-end must accept a bare call into an imported module; output: {}",
+            String::from_utf8_lossy(&sink)
+        );
+    }
+
+    /// IMP-4: the same call through the `namespace__name`
+    /// alias resolves only via the imported-signature
+    /// registration — the expanded program declares `lib_add`,
+    /// never `lib__lib_add`, so nothing else can resolve it.
+    #[test]
+    fn check_frontend_registers_imported_alias_signatures() {
+        let tree = TempTree::new("checkalias");
+        tree.write(
+            "lib.sla",
+            "fn lib_add(a: i32, b: i32) -> i32 { return a + b; }\n",
+        );
+        let main = tree.write(
+            "main.sla",
+            "@import \"lib.sla\"\nfn use_it() -> i32 { return lib__lib_add(1, 2); }\n",
+        );
+        let mut sink: Vec<u8> = Vec::new();
+        let checked = run_frontend(&main, FrontendKind::Check, None, &mut sink);
+        assert!(
+            checked.is_some(),
+            "Check front-end must resolve the namespace__name alias call; output: {}",
+            String::from_utf8_lossy(&sink)
+        );
+    }
+
+    /// Expansion carries imported type + impl declarations
+    /// too: an associated call on a struct whose impl lives in
+    /// the imported module checks on the Check path.
+    #[test]
+    fn check_frontend_accepts_imported_impl_assoc_call() {
+        let tree = TempTree::new("checkimpl");
+        tree.write(
+            "lib.sla",
+            "struct Thing { x: i32 }\nimpl Thing {\n    fn twice(x: i32) -> i32 { return x * 2; }\n}\n",
+        );
+        let main = tree.write(
+            "main.sla",
+            "@import \"lib.sla\"\nfn use_it() -> i32 { return Thing::twice(21); }\n",
+        );
+        let mut sink: Vec<u8> = Vec::new();
+        let checked = run_frontend(&main, FrontendKind::Check, None, &mut sink);
+        assert!(
+            checked.is_some(),
+            "Check front-end must accept an associated call into an imported impl; output: {}",
+            String::from_utf8_lossy(&sink)
+        );
+    }
