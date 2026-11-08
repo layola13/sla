@@ -283,23 +283,6 @@ impl Checker {
                             ),
                         ));
                     }
-                    // R-3: the const must also be VISIBLE as a
-                    // value — registration above only claimed the
-                    // name, so bodies referencing the const hit
-                    // UndefinedVariable. Define it in the program
-                    // frame with its declared (or value-inferred)
-                    // type.
-                    let cty = match &c.ty {
-                        Some(t) => (**t).clone(),
-                        None => self.check_expr(&c.value)?,
-                    };
-                    self.define_symbol_with_state(
-                        &c.name,
-                        cty,
-                        true,
-                        crate::rules::ValueState::Active,
-                        None,
-                    )?;
                 }
                 Node::ImplDecl(imp) => {
                     let target_name = target_type_name(&imp.target_ty)?;
