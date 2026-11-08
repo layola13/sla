@@ -507,9 +507,12 @@ pub fn compile_to_sa_string(
                 sla_codegen_text::TextError::MissingType { .. } => "MissingType",
                 sla_codegen_text::TextError::Lowering(_) => "LoweringError",
             };
+            // As in the SAB tail: append the error's Display detail
+            // after the variant name instead of dropping the payload
+            // (feature/context). The old line stays a strict prefix.
             let _ = writeln!(
                 stderr,
-                "Codegen Error: failed to generate SA code: error.{name}"
+                "Codegen Error: failed to generate SA code: error.{name}: {err}"
             );
             return None;
         }
@@ -563,18 +566,14 @@ pub fn compile_to_sab(
     ) {
         Ok(bytes) => bytes,
         Err(err) => {
-            let name = match &err {
-                sla_codegen_sab::Error::UnsupportedSabDirectFeature(_) => {
-                    "UnsupportedSabDirectFeature"
-                }
-                sla_codegen_sab::Error::ConflictingConstDecl(_) => "ConflictingConstDecl",
-                sla_codegen_sab::Error::MissingType(_) => "MissingType",
-                sla_codegen_sab::Error::InvalidStringLiteral(_) => "InvalidStringLiteral",
-                sla_codegen_sab::Error::InvalidModule(_) => "InvalidModule",
-            };
+            // The SAB error's Display renders `{Variant}: {detail}`;
+            // printing `error.{err}` surfaces the SAB-D11 payload
+            // (construct names, flattener host stderr) that the old
+            // name-only form dropped. The old line stays a strict
+            // prefix of this one.
             let _ = writeln!(
                 stderr,
-                "SAB Error: direct SLA-to-SAB lowering failed: error.{name}"
+                "SAB Error: direct SLA-to-SAB lowering failed: error.{err}"
             );
             return None;
         }

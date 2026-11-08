@@ -73,6 +73,15 @@ SAB 路与 workspace build 出现）与 `.sla-cache/imports/*.lst`
   不迭代），load contracts 331ms → 86–93ms（静窗实测）。
 
 残留坐标（均响亮失败、不静默）：
+0. **错误细节透出现行形态（2026-11-08 主会话裁断采 A、两处同取）**：
+   pipeline.rs 两条 codegen 尾（text 尾与 SAB 尾）自落地起全量
+   透出 provider 细节——旧形态「只打印错误变体名」作废。text 尾
+   打 `error.{VariantName}: {Display}`（变体名后附 feature/context
+   全文），SAB 尾打 `error.{err}`（错误类型自带 Display，渲染为
+   变体名 + SAB-D11 payload：构造名与 flattener 宿主 stderr 全文）。
+   两条新行均以旧行作严格前缀（子串型消费者不受影响），退出码
+   不变（1）；透出内容只含源码标识符、本地路径、io 错误与用户自家
+   宿主 stderr，同信任域（与委托路 stdio 直通口径一致）。
 1. **宏片段的 verified-encode 墙 —— 六期 provider 切换已闭合**：
    Zig 的模板/新鲜片段路用 `encodeSabFromFlatUnchecked`，而
    sa CLI 的 `check --emit-sab` 只提供 verified 编码，占位
