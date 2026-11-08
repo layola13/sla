@@ -298,6 +298,7 @@ fn probe_file(path: &Path, sa_exe: &str) -> String {
                 .collect::<Vec<_>>(),
             &func.ret_ty,
             func.return_fallible,
+            func.is_variadic,
         );
         if let Err(diag) = checker.register_extern_contract(&func.name, sig) {
             return format!(
