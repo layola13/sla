@@ -565,6 +565,14 @@ impl<'c> Driver<'c> {
                 return Ok(reg);
             }
         }
+        // D surface (surface_call), bare-call branches of
+        // genStdSurfaceCall: constructor rules keyed on the
+        // result type and function/method rules keyed on a
+        // receiver argument claim their calls here; anything
+        // unclaimed falls through to the plain tail below.
+        if let Some(reg) = self.gen_bare_surface_call(expr, call)? {
+            return Ok(reg);
+        }
         // Plain user-function static call.
         let resolved = self.check.resolve_alias(&call.func_name);
         let (arity, is_void) = match self.funcs.get(&resolved) {
