@@ -40,7 +40,10 @@ name = "sla-codegen-sab"
 version = "0.1.0"
 dependencies = [
  "sla-ast",
+ "sla-checker",
  "sla-lowering",
+ "sla-parser",
+ "sla-plugin",
 ]
 
 [[package]]

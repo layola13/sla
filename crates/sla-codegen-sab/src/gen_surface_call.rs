@@ -274,7 +274,7 @@ impl<'c> Driver<'c> {
     /// results) transfer. The shallow-copy and byte-copy arms
     /// for live struct sources stop loudly with the Zig
     /// coordinate instead of being approximated.
-    fn gen_vec_deque_element_store_reg(
+    pub(crate) fn gen_vec_deque_element_store_reg(
         &mut self,
         arg: &Node,
         value_reg: u32,

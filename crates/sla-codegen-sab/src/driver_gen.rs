@@ -312,6 +312,16 @@ impl<'c> Driver<'c> {
                 return Ok(reg);
             }
         }
+        // D surface (surface_call): the bare-call method
+        // probes (gen_method_call.rs / gen_method_surface.rs,
+        // Zig genCallInner's method chain) claim receiver-
+        // method calls before the plain static-call tail,
+        // exactly as in Zig.
+        if call.associated_target.is_none() {
+            if let Some(reg) = self.gen_method_call(expr, call)? {
+                return Ok(reg);
+            }
+        }
         // D surface (surface_call), bare-call branches of
         // genStdSurfaceCall: constructor rules keyed on the
         // result type and function/method rules keyed on a
