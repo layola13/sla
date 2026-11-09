@@ -20,7 +20,7 @@
 //! probe self-guards on the call shape and receiver type;
 //! `Ok(None)` keeps the caller's loud stop. Arms whose support
 //! machinery is not yet ported stay loud, never approximated:
-//! Vec pop, map insert/get/clear/contains/remove/keys/values,
+//! Vec pop, map clear/remove/keys/values,
 //! VecDeque pop_front / rotate, atomic compare_exchange,
 //! RefCell borrow, smart-pointer clone/count, and the raw_ptr
 //! `len` arm (string materialization plan) are NOT ported here.
@@ -89,6 +89,9 @@ impl<'c> Driver<'c> {
             return Ok(Some(reg));
         }
         if let Some(reg) = self.gen_atomic_method_call(call)? {
+            return Ok(Some(reg));
+        }
+        if let Some(reg) = self.gen_map_method_call(call)? {
             return Ok(Some(reg));
         }
         if let Some(reg) = self.gen_std_surface_bare_call(expr, call)? {
