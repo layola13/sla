@@ -147,6 +147,7 @@ pub mod gen_surface_call;
 pub mod gen_method_call;
 pub mod gen_method_surface;
 pub mod gen_map_call;
+pub mod gen_assign;
 pub mod emit;
 pub mod encode;
 pub mod error;

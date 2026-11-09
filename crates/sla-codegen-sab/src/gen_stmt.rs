@@ -50,8 +50,16 @@ impl<'c> Driver<'c> {
                 crate::locals::push_stack_local(&mut self.state, &v.name, dst, &v.ty)
             }
             Node::AssignStmt(a) => {
-                let name = match &*a.target {
-                    Node::Identifier(name) => name.clone(),
+                // Zig `genStmt` assign arm (10150) routes to
+                // `genAssign` (10335): deref / field / index
+                // targets are ported in `gen_assign.rs`;
+                // identifier targets keep the path below; any
+                // other target kind keeps the loud stop.
+                match &*a.target {
+                    Node::DerefExpr(_) | Node::FieldExpr(_) | Node::IndexExpr(_) => {
+                        return self.gen_assign(a);
+                    }
+                    Node::Identifier(_) => {}
                     _ => {
                         return Err(unsupported(
                             "assign to non-identifier target",
@@ -59,6 +67,10 @@ impl<'c> Driver<'c> {
                             "10150",
                         ))
                     }
+                }
+                let name = match &*a.target {
+                    Node::Identifier(name) => name.clone(),
+                    _ => unreachable!("target kind checked above"),
                 };
                 let src = self.gen_expr(&a.value)?;
                 // Zig `assignToIdentifier` (8837-8846): a target
