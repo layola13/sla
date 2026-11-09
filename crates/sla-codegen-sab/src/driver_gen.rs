@@ -483,7 +483,7 @@ impl<'c> Driver<'c> {
     /// static-call tail (`emitPlannedStaticCall`), subset form.
     /// Every named surface in the Zig dispatch head that belongs to
     /// another group stops loudly with that attribution.
-    pub(crate) fn gen_call(&mut self, _expr: &Node, call: &CallExpr) -> Result<u32> {
+    pub(crate) fn gen_call(&mut self, expr: &Node, call: &CallExpr) -> Result<u32> {
         // I group: an immediately-invoked closure callee inlines
         // through the closure family (Zig 17770–17774).
         if let Some(callee) = &call.callee {
@@ -528,6 +528,12 @@ impl<'c> Driver<'c> {
             ));
         }
         if call.associated_target.is_some() {
+            // D surface (surface_call): the ported associated
+            // probes (gen_surface_call.rs) claim their families;
+            // every other associated call keeps the loud stop.
+            if let Some(reg) = self.gen_associated_call(expr, call)? {
+                return Ok(reg);
+            }
             return Err(unsupported(
                 &format!(
                     "associated/method call `{}::{}` (surface or method lowering)",
