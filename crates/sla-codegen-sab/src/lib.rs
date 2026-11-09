@@ -142,6 +142,7 @@ pub mod driver_types;
 pub mod gen_print;
 pub mod gen_surface_fn;
 pub mod gen_struct;
+pub mod gen_stmt;
 pub mod gen_surface_call;
 pub mod emit;
 pub mod encode;
