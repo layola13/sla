@@ -304,19 +304,33 @@ impl ModuleBuilder {
         self.append_inst(inst);
     }
 
-    /// A call in the codegen's text-body form: operands
-    /// `[Reg(dst) | None, Text("@callee(args)")]` — the shape
+    /// A call in the codegen's text-body form — the shape
     /// `emitCallBody` and the whole `gen*Call` family produce, where
-    /// the argument list is rendered into the body text.
+    /// the argument list is rendered into the body text. The operand
+    /// layout is destination-dependent, exactly as in Zig's
+    /// `emitCallBody` (see `FragmentMachine::emit_call_body`): with a
+    /// destination, operands are `[Reg(dst), Text("@callee(args)")]`;
+    /// without one, the body text sits in `operands[0]`. The host
+    /// verifier's call parser (`referee/call.zig`
+    /// `parseInstructionCall`) reads the body from `operands[1]`
+    /// only when `operands[0]` is a register and from `operands[0]`
+    /// otherwise, so a destination-less call carrying its body in
+    /// `operands[1]` is rejected as `ForbiddenSyntax`
+    /// ("invalid call syntax", trap 1001) under the test backend
+    /// (F2 family: void statement calls, `@sa_mem_free` /
+    /// `@sa_vec_free` release calls).
     pub fn emit_call(&mut self, dst: Option<u32>, body: &str) {
-        if let Some(reg) = dst {
-            self.record_reg(reg);
-        }
         let mut inst = self.make_inst(InstKind::Call);
-        if let Some(reg) = dst {
-            inst.operands[0] = Operand::Reg(reg);
+        match dst {
+            Some(reg) => {
+                self.record_reg(reg);
+                inst.operands[0] = Operand::Reg(reg);
+                inst.operands[1] = Operand::Text(body.to_string());
+            }
+            None => {
+                inst.operands[0] = Operand::Text(body.to_string());
+            }
         }
-        inst.operands[1] = Operand::Text(body.to_string());
         self.append_inst(inst);
     }
 
@@ -504,5 +518,47 @@ impl ModuleBuilder {
             const_decls: self.const_decls,
             instructions: self.instructions,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// F2 regression: a destination-less call must carry its body
+    /// in `operands[0]` (the host verifier reads it there; the
+    /// pre-fix layout — body in `operands[1]`, `operands[0]` empty —
+    /// traps `ForbiddenSyntax` 1001 under the test backend).
+    #[test]
+    fn emit_call_void_body_in_first_operand() {
+        let mut b = ModuleBuilder::new();
+        b.emit_call(None, "@sla__hit()");
+        let module = b.finish();
+        assert_eq!(module.instructions.len(), 1);
+        let inst = &module.instructions[0];
+        assert_eq!(inst.kind, InstKind::Call);
+        assert!(
+            matches!(&inst.operands[0], Operand::Text(t) if t == "@sla__hit()"),
+            "void call body must be operands[0], got {:?}",
+            inst.operands[0]
+        );
+        assert_eq!(inst.operands[1], Operand::None);
+    }
+
+    /// The destination form keeps the established layout:
+    /// `[Reg(dst), Text(body)]`.
+    #[test]
+    fn emit_call_with_dest_keeps_reg_text_layout() {
+        let mut b = ModuleBuilder::new();
+        let dst = b.intern("dst");
+        b.emit_call(Some(dst), "@sla__seven()");
+        let module = b.finish();
+        let inst = &module.instructions[0];
+        assert_eq!(inst.operands[0], Operand::Reg(dst));
+        assert!(
+            matches!(&inst.operands[1], Operand::Text(t) if t == "@sla__seven()"),
+            "dest call body must be operands[1], got {:?}",
+            inst.operands[1]
+        );
     }
 }
