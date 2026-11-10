@@ -45,10 +45,11 @@ use crate::types::{StdSurfaceRule, StdSurfaceRuleKind};
 
 /// Zig `AddressSource`: an address register plus the extra
 /// registers a caller releases together with it
-/// (`releaseAddressSource`).
-struct AddressSource {
-    reg: u32,
-    release_regs: Vec<u32>,
+/// (`releaseAddressSource`). Shared with the IndexExpr read
+/// slice (`gen_index`), which reuses the array address path.
+pub(crate) struct AddressSource {
+    pub(crate) reg: u32,
+    pub(crate) release_regs: Vec<u32>,
 }
 
 /// Zig `DerefAssignmentTargetLifecycleAction`
@@ -254,7 +255,7 @@ impl<'c> Driver<'c> {
             unreachable!("array guard checked above")
         };
         let arr = arr.clone();
-        let target = self.gen_index_address(idx, &arr)?;
+        let target = self.gen_index_address_array(idx, &arr)?;
         let value = self.gen_expr(&assign.value)?;
         crate::release_prim::emit_store(
             &mut self.state,
@@ -303,8 +304,13 @@ impl<'c> Driver<'c> {
 
     /// Zig `genIndexAddress` (11806–11903), array path only —
     /// see the module note for why the Slice / surface paths
-    /// are unreachable from `genAssign`.
-    fn gen_index_address(&mut self, idx: &IndexExpr, arr: &ArrayType) -> Result<AddressSource> {
+    /// are unreachable from `genAssign`. The Slice / surface
+    /// paths live in `gen_index::gen_index_address`.
+    pub(crate) fn gen_index_address_array(
+        &mut self,
+        idx: &IndexExpr,
+        arr: &ArrayType,
+    ) -> Result<AddressSource> {
         let mut target_source = if let Node::FieldExpr(f) = &*idx.target {
             self.gen_field_address(f)?
         } else {
@@ -397,7 +403,7 @@ impl<'c> Driver<'c> {
     }
 
     /// Zig `addressWithOffset` (11768–11773).
-    fn address_with_offset(&mut self, base: u32, offset: usize) -> AddressSource {
+    pub(crate) fn address_with_offset(&mut self, base: u32, offset: usize) -> AddressSource {
         if offset == 0 {
             return AddressSource {
                 reg: base,
@@ -418,7 +424,7 @@ impl<'c> Driver<'c> {
     }
 
     /// Zig `releaseAddressSource` (11799–11804).
-    fn release_address_source(&mut self, source: &AddressSource) -> Result<()> {
+    pub(crate) fn release_address_source(&mut self, source: &AddressSource) -> Result<()> {
         if !self.is_local_reg(source.reg) {
             self.emit_release(source.reg)?;
         }

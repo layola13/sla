@@ -46,7 +46,9 @@ impl<'c> Driver<'c> {
     /// Zig `genMapKeyReg` (21785): non-literal keys generate
     /// plainly; string-literal keys take Zig's cached
     /// `genStringLiteral` arm, which is not ported — loud stop.
-    fn gen_map_key_reg(&mut self, arg: &Node) -> Result<u32> {
+    /// Shared with the IndexExpr read slice (`gen_index`'s
+    /// `gen_map_index`).
+    pub(crate) fn gen_map_key_reg(&mut self, arg: &Node) -> Result<u32> {
         if let Node::Literal(Literal::StringVal(_)) = arg {
             return Err(unsupported(
                 "string-literal map key (string materialization)",

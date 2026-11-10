@@ -4,7 +4,7 @@
 //! `driver.rs`. Split from `driver.rs` solely for the 700-line
 //! file discipline; the two files are one decomposition unit (B4).
 
-use sla_ast::{BinaryOp, CallExpr, IfExpr, Literal, Node, Primitive, Type, WhileStmt};
+use sla_ast::{BinaryOp, CallExpr, IfExpr, IndexExpr, Literal, Node, Primitive, Type, WhileStmt};
 use sla_lowering::{is_panic_builtin_name, is_println_call, plan_scalar_binary_op};
 
 use crate::error::{Error, Result};
@@ -165,6 +165,7 @@ impl<'c> Driver<'c> {
                 Ok(dst)
             }
             Node::CallExpr(call) => self.gen_call(expr, call),
+            Node::IndexExpr(idx) => self.gen_index(idx),
             Node::IfExpr(ife) => self.gen_if(expr, ife),
             Node::CastExpr(c) => self.gen_cast(c),
             Node::UnsafeExpr(u) => self.gen_unsafe_expr(expr, u),
