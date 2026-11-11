@@ -34,6 +34,7 @@
 
 use crate::freshness::{CompileOptions, FreshKind};
 use crate::out::zig_error_name;
+use checker_info::CheckerInfo;
 use sla_ast::node::Node;
 use sla_checker::Checker;
 use std::io::Write;
@@ -498,36 +499,7 @@ pub fn run_frontend(
     })
 }
 
-// -- CheckInfo adapter (same wiring shape as sla-oracle's) -------------------------
-
-struct CheckerInfo<'c>(&'c Checker);
-
-impl sla_lowering::CheckInfo for CheckerInfo<'_> {
-    fn expr_type(&self, node: &Node) -> Option<&sla_ast::Type> {
-        self.0.expr_types.get(&sla_lowering::node_key(node))
-    }
-    fn cleanups(&self, stmt: &Node) -> Option<&[String]> {
-        self.0
-            .cleanups
-            .get(&sla_lowering::node_key(stmt))
-            .map(Vec::as_slice)
-    }
-    fn phi_cleanups(&self, stmt: &Node) -> Option<&[String]> {
-        self.0
-            .phi_cleanups
-            .get(&sla_lowering::node_key(stmt))
-            .map(Vec::as_slice)
-    }
-    fn type_is_copy_value(&self, ty: &sla_ast::Type) -> bool {
-        self.0.type_is_copy(ty)
-    }
-    fn is_extern_func(&self, name: &str) -> bool {
-        self.0.extern_funcs.contains_key(name)
-    }
-    fn is_macro(&self, name: &str) -> bool {
-        self.0.macros.contains_key(name)
-    }
-}
+// -- CheckInfo adapter: crate::pipeline::checker_info ---------------------------
 
 // -- tails ---------------------------------------------------------------------------
 
@@ -556,7 +528,7 @@ pub fn compile_to_sa_string(
     // post-check reachability prunes are separate stages; see
     // the CLI-D5 scope note in docs/divergences/cli-commands.md.)
     let frontend = run_frontend(file, kind, options.test_filter.as_deref(), stderr)?;
-    let info = CheckerInfo(&frontend.checker);
+    let info = CheckerInfo::new(&frontend.checker);
     let start = Instant::now();
     let text = match sla_codegen_text::generate(&frontend.root, &info) {
         Ok(text) => text,
@@ -606,7 +578,7 @@ pub fn compile_to_sab(
         return Some(cached);
     }
     let frontend = run_frontend(file, kind, options.test_filter.as_deref(), stderr)?;
-    let info = CheckerInfo(&frontend.checker);
+    let info = CheckerInfo::new(&frontend.checker);
     let start = Instant::now();
     // CLI-D4: the SAB tail runs through the F-group entry with a
     // real StdSnippetFlattener provider — the host `sa` reached
@@ -693,6 +665,7 @@ pub fn test_filter_selects_no_tests(file: &str, filter: Option<&str>, stderr: &m
     Some(true)
 }
 
+mod checker_info;
 mod expand_wire;
 
 #[cfg(test)]
