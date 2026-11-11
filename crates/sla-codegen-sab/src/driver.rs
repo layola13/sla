@@ -547,6 +547,17 @@ impl<'c> Driver<'c> {
         self.b().emit_label(&entry);
         self.gen_block(&t.body)?;
         if !self.b().last_is_terminator() {
+            // V-ML: the checker records the test body's block-exit
+            // cleanups on its last statement (checkBlock); no other
+            // consumer runs at a test's fallthrough exit, and the
+            // host enforces exit liveness for test functions, so
+            // still-active bindings (e.g. locals bound from call
+            // results) leaked as MemoryLeak. Consume the list --
+            // the same list the ReturnStmt arm consumes at
+            // explicit returns -- before the void return.
+            if let Some(last) = t.body.last() {
+                self.release_cleanups_for_stmt(last)?;
+            }
             self.b().emit_return(None);
         }
         self.flush_pending_std_deps()?;

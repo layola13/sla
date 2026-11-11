@@ -105,7 +105,19 @@ impl<'c> Driver<'c> {
                 // calls discard without release; other calls and
                 // expressions evaluate (subset: releases omitted,
                 // SAB-D19).
-                let _ = self.gen_expr(e)?;
+                let result = self.gen_expr(e)?;
+                // V-ML: a statement-position call's result register
+                // is consumed by the discard itself, so Zig releases
+                // it at this consumption point. Without the release
+                // the register stays live at function exit, which
+                // the host's test-exit liveness scan reports as
+                // MemoryLeak. Only call results are released here:
+                // if/switch/match bookkeeping registers have no
+                // defining instruction, and panic calls terminate
+                // the block (guarded by last_is_terminator).
+                if matches!(&**e, Node::CallExpr(_)) && !self.b().last_is_terminator() {
+                    self.release_tmp(result)?;
+                }
                 Ok(())
             }
             Node::ReturnStmt(r) => {
