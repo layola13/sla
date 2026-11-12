@@ -89,6 +89,10 @@ pub(crate) struct FuncShape {
     pub(crate) ret_prim: PrimType,
     pub(crate) is_void: bool,
     pub(crate) arity: usize,
+    /// Per-parameter callsite caps (the same shared-ABI
+    /// computation the declaration side uses), so the plain
+    /// static-call tail can render `&`/`^` operand prefixes.
+    pub(crate) param_caps: Vec<CapPrefix>,
 }
 
 pub struct Driver<'c> {
@@ -284,6 +288,13 @@ impl<'c> Driver<'c> {
                             ret_prim: abi_return_prim_type(&f.ret_ty)?,
                             is_void: is_void_type(&f.ret_ty),
                             arity: f.params.len(),
+                            param_caps: f
+                                .params
+                                .iter()
+                                .map(|p| {
+                                    crate::release_emit::param_capability(self.check, p)
+                                })
+                                .collect(),
                         },
                     );
                 }
@@ -432,6 +443,13 @@ impl<'c> Driver<'c> {
                 param_cap: Some(cap),
                 is_stack_alloc: false,
             });
+            // Zig `pushParamLocal` (locals.rs keeps the same
+            // rule in its tested helper): a borrow-typed
+            // parameter register IS an object pointer — the
+            // genField through-load guards consult this mark.
+            if matches!(&*p.ty, Type::Borrow(_)) {
+                crate::locals::mark_object_ptr_reg(&mut self.state, param_id);
+            }
         }
         let ret_cap = return_cap_for_type(ret_ty);
         self.b().set_sig_params(sig_index, specs, param_ids);

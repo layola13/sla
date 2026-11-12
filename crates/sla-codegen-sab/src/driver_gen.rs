@@ -165,6 +165,9 @@ impl<'c> Driver<'c> {
                 Ok(dst)
             }
             Node::CallExpr(call) => self.gen_call(expr, call),
+            Node::FieldExpr(field) => self.gen_field(field),
+            Node::DerefExpr(deref) => self.gen_deref(expr, deref),
+            Node::BorrowExpr(borrow) => self.gen_borrow(borrow),
             Node::IndexExpr(idx) => self.gen_index(idx),
             Node::IfExpr(ife) => self.gen_if(expr, ife),
             Node::CastExpr(c) => self.gen_cast(c),
@@ -333,8 +336,8 @@ impl<'c> Driver<'c> {
         }
         // Plain user-function static call.
         let resolved = self.check.resolve_alias(&call.func_name);
-        let (arity, is_void) = match self.funcs.get(&resolved) {
-            Some(shape) => (shape.arity, shape.is_void),
+        let (arity, is_void, param_caps) = match self.funcs.get(&resolved) {
+            Some(shape) => (shape.arity, shape.is_void, shape.param_caps.clone()),
             None => {
                 return Err(unsupported(
                     &format!("call to unknown or non-user function `{}`", call.func_name),
@@ -355,26 +358,85 @@ impl<'c> Driver<'c> {
         // facts: main / extern / no-mangle / `sa_`-prefixed names
         // stay as-is, other user functions become `sla__<name>`.
         let lowered = crate::symbols::lowered_func_symbol(&resolved, self.check);
-        let mut arg_regs = Vec::with_capacity(call.args.len());
-        for arg in &call.args {
-            arg_regs.push(self.gen_expr(arg)?);
+        // Callsite cap prefixes (Zig genStaticCall's planned
+        // materializations, subset): the host verifier reads
+        // the per-arg cap glyphs off the call body text, so a
+        // borrow arg must render `&place` (address-of, never a
+        // materialized borrow register) and a move-cap arg
+        // must render `^value`; bare names are cap ByValue and
+        // trap 1013 against borrow/move contracts.
+        let mut rendered: Vec<String> = Vec::with_capacity(call.args.len());
+        let mut post_call_releases: Vec<u32> = Vec::new();
+        let mut post_call_consumed: Vec<u32> = Vec::new();
+        for (i, arg) in call.args.iter().enumerate() {
+            let cap = param_caps.get(i).copied();
+            let operand = match cap {
+                Some(crate::ir::CapPrefix::Borrow) => match arg {
+                    Node::BorrowExpr(borrow) => {
+                        self.gen_prefixed_borrow_call_arg(borrow, &mut post_call_releases)?
+                    }
+                    _ => {
+                        let reg = self.gen_expr(arg)?;
+                        if !self.is_local_reg(reg) {
+                            post_call_releases.push(reg);
+                        }
+                        format!("&{}", self.b().symbol_name(reg))
+                    }
+                },
+                Some(crate::ir::CapPrefix::Move) => {
+                    // Zig's shallow-copy call-arg branch
+                    // (genStaticCall): an identifier arg of a
+                    // shallow-copyable struct type is copied
+                    // and the copy is moved into the call, so
+                    // the source binding stays live afterwards.
+                    let shallow_ty = match arg {
+                        Node::Identifier(_) => self.check.expr_type(arg).cloned().filter(|ty| {
+                            self.check.type_is_shallow_copy_call_arg_value(ty)
+                        }),
+                        _ => None,
+                    };
+                    if let Some(ty) = shallow_ty {
+                        let reg = self.gen_expr(arg)?;
+                        let copied = self.gen_shallow_copy_call_arg_value(reg, &ty)?;
+                        post_call_consumed.push(copied);
+                        format!("^{}", self.b().symbol_name(copied))
+                    } else {
+                        let reg = self.gen_expr(arg)?;
+                        post_call_consumed.push(reg);
+                        format!("^{}", self.b().symbol_name(reg))
+                    }
+                }
+                _ => {
+                    let reg = self.gen_expr(arg)?;
+                    self.b().symbol_name(reg).to_string()
+                }
+            };
+            rendered.push(operand);
         }
-        let rendered: Vec<String> = arg_regs
-            .iter()
-            .map(|&reg| self.b().symbol_name(reg).to_string())
-            .collect();
         let body = format!("@{}({})", lowered, rendered.join(", "));
-        if is_void {
+        let result = if is_void {
             self.b().emit_call(None, &body);
             // Zig emitPlannedCallBody void arm: sentinel tmp = 0.
             let sentinel = self.b().new_tmp();
             self.b().emit_assign_imm(sentinel, 0);
-            Ok(sentinel)
+            sentinel
         } else {
             let dst = self.b().new_tmp();
             self.b().emit_call(Some(dst), &body);
-            Ok(dst)
+            dst
+        };
+        for reg in post_call_consumed {
+            // The call consumed the register (cap Move): join
+            // the released set so later cleanups stay silent
+            // (release_emit::mark_consumed — the RegState::
+            // Released bookkeeping release_locals consults,
+            // not the Consumed classification).
+            crate::release_emit::mark_consumed(&mut self.state, reg);
         }
+        for reg in &post_call_releases {
+            self.emit_release(*reg)?;
+        }
+        Ok(result)
     }
 
     /// Zig `genIf` / `genIfStatement` / `genIfValue` (lines

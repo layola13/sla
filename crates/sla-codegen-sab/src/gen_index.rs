@@ -23,6 +23,7 @@
 //!   target's base type name (Vec / GrowVec / Slice reads).
 
 use sla_ast::{IndexExpr, Literal, Node, Type};
+use sla_lowering::abi_passes_as_pointer;
 
 use crate::driver::{unsupported, Driver};
 use crate::error::{Error, Result};
@@ -33,7 +34,7 @@ use crate::gen_method_call::map_types;
 use crate::ir::{OpKind, Operand, PrimType};
 use crate::layout::{
     element_load_type, element_slot_size, first_generic_arg, storage_prim_type, type_base_name,
-    type_size, user_defined_generic_inner,
+    type_size, user_defined_generic_inner, vec_element_type, LayoutAdapter,
 };
 use crate::state::RegState;
 use crate::surface_query::{
@@ -151,8 +152,147 @@ impl<'c> Driver<'c> {
         if let Some(elem_ty) = user_defined_generic_inner(&target_ty, "VecDeque") {
             return self.gen_vec_deque_index(idx, &elem_ty);
         }
+        // (4b) CLASSB segment 3: inline-POD vec-like elements
+        // are read by loading the packed word out of the slot
+        // and materializing a record (the `.index` surface
+        // rule would load the word as a pointer).
+        if let Some(elem_ty) = vec_element_type(&target_ty)
+            .or_else(|| user_defined_generic_inner(&target_ty, "GrowVec"))
+        {
+            if self.inline_pod_element(&elem_ty) {
+                return self.gen_vec_pod_index_read(idx, &target_ty, &elem_ty);
+            }
+        }
         // (5) `.index` surface rule.
         self.gen_surface_index(idx, &target_ty)
+    }
+
+    /// Zig `genVecOwnerReceiver` (sab_codegen.zig:14386):
+    /// a field-projection target yields the field's stored
+    /// handle (marked non-owning, and a field handle view
+    /// when the field type passes as a pointer); any other
+    /// target is a plain `gen_expr`.
+    fn gen_vec_owner_receiver(&mut self, target: &Node) -> Result<AddressSource> {
+        if let Node::FieldExpr(field) = target {
+            let projection = self.gen_field_address(field)?;
+            let owner = self.b().new_tmp();
+            self.b().record_reg(owner);
+            self.emit_load(owner, projection.reg, 0, PrimType::Ptr);
+            self.mark_non_owning(owner);
+            // DEF-KB-1: register the handle-typed field view
+            // so its disposal uses a real release.
+            if let Some(base_ty) = self.check.expr_type(&field.expr).cloned() {
+                let field_ty =
+                    LayoutAdapter::new(self.check).field_type(&base_ty, &field.field_name);
+                if let Some(field_ty) = field_ty {
+                    if abi_passes_as_pointer(&field_ty) {
+                        self.state.frame.field_handle_view_regs.insert(owner);
+                    }
+                }
+            }
+            self.release_address_source(&projection)?;
+            return Ok(AddressSource {
+                reg: owner,
+                release_regs: Vec::new(),
+            });
+        }
+        let reg = self.gen_expr(target)?;
+        Ok(AddressSource {
+            reg,
+            release_regs: Vec::new(),
+        })
+    }
+
+    /// Zig `genVecPodIndexRead` (sab_codegen.zig:21704):
+    /// bounds-checked load of the packed element word plus
+    /// record materialization. The miss arm follows this
+    /// port's branch convention from `gen_map_index`
+    /// (branch-local releases; Zig's DEF-PHI disposal
+    /// snapshot has no counterpart in the ported branch
+    /// machinery).
+    fn gen_vec_pod_index_read(
+        &mut self,
+        idx: &IndexExpr,
+        target_ty: &Type,
+        elem_ty: &Type,
+    ) -> Result<u32> {
+        let is_grow = user_defined_generic_inner(target_ty, "GrowVec").is_some();
+        let (len_off, ptr_off) = if is_grow {
+            (
+                crate::release_drop::GROWVEC_ABI_LEN_OFFSET,
+                crate::release_drop::GROWVEC_ABI_PTR_OFFSET,
+            )
+        } else {
+            (
+                crate::release_drop::VEC_ABI_LEN_OFFSET,
+                crate::release_drop::VEC_ABI_PTR_OFFSET,
+            )
+        };
+        let target_source = self.gen_vec_owner_receiver(&idx.target)?;
+        let target_reg = target_source.reg;
+        let index_reg = self.gen_expr(&idx.index)?;
+        let len_reg = self.b().new_tmp();
+        let in_bounds = self.b().new_tmp();
+        self.b().record_reg(len_reg);
+        self.b().record_reg(in_bounds);
+        self.emit_load(len_reg, target_reg, len_off, PrimType::U64);
+        crate::release_prim::emit_op(
+            &mut self.state,
+            in_bounds,
+            OpKind::Ult,
+            Operand::Reg(index_reg),
+            Operand::Reg(len_reg),
+        );
+        self.emit_release(len_reg)?;
+
+        let hit_label = self.b().new_label("L_VEC_POD_INDEX_HIT");
+        let miss_label = self.b().new_label("L_VEC_POD_INDEX_MISS");
+        self.b().emit_branch(in_bounds, &hit_label, &miss_label);
+
+        self.b().emit_label(&miss_label);
+        self.branch_release_if_owned(in_bounds);
+        self.branch_release_if_owned(index_reg);
+        self.branch_release_if_owned(target_reg);
+        for reg in &target_source.release_regs {
+            self.branch_release_if_owned(*reg);
+        }
+        self.b().emit_panic_code(32);
+
+        self.b().emit_label(&hit_label);
+        self.branch_release_if_owned(in_bounds);
+        let data_ptr = self.b().new_tmp();
+        let offset = self.b().new_tmp();
+        let elem_ptr = self.b().new_tmp();
+        let word = self.b().new_tmp();
+        self.b().record_reg(data_ptr);
+        self.b().record_reg(offset);
+        self.b().record_reg(elem_ptr);
+        self.b().record_reg(word);
+        self.emit_load(data_ptr, target_reg, ptr_off, PrimType::Ptr);
+        crate::release_prim::emit_op(
+            &mut self.state,
+            offset,
+            OpKind::Mul,
+            Operand::Reg(index_reg),
+            Operand::ImmI64(8),
+        );
+        crate::release_prim::emit_ptr_add(
+            &mut self.state,
+            elem_ptr,
+            data_ptr,
+            Operand::Reg(offset),
+        );
+        self.emit_release(data_ptr)?;
+        self.emit_load(word, elem_ptr, 0, PrimType::U64);
+        self.emit_release(elem_ptr)?;
+        self.emit_release(offset)?;
+        let rec = self.materialize_inline_pod_record(word, elem_ty)?;
+        self.emit_release(word)?;
+        if !self.is_local_reg(index_reg) {
+            self.emit_release(index_reg)?;
+        }
+        self.release_address_source(&target_source)?;
+        Ok(rec)
     }
 
     /// Zig `genIndexAddress` (sab_codegen.zig:11806–11903):
@@ -411,6 +551,18 @@ impl<'c> Driver<'c> {
         let index_reg = self.gen_expr(&idx.index)?;
         let dst = self.b().new_tmp();
         self.b().record_reg(dst);
+        // DEF-ZRANGE: indexing a Vec of heap-handle elements
+        // loads the element's own cell handle out of the
+        // buffer slot — a borrowed view, not an owned value.
+        // Mark the result non-owning so any later cleanup of
+        // this register (e.g. the base release at the end of
+        // a field projection, genField) degrades to a forget
+        // instead of freeing the element the Vec still owns.
+        if let Some(elem_ty) = vec_element_type(target_ty) {
+            if crate::agg_emit::is_heap_handle_type(&elem_ty) {
+                self.mark_non_owning(dst);
+            }
+        }
         let values = StdSurfaceValues {
             out: Some(dst),
             receiver: Some(target_reg),

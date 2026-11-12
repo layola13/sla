@@ -65,7 +65,7 @@ enum FieldTransfer {
 }
 
 /// Zig `lowering_rules.structFieldIsPointerBacked` (5920).
-fn struct_field_is_pointer_backed(field_ty: &Type) -> bool {
+pub(crate) fn struct_field_is_pointer_backed(field_ty: &Type) -> bool {
     match field_ty {
         Type::Infer | Type::Primitive(_) | Type::Pointer(_) | Type::Borrow(_) | Type::FnPtr(_) => {
             false

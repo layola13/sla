@@ -272,7 +272,7 @@ impl<'c> Driver<'c> {
     }
 
     /// Zig `genFieldAddress` (11775–11786).
-    fn gen_field_address(&mut self, field: &FieldExpr) -> Result<AddressSource> {
+    pub(crate) fn gen_field_address(&mut self, field: &FieldExpr) -> Result<AddressSource> {
         let expr_ty = self.check.expr_type(&field.expr).cloned().ok_or_else(|| {
             Error::MissingType("field address target has no checker type".to_string())
         })?;

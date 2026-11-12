@@ -189,7 +189,7 @@ impl<'c> Driver<'c> {
     /// a text mode operand and the borrow cap prefix; the
     /// result register joins `borrow_result_regs` (the port's
     /// `RegState::BorrowResult`).
-    fn emit_borrow_reg(&mut self, dst: u32, source: u32, mode: &str) {
+    pub(crate) fn emit_borrow_reg(&mut self, dst: u32, source: u32, mode: &str) {
         self.b().record_reg(dst);
         self.state
             .frame
@@ -449,7 +449,7 @@ impl<'c> Driver<'c> {
 
     /// Zig `inlinePodElement` (2176) over
     /// `structDeclIsInlinePod` (lowering_rules.zig:5582).
-    fn inline_pod_element(&mut self, elem_ty: &Type) -> bool {
+    pub(crate) fn inline_pod_element(&mut self, elem_ty: &Type) -> bool {
         let Type::UserDefined(ud) = elem_ty else {
             return false;
         };
@@ -471,7 +471,7 @@ impl<'c> Driver<'c> {
 
     /// Zig `materializeInlinePodRecord` (2185): a fresh heap
     /// record holding the packed slot word.
-    fn materialize_inline_pod_record(&mut self, word_reg: u32, elem_ty: &Type) -> Result<u32> {
+    pub(crate) fn materialize_inline_pod_record(&mut self, word_reg: u32, elem_ty: &Type) -> Result<u32> {
         let Type::UserDefined(ud) = elem_ty else {
             return Err(unsupported(
                 "inline-POD record materialization of a non-struct element",
