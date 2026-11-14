@@ -155,6 +155,16 @@ impl Checker {
             Node::IndexExpr(i) => {
                 let target = self.check_expr(&i.target)?;
                 let index = self.check_expr(&i.index)?;
+                // DEF-RUST-STRKEY-V2: map targets key the index
+                // by the declared key type and yield the value
+                // type (check_expr_util::map_index_result_type,
+                // Zig index_expr arm mirror); the integer gate
+                // below governs only sequence targets.
+                if let Some(res) =
+                    crate::check_expr_util::map_index_result_type(&target, &i.index, &index)
+                {
+                    return res;
+                }
                 if !is_integer_type(&index) {
                     return Err(Diagnostic::new(
                         ErrorKind::TypeMismatch,

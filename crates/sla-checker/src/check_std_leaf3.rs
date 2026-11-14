@@ -150,6 +150,38 @@ impl Checker {
                         Ok(bool_ty())
                     })());
                 }
+                "remove" => {
+                    return Some((|| {
+                        if argc != 2 {
+                            return Err(arity(name, 2, argc));
+                        }
+                        // DEF-RUST-STRKEY-V2: mirror Zig's
+                        // HashSet remove arm (type_checker.zig,
+                        // P1 surface): the key slot refines like
+                        // the map key slots, the key is NOT
+                        // consumed (a probe, as with contains),
+                        // and the result is bool. Without this
+                        // arm every HashSet.remove fell through
+                        // the leaf cascade to a bare TypeMismatch;
+                        // the std-surface meta rule alone lives
+                        // on the codegen side and could never
+                        // admit the call at check.
+                        let k = self.check_expr(&call.args[1])?;
+                        let k = crate::check_expr_util::refine_string_literal_key(
+                            &call.args[1],
+                            k,
+                            &key_ty,
+                        );
+                        if !types_equal(&key_ty, &k) {
+                            return Err(mismatch(format!(
+                                "TypeMismatch: HashSet remove expects {}, actual {}",
+                                type_desc(&key_ty),
+                                type_desc(&k)
+                            )));
+                        }
+                        Ok(bool_ty())
+                    })());
+                }
                 _ => {}
             }
         }

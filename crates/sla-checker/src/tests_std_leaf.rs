@@ -119,3 +119,69 @@ fn r2_hashmap_infer_refinement_binds() {
     assert!(result.is_err(), "{result:?}");
 }
 
+
+
+/// DEF-RUST-STRKEY-V2: `m[k]` on a declared HashMap<String, i32>
+/// typechecks against the key type and yields the VALUE type
+/// (returning it as i32 proves the recorded result type).
+#[test]
+fn strkey_v2_map_index_string_var_key_passes() {
+    let source = "fn probe(m: HashMap<String, i32>, k: String) -> i32 {\n    return m[k];\n}\n";
+    let result = check_source(source);
+    assert!(result.is_ok(), "{result:?}");
+}
+
+/// DEF-RUST-STRKEY-V2: a string-literal index refines against
+/// the String key slot (Zig refineStringLiteralArg).
+#[test]
+fn strkey_v2_map_index_literal_key_passes() {
+    let source = "fn probe(m: HashMap<String, i32>) -> i32 {\n    return m[\"a\"];\n}\n";
+    let result = check_source(source);
+    assert!(result.is_ok(), "{result:?}");
+}
+
+/// DEF-RUST-STRKEY-V2: an integer index into a String-keyed
+/// map is a TypeMismatch at the index site itself.
+#[test]
+fn strkey_v2_map_index_int_key_rejected() {
+    let source = "fn probe(m: HashMap<String, i32>) -> i32 {\n    return m[5];\n}\n";
+    let result = check_source(source);
+    let err = result.expect_err("int key on String map must be rejected");
+    assert_eq!(err.kind, ErrorKind::TypeMismatch);
+}
+
+/// DEF-RUST-STRKEY-V2: the integer-key map control passes.
+#[test]
+fn strkey_v2_map_index_int_map_passes() {
+    let source = "fn probe(m: HashMap<i32, i32>) -> i32 {\n    return m[5];\n}\n";
+    let result = check_source(source);
+    assert!(result.is_ok(), "{result:?}");
+}
+
+/// DEF-RUST-STRKEY-V2: indexing a Vec by a String stays a
+/// TypeMismatch — the map arm must not loosen sequence typing.
+#[test]
+fn strkey_v2_vec_index_string_key_rejected() {
+    let source = "fn probe(v: Vec<i32>, k: String) -> i32 {\n    return v[k];\n}\n";
+    let result = check_source(source);
+    assert!(result.is_err(), "{result:?}");
+}
+
+/// DEF-RUST-STRKEY-V2: HashSet.remove typechecks and returns
+/// bool (the fn return type proves the result type).
+#[test]
+fn strkey_v2_hashset_remove_passes() {
+    let source = "fn probe(s: HashSet<String>, k: String) -> bool {\n    return s.remove(k);\n}\n";
+    let result = check_source(source);
+    assert!(result.is_ok(), "{result:?}");
+}
+
+/// DEF-RUST-STRKEY-V2: HashSet.remove with a wrong key type
+/// is a TypeMismatch.
+#[test]
+fn strkey_v2_hashset_remove_wrong_key_rejected() {
+    let source = "fn probe(s: HashSet<String>) -> bool {\n    return s.remove(5);\n}\n";
+    let result = check_source(source);
+    let err = result.expect_err("int key on String set must be rejected");
+    assert_eq!(err.kind, ErrorKind::TypeMismatch);
+}

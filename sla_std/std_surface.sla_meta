@@ -35,6 +35,7 @@ function len String sa_std/string.sa STRING_BUF_LEN out,receiver deps=sa_vec_len
 method Vec push sa_std/vec.sa VEC_PUSH receiver,value,elem_size deps=sa_vec_push,sa_mem_copy
 method HashSet insert sa_std/hashset.sa SET_INSERT out,receiver,value deps=sa_set_insert,sa_map_put,map_hash_ptr_seed,map_table_probe,map_rehash,map_table_insert,sa_mem_set
 method HashSet contains sa_std/hashset.sa SET_CONTAINS out,receiver,value deps=sa_set_contains,sa_map_get,map_hash_ptr_seed,map_table_probe
+method HashSet remove sa_std/hashset.sa SET_REMOVE out,receiver,value deps=sa_set_remove,sa_map_del
 method BTreeSet insert sa_std/btree_set.sa BTREE_SET_INSERT out,receiver,value deps=sa_btree_set_insert,sa_btree_map_len,sa_btree_map_insert,btree_map_find,btree_map_find_at,btree_map_entry_cmp,btree_map_entry_cmp_at,btree_map_grow,sa_mem_copy
 method BTreeSet contains sa_std/btree_set.sa BTREE_SET_CONTAINS out,receiver,value deps=sa_btree_set_contains,sa_btree_map_contains_key,btree_map_find,btree_map_find_at,btree_map_entry_cmp,btree_map_entry_cmp_at
 fallible_method Vec remove sa_std/vec.sa VEC_REMOVE ok,out,receiver,index,elem_size deps=sa_vec_try_remove panic=86

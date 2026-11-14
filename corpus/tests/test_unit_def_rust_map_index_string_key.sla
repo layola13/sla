@@ -1,0 +1,74 @@
+@import "sa_std/hashmap.sa"
+@import "sa_std/string.sa"
+@import "sa_std/core/option.sa"
+
+// DEF-RUST-STRKEY regression (GAP-1): the SAB index route
+// (gen_index's map plan) never selected the content-keyed
+// MAP_TRY_GET_STR variant — its plan hard-coded the plain
+// MAP_TRY_GET / sa_map_try_get for every HashMap, so an
+// `m[k]` read on a HashMap<String, _> probed by pointer
+// identity against entries that insert stored content-keyed
+// (MAP_INSERT_STR). Any fresh equal-content key missed and
+// the read hit the codegen's own miss trap (panic 404).
+// The sibling probes (insert / get / contains_key) all route
+// by content; only the index read diverged. The corpus map
+// string-key test exercises only the .get() method form, so
+// no corpus cell covered `m[k]` on a String-keyed map.
+// Pre-fix: tests 1-3 fail with panic 404; test 4 (int key
+// control) passes. Post-fix: all pass.
+
+@test "rust map index string key fresh var key"() {
+    let m: HashMap<String, i32> = HashMap::new();
+    let k: String = format("the-key");
+    m.insert(k, 42);
+    let f1: String = format("filler-one");
+    m.insert(f1, 1);
+    let f2: String = format("filler-two");
+    m.insert(f2, 2);
+    let f3: String = format("filler-three");
+    m.insert(f3, 3);
+    let f4: String = format("filler-four");
+    m.insert(f4, 4);
+    let f5: String = format("filler-five");
+    m.insert(f5, 5);
+    let f6: String = format("filler-six");
+    m.insert(f6, 6);
+    let f7: String = format("filler-seven");
+    m.insert(f7, 7);
+    let probe: String = format("the-key");
+    let v: i32 = m[probe];
+    if v != 42 { panic(74911); };
+    let probe2: String = format("filler-five");
+    let w: i32 = m[probe2];
+    if w != 5 { panic(74912); };
+}
+
+@test "rust map index string key literal index"() {
+    let m: HashMap<String, i32> = HashMap::new();
+    let k: String = format("lit-key");
+    m.insert(k, 7);
+    let v: i32 = m["lit-key"];
+    if v != 7 { panic(74913); };
+}
+
+@test "rust map index string key after overwrite"() {
+    let m: HashMap<String, i32> = HashMap::new();
+    let k1: String = format("dup-key");
+    m.insert(k1, 1);
+    let k2: String = format("dup-key");
+    m.insert(k2, 2);
+    if len(m) != 1 { panic(74914); };
+    let probe: String = format("dup-key");
+    let v: i32 = m[probe];
+    if v != 2 { panic(74915); };
+}
+
+@test "rust map index int key control"() {
+    let m: HashMap<i32, i32> = HashMap::new();
+    m.insert(5, 50);
+    m.insert(9, 90);
+    let v: i32 = m[5];
+    if v != 50 { panic(74916); };
+    let w: i32 = m[9];
+    if w != 90 { panic(74917); };
+}

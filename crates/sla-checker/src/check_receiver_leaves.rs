@@ -103,7 +103,11 @@ impl Checker {
         match name {
             "push" => return Some(self.leaf_push(call)),
             "pop" => return Some(self.leaf_pop(call)),
-            "remove" => return Some(self.leaf_remove(call)),
+            "remove" => {
+                if let Some(r) = self.leaf_remove_unless_map_set(call) {
+                    return Some(r);
+                }
+            }
             _ => {}
         }
         if call.args.is_empty() {
@@ -430,16 +434,6 @@ impl Checker {
         Ok(user_ty("Option", vec![elem]))
     }
 
-    fn leaf_remove(&mut self, call: &CallExpr) -> CheckResult<Type> {
-        arity(call, 2)?;
-        let recv_ty = self.check_expr(&call.args[0])?;
-        let elem = vec_element_type(&recv_ty).ok_or_else(type_mismatch)?;
-        let index_ty = self.check_expr(&call.args[1])?;
-        if !is_numeric_type(&index_ty) || matches!(elem, Type::Infer) {
-            return Err(type_mismatch());
-        }
-        Ok(elem)
-    }
 
     // -- receiver-shape segments (Zig order) -------------------------
 

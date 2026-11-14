@@ -30,7 +30,7 @@ use crate::error::{Error, Result};
 use crate::fragment::FragmentMachine;
 use crate::fragment_imports::MachineSurfaceEmitter;
 use crate::gen_assign::AddressSource;
-use crate::gen_method_call::map_types;
+use crate::gen_method_call::{is_string_type, map_types};
 use crate::ir::{OpKind, Operand, PrimType};
 use crate::layout::{
     element_load_type, element_slot_size, first_generic_arg, storage_prim_type, type_base_name,
@@ -81,19 +81,42 @@ struct MapIndexPlan {
     dep_symbol: &'static str,
     import_path: &'static str,
     shape: MapIndexShape,
+    string_key: bool,
 }
 
-/// Zig `mapIndexPlan` (lowering_rules.zig:4628). Distinct
-/// from `gen_map_call`'s reduced plan for the `get` probe:
-/// that one keys a `_STR` variant for string keys, which
-/// Zig's `genMapIndex` does not have.
-fn map_index_plan(ty: &Type) -> Option<MapIndexPlan> {
-    if map_types(ty, "HashMap").is_some() {
+/// Zig `mapIndexPlan` (lowering_rules.zig:4845): ONE shared
+/// plan serves both `genMapGetCall` and `genMapIndex`, and
+/// its HashMap arm keys the `_STR` variant for string keys
+/// (`MAP_TRY_GET_STR` / `sa_map_try_get_str` when the key
+/// type is String). An earlier note on this port claimed
+/// the index route has no `_STR` arm; that was wrong, and
+/// acting on it left every `m[k]` read on a
+/// `HashMap<String, _>` probing by pointer identity against
+/// content-hashed entries — a guaranteed miss (panic 404)
+/// for any fresh equal-content key, and for the stored
+/// handle itself whenever the probe chain differs.
+/// DEF-RUST-STRKEY: route this plan by the caller's
+/// `string_key` decision (the shared
+/// `map_key_string_content`: declared String key type, or a
+/// string-literal index), exactly as `gen_map_call`'s twin
+/// plan does for the `get` probe.
+fn map_index_plan(ty: &Type, string_key: bool) -> Option<MapIndexPlan> {
+    if let Some((key_ty, _)) = map_types(ty, "HashMap") {
+        if string_key || is_string_type(&key_ty) {
+            return Some(MapIndexPlan {
+                macro_name: "MAP_TRY_GET_STR",
+                dep_symbol: "sa_map_try_get_str",
+                import_path: "sa_std/hashmap.sa",
+                shape: MapIndexShape::TryGetPtr,
+                string_key: true,
+            });
+        }
         return Some(MapIndexPlan {
             macro_name: "MAP_TRY_GET",
             dep_symbol: "sa_map_try_get",
             import_path: "sa_std/hashmap.sa",
             shape: MapIndexShape::TryGetPtr,
+            string_key: false,
         });
     }
     if map_types(ty, "BTreeMap").is_some() {
@@ -102,6 +125,7 @@ fn map_index_plan(ty: &Type) -> Option<MapIndexPlan> {
             dep_symbol: "sa_btree_map_try_get",
             import_path: "sa_std/btree_map.sa",
             shape: MapIndexShape::TryGetValue,
+            string_key: false,
         });
     }
     None
@@ -134,7 +158,10 @@ impl<'c> Driver<'c> {
             return Ok(dst);
         }
         // (2) map plan.
-        if let Some(plan) = map_index_plan(&target_ty) {
+        if let Some(plan) = map_index_plan(
+            &target_ty,
+            self.map_key_string_content(&target_ty, &idx.index),
+        ) {
             let container = match plan.shape {
                 MapIndexShape::TryGetPtr => "HashMap",
                 MapIndexShape::TryGetValue => "BTreeMap",
@@ -458,7 +485,14 @@ impl<'c> Driver<'c> {
         let dst = self.b().new_tmp();
         self.b().record_reg(dst);
         let map_reg = self.gen_expr(&idx.target)?;
-        let key_reg = self.gen_map_key_reg(&idx.index)?;
+        // DEF-RUST-STRKEY: on a string-keyed plan a literal
+        // index materializes as an owned String handle (the
+        // `_STR` probe reads the key through the handle
+        // layout); retire it after the probe like the `get`
+        // probe does, instead of the expr-result release.
+        let key_materialized_owned =
+            plan.string_key && matches!(*idx.index, Node::Literal(Literal::StringVal(_)));
+        let key_reg = self.gen_map_key_reg_mode(&idx.index, plan.string_key)?;
         self.ensure_method_std_deps(plan.import_path, &[plan.dep_symbol])?;
         let ok_reg = self.b().new_tmp();
         let payload_reg = self.b().new_tmp();
@@ -482,7 +516,12 @@ impl<'c> Driver<'c> {
         self.b().emit_panic_code(404);
         self.b().emit_label(&hit_label);
         self.branch_release_if_owned(ok_reg);
-        let load_ty = element_load_type(value_ty)?;
+        // DEF-RUST-STRKEY-V2: Zig genMapIndex loads the
+        // payload with storagePrimType(value_ty); this was
+        // element_load_type(value_ty) — a container-shaped
+        // helper fed the bare value type, unreachable while
+        // the checker blocked map indices outright.
+        let load_ty = storage_prim_type(value_ty)?;
         match plan.shape {
             MapIndexShape::TryGetValue => {
                 self.b().emit_op(
@@ -498,7 +537,11 @@ impl<'c> Driver<'c> {
         }
         self.branch_release_if_owned(payload_reg);
         self.release_non_local(map_reg)?;
-        self.release_expr_result_if_needed(&idx.index, key_reg)?;
+        if key_materialized_owned {
+            self.retire_owned_probe_key(key_reg)?;
+        } else {
+            self.release_expr_result_if_needed(&idx.index, key_reg)?;
+        }
         Ok(dst)
     }
 

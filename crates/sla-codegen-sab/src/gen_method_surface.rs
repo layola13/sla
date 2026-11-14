@@ -452,7 +452,21 @@ impl<'c> Driver<'c> {
         // on string CONTENT, not pointer identity; substitute
         // the *_str rule variants for SET_INSERT / SET_CONTAINS
         // when the value argument is a String.
-        if (rule.macro_name == "SET_INSERT" || rule.macro_name == "SET_CONTAINS")
+        // DEF-RUST-STRKEY: SET_REMOVE joins the enumeration —
+        // the Zig SAB route missed exactly this member until
+        // DEF-SET-REMOVE-SABROUTE (candidate a6c56caa), where
+        // the meta rule existed but the substitution did not,
+        // so a String-element remove silently emitted the
+        // identity-keyed plain variant. Here the meta rule
+        // itself was also missing (added beside insert /
+        // contains in sla_std/std_surface.sla_meta); both
+        // halves land together so the silent shape cannot
+        // open. The *_str arm needs sa_set_remove_str /
+        // SET_REMOVE_STR in sa_std (sci candidate 8dbae038);
+        // on a std without it the dep check fails loudly.
+        if (rule.macro_name == "SET_INSERT"
+            || rule.macro_name == "SET_CONTAINS"
+            || rule.macro_name == "SET_REMOVE")
             && call.args.len() > 1
         {
             if let Some(value_ty) = self.check.expr_type(&call.args[1]).cloned() {
@@ -473,11 +487,24 @@ impl<'c> Driver<'c> {
                         .iter()
                         .map(|dep| dep.to_string())
                         .collect();
-                    } else {
+                    } else if rule.macro_name == "SET_CONTAINS" {
                         rule.macro_name = "SET_CONTAINS_STR".to_string();
                         rule.deps = [
                             "sa_set_contains_str",
                             "sa_map_get_str",
+                            "map_hash_str_seed",
+                            "map_table_probe_str",
+                            "map_probe_existing_str",
+                            "map_str_key_eq",
+                        ]
+                        .iter()
+                        .map(|dep| dep.to_string())
+                        .collect();
+                    } else {
+                        rule.macro_name = "SET_REMOVE_STR".to_string();
+                        rule.deps = [
+                            "sa_set_remove_str",
+                            "sa_map_del_str",
                             "map_hash_str_seed",
                             "map_table_probe_str",
                             "map_probe_existing_str",

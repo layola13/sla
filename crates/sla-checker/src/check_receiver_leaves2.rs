@@ -577,4 +577,47 @@ impl Checker {
             _ => None,
         }
     }
+
+    // -- remove pair (moved from check_receiver_leaves.rs,
+    // which sits at the 700-line cap; DEF-RUST-STRKEY-V2) --
+    /// DEF-RUST-STRKEY-V2: `remove` is name-keyed for Vec
+    /// receivers, but map/set receivers own receiver-keyed
+    /// remove arms in the std cascade (check_std_map_leaf) —
+    /// which leaf2's own dispatch consults BEFORE its
+    /// name-keyed arms. Mirror that order: a map/set receiver
+    /// falls through (None) instead of taking the Vec arm's
+    /// bare TypeMismatch ahead of every other stage. Every
+    /// other receiver keeps the standing name-keyed verdict.
+    pub(crate) fn leaf_remove_unless_map_set(
+        &mut self,
+        call: &CallExpr,
+    ) -> Option<CheckResult<Type>> {
+        if call.args.is_empty() {
+            return Some(self.leaf_remove(call));
+        }
+        let recv_ty = match self.check_expr(&call.args[0]) {
+            Ok(t) => t,
+            Err(e) => return Some(Err(e)),
+        };
+        if crate::types_util::hash_map_types(&recv_ty).is_some()
+            || crate::types_util::btree_map_types(&recv_ty).is_some()
+            || crate::types_util::hash_set_element_type(&recv_ty).is_some()
+            || crate::types_util::btree_set_element_type(&recv_ty).is_some()
+        {
+            return None;
+        }
+        Some(self.leaf_remove(call))
+    }
+
+    pub(crate) fn leaf_remove(&mut self, call: &CallExpr) -> CheckResult<Type> {
+        arity(call, 2)?;
+        let recv_ty = self.check_expr(&call.args[0])?;
+        let elem = vec_element_type(&recv_ty).ok_or_else(type_mismatch)?;
+        let index_ty = self.check_expr(&call.args[1])?;
+        if !is_numeric_type(&index_ty) || matches!(elem, Type::Infer) {
+            return Err(type_mismatch());
+        }
+        Ok(elem)
+    }
+
 }

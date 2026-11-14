@@ -92,7 +92,7 @@ fn map_index_plan_table() {
         "HashMap",
         vec![prim(Primitive::I64), prim(Primitive::U32)],
     );
-    let plan = map_index_plan(&hash).expect("HashMap plan");
+    let plan = map_index_plan(&hash, false).expect("HashMap plan");
     assert_eq!(plan.macro_name, "MAP_TRY_GET");
     assert_eq!(plan.dep_symbol, "sa_map_try_get");
     assert_eq!(plan.import_path, "sa_std/hashmap.sa");
@@ -102,12 +102,29 @@ fn map_index_plan_table() {
         "BTreeMap",
         vec![prim(Primitive::I64), prim(Primitive::U32)],
     );
-    let plan = map_index_plan(&btree).expect("BTreeMap plan");
+    let plan = map_index_plan(&btree, false).expect("BTreeMap plan");
     assert_eq!(plan.macro_name, "BTREE_MAP_TRY_GET");
     assert_eq!(plan.dep_symbol, "sa_btree_map_try_get");
     assert_eq!(plan.import_path, "sa_std/btree_map.sa");
     assert_eq!(plan.shape, MapIndexShape::TryGetValue);
 
-    assert!(map_index_plan(&generic("Vec", vec![prim(Primitive::I32)])).is_none());
-    assert!(map_index_plan(&prim(Primitive::I32)).is_none());
+    assert!(map_index_plan(&generic("Vec", vec![prim(Primitive::I32)]), false).is_none());
+    assert!(map_index_plan(&prim(Primitive::I32), false).is_none());
+
+    // DEF-RUST-STRKEY-V2: a declared String key type selects
+    // the content-keyed arm even without the literal decision,
+    // and the literal decision (string_key=true) selects it
+    // for an int-keyed map shape as well.
+    let hash_str = generic(
+        "HashMap",
+        vec![generic("String", vec![]), prim(Primitive::U32)],
+    );
+    let plan = map_index_plan(&hash_str, false).expect("HashMap String plan");
+    assert_eq!(plan.macro_name, "MAP_TRY_GET_STR");
+    assert_eq!(plan.dep_symbol, "sa_map_try_get_str");
+    assert_eq!(plan.shape, MapIndexShape::TryGetPtr);
+    assert!(plan.string_key);
+    let plan = map_index_plan(&hash, true).expect("HashMap literal-decision plan");
+    assert_eq!(plan.macro_name, "MAP_TRY_GET_STR");
+    assert!(plan.string_key);
 }

@@ -1,0 +1,62 @@
+@import "sa_std/hashset.sa"
+@import "sa_std/string.sa"
+
+// DEF-RUST-STRKEY regression (GAP-2): HashSet.remove had NO
+// std-surface rule in sla_std/std_surface.sla_meta (insert /
+// contains / len only), so every HashSet.remove call fell
+// through the dispatch chain and failed loudly as an unknown
+// function — and the *_str substitution block in
+// gen_std_surface_bare_call enumerated SET_INSERT /
+// SET_CONTAINS but not SET_REMOVE (the exact enumeration
+// miss the Zig SAB route shipped until DEF-SET-REMOVE-
+// SABROUTE, candidate a6c56caa). Both halves land together:
+// the meta rule (mirroring the Zig meta verbatim) plus the
+// SET_REMOVE -> SET_REMOVE_STR substitution with the Zig
+// dep chain.
+// Discriminator ladder:
+//   pristine dbf80121: this file does not compile
+//     (unknown function `remove`).
+//   meta rule only: compiles; String tests panic 75111
+//     (identity-keyed remove misses the fresh key).
+//   full fix on stock sci b92531c2 std: int control passes;
+//     String tests stop loudly on the missing
+//     sa_set_remove_str dep (SET_REMOVE_STR lives in sci
+//     candidate 8dbae038, not yet landed).
+//   full fix + that std swapped in: all pass.
+
+@test "rust set remove str fresh var key"() {
+    let s: HashSet<String> = HashSet::new();
+    let a: String = format("elem-one");
+    s.insert(a);
+    let b: String = format("elem-two");
+    s.insert(b);
+    if len(s) != 2 { panic(75110); };
+    let p: String = format("elem-one");
+    s.remove(p);
+    if len(s) != 1 { panic(75111); };
+    let q: String = format("elem-one");
+    if s.contains(q) { panic(75112); };
+    let r: String = format("elem-two");
+    if !s.contains(r) { panic(75113); };
+}
+
+@test "rust set remove str missing key"() {
+    let s: HashSet<String> = HashSet::new();
+    let a: String = format("elem-a");
+    s.insert(a);
+    let z: String = format("elem-zz");
+    s.remove(z);
+    if len(s) != 1 { panic(75114); };
+    let q: String = format("elem-a");
+    if !s.contains(q) { panic(75115); };
+}
+
+@test "rust set remove int control"() {
+    let s: HashSet<i32> = HashSet::new();
+    s.insert(5);
+    s.insert(9);
+    s.remove(5);
+    if len(s) != 1 { panic(75116); };
+    if s.contains(5) { panic(75117); };
+    if !s.contains(9) { panic(75118); };
+}
