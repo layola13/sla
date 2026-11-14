@@ -334,6 +334,32 @@ impl ModuleBuilder {
         self.append_inst(inst);
     }
 
+    /// `va_start` opens the variadic list state in the VaList
+    /// parameter's own register (host InstKind::VaStart).
+    pub fn emit_va_start(&mut self, reg: u32) {
+        let mut inst = self.make_inst(InstKind::VaStart);
+        inst.operands[0] = Operand::Reg(reg);
+        self.append_inst(inst);
+    }
+
+    /// `va_arg dst, state, ty` reads the next promoted argument
+    /// (host InstKind::VaArg).
+    pub fn emit_va_arg(&mut self, dst: u32, state: u32, ty: PrimType) {
+        self.record_reg(dst);
+        let mut inst = self.make_inst(InstKind::VaArg);
+        inst.operands[0] = Operand::Reg(dst);
+        inst.operands[1] = Operand::Reg(state);
+        inst.operands[2] = Operand::Ty(ty as u32);
+        self.append_inst(inst);
+    }
+
+    /// `va_end` closes the list state (host InstKind::VaEnd).
+    pub fn emit_va_end(&mut self, reg: u32) {
+        let mut inst = self.make_inst(InstKind::VaEnd);
+        inst.operands[0] = Operand::Reg(reg);
+        self.append_inst(inst);
+    }
+
     /// The interned name for an id (Zig `symbols.items[id]`).
     pub fn symbol_name(&self, id: u32) -> &str {
         &self.symbols[id as usize]
@@ -398,6 +424,10 @@ impl ModuleBuilder {
 
     /// Set a sig's return capability (Zig `genFuncSig`'s
     /// `return_cap = returnCapForType(ret_ty)`).
+    pub fn set_sig_variadic(&mut self, sig_index: usize, is_variadic: bool) {
+        self.function_sigs[sig_index].is_variadic = is_variadic;
+    }
+
     pub fn set_sig_return_cap(&mut self, sig_index: usize, cap: Option<CapPrefix>) {
         self.function_sigs[sig_index].return_cap = cap;
     }

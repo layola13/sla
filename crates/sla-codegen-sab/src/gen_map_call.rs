@@ -6,8 +6,7 @@
 //! vec-pop branch-merge idiom (clone / restore / merge over
 //! the frame's released set), exactly as in Zig.
 //!
-//! Not ported (stay loud): `genMapClearCall` (its HashMap arm
-//! needs the `emitHashMapValueCellsFree` slot walk),
+//! Not ported (stay loud):
 //! `genMapRemoveCall` / `genBTreeMapRemoveCall` (tombstone
 //! slot walk), `genMapKeysCall` / `genMapValuesCall`, and
 //! string-literal keys (`genMapKeyReg`'s cached
@@ -23,6 +22,9 @@ use crate::error::{Error, Result};
 use crate::gen_method_call::{is_string_type, map_types};
 use crate::ir::{Operand, PrimType};
 use crate::layout::{prim_type, user_defined_generic_inner};
+use crate::release_drop::NoDropFacts;
+use crate::release_emit::NoMacroFragments;
+use crate::release_locals::DropEngine;
 
 impl<'c> Driver<'c> {
     /// The ported map probe chain, in Zig `genCallInner`
@@ -40,7 +42,49 @@ impl<'c> Driver<'c> {
         if let Some(reg) = self.gen_map_contains_key_call(call)? {
             return Ok(Some(reg));
         }
+        if let Some(reg) = self.gen_map_clear_call(call)? {
+            return Ok(Some(reg));
+        }
         Ok(None)
+    }
+
+    /// Zig `genMapClearCall`: free the entry value cells
+    /// (the same A-form slot walk a dropped HashMap runs,
+    /// via the E5 DropEngine), then the `MAP_CLEAR` /
+    /// `BTREE_MAP_CLEAR` fragment zeroes the table; the map
+    /// stays fully usable afterwards. The result is a zero
+    /// sentinel, as for the other void method arms.
+    fn gen_map_clear_call(&mut self, call: &CallExpr) -> Result<Option<u32>> {
+        if call.args.len() != 1 || call.func_name != "clear" || call.associated_target.is_some() {
+            return Ok(None);
+        }
+        let receiver_ty = match self.check.expr_type(&call.args[0]).cloned() {
+            Some(ty) => ty,
+            None => return Ok(None),
+        };
+        let (import_path, dep_symbol, macro_name) = if map_types(&receiver_ty, "HashMap").is_some()
+        {
+            ("sa_std/hashmap.sa", "sa_map_clear", "MAP_CLEAR")
+        } else if map_types(&receiver_ty, "BTreeMap").is_some() {
+            ("sa_std/btree_map.sa", "sa_btree_map_clear", "BTREE_MAP_CLEAR")
+        } else {
+            return Ok(None);
+        };
+        let recv_reg = self.gen_expr(&call.args[0])?;
+        if dep_symbol == "sa_map_clear" {
+            static NO_DROPS: NoDropFacts = NoDropFacts;
+            let mut engine = DropEngine::new(self.check, &NO_DROPS);
+            let mut frags = NoMacroFragments;
+            engine.emit_hashmap_value_cells_free(&mut self.state, &mut frags, recv_reg)?;
+        }
+        self.ensure_method_std_deps(import_path, &[dep_symbol])?;
+        let recv_name = self.b().symbol_name(recv_reg).to_string();
+        self.emit_method_macro_fragment(import_path, macro_name, &[recv_name])?;
+        self.release_non_local(recv_reg)?;
+        let sentinel = self.b().new_tmp();
+        self.b().record_reg(sentinel);
+        self.b().emit_assign_imm(sentinel, 0);
+        Ok(Some(sentinel))
     }
 
     /// Zig `genMapKeyReg` (21785): non-literal keys generate
@@ -49,14 +93,7 @@ impl<'c> Driver<'c> {
     /// Shared with the IndexExpr read slice (`gen_index`'s
     /// `gen_map_index`).
     pub(crate) fn gen_map_key_reg(&mut self, arg: &Node) -> Result<u32> {
-        if let Node::Literal(Literal::StringVal(_)) = arg {
-            return Err(unsupported(
-                "string-literal map key (string materialization)",
-                "D surface (surface_call)",
-                "21785-21795",
-            ));
-        }
-        self.gen_expr(arg)
+        self.gen_map_key_reg_mode(arg, false)
     }
 
     /// Zig `insertEnumPayloadIsCopy` (21795).
@@ -128,13 +165,16 @@ impl<'c> Driver<'c> {
             Some(ty) => ty,
             None => return Ok(None),
         };
-        let plan = match map_insert_plan(&receiver_ty) {
+        let string_key = self.map_key_string_content(&receiver_ty, &call.args[1]);
+        let plan = match map_insert_plan(&receiver_ty, string_key) {
             Some(plan) => plan,
             None => return Ok(None),
         };
         let recv_reg = self.gen_expr(&call.args[0])?;
         let key_arg = call.args[1].clone();
-        let key_reg = self.gen_map_key_reg(&key_arg)?;
+        let key_materialized_owned =
+            string_key && matches!(key_arg, Node::Literal(Literal::StringVal(_)));
+        let key_reg = self.gen_map_key_reg_mode(&key_arg, string_key)?;
         let value_reg = self.gen_expr(&call.args[2])?;
         let value_arg_ty = self.check.expr_type(&call.args[2]).cloned();
         let value_u64 = self.b().new_tmp();
@@ -283,7 +323,13 @@ impl<'c> Driver<'c> {
             self.emit_consumed_marker(value_reg);
             self.mark_consumed(value_reg);
         }
-        if self.insert_arg_checker_consumed(&call.args[0], &key_arg) {
+        if key_materialized_owned {
+            // The `_STR` insert stores the key handle itself:
+            // the map adopts it, so the materialized handle is
+            // consumed here, never freed.
+            self.emit_consumed_marker(key_reg);
+            self.mark_consumed(key_reg);
+        } else if self.insert_arg_checker_consumed(&call.args[0], &call.args[1]) {
             self.emit_consumed_marker(key_reg);
             self.mark_consumed(key_reg);
         } else {
@@ -307,13 +353,16 @@ impl<'c> Driver<'c> {
         if map_types(&receiver_ty, "HashMap").is_none() {
             return Ok(None);
         }
-        let plan = match map_index_plan(&receiver_ty) {
+        let string_key = self.map_key_string_content(&receiver_ty, &call.args[1]);
+        let plan = match map_index_plan(&receiver_ty, string_key) {
             Some(plan) => plan,
             None => return Ok(None),
         };
         let recv_reg = self.gen_expr(&call.args[0])?;
         let key_arg = call.args[1].clone();
-        let key_reg = self.gen_map_key_reg(&key_arg)?;
+        let key_materialized_owned =
+            string_key && matches!(key_arg, Node::Literal(Literal::StringVal(_)));
+        let key_reg = self.gen_map_key_reg_mode(&key_arg, string_key)?;
         self.ensure_method_std_deps(plan.import_path, &[plan.dep_symbol])?;
         let ok_reg = self.b().new_tmp();
         let payload_reg = self.b().new_tmp();
@@ -371,7 +420,11 @@ impl<'c> Driver<'c> {
         );
         self.b().emit_label(&end_label);
         self.release_non_local(recv_reg)?;
-        self.release_expr_result_if_needed(&key_arg, key_reg)?;
+        if key_materialized_owned {
+            self.retire_owned_probe_key(key_reg)?;
+        } else {
+            self.release_expr_result_if_needed(&key_arg, key_reg)?;
+        }
         Ok(Some(option_reg))
     }
 
@@ -474,12 +527,16 @@ impl<'c> Driver<'c> {
             Some(types) => types,
             None => return Ok(None),
         };
+        let string_key = is_string_type(&key_ty)
+            || matches!(call.args[1], Node::Literal(Literal::StringVal(_)));
         let recv_reg = self.gen_expr(&call.args[0])?;
         let key_arg = call.args[1].clone();
-        let key_reg = self.gen_map_key_reg(&key_arg)?;
+        let key_materialized_owned =
+            string_key && matches!(key_arg, Node::Literal(Literal::StringVal(_)));
+        let key_reg = self.gen_map_key_reg_mode(&key_arg, string_key)?;
         let result_reg = self.b().new_tmp();
         self.b().record_reg(result_reg);
-        if is_string_type(&key_ty) {
+        if string_key {
             self.ensure_method_std_deps("sa_std/hashmap.sa", &["sa_map_contains_key_str"])?;
             let recv_name = self.b().symbol_name(recv_reg).to_string();
             let key_name = self.b().symbol_name(key_reg).to_string();
@@ -499,7 +556,11 @@ impl<'c> Driver<'c> {
             )?;
         }
         self.release_non_local(recv_reg)?;
-        self.release_expr_result_if_needed(&key_arg, key_reg)?;
+        if key_materialized_owned {
+            self.retire_owned_probe_key(key_reg)?;
+        } else {
+            self.release_expr_result_if_needed(&key_arg, key_reg)?;
+        }
         Ok(Some(result_reg))
     }
 }
@@ -515,9 +576,9 @@ struct MapInsertPlan {
 /// Zig `mapInsertPlan` (lowering_rules.zig:4803): owned
 /// String keys are content-keyed (DEF-INSERT-GETMISS), so
 /// they route through the `_STR` insert variant.
-fn map_insert_plan(ty: &Type) -> Option<MapInsertPlan> {
+fn map_insert_plan(ty: &Type, string_key: bool) -> Option<MapInsertPlan> {
     if let Some((key, _)) = map_types(ty, "HashMap") {
-        if is_string_type(&key) {
+        if string_key || is_string_type(&key) {
             return Some(MapInsertPlan {
                 import_path: "sa_std/hashmap.sa",
                 macro_name: "MAP_INSERT_STR",
@@ -552,9 +613,9 @@ struct MapIndexPlan {
 }
 
 /// Zig `mapIndexPlan` (lowering_rules.zig:4845), HashMap arm.
-fn map_index_plan(ty: &Type) -> Option<MapIndexPlan> {
+fn map_index_plan(ty: &Type, string_key: bool) -> Option<MapIndexPlan> {
     let (key, _) = map_types(ty, "HashMap")?;
-    if is_string_type(&key) {
+    if string_key || is_string_type(&key) {
         return Some(MapIndexPlan {
             import_path: "sa_std/hashmap.sa",
             macro_name: "MAP_TRY_GET_STR",

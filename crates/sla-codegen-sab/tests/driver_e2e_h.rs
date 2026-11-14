@@ -358,6 +358,14 @@ fn model_if_value() -> Vec<u8> {
             Operand::Ty(PrimType::I32 as u32),
         ],
     );
+    // Stage-5: the stored branch-tail value is released right
+    // after the store (Zig oracle stream for the if-value
+    // program: `store slot, r8; release r8`).
+    push_inst(
+        &mut b,
+        InstKind::Release,
+        [Operand::Reg(tv), Operand::None, Operand::None, Operand::None],
+    );
     b.emit_jmp(&merge_label);
     b.emit_label(&else_label);
     let ev = b.new_tmp();
@@ -371,6 +379,11 @@ fn model_if_value() -> Vec<u8> {
             Operand::Reg(ev),
             Operand::Ty(PrimType::I32 as u32),
         ],
+    );
+    push_inst(
+        &mut b,
+        InstKind::Release,
+        [Operand::Reg(ev), Operand::None, Operand::None, Operand::None],
     );
     b.emit_jmp(&merge_label);
     b.emit_label(&merge_label);
@@ -496,6 +509,13 @@ fn model_unsafe_value() -> Vec<u8> {
             Operand::Ty(PrimType::I32 as u32),
         ],
     );
+    // Stage-5: the stored tail value is released right after
+    // the store (Zig oracle stream: `store r2, r3; release r3`).
+    push_inst(
+        &mut b,
+        InstKind::Release,
+        [Operand::Reg(v), Operand::None, Operand::None, Operand::None],
+    );
     let result = b.new_tmp();
     b.record_reg(result);
     push_inst(
@@ -507,6 +527,13 @@ fn model_unsafe_value() -> Vec<u8> {
             Operand::ImmU64(0),
             Operand::Ty(PrimType::I32 as u32),
         ],
+    );
+    // Stage-5: the unsafe result slot is released right after
+    // the load (Zig oracle stream: `load r4, r2; release r2`).
+    push_inst(
+        &mut b,
+        InstKind::Release,
+        [Operand::Reg(slot), Operand::None, Operand::None, Operand::None],
     );
     let x = b.intern("x");
     b.emit_assign_reg(x, result);

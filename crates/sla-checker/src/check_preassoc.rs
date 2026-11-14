@@ -607,11 +607,12 @@ impl Checker {
         }
         let list_ty = self.check_expr(&call.args[0])?;
         // Zig: `list_ty` must be primitive va_list, and the arm
-        // then returns `read_ty`. sla-ast has no VaList primitive
-        // (D-C24), so every spellable type lands on Zig's own
-        // mismatch message instead; `read_ty` becomes the result
-        // the day the VaList surface lands.
-        let _ = &read_ty;
+        // then returns `read_ty`. The VaList surface has landed
+        // (Primitive::VaList, R-3), so a VaList argument returns
+        // the read type; anything else keeps Zig's mismatch.
+        if matches!(list_ty, Type::Primitive(Primitive::VaList)) {
+            return Ok(read_ty);
+        }
         Err(Diagnostic::new(
             ErrorKind::TypeMismatch,
             format!(

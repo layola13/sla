@@ -24,10 +24,10 @@
 use sla_ast::{CallExpr, Literal, Node, Primitive, Type};
 
 use crate::driver::{unsupported, Driver};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::fragment::FragmentMachine;
 use crate::fragment_imports::MachineStdDeps;
-use crate::ir::{OpKind, Operand};
+use crate::ir::{OpKind, Operand, PrimType};
 use crate::surface_query::StdDepEnsurer;
 
 /// Zig `PrintPrimitiveFormat` (lowering_rules.zig:5149).
@@ -340,4 +340,297 @@ impl<'c> Driver<'c> {
         self.b().emit_assign_imm(sentinel, 0);
         Ok(sentinel)
     }
+    // -- format() (Zig genFormatCall family, 13741-13960) --------
+
+    /// Zig `ensureDebugFormatDeps`: the string_format.sa deps
+    /// the format builder's fragments and `_into` calls need.
+    fn ensure_debug_format_deps(&mut self) -> Result<()> {
+        let mut ensurer = MachineStdDeps {
+            machine: FragmentMachine::new(&mut self.state),
+            flattener: &mut *self.flattener,
+        };
+        ensurer.ensure_std_deps(
+            "sa_std/string_format.sa",
+            &[
+                "sa_vec_with_capacity".to_string(),
+                "sa_vec_reserve".to_string(),
+                "sa_vec_free".to_string(),
+                "sa_mem_copy".to_string(),
+                "sa_mem_set".to_string(),
+                "sa_fmt_i64_into".to_string(),
+                "sa_fmt_u64_into".to_string(),
+                "sa_fmt_f64_into".to_string(),
+                "sa_fmt_bool_into".to_string(),
+            ],
+        )
+    }
+
+    /// Zig `newFormatTag`: a fresh hygiene tag from the tmp
+    /// counter.
+    fn new_format_tag(&mut self) -> String {
+        let n = self.b().new_tmp();
+        format!("fmttag_{n}")
+    }
+
+    /// Zig `emitFormatPushConstBytes` (13741): intern the bytes
+    /// as a utf8 const and push them into the format string.
+    fn emit_format_push_const_bytes(&mut self, out_string: u32, bytes: &[u8]) -> Result<()> {
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        let label = self.b().append_utf8_const(bytes);
+        let ptr_reg = self.b().new_tmp();
+        let symbol_id = self.b().intern(&label);
+        self.b().record_reg(symbol_id);
+        self.emit_borrow_reg(ptr_reg, symbol_id, "read");
+        let len_reg = self.b().new_tmp();
+        self.b().emit_assign_imm(len_reg, bytes.len() as i64);
+        let tag = self.new_format_tag();
+        let out_name = self.b().symbol_name(out_string).to_string();
+        let ptr_name = self.b().symbol_name(ptr_reg).to_string();
+        let len_name = self.b().symbol_name(len_reg).to_string();
+        FragmentMachine::new(&mut self.state).emit_std_macro_fragment(
+            &mut *self.flattener,
+            "sa_std/string_format.sa",
+            "FORMAT_PUSH_BYTES",
+            &[tag, out_name, ptr_name, len_name],
+        )?;
+        self.emit_release(len_reg)?;
+        self.emit_release(ptr_reg)?;
+        Ok(())
+    }
+
+    /// Zig `emitFormatPushPrimitiveValue` (13854): format the
+    /// value into a 64-byte stack scratch via the `sa_fmt_*_into`
+    /// externs, then push the produced bytes.
+    fn emit_format_push_primitive_value(
+        &mut self,
+        out_string: u32,
+        value_reg: u32,
+        suffix: &str,
+    ) -> Result<()> {
+        let buf = self.b().new_tmp();
+        crate::release_prim::emit_stack_alloc(&mut self.state, buf, 64);
+        let len_slot = self.b().new_tmp();
+        crate::release_prim::emit_stack_alloc(&mut self.state, len_slot, 8);
+        let value_name = self.b().symbol_name(value_reg).to_string();
+        let buf_name = self.b().symbol_name(buf).to_string();
+        let len_slot_name = self.b().symbol_name(len_slot).to_string();
+        let ok = self.b().new_tmp();
+        let body = match suffix {
+            "I64" => format!("@sa_fmt_i64_into({value_name}, 10, {buf_name}, 64, &{len_slot_name})"),
+            "U64" => format!("@sa_fmt_u64_into({value_name}, 10, {buf_name}, 64, &{len_slot_name})"),
+            "F64" => format!("@sa_fmt_f64_into({value_name}, 6, {buf_name}, 64, &{len_slot_name})"),
+            "BOOL" => format!("@sa_fmt_bool_into({value_name}, {buf_name}, 64, &{len_slot_name})"),
+            _ => {
+                return Err(unsupported(
+                    "format argument with no debug-format suffix",
+                    "D surface (format_print)",
+                    "13854-13880",
+                ))
+            }
+        };
+        self.emit_call_body(Some(ok), body)?;
+        let fmt_len = self.b().new_tmp();
+        self.emit_load(fmt_len, len_slot, 0, PrimType::U64);
+        let tag = self.new_format_tag();
+        let out_name = self.b().symbol_name(out_string).to_string();
+        let fmt_len_name = self.b().symbol_name(fmt_len).to_string();
+        FragmentMachine::new(&mut self.state).emit_std_macro_fragment(
+            &mut *self.flattener,
+            "sa_std/string_format.sa",
+            "FORMAT_PUSH_BYTES",
+            &[tag, out_name, buf_name, fmt_len_name],
+        )?;
+        self.emit_release(ok)?;
+        self.emit_release(fmt_len)?;
+        crate::release_meta::mark_non_owning_reg(&mut self.state, len_slot);
+        self.emit_release(len_slot)?;
+        crate::release_meta::mark_non_owning_reg(&mut self.state, buf);
+        self.emit_release(buf)?;
+        Ok(())
+    }
+
+    /// Zig `emitFormatPushStringLike` (13763).
+    fn emit_format_push_string_like(
+        &mut self,
+        out_string: u32,
+        arg: &Node,
+        ty: &Type,
+    ) -> Result<()> {
+        let tag = self.new_format_tag();
+        let out_name = self.b().symbol_name(out_string).to_string();
+        if is_format_string_type(ty) {
+            let owner_reg = self.gen_expr(arg)?;
+            let slice_reg = self.b().new_tmp();
+            let slice_name = self.b().symbol_name(slice_reg).to_string();
+            let owner_name = self.b().symbol_name(owner_reg).to_string();
+            FragmentMachine::new(&mut self.state).emit_std_macro_fragment(
+                &mut *self.flattener,
+                "sa_std/string.sa",
+                "STRING_BUF_AS_STR",
+                &[slice_name.clone(), owner_name],
+            )?;
+            FragmentMachine::new(&mut self.state).emit_std_macro_fragment(
+                &mut *self.flattener,
+                "sa_std/string_format.sa",
+                "FORMAT_PUSH_SLICE",
+                &[tag, out_name, slice_name],
+            )?;
+            self.emit_release(slice_reg)?;
+            self.release_expr_result_if_needed(arg, owner_reg)?;
+            return Ok(());
+        }
+        if let Node::Literal(Literal::StringVal(text)) = arg {
+            let bytes = crate::literals::decode_string_literal_bytes(text.as_bytes())?;
+            return self.emit_format_push_const_bytes(out_string, &bytes);
+        }
+        if matches!(ty, Type::Primitive(Primitive::RawPtr)) {
+            let ptr_reg = self.gen_expr(arg)?;
+            let len_reg = self.b().new_tmp();
+            let len_name = self.b().symbol_name(len_reg).to_string();
+            let ptr_name = self.b().symbol_name(ptr_reg).to_string();
+            FragmentMachine::new(&mut self.state).emit_std_macro_fragment(
+                &mut *self.flattener,
+                "sa_std/ffi.sa",
+                "CSTR_LEN",
+                &[len_name.clone(), ptr_name.clone()],
+            )?;
+            FragmentMachine::new(&mut self.state).emit_std_macro_fragment(
+                &mut *self.flattener,
+                "sa_std/string_format.sa",
+                "FORMAT_PUSH_BYTES",
+                &[tag, out_name, ptr_name, len_name],
+            )?;
+            self.emit_release(len_reg)?;
+            self.release_expr_result_if_needed(arg, ptr_reg)?;
+            return Ok(());
+        }
+        let slice_reg = self.gen_expr(arg)?;
+        let slice_name = self.b().symbol_name(slice_reg).to_string();
+        FragmentMachine::new(&mut self.state).emit_std_macro_fragment(
+            &mut *self.flattener,
+            "sa_std/string_format.sa",
+            "FORMAT_PUSH_SLICE",
+            &[tag, out_name, slice_name],
+        )?;
+        self.release_expr_result_if_needed(arg, slice_reg)?;
+        Ok(())
+    }
+
+    /// Zig `emitFormatPushArg` (13800).
+    fn emit_format_push_arg(&mut self, out_string: u32, arg: &Node) -> Result<()> {
+        let ty = self
+            .check
+            .expr_type(arg)
+            .cloned()
+            .ok_or_else(|| Error::MissingType("format call argument".to_string()))?;
+        if is_string_like_type(&ty) {
+            return self.emit_format_push_string_like(out_string, arg, &ty);
+        }
+        let suffix = match &ty {
+            Type::Primitive(p) => match p {
+                Primitive::I8
+                | Primitive::I16
+                | Primitive::I32
+                | Primitive::I64
+                | Primitive::Isize => "I64",
+                Primitive::U8
+                | Primitive::U16
+                | Primitive::U32
+                | Primitive::U64
+                | Primitive::Usize => "U64",
+                Primitive::F32 | Primitive::F64 => "F64",
+                Primitive::Boolean => "BOOL",
+                _ => {
+                    return Err(unsupported(
+                        "format argument with no debug-format suffix",
+                        "D surface (format_print)",
+                        "13800-13810",
+                    ))
+                }
+            },
+            _ => {
+                return Err(unsupported(
+                    "format argument with no debug-format suffix",
+                    "D surface (format_print)",
+                    "13800-13810",
+                ))
+            }
+        };
+        let value_reg = self.gen_expr(arg)?;
+        self.emit_format_push_primitive_value(out_string, value_reg, suffix)?;
+        self.release_expr_result_if_needed(arg, value_reg)?;
+        Ok(())
+    }
+
+    /// Zig `genFormatCall` (13812): build a String by walking
+    /// the decoded format template, pushing literal runs and
+    /// formatted arguments in order (`{{` / `}}` are escapes).
+    pub(crate) fn gen_format_call(&mut self, call: &CallExpr) -> Result<u32> {
+        let Some(Node::Literal(Literal::StringVal(text))) = call.args.first() else {
+            return Err(unsupported(
+                "format call without a string-literal template",
+                "D surface (format_print)",
+                "13812-13814",
+            ));
+        };
+        let template = text.clone();
+        self.ensure_debug_format_deps()?;
+        let fmt = crate::literals::decode_string_literal_bytes(template.as_bytes())?;
+        let out_string = self.b().new_tmp();
+        let capacity = fmt.len() + call.args.len().saturating_sub(1) * 24;
+        let out_name = self.b().symbol_name(out_string).to_string();
+        FragmentMachine::new(&mut self.state).emit_std_macro_fragment_with_literal_args(
+            &mut *self.flattener,
+            "sa_std/string_format.sa",
+            "FORMAT_BEGIN",
+            &[out_name, capacity.to_string()],
+            &[false, true],
+        )?;
+        let mut literal: Vec<u8> = Vec::new();
+        let mut arg_idx = 1usize;
+        let mut i = 0usize;
+        while i < fmt.len() {
+            if fmt[i] == b'{' && i + 1 < fmt.len() {
+                if fmt[i + 1] == b'{' {
+                    literal.push(b'{');
+                    i += 2;
+                    continue;
+                }
+                if fmt[i + 1] == b'}' {
+                    self.emit_format_push_const_bytes(out_string, &literal)?;
+                    literal.clear();
+                    if arg_idx >= call.args.len() {
+                        return Err(unsupported(
+                            "format template with more placeholders than arguments",
+                            "D surface (format_print)",
+                            "13840-13844",
+                        ));
+                    }
+                    self.emit_format_push_arg(out_string, &call.args[arg_idx])?;
+                    arg_idx += 1;
+                    i += 2;
+                    continue;
+                }
+            }
+            if fmt[i] == b'}' && i + 1 < fmt.len() && fmt[i + 1] == b'}' {
+                literal.push(b'}');
+                i += 2;
+                continue;
+            }
+            literal.push(fmt[i]);
+            i += 1;
+        }
+        self.emit_format_push_const_bytes(out_string, &literal)?;
+        if arg_idx != call.args.len() {
+            return Err(unsupported(
+                "format call with unused arguments",
+                "D surface (format_print)",
+                "13850-13852",
+            ));
+        }
+        Ok(out_string)
+    }
 }
+

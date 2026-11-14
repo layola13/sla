@@ -88,6 +88,7 @@ pub(crate) use crate::driver_types::{
 pub(crate) struct FuncShape {
     pub(crate) ret_prim: PrimType,
     pub(crate) is_void: bool,
+    pub(crate) is_variadic: bool,
     pub(crate) arity: usize,
     /// Per-parameter callsite caps (the same shared-ABI
     /// computation the declaration side uses), so the plain
@@ -116,6 +117,12 @@ pub struct Driver<'c> {
     /// the program's own enum decls — imported enums stop loudly
     /// in `gen_enum_literal`, see the I-group REPORT).
     pub(crate) enums: HashMap<String, sla_ast::EnumDecl>,
+    /// B1: contract externs referenced by emitted bodies, recorded
+    /// at the gen_call extern arm and declared in step 7 (Zig
+    /// `emitReferencedContractExternDecls` scans emitted bodies;
+    /// the port records at the call point instead — the same set,
+    /// since every extern call routes through that arm).
+    pub(crate) referenced_externs: std::collections::BTreeSet<String>,
 }
 
 impl<'c> Driver<'c> {
@@ -128,6 +135,7 @@ impl<'c> Driver<'c> {
             funcs: HashMap::new(),
             multi_let: std::collections::HashSet::new(),
             enums: HashMap::new(),
+            referenced_externs: std::collections::BTreeSet::new(),
         }
     }
 
@@ -177,6 +185,17 @@ impl<'c> Driver<'c> {
                 ))
             }
         };
+
+        // The root program's direct `.sa` imports, recorded
+        // for gen_extern_call's concrete-definition probe.
+        self.state.program.root_sa_imports = prog
+            .decls
+            .iter()
+            .filter_map(|d| match d {
+                Node::ImportDecl(i) if i.path.ends_with(".sa") => Some(i.path.clone()),
+                _ => None,
+            })
+            .collect();
 
         // Step 1: pre-scan (C1/C2 call points).
         self.prescan(prog)?;
@@ -287,6 +306,7 @@ impl<'c> Driver<'c> {
                         FuncShape {
                             ret_prim: abi_return_prim_type(&f.ret_ty)?,
                             is_void: is_void_type(&f.ret_ty),
+                            is_variadic: f.is_variadic,
                             arity: f.params.len(),
                             param_caps: f
                                 .params
@@ -347,9 +367,33 @@ impl<'c> Driver<'c> {
         // Step 6: escaped closures (I call point) — the subset
         // collects none; a closure literal anywhere was already
         // refused at its expression site.
-        // Step 7: contract externs (call point) — none are
-        // referenced by the subset's call path; extern *calls* stop
-        // loudly in gen_call.
+        // Step 7: referenced contract extern decls (Zig
+        // emitReferencedContractExternDecls, 15460-15480): declare
+        // every contract extern the emitted bodies called, minus
+        // names with a concrete twin in the program (the checker
+        // dedupes them the same way) and names whose external sig
+        // is already emitted (step 5's AST prototypes), in sorted
+        // order for determinism.
+        let referenced = std::mem::take(&mut self.referenced_externs);
+        for name in referenced {
+            if self.funcs.contains_key(&name) {
+                continue;
+            }
+            let lowered = crate::symbols::lowered_func_symbol(&name, self.check);
+            if self.has_external_sig(&lowered) {
+                continue;
+            }
+            let view = self.check.extern_sig(&name).ok_or_else(|| {
+                unsupported(
+                    &format!(
+                        "referenced extern `{name}` (contract signature unavailable to the SAB driver)"
+                    ),
+                    "B1 contract extern emission",
+                    "15460-15480",
+                )
+            })?;
+            self.gen_contract_extern_decl(&name, &view)?;
+        }
 
         // Step 8: encode (Zig 622-629).
         let module = self.state.builder.finish();
@@ -400,71 +444,7 @@ impl<'c> Driver<'c> {
         ignored: bool,
         should_panic: bool,
     ) -> Result<usize> {
-        // Zig counter at genFuncSig entry: test_sigs.len is sampled
-        // before this sig exists; function_sigs.len is the index
-        // `add_sig` is about to return.
-        let test_count = self.state.program.test_sigs.len();
-        let mut sig = FunctionSig::new(0, lowered, abi_return_prim_type(ret_ty)?, 0);
-        sig.kind = kind;
-        let sig_index = self.b().add_sig(sig);
-        self.b().begin_function(sig_index);
-        // Scoped param registers, Zig genFuncSig lines 6055-6068.
-        let mut specs = Vec::with_capacity(f_params.len());
-        let mut param_ids = Vec::with_capacity(f_params.len());
-        for (i, p) in f_params.iter().enumerate() {
-            let scoped = format!("{lowered}__param_{i}_{}", p.name);
-            let param_id = self.b().intern(&scoped);
-            let cap = match shared_abi_param_cap(
-                p.is_borrow,
-                p.is_move,
-                matches!(&*p.ty, Type::Borrow(_)),
-                by_value_raw_pointer_param(p),
-                self.check.type_is_copy_value(&p.ty),
-                is_borrow_like_type(&p.ty),
-            ) {
-                AbiCapKind::Borrow => CapPrefix::Borrow,
-                AbiCapKind::Move => CapPrefix::Move,
-                AbiCapKind::Raw => CapPrefix::Raw,
-                AbiCapKind::None => CapPrefix::ByValue,
-            };
-            specs.push(ParamSpec {
-                name: p.name.clone(),
-                ty: prim_type(&p.ty)?,
-                cap,
-            });
-            param_ids.push(param_id);
-            self.b().record_reg(param_id);
-            self.state.frame.push_local(Local {
-                name: p.name.clone(),
-                reg: param_id,
-                is_param: true,
-                stack_ty: None,
-                ty: Some((*p.ty).clone()),
-                param_cap: Some(cap),
-                is_stack_alloc: false,
-            });
-            // Zig `pushParamLocal` (locals.rs keeps the same
-            // rule in its tested helper): a borrow-typed
-            // parameter register IS an object pointer — the
-            // genField through-load guards consult this mark.
-            if matches!(&*p.ty, Type::Borrow(_)) {
-                crate::locals::mark_object_ptr_reg(&mut self.state, param_id);
-            }
-        }
-        let ret_cap = return_cap_for_type(ret_ty);
-        self.b().set_sig_params(sig_index, specs, param_ids);
-        self.b().set_sig_return_cap(sig_index, ret_cap);
-        if kind == FunctionKind::TestFunc {
-            self.b().set_sig_test_meta(sig_index, ignored, should_panic);
-        }
-        self.b().append_decl_inst(sig_index);
-        // SAB-D17: only now, with the decl instruction's intern-id
-        // operands already captured, does the sig's own id switch
-        // to the Zig emission counter (function index + test count
-        // sampled at entry).
-        let counter_id = (sig_index + test_count) as u32;
-        self.b().set_sig_id(sig_index, counter_id);
-        Ok(sig_index)
+        self.begin_sig_variadic(lowered, kind, f_params, ret_ty, ignored, should_panic, false)
     }
 
     /// Zig `genFuncDecl`: the lowered name comes from the decl
@@ -505,7 +485,52 @@ impl<'c> Driver<'c> {
             );
             set
         };
-        let _sig_index = self.begin_sig(lowered, FunctionKind::Normal, &f.params, &f.ret_ty, false, false)?;
+        let sig_index = self.begin_sig_variadic(
+            lowered,
+            FunctionKind::Normal,
+            &f.params,
+            &f.ret_ty,
+            false,
+            false,
+            f.is_variadic,
+        )?;
+        if f.is_variadic {
+            // The host renders the `...` in the signature (and
+            // accepts va_start in the body) only for sigs marked
+            // variadic.
+            self.b().set_sig_variadic(sig_index, true);
+        }
+
+        // R-3 variadic definition: open the va_list state,
+        // first in the body (Zig genFuncDeclNamed's va_start
+        // placement). The state lives in a fresh register:
+        // `va_start` is its defining instruction, so it cannot
+        // target the parameter register itself (already live —
+        // RegisterRedefinition at the host).
+        if f.is_variadic {
+            if let Some(param) = f
+                .params
+                .iter()
+                .find(|p| matches!(*p.ty, sla_ast::Type::Primitive(sla_ast::Primitive::VaList)))
+            {
+                let reg = self.b().new_tmp();
+                self.b().record_reg(reg);
+                self.b().emit_va_start(reg);
+                self.state.frame.va_list_reg = Some(reg);
+                // The parameter name resolves to the state
+                // register for name-based consumers (the return
+                // cleanup list references it by name).
+                self.state.frame.push_local(Local {
+                    name: param.name.clone(),
+                    reg,
+                    is_param: true,
+                    stack_ty: None,
+                    ty: Some((*param.ty).clone()),
+                    param_cap: None,
+                    is_stack_alloc: false,
+                });
+            }
+        }
 
         // Tail-expression return path (Zig 6231-6250): a non-void
         // function whose last statement is an expression statement
@@ -527,11 +552,19 @@ impl<'c> Driver<'c> {
                     _ => unreachable!(),
                 };
                 let value = self.gen_expr(tail)?;
+                if let Some(va_reg) = self.state.frame.va_list_reg {
+                    self.emit_move(va_reg);
+                    self.b().emit_va_end(va_reg);
+                }
                 self.b().emit_return(Some(value));
             }
         } else {
             self.gen_block(&f.body)?;
             if is_void_type(&f.ret_ty) && !self.b().last_is_terminator() {
+                if let Some(va_reg) = self.state.frame.va_list_reg {
+                    self.emit_move(va_reg);
+                    self.b().emit_va_end(va_reg);
+                }
                 self.b().emit_return(None);
             }
         }

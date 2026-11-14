@@ -18,6 +18,51 @@ use sla_ast::{FuncDecl, Node, StructDecl, Type};
 use crate::abi::type_is_copy_value_leaf;
 use crate::node_key;
 
+/// One contract-extern parameter as a backend needs it (Zig
+/// `tc.extern_funcs` param entries): the ABI type spelling plus the
+/// capability the contract declared for the argument (`&name` =
+/// borrow, `^name` = move, anything else = by value; a raw `*name`
+/// pointer parameter is by-value at the call site).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExternParamView {
+    pub name: String,
+    pub abi_ty: String,
+    pub is_borrow: bool,
+    pub is_move: bool,
+}
+
+/// A contract extern's full signature as a backend needs it (Zig
+/// `tc.extern_funcs` values): parameter views, the ABI return
+/// spelling (payload spelling for a fallible extern — the contract
+/// parser strips the trailing `!`), the fallible flag and the
+/// C-variadic flag.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExternSigView {
+    pub params: Vec<ExternParamView>,
+    pub ret_abi: String,
+    pub fallible: bool,
+    pub is_variadic: bool,
+}
+
+/// One imported SA-text macro as a backend needs it (Zig
+/// `tc.imported_macros` values): the macro's arity and leading
+/// output count from its `[MACRO]` declaration in the imported
+/// `.sa` file, the file it came from, and the per-parameter
+/// borrow / address-slot masks the declaration analysis computed.
+/// The registry is generated from the imported files' own
+/// declarations and merged per package — the SAB registry
+/// federation shape — so a backend that consumes this view never
+/// hardcodes a macro's home file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportedMacroView {
+    pub arity: usize,
+    pub leading_outputs: usize,
+    pub import_path: Option<String>,
+    pub borrowed_arg_mask: u64,
+    pub address_slot_arg_mask: u64,
+    pub direct_callees: Vec<String>,
+}
+
 /// Read-only view of everything the text emitter needs from checking.
 pub trait CheckInfo {
     /// `tc.expr_types` (and codegen's `resolvedTypeForExpr`, which
@@ -40,6 +85,19 @@ pub trait CheckInfo {
     /// `tc.extern_funcs` membership.
     fn is_extern_func(&self, _name: &str) -> bool {
         false
+    }
+
+    /// `tc.imported_macros` entry for an imported SA-text macro.
+    fn imported_macro(&self, _name: &str) -> Option<ImportedMacroView> {
+        None
+    }
+
+    /// `tc.extern_funcs` full signature for a contract extern, when
+    /// the lane registered exactly one. Backends that emit extern
+    /// declarations / calls consume this; the default keeps lanes
+    /// that only track membership compiling.
+    fn extern_sig(&self, _name: &str) -> Option<ExternSigView> {
+        None
     }
 
     /// `tc.macros` / imported-macro presence by name.
@@ -90,6 +148,8 @@ pub struct MapCheckInfo {
     pub phi_cleanups: HashMap<usize, Vec<String>>,
     pub funcs: HashMap<String, FuncDecl>,
     pub extern_funcs: HashSet<String>,
+    pub extern_sigs: HashMap<String, ExternSigView>,
+    pub imported_macros: HashMap<String, ImportedMacroView>,
     pub macros: HashSet<String>,
     pub aliases: HashMap<String, String>,
     pub resolved_symbols: HashMap<usize, String>,
@@ -126,6 +186,17 @@ impl MapCheckInfo {
 
     pub fn add_extern_func(&mut self, name: &str) -> &mut Self {
         self.extern_funcs.insert(name.to_string());
+        self
+    }
+
+    pub fn add_imported_macro(&mut self, name: &str, view: ImportedMacroView) -> &mut Self {
+        self.imported_macros.insert(name.to_string(), view);
+        self
+    }
+
+    pub fn add_extern_sig(&mut self, name: &str, sig: ExternSigView) -> &mut Self {
+        self.extern_funcs.insert(name.to_string());
+        self.extern_sigs.insert(name.to_string(), sig);
         self
     }
 
@@ -192,7 +263,15 @@ impl CheckInfo for MapCheckInfo {
     }
 
     fn is_extern_func(&self, name: &str) -> bool {
-        self.extern_funcs.contains(name)
+        self.extern_funcs.contains(name) || self.extern_sigs.contains_key(name)
+    }
+
+    fn extern_sig(&self, name: &str) -> Option<ExternSigView> {
+        self.extern_sigs.get(name).cloned()
+    }
+
+    fn imported_macro(&self, name: &str) -> Option<ImportedMacroView> {
+        self.imported_macros.get(name).cloned()
     }
 
     fn is_macro(&self, name: &str) -> bool {

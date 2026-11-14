@@ -82,6 +82,9 @@ impl<'c> Driver<'c> {
         if let Some(reg) = self.gen_option_unwrap_call(call)? {
             return Ok(Some(reg));
         }
+        if let Some(reg) = self.gen_option_copied_call(call)? {
+            return Ok(Some(reg));
+        }
         if let Some(reg) = self.gen_unwrap_or_call(call)? {
             return Ok(Some(reg));
         }

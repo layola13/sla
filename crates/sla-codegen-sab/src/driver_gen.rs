@@ -8,7 +8,7 @@ use sla_ast::{BinaryOp, CallExpr, IfExpr, IndexExpr, Literal, Node, Primitive, T
 use sla_lowering::{is_panic_builtin_name, is_println_call, plan_scalar_binary_op};
 
 use crate::error::{Error, Result};
-use crate::ir::Operand;
+use crate::ir::{Operand, PrimType};
 use crate::release_drop::NoDropFacts;
 use crate::release_emit::{emit_branch_release, emit_release, NoMacroFragments};
 use crate::release_locals::DropEngine;
@@ -222,11 +222,10 @@ impl<'c> Driver<'c> {
                 self.b().emit_assign_imm(reg, if *v { 1 } else { 0 });
                 Ok(reg)
             }
-            Literal::StringVal(_) => Err(unsupported(
-                "string literal value (slice/raw-pointer materialization)",
-                "D surface / B6 literals",
-                "10750-10760",
-            )),
+            Literal::StringVal(text) => {
+                let text = text.clone();
+                self.gen_string_literal(&text)
+            }
         }
     }
 
@@ -271,12 +270,36 @@ impl<'c> Driver<'c> {
             // string-value plans stop loudly there.
             return self.gen_println_call(call);
         }
+        if call.associated_target.is_none() {
+            if let Some(reg) = self.gen_va_next_call(call)? {
+                return Ok(reg);
+            }
+        }
         if call.func_name == "str_eq" || call.func_name == "STR_EQ" {
             return Err(unsupported(
                 "str_eq call (string surface expansion)",
                 "D surface (surface_call)",
                 "15198-15200",
             ));
+        }
+        if call.func_name == "format" && call.associated_target.is_none() {
+            return self.gen_format_call(call);
+        }
+        // G wiring (Zig genCall's bare-name builtin arms, ahead
+        // of the associated probes): STR_PTR / STR_LEN literal
+        // forms and the stack_alloc builtin. Non-literal STR_PTR /
+        // STR_LEN arguments fall through to the imported-macro
+        // expansion below.
+        if call.associated_target.is_none() {
+            if let Some(reg) = self.gen_str_ptr_call(call) {
+                return reg;
+            }
+            if let Some(reg) = self.gen_str_len_call(call) {
+                return reg;
+            }
+            if call.func_name == "stack_alloc" {
+                return self.gen_stack_alloc_call(call);
+            }
         }
         if call.associated_target.is_some() {
             // D surface (surface_call): the ported associated
@@ -302,12 +325,10 @@ impl<'c> Driver<'c> {
                 "15220-15230",
             ));
         }
-        if self.check.is_extern_func(&call.func_name) {
-            return Err(unsupported(
-                &format!("extern call `{}` (contract extern emission)", call.func_name),
-                "B4 driver step 7 / F fragments",
-                "15460-15480",
-            ));
+        if self.check.is_extern_func(&call.func_name)
+            && !self.funcs.contains_key(&call.func_name)
+        {
+            return self.gen_extern_call(call);
         }
         // I group: a call through a let-bound closure name
         // inlines the closure body (Zig 17812).
@@ -315,6 +336,12 @@ impl<'c> Driver<'c> {
             if let Some(reg) = self.try_gen_bound_closure_call(call)? {
                 return Ok(reg);
             }
+        }
+        // G wiring: an imported SA-macro call (Zig genCall's
+        // planImportedMacroCall arm) claims its expansion before
+        // the method probes.
+        if let Some(reg) = self.gen_imported_macro_call(expr, call) {
+            return reg;
         }
         // D surface (surface_call): the bare-call method
         // probes (gen_method_call.rs / gen_method_surface.rs,
@@ -336,8 +363,29 @@ impl<'c> Driver<'c> {
         }
         // Plain user-function static call.
         let resolved = self.check.resolve_alias(&call.func_name);
-        let (arity, is_void, param_caps) = match self.funcs.get(&resolved) {
-            Some(shape) => (shape.arity, shape.is_void, shape.param_caps.clone()),
+        // `using` extension calls: module functions lifted by the
+        // import expansion carry a module-prefixed key
+        // (`vec_ext__len_plus`) while the call site keeps the bare
+        // name; a unique tail-segment match is the callee.
+        let resolved = if self.funcs.contains_key(&resolved) {
+            resolved
+        } else {
+            let mut tail_matches = self.funcs.keys().filter(|k| {
+                k.rsplit("::").next() == Some(resolved.as_str())
+                    || k.rsplit("__").next() == Some(resolved.as_str())
+            });
+            match (tail_matches.next(), tail_matches.next()) {
+                (Some(only), None) => only.clone(),
+                _ => resolved,
+            }
+        };
+        let (arity, is_void, param_caps, is_variadic) = match self.funcs.get(&resolved) {
+            Some(shape) => (
+                shape.arity,
+                shape.is_void,
+                shape.param_caps.clone(),
+                shape.is_variadic,
+            ),
             None => {
                 return Err(unsupported(
                     &format!("call to unknown or non-user function `{}`", call.func_name),
@@ -346,7 +394,13 @@ impl<'c> Driver<'c> {
                 ))
             }
         };
-        if arity != call.args.len() {
+        // A variadic callee takes its fixed params plus any
+        // number of promoted trailing args; the declared arity
+        // includes the trailing VaList slot, which is not itself
+        // passed.
+        if arity != call.args.len()
+            && !(is_variadic && call.args.len() + 1 >= arity)
+        {
             return Err(Error::UnsupportedSabDirectFeature(format!(
                 "call to `{}` with {} args, declared arity {} [group B4 driver; Zig sab_codegen.zig:15451]",
                 call.func_name,
@@ -358,85 +412,49 @@ impl<'c> Driver<'c> {
         // facts: main / extern / no-mangle / `sa_`-prefixed names
         // stay as-is, other user functions become `sla__<name>`.
         let lowered = crate::symbols::lowered_func_symbol(&resolved, self.check);
-        // Callsite cap prefixes (Zig genStaticCall's planned
-        // materializations, subset): the host verifier reads
-        // the per-arg cap glyphs off the call body text, so a
-        // borrow arg must render `&place` (address-of, never a
-        // materialized borrow register) and a move-cap arg
-        // must render `^value`; bare names are cap ByValue and
-        // trap 1013 against borrow/move contracts.
-        let mut rendered: Vec<String> = Vec::with_capacity(call.args.len());
-        let mut post_call_releases: Vec<u32> = Vec::new();
-        let mut post_call_consumed: Vec<u32> = Vec::new();
-        for (i, arg) in call.args.iter().enumerate() {
-            let cap = param_caps.get(i).copied();
-            let operand = match cap {
-                Some(crate::ir::CapPrefix::Borrow) => match arg {
-                    Node::BorrowExpr(borrow) => {
-                        self.gen_prefixed_borrow_call_arg(borrow, &mut post_call_releases)?
-                    }
-                    _ => {
-                        let reg = self.gen_expr(arg)?;
-                        if !self.is_local_reg(reg) {
-                            post_call_releases.push(reg);
-                        }
-                        format!("&{}", self.b().symbol_name(reg))
-                    }
-                },
-                Some(crate::ir::CapPrefix::Move) => {
-                    // Zig's shallow-copy call-arg branch
-                    // (genStaticCall): an identifier arg of a
-                    // shallow-copyable struct type is copied
-                    // and the copy is moved into the call, so
-                    // the source binding stays live afterwards.
-                    let shallow_ty = match arg {
-                        Node::Identifier(_) => self.check.expr_type(arg).cloned().filter(|ty| {
-                            self.check.type_is_shallow_copy_call_arg_value(ty)
-                        }),
-                        _ => None,
-                    };
-                    if let Some(ty) = shallow_ty {
-                        let reg = self.gen_expr(arg)?;
-                        let copied = self.gen_shallow_copy_call_arg_value(reg, &ty)?;
-                        post_call_consumed.push(copied);
-                        format!("^{}", self.b().symbol_name(copied))
-                    } else {
-                        let reg = self.gen_expr(arg)?;
-                        post_call_consumed.push(reg);
-                        format!("^{}", self.b().symbol_name(reg))
-                    }
-                }
-                _ => {
-                    let reg = self.gen_expr(arg)?;
-                    self.b().symbol_name(reg).to_string()
-                }
-            };
-            rendered.push(operand);
-        }
-        let body = format!("@{}({})", lowered, rendered.join(", "));
-        let result = if is_void {
-            self.b().emit_call(None, &body);
-            // Zig emitPlannedCallBody void arm: sentinel tmp = 0.
-            let sentinel = self.b().new_tmp();
-            self.b().emit_assign_imm(sentinel, 0);
-            sentinel
-        } else {
-            let dst = self.b().new_tmp();
-            self.b().emit_call(Some(dst), &body);
-            dst
-        };
-        for reg in post_call_consumed {
-            // The call consumed the register (cap Move): join
-            // the released set so later cleanups stay silent
-            // (release_emit::mark_consumed — the RegState::
-            // Released bookkeeping release_locals consults,
-            // not the Consumed classification).
-            crate::release_emit::mark_consumed(&mut self.state, reg);
-        }
-        for reg in &post_call_releases {
-            self.emit_release(*reg)?;
-        }
+        // Callsite cap prefixes and post-call bookkeeping live
+        // in the shared planned-call helpers (gen_extern.rs),
+        // which the contract-extern arm uses identically.
+        let rendered = self.render_planned_call_operands(call, &lowered, &param_caps)?;
+        let result = self.emit_planned_call_result(&rendered.body, is_void);
+        self.apply_planned_post_call(rendered)?;
         Ok(result)
+    }
+
+    /// R-3 `va_next_<ty>` builtin inside a variadic
+    /// definition: emit one `va_arg` read of the named primitive
+    /// from the function's va_list state register. The argument
+    /// is the VaList parameter's name, not a value expression,
+    /// so it is never evaluated.
+    pub(crate) fn gen_va_next_call(&mut self, call: &CallExpr) -> Result<Option<u32>> {
+        let Some(suffix) = call.func_name.strip_prefix("va_next_") else {
+            return Ok(None);
+        };
+        let prim = match suffix {
+            "i8" => PrimType::I8,
+            "i16" => PrimType::I16,
+            "i32" => PrimType::I32,
+            "i64" => PrimType::I64,
+            "u8" => PrimType::U8,
+            "u16" => PrimType::U16,
+            "u32" => PrimType::U32,
+            "u64" => PrimType::U64,
+            "f32" => PrimType::F32,
+            "f64" => PrimType::F64,
+            "ptr" => PrimType::Ptr,
+            _ => return Ok(None),
+        };
+        let Some(state_reg) = self.state.frame.va_list_reg else {
+            return Err(unsupported(
+                &format!("`{}` outside a variadic definition", call.func_name),
+                "R-3 va_next",
+                "sab_codegen va_arg",
+            ));
+        };
+        let dst = self.b().new_tmp();
+        self.b().record_reg(dst);
+        self.b().emit_va_arg(dst, state_reg, prim);
+        Ok(Some(dst))
     }
 
     /// Zig `genIf` / `genIfStatement` / `genIfValue` (lines

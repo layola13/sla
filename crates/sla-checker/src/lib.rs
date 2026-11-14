@@ -81,6 +81,8 @@ mod tests_std_leaf;
 #[cfg(test)]
 mod tests_e2e;
 #[cfg(test)]
+mod tests_extern_def;
+#[cfg(test)]
 mod tests_phase2;
 #[cfg(test)]
 mod tests_phase2b;

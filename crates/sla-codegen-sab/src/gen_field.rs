@@ -375,7 +375,7 @@ impl<'c> Driver<'c> {
     /// the place shapes the borrow tail reaches (identifier /
     /// field / index / deref / value temp). Smart-pointer
     /// deref places stop loudly, as in `gen_deref`.
-    fn gen_address_of(&mut self, expr: &Node) -> Result<AddressSource> {
+    pub(crate) fn gen_address_of(&mut self, expr: &Node) -> Result<AddressSource> {
         match expr {
             Node::Identifier(name) => {
                 if let Some(slot) = crate::captures::stack_local(&self.state, name) {

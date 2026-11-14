@@ -115,7 +115,10 @@ impl<'c> Driver<'c> {
                 // if/switch/match bookkeeping registers have no
                 // defining instruction, and panic calls terminate
                 // the block (guarded by last_is_terminator).
-                if matches!(&**e, Node::CallExpr(_)) && !self.b().last_is_terminator() {
+                if (matches!(&**e, Node::CallExpr(_))
+                    || matches!(&**e, Node::UnsafeExpr(_)))
+                    && !self.b().last_is_terminator()
+                {
                     self.release_tmp(result)?;
                 }
                 Ok(())
@@ -134,7 +137,17 @@ impl<'c> Driver<'c> {
                     // SAB releases the `limit` param of
                     // `while_sum` exactly here. The text backend
                     // consumes the same list at the same point.
+                    // R-3: a variadic body moves its va_list state
+                    // before the cleanups and ends it after them,
+                    // immediately before the return (the host
+                    // oracle's exit choreography).
+                    if let Some(va_reg) = self.state.frame.va_list_reg {
+                        self.emit_move(va_reg);
+                    }
                     self.release_cleanups_for_stmt(stmt)?;
+                    if let Some(va_reg) = self.state.frame.va_list_reg {
+                        self.b().emit_va_end(va_reg);
+                    }
                     self.b().emit_return(value);
                 }
                 Ok(())
@@ -194,6 +207,40 @@ impl<'c> Driver<'c> {
         if self.b().last_is_terminator() {
             return Ok(());
         }
+        if let Node::Identifier(src_name) = value {
+            let aliased = self
+                .state
+                .frame
+                .locals
+                .iter()
+                .rev()
+                .find(|l| l.name == *src_name && l.reg == src)
+                .map(|l| l.is_stack_alloc);
+            if aliased == Some(true) {
+                let ty = self.check.expr_type(value).cloned();
+                let mut local = match ty {
+                    Some(ty) => Local::typed(name, src, false, ty),
+                    None => Local::plain(name, src, false),
+                };
+                local.is_stack_alloc = true;
+                self.state.frame.push_local(local);
+                return Ok(());
+            }
+        }
+        if matches!(
+            value,
+            Node::CallExpr(c) if c.func_name == "stack_alloc"
+                && c.associated_target.is_none()
+        ) {
+            let ty = self.check.expr_type(value).cloned();
+            let mut local = match ty {
+                Some(ty) => Local::typed(name, src, false, ty),
+                None => Local::plain(name, src, false),
+            };
+            local.is_stack_alloc = true;
+            self.state.frame.push_local(local);
+            return Ok(());
+        }
         let dst = self.binding_reg(name);
         let ty = self.check.expr_type(value).cloned();
         // Zig `genLetFromValue` (6864-6873): a primitive-typed
@@ -202,12 +249,22 @@ impl<'c> Driver<'c> {
         // reassignments store through the slot and reads load from
         // it. Without this the binding register is redefined by
         // every assignment, which the verifier rejects.
+        // The borrowed sibling arm: a primitive-typed binding
+        // whose address is taken anywhere in the body (the C2
+        // prescan's `borrowed_bindings`, collected but previously
+        // never read) needs the same slot — `&local` as a call
+        // argument must name real storage the callee can write
+        // through (the sla_std fd/http2 out-param wrappers;
+        // without the slot the out-write has no home and the
+        // value read back is the stale initializer).
         if let Some(ty) = &ty {
             if crate::prescan_bindings::binding_needs_scalar_reassign_slot(
                 name,
                 ty,
                 &self.state.program.assigned_bindings,
-            ) {
+            ) || (matches!(ty, Type::Primitive(_))
+                && self.state.program.borrowed_bindings.contains(name))
+            {
                 crate::release_prim::emit_stack_alloc(
                     &mut self.state,
                     dst,
@@ -219,6 +276,12 @@ impl<'c> Driver<'c> {
             }
         }
         self.b().emit_assign_reg(dst, src);
+        if matches!(ty, Some(Type::Primitive(sla_ast::types::Primitive::RawPtr)))
+            && !self.is_local_reg(src)
+            && !matches!(value, Node::CallExpr(_))
+        {
+            self.emit_move(src);
+        }
         self.state.frame.push_local(match ty {
             Some(ty) => Local::typed(name, dst, false, ty),
             None => Local::plain(name, dst, false),

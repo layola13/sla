@@ -27,7 +27,7 @@ pub mod scalar_ops;
 
 pub use abi::*;
 pub use call_args::*;
-pub use check_info::{CheckInfo, MapCheckInfo};
+pub use check_info::{CheckInfo, ExternParamView, ExternSigView, ImportedMacroView, MapCheckInfo};
 pub use collect::collect_repeated_let_bindings;
 pub use control_flow::*;
 pub use names::*;

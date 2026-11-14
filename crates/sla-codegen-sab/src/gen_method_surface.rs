@@ -109,6 +109,38 @@ impl<'c> Driver<'c> {
         Ok(Some(dst))
     }
 
+    /// Zig `genOptionCopiedCall` (23537): `OPTION_COPIED_U64`
+    /// fragment on Option receivers — maps `Option<&T>` to
+    /// `Option<T>` for Copy payloads (the map `get` chain's
+    /// `.copied()` step).
+    pub(crate) fn gen_option_copied_call(&mut self, call: &CallExpr) -> Result<Option<u32>> {
+        if call.func_name != "copied"
+            || call.associated_target.is_some()
+            || call.args.len() != 1
+        {
+            return Ok(None);
+        }
+        let receiver_ty = match self.check.expr_type(&call.args[0]).cloned() {
+            Some(ty) => ty,
+            None => return Ok(None),
+        };
+        if user_defined_generic_inner(&receiver_ty, "Option").is_none() {
+            return Ok(None);
+        }
+        let recv_reg = self.gen_expr(&call.args[0])?;
+        let dst = self.b().new_tmp();
+        self.b().record_reg(dst);
+        let dst_name = self.b().symbol_name(dst).to_string();
+        let recv_name = self.b().symbol_name(recv_reg).to_string();
+        self.emit_method_macro_fragment(
+            "sa_std/core/option.sa",
+            "OPTION_COPIED_U64",
+            &[dst_name, recv_name],
+        )?;
+        self.release_non_local(recv_reg)?;
+        Ok(Some(dst))
+    }
+
     /// Zig `genUnwrapOrCall` (22721): `unwrap_or(default)` for
     /// Option and Result receivers. The default register is
     /// marked consumed on both branches (DEF-R8-FIX in the Zig

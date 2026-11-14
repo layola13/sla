@@ -259,6 +259,9 @@ impl<'c> Driver<'c> {
         let value = self.gen_expr(tail)?;
         let prim = layout::prim_type(target_ty)?;
         self.h_emit_store(target, 0, value, prim);
+        if value != target {
+            self.release_tmp(value)?;
+        }
         Ok(false)
     }
 
@@ -350,6 +353,7 @@ impl<'c> Driver<'c> {
         let result = self.b().new_tmp();
         let prim = layout::prim_type(&result_ty)?;
         self.h_emit_load(result, result_slot, 0, prim);
+        self.emit_release(result_slot)?;
         Ok(result)
     }
 }

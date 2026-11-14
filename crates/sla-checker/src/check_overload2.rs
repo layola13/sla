@@ -207,7 +207,9 @@ fn primitive_from_spelling(name: &str) -> Option<Primitive> {
         "u64" | "usize" => Primitive::U64,
         "f32" => Primitive::F32,
         "f64" => Primitive::F64,
-        "bool" => Primitive::Boolean,
+        "bool" | "boolean" => Primitive::Boolean,
+        "ptr" | "raw_ptr" => Primitive::RawPtr,
+        "void" | "void_type" => Primitive::VoidType,
         _ => return None,
     })
 }

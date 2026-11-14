@@ -11,9 +11,9 @@ use sla_ast::types::{Primitive, Type};
 pub fn extern_ret_type(abi: &str) -> Type {
     use sla_ast::types::Primitive as P;
     match abi {
-        "" | "void" => types_util::prim(P::VoidType),
-        "ptr" | "*u8" | "*const u8" => types_util::prim(P::RawPtr),
-        "bool" => types_util::prim(P::Boolean),
+        "" | "void" | "void_type" => types_util::prim(P::VoidType),
+        "ptr" | "*u8" | "*const u8" | "raw_ptr" => types_util::prim(P::RawPtr),
+        "bool" | "boolean" => types_util::prim(P::Boolean),
         "i8" => types_util::prim(P::I8),
         "i16" => types_util::prim(P::I16),
         "i32" => types_util::prim(P::I32),
@@ -23,7 +23,8 @@ pub fn extern_ret_type(abi: &str) -> Type {
         "u32" => types_util::prim(P::U32),
         "u64" | "usize" => types_util::prim(P::U64),
         "f32" => types_util::prim(P::F32),
-        "f64" => types_util::prim(P::F64),
+        "f64" | "float" => types_util::prim(P::F64),
+        "integer" => types_util::prim(P::I64),
         _ => Type::Infer,
     }
 }

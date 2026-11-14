@@ -414,7 +414,11 @@ impl Checker {
         for decl in &program.decls {
             match decl {
                 Node::FuncDecl(f) => {
-                    if !f.is_decl_only && !f.is_extern {
+                    // An extern "C" DEFINITION carries a body:
+                    // it is checked like any other function
+                    // (only prototypes — decl-only or body-less —
+                    // are skipped).
+                    if !f.is_decl_only && (!f.is_extern || !f.body.is_empty()) {
                         self.check_func(f)?;
                     }
                 }
@@ -445,6 +449,8 @@ impl Checker {
         // the return gate.
         self.origin_check_decl(func)?;
         self.origin_reset();
+        let saved_variadic = self.current_fn_is_variadic;
+        self.current_fn_is_variadic = self.current_fn_is_variadic || func.is_variadic;
         self.current_func = Some(func.clone());
         let ret_ty = (*func.ret_ty).clone();
         let frame = self.scopes.push_frame();
@@ -468,6 +474,7 @@ impl Checker {
         self.scopes.pop_frame();
         self.fn_root_depth = saved_root;
         self.current_ret_ty = saved_ret;
+        self.current_fn_is_variadic = saved_variadic;
         result
     }
 
@@ -578,9 +585,10 @@ impl Checker {
 }
 
 /// Bindings released when a block scope exits: still active, not
-/// internal, not a raw-pointer primitive, and not the borrow source
-/// of another still-active local (Zig's issue013 guard). Collected in
-/// declaration order (D-C6).
+/// internal, and not the borrow source of another still-active
+/// local (Zig's issue013 guard). Collected in declaration order
+/// (D-C6). Raw-pointer bindings are included: the register must
+/// be retired at exit even though nothing is freed.
 fn block_exit_cleanups(bindings: &[crate::scope::Binding]) -> Vec<String> {
     let mut names = Vec::new();
     for b in bindings {
@@ -588,9 +596,6 @@ fn block_exit_cleanups(bindings: &[crate::scope::Binding]) -> Vec<String> {
             continue;
         }
         if is_internal_symbol(&b.name) {
-            continue;
-        }
-        if matches!(b.ty, Type::Primitive(sla_ast::types::Primitive::RawPtr)) {
             continue;
         }
         let borrowed_by_active = bindings.iter().any(|other| {

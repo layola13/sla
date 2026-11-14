@@ -94,6 +94,10 @@ pub struct ProgramState {
     pub surface_load_log: Option<crate::surface_load::SurfaceLoadLog>,
     /// Zig `included_imports`.
     pub included_imports: HashSet<String>,
+    /// The root program's direct `.sa` imports: the search
+    /// space for concrete definitions behind contract-extern
+    /// names (gen_extern_call's probe).
+    pub root_sa_imports: Vec<String>,
     /// Zig `pending_std_deps` (insertion order = preload order).
     pub pending_std_deps: Vec<PendingStdDep>,
     /// Zig `std_import_modules` + `std_import_module_ids` (F group).
@@ -175,6 +179,10 @@ pub struct FrameState {
     pub current_async_return_ty: Option<Type>,
     /// Zig `current_expr_result_escapes`.
     pub current_expr_result_escapes: bool,
+    /// R-3: the active variadic list state register of the
+    /// function being generated (the VaList parameter's own
+    /// register once `va_start` has opened it).
+    pub va_list_reg: Option<u32>,
     /// Zig `active_macro_try_cleanup`.
     pub active_macro_try_cleanup: Option<Vec<String>>,
 }
@@ -211,6 +219,7 @@ impl FrameState {
         self.current_async_return = false;
         self.current_async_return_ty = None;
         self.current_expr_result_escapes = false;
+        self.va_list_reg = None;
         self.active_macro_try_cleanup = None;
     }
 
