@@ -168,3 +168,36 @@
             String::from_utf8_lossy(&sink)
         );
     }
+
+
+    /// A1 line (2026-11-14): the Compile front-end must run
+    /// the bodies-kept include-all expansion like the other
+    /// kinds. At the baseline it ran NO expansion at all, so
+    /// a plain function body calling an imported module
+    /// function — a bare free-function call, or an
+    /// associated call of the `Instant::now()` shape —
+    /// fell to `Undefined call: <name>` at check_program,
+    /// and no Compile program could use the .sla std
+    /// surface (the A1 cluster: 50 frontier names sharing
+    /// that one signature). The Check-kind siblings above
+    /// passed vacuously for these shapes; Compile was the
+    /// red one. Both calls below must now be accepted.
+    #[test]
+    fn compile_frontend_expands_imported_module_bodies() {
+        let tree = TempTree::new("a1compile");
+        tree.write(
+            "lib.sla",
+            "struct Clock { ns: u64 }\nimpl Clock {\n    fn now() -> Clock { return Clock { ns: 7 }; }\n    fn raw_ns(self) -> u64 { return self.ns; }\n}\nfn lib_add(a: i32, b: i32) -> i32 { return a + b; }\n",
+        );
+        let main = tree.write(
+            "main.sla",
+            "@import \"lib.sla\"\nfn use_it() -> i32 { return lib_add(1, 2); }\nfn use_now() -> u64 { let c = Clock::now(); return c.raw_ns(); }\n",
+        );
+        let mut sink: Vec<u8> = Vec::new();
+        let frontend = run_frontend(&main, FrontendKind::Compile, None, &mut sink);
+        assert!(
+            frontend.is_some(),
+            "Compile front-end must accept calls into imported module bodies; output: {}",
+            String::from_utf8_lossy(&sink)
+        );
+    }

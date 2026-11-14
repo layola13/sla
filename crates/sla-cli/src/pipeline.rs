@@ -9,17 +9,19 @@
 //! Stage order: freshness load → read → parse (with the D-P3
 //! seed prescan) → [.sla import expansion
 //! (sla_plugin::sla_expand, include-all: bodies kept on
-//! TestCodegen — phase-6 census R-2 — decl-only on Check, the
-//! combination `sla check` runs in Zig), then, TestCodegen
-//! only, filter prune + reachability prune, the CLI-D5 stages
-//! in crate::test_prune]
+//! TestCodegen — phase-6 census R-2 — and on Compile — A1
+//! line; decl-only on Check, the `sla check` combination),
+//! then the CLI-D5 prunes in crate::test_prune (TestCodegen:
+//! filter + reachability; Compile: imported-body
+//! reachability, rooted at the root file's decls)]
 //! → contract load + extern registration + IMP-4 imported-
 //! signature registration (crate::pipeline::expand_wire) →
 //! type check → tail
 //! codegen → freshness store. Stages with no port in
-//! the existing crates — source_expand (@expand_tuple), .sla
-//! import expansion on the Compile kind (IMP-1 selective),
-//! defer desugar, monomorphizer, syntax lowering
+//! the existing crates — source_expand (@expand_tuple), the
+//! reachability-selective expansion mode (IMP-1; Compile
+//! runs the bodies-kept combination instead, see the
+//! expansion site), defer desugar, monomorphizer, syntax
 //! (go/chan/select), the SAB audit, the IMP-4 alias metadata
 //! table, and output import-path rewriting — are NOT silently
 //! skipped:
@@ -296,8 +298,7 @@ pub fn run_frontend(
         _ => Vec::new(),
     };
 
-    // .sla import expansion, include-all combination, on the
-    // two kinds whose Zig front-ends run it:
+    // .sla import expansion, include-all combination:
     //   * TestCodegen (phase-6 census R-2): bodies kept — on
     //     the test path the Zig front-end checks the program
     //     with imported module bodies present, because `sla
@@ -311,16 +312,30 @@ pub fn run_frontend(
     //     (include_all_imported_decls +
     //     imported_bodies_decl_only): imported bodies never
     //     reach the checker, only their declarations.
-    // The Compile kind runs neither: its Zig combination is
-    // the reachability-selective expansion (IMP-1, loudly
-    // unwired), and faking it with the decl-only pass would
-    // turn Compile checks green while every called body goes
-    // missing at codegen. The expanded modules join the
-    // freshness closure below; the root groups' .sla modules
-    // feed the IMP-4 registration in the sequence further down.
+    //   * Compile (A1 line, 2026-11-14): bodies kept. This
+    //     kind previously ran NO expansion at all — its Zig
+    //     combination is the reachability-selective
+    //     expansion (IMP-1, still unwired) — so no imported
+    //     signatures registered and every root-body call
+    //     into an imported .sla module (the whole .sla std
+    //     surface: Instant::now, redis_push_lit,
+    //     sla_json_parse, ...) fell to "Undefined call" at
+    //     check_program. The combination here is include-all
+    //     plus the primary-rooted reachability prune below
+    //     (test_prune::prune_unreachable_imported_function_decls_before_type_check):
+    //     every body the selective pass would materialize
+    //     for the root's decls is present and checked;
+    //     unreached imported bodies are pruned before the
+    //     check instead of being emitted as root bodies
+    //     (the SAB tail dispatches per decl). NOT the
+    //     decl-only fake IMP-1/IMP-4 warn against.
+    // The expanded modules join the freshness closure
+    // below; the root groups' .sla modules feed the IMP-4
+    // registration in the sequence further down.
     let mut expanded_modules: Vec<String> = Vec::new();
     let mut root_sla_modules: Vec<sla_plugin::sla_expand::RootSlaModule> = Vec::new();
-    if kind == FrontendKind::TestCodegen || kind == FrontendKind::Check {
+    let mut root_flags: Vec<bool> = Vec::new();
+    if matches!(kind, FrontendKind::TestCodegen | FrontendKind::Check | FrontendKind::Compile) {
         let Node::Program(parsed) = &root else {
             return None;
         };
@@ -334,6 +349,8 @@ pub fn run_frontend(
             Ok(expanded) => {
                 expanded_modules = expanded.ordered_modules.clone();
                 root_sla_modules = expanded.root_sla_modules;
+                root_flags =
+                    crate::test_prune::root_decl_flags(&parsed.decls, &expanded.program.decls);
                 root = Node::Program(expanded.program);
             }
             Err(err) => {
@@ -361,6 +378,17 @@ pub fn run_frontend(
         let start = Instant::now();
         crate::test_prune::prune_unreachable_test_function_decls_before_type_check(&mut root);
         stage_done(stderr, profile, "pre-typecheck reachable decl filter", start);
+    }
+
+    // Compile-kind pre-check prune (A1 line; other kinds
+    // never prune here): drop unreached imported bodies.
+    if kind == FrontendKind::Compile {
+        let start = Instant::now();
+        crate::test_prune::prune_unreachable_imported_function_decls_before_type_check(
+            &mut root,
+            &root_flags,
+        );
+        stage_done(stderr, profile, "compile reachable imported-body prune", start);
     }
 
     let Node::Program(program) = &root else {
@@ -460,8 +488,8 @@ pub fn run_frontend(
     // impl methods under mangled symbols (see
     // pipeline::expand_wire for the exact surface and the
     // unported metadata-table residual). Zig's order: after
-    // contract loading, before checkProgram. Kinds that ran no
-    // expansion (Compile) carry no root modules and skip this.
+    // contract loading, before checkProgram. A kind that ran
+    // no expansion carries no root modules and skips this.
     if !root_sla_modules.is_empty() {
         expand_wire::register_imported_signatures(&mut checker, &root_sla_modules);
     }

@@ -34,6 +34,34 @@ runs, shared installed plugin, read-only use).
   IMP-4 signature half (see IMP-4). The selective default
   remains unwired exactly as above, and the Compile kind still
   runs no expansion; both stay registered residuals here.
+- Update (A1 line, 2026-11-14): the Compile kind now runs the
+  bodies-kept include-all combination PLUS a root-file-rooted
+  reachability prune before contract load and checkProgram
+  (sla-cli test_prune::prune_unreachable_imported_function_
+  decls_before_type_check over test_reach's collector, roots
+  = the root file's own decls — @test decls are not roots on
+  the build path — with root positions recovered by
+  test_prune::root_decl_flags; sla_expand's `primary` marks
+  every materialized decl under include-all and cannot
+  identify the root file's decls). This restores the
+  selective combination's root discipline in the pipeline's
+  single-module form: every body the selective pass would
+  materialize for the root's decls is present, registered
+  (IMP-4) and checked, and unreached imported bodies are
+  dropped before the check instead of being checked and
+  emitted as root bodies (the SAB tail dispatches per decl).
+  It is NOT the decl-only wiring Residual 2 below forbids:
+  no signature is registered for an absent body. The
+  selective mode's own machinery (module-table reparse /
+  materialization, lazy transitive imports) remains unwired
+  exactly as above. Evidence: the A1 census cluster — 50
+  frontier names red at check with `Undefined call` on
+  imported `.sla` surface (Instant::now, redis_push_lit,
+  sla_json_parse, ...) — clears that signature on all 50
+  (residuals are the downstream D-surface / B4 / H gates);
+  the 292-name frontier roster's sab mode moves 169 -> 173
+  green with zero green->red (the 4 flips are the import
+  fixtures / sla_import names).
 
 ## IMP-2 (b, 注册面不足) `ImportedMacroInfo` cannot carry `assigned_output_mask`
 
@@ -70,18 +98,26 @@ runs, shared installed plugin, read-only use).
   Zig's order — after contract loading, before check_program —
   via sla-cli's `pipeline::expand_wire`, 1:1 with the Zig
   surface above. It runs on every kind that expands (Check
-  decl-only, TestCodegen bodies-kept).
+  decl-only, TestCodegen bodies-kept, Compile bodies-kept
+  since the A1 line — see Residual 2).
 - Residual 1 (alias metadata table): Zig's
   `registerFunctionAliasWithMetadata` also fills the checker's
   function-alias metadata tables. Not ported — no Rust consumer
   reads them; port atomically when a consumer lands (the IMP-2
   coordinator shape).
-- Residual 2 (Compile kind): the Compile front-end runs no
-  expansion (IMP-1), so it registers nothing either; Zig's
-  standalone entry, which re-resolves root imports without an
-  expansion, is not mirrored. Closing either residual must not
-  wire decl-only data into the Compile path — that would fake
-  check-green against missing bodies (see IMP-1).
+- Residual 2 (Compile kind) — CLOSED by the A1 line
+  (2026-11-14): the Compile front-end expands bodies-kept
+  (IMP-1 update above), so the signature half registers on
+  Compile exactly as on the other kinds. The closing
+  respected the standing prohibition: the wiring is
+  bodies-kept plus the root-file-rooted reachability prune,
+  never decl-only data — no check-green was faked against a
+  missing body (every kept signature has its body in the
+  program; pruned bodies' signatures stay registered for
+  call checking, mirroring the selective materialization).
+  Zig's standalone entry, which re-resolves root imports
+  without an expansion, remains unmirrored and unneeded:
+  the expansion path subsumes it.
 
 ## IMP-5 (b, 近似) Module type prescan is a textual approximation
 

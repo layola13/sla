@@ -87,14 +87,24 @@ pub(crate) fn is_project_shortcut_retained_helper_name(name: &str) -> bool {
 // -- callable index (plugin_reachability.zig SlaCallableIndex, one module) -------
 
 pub(crate) struct CallableIndex<'a> {
-    names: BTreeSet<String>,
-    decls: BTreeMap<String, &'a sla_ast::FuncDecl>,
+    pub(crate) names: BTreeSet<String>,
+    pub(crate) decls: BTreeMap<String, &'a sla_ast::FuncDecl>,
     const_decls: BTreeMap<String, &'a sla_ast::ConstStmt>,
     macro_decls: BTreeMap<String, &'a sla_ast::MacroDecl>,
     associated_candidates: BTreeMap<String, Vec<String>>,
 }
 
 impl<'a> CallableIndex<'a> {
+    pub(crate) fn new() -> Self {
+        CallableIndex {
+            names: BTreeSet::new(),
+            decls: BTreeMap::new(),
+            const_decls: BTreeMap::new(),
+            macro_decls: BTreeMap::new(),
+            associated_candidates: BTreeMap::new(),
+        }
+    }
+
     /// Zig `recordFunction` (first declaration wins), including
     /// the flattened-suffix candidates and the `__ov_` plain-name
     /// alias.
@@ -152,7 +162,7 @@ impl<'a> CallableIndex<'a> {
     }
 
     /// Zig `addDecls` (single root module).
-    fn add_decls(&mut self, decls: &'a [Node]) {
+    pub(crate) fn add_decls(&mut self, decls: &'a [Node]) {
         for decl in decls {
             match decl {
                 Node::FuncDecl(fd) => self.record_function(&fd.name, fd),
@@ -216,14 +226,14 @@ impl<'a> CallableIndex<'a> {
 
 pub(crate) struct Collector<'a> {
     index: &'a CallableIndex<'a>,
-    reachable: BTreeSet<String>,
-    referenced_types: BTreeSet<String>,
-    worklist: Vec<String>,
+    pub(crate) reachable: BTreeSet<String>,
+    pub(crate) referenced_types: BTreeSet<String>,
+    pub(crate) worklist: Vec<String>,
     scanned_symbol_roots: BTreeSet<String>,
 }
 
 impl<'a> Collector<'a> {
-    fn new(index: &'a CallableIndex<'a>) -> Self {
+    pub(crate) fn new(index: &'a CallableIndex<'a>) -> Self {
         Collector {
             index,
             reachable: BTreeSet::new(),
@@ -235,7 +245,7 @@ impl<'a> Collector<'a> {
 
     /// Zig `markSyntacticReachableFunc` minus module qualification
     /// and fact merging.
-    fn mark_reachable_func(&mut self, name: &str) {
+    pub(crate) fn mark_reachable_func(&mut self, name: &str) {
         if !self.index.names.contains(name) {
             if let Some(marker) = name.find("__ov_") {
                 if marker > 0 && self.index.names.contains(&name[..marker]) {
@@ -290,7 +300,7 @@ impl<'a> Collector<'a> {
 
     /// Zig `collectSyntacticReachableExpr` minus the fact engine:
     /// both if-branches are always walked (no known-branch eval).
-    fn collect_expr(&mut self, expr: &Node, caller: Option<&str>) {
+    pub(crate) fn collect_expr(&mut self, expr: &Node, caller: Option<&str>) {
         match expr {
             Node::Identifier(name) => {
                 self.mark_reachable_func(name);
@@ -418,7 +428,7 @@ impl<'a> Collector<'a> {
     }
 
     /// Zig `collectSyntacticReachableBlock` minus fact updates.
-    fn collect_block(&mut self, block: &[Node], caller: Option<&str>) {
+    pub(crate) fn collect_block(&mut self, block: &[Node], caller: Option<&str>) {
         for stmt in block {
             match stmt {
                 Node::LetStmt(let_stmt) => {
@@ -477,7 +487,7 @@ impl<'a> Collector<'a> {
 
     /// Zig `scanReferencedSymbolRoots`: referenced const / macro
     /// names become roots. Returns true when new roots were scanned.
-    fn scan_referenced_symbol_roots(&mut self) -> bool {
+    pub(crate) fn scan_referenced_symbol_roots(&mut self) -> bool {
         if self.referenced_types.len() == self.scanned_symbol_roots.len() {
             return false;
         }
@@ -510,7 +520,7 @@ impl<'a> Collector<'a> {
     /// Zig `expandReachableOverloadMembers` minus facts: a plain
     /// name that is reachable expands to every `__ov_` member key,
     /// whose body is collected inline. Returns true on expansion.
-    fn expand_reachable_overload_members(&mut self, decls: &[Node]) -> bool {
+    pub(crate) fn expand_reachable_overload_members(&mut self, decls: &[Node]) -> bool {
         let mut added = false;
         for decl in decls {
             let Node::FuncDecl(fd) = decl else { continue };
