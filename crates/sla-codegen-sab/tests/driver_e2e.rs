@@ -227,6 +227,22 @@ fn program_p1() -> Node {
     })
 }
 
+/// DEF-RUST-STRPTR-ARG-ADDR-TEMP: the driver now releases a
+/// planned call's fresh by-value argument temps right after the
+/// call (Zig genPlannedSabCallArg's release_after_call arm); the
+/// hand models emit the same raw Release instructions.
+fn model_emit_release(b: &mut ModuleBuilder, reg: u32) {
+    // expanded_line carries the global instruction index, exactly
+    // as the trunk's own make_inst stamps it.
+    let mut inst = sla_codegen_sab::ir::Instruction::new(
+        sla_codegen_sab::ir::InstKind::Release,
+        0,
+        b.instructions_len() as u32,
+    );
+    inst.operands[0] = Operand::Reg(reg);
+    b.append_instruction(inst);
+}
+
 /// The hand model of P1, built through the phase-1 trunk with the
 /// driver's documented conventions (lowered symbols, scoped param
 /// registers, trunk interning order).
@@ -268,6 +284,8 @@ fn model_p1() -> Vec<u8> {
     b.emit_assign_int(arg1, 2, false);
     let dst = b.new_tmp();
     b.emit_call(Some(dst), "@sla__add(tmp_1, tmp_2)");
+    model_emit_release(&mut b, arg0);
+    model_emit_release(&mut b, arg1);
     b.emit_return(Some(dst));
     b.finish_function();
     sla_codegen_sab::generate(&b.finish()).expect("encode model")
@@ -458,6 +476,8 @@ fn model_p3() -> Vec<u8> {
     b.emit_assign_int(arg1, 2, false);
     let dst = b.new_tmp();
     b.emit_call(Some(dst), "@sla__add(tmp_1, tmp_2)");
+    model_emit_release(&mut b, arg0);
+    model_emit_release(&mut b, arg1);
     b.emit_return(Some(dst));
     b.finish_function();
     sla_codegen_sab::generate(&b.finish()).expect("encode model")
@@ -601,8 +621,18 @@ fn driver_test_decl_with_panic_guard() {
 // - TEST (was 8220127f…): the test sig.id 4 -> 1; add 0 -> 0.
 // - P3 is new with the mirror (sig ids 0/1/3, decl operands
 //   0/4/6 — the same shape the real Zig product shows).
-const MODEL_P1_LEN: usize = 334;
-const MODEL_P1_SHA256: &str = "2ab9401221af90e79d2d278992bd87b54c856a59804e4e7a880a8a853455d148";
+// DEF-RUST-STRPTR-ARG-ADDR-TEMP re-pin (2026-11-15): P1, P3
+// and TEST each grew by exactly two Release instructions and
+// nothing else (byte-level diff vs the pre-fix streams: two
+// kind-11 records inserted directly after the `add(40, 2)`
+// planned call — the literal arg temps are now released after
+// the call, mirroring Zig genPlannedSabCallArg's
+// release_after_call arm; previously they leaked at function
+// exit on shapes whose temps no other cleanup owned). P1/P3
+// hand models updated constructively with the same two
+// releases; lengths +38 each.
+const MODEL_P1_LEN: usize = 372;
+const MODEL_P1_SHA256: &str = "7317759a7645f72973b0ee2d43843ea22960b844d5c002b9913b56ffa1182c60";
 const MODEL_P2_LEN: usize = 1298;
 // CLI-D5R re-pin (2026-11-07): P2 grew by exactly five Release
 // instructions and nothing else (instruction-level diff vs the
@@ -614,6 +644,6 @@ const MODEL_P2_LEN: usize = 1298;
 // op). P1/P3 are unchanged: their binary operands are all
 // named locals, so no release point fires.
 const MODEL_P2_SHA256: &str = "3c2437b63580a830b588ca4b9ac5d9743d7d9b5d0bec5cc139fce4f6689c7d31";
-const MODEL_P3_LEN: usize = 433;
-const MODEL_P3_SHA256: &str = "ddcc33f7656899c1c4e183e4e5dc6dfda7a533f1f351a0fb7012eaebc9126b96";
-const MODEL_TEST_SHA256: &str = "bda48f542594f29ae3af8406a6ff88fcfd638eeb5d11ec9afe90fd814876ce6d";
+const MODEL_P3_LEN: usize = 471;
+const MODEL_P3_SHA256: &str = "810e595827b478196ea7597cd0fbb988dc405a1da0542df34c15328d6b727197";
+const MODEL_TEST_SHA256: &str = "f3acfde2567eb88a0bd4e9a5a733e8fcb37197c080e03ecf3bfc322c32ca398a";

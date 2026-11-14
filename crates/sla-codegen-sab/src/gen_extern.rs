@@ -154,6 +154,35 @@ impl<'c> Driver<'c> {
                 }
                 _ => {
                     let reg = self.gen_expr(arg)?;
+                    // DEF-RUST-STRPTR-ARG-ADDR-TEMP: fresh
+                    // temporaries produced while evaluating a
+                    // by-value argument are released after the
+                    // call (Zig genPlannedSabCallArg's value arm:
+                    // release_reg = the arg temp when
+                    // release_after_call, released by
+                    // emitPlannedStaticCallTo's
+                    // releaseNonLocalTemps). The port collected
+                    // them only for cap-Borrow args, so a by-value
+                    // arg temp (a STR_PTR literal-form borrow, a
+                    // nested call's result) stayed live at
+                    // function exit — MemoryLeak 1012. Locals are
+                    // the caller's own bindings and stay
+                    // untouched, exactly as in the borrow arm.
+                    // Stack-slot temps are excluded: a slot dies
+                    // with its frame and can never leak, and at
+                    // this base Driver::emit_release dispatches
+                    // on the single reg_state enum, so a slot
+                    // whose state was overwritten NonOwning (a
+                    // string literal's slice view) would retire
+                    // with move_ and trap StackEscape in the
+                    // host — the class the release_emit free
+                    // function already guards via
+                    // stack_alloc_emitted.
+                    if !self.is_local_reg(reg)
+                        && !self.state.frame.stack_alloc_emitted.contains(&reg)
+                    {
+                        post_call_releases.push(reg);
+                    }
                     self.b().symbol_name(reg).to_string()
                 }
             };

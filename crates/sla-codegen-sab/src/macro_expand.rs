@@ -126,6 +126,10 @@ pub fn expand_imported_macro_call<H: MacroExpandHost>(
     // is released — retiring the result before its first real
     // use. (Zig comment, genImportedMacroCall.)
     let mut result_alias_risk = false;
+    // DEF-RUST-STRPTR-ARG-ADDR-TEMP: did the FIRST argument
+    // (the direct ptr_add family's base) contribute a temp
+    // this call releases at its end?
+    let mut first_arg_released = false;
 
     if let Some(reg) = dst {
         arg_names.push(host.builder().symbol_name(reg).to_string());
@@ -153,6 +157,9 @@ pub fn expand_imported_macro_call<H: MacroExpandHost>(
             && (lowered_arg.release_reg.is_some() || !lowered_arg.release_regs.is_empty())
         {
             result_alias_risk = true;
+        }
+        if i == 0 && (lowered_arg.release_reg.is_some() || !lowered_arg.release_regs.is_empty()) {
+            first_arg_released = true;
         }
         if let Some(reg) = host.planned_call_arg_release_reg(lowered_arg.release_reg) {
             release_regs.push(reg);
@@ -231,9 +238,24 @@ pub fn expand_imported_macro_call<H: MacroExpandHost>(
     // to the slot, which outlives every later use of the result;
     // the store itself consumes the interior child while its
     // parent borrow is still live, which the verifier accepts.
+    // DEF-RUST-STRPTR-ARG-ADDR-TEMP completes the risk detection
+    // for borrow-producing argument expressions the node-kind
+    // test cannot see, above all the STR_PTR literal form (a
+    // nested call whose result borrows the string const label).
+    // Two facts must BOTH hold: the direct emitter's derivation
+    // verdict (`direct_ptr_add_dst`) marks the result consumed,
+    // i.e. its base is a view; and the base argument contributed
+    // a temp THIS call releases, i.e. the parent borrow dies
+    // here. With a surviving caller-binding base the plain
+    // assign consumes the result legally and the slot must NOT
+    // fire — the store does not consume its value operand, so
+    // the detoured result would be orphaned and leak.
+    let direct_base_retired = direct_result.consumed_dst.is_some()
+        && matches!(plan.macro_name.as_str(), "PTR_BYTE_ADD" | "SLA_PTR_ADD")
+        && first_arg_released;
     let mut effective_dst = dst;
     if let Some(reg) = dst {
-        if result_alias_risk {
+        if result_alias_risk || direct_base_retired {
             if let Some(ty) = result_ty {
                 if host.type_is_pointer_scalar_value(ty) {
                     let slot = host.builder().new_tmp();
@@ -275,6 +297,7 @@ mod tests {
         types: HashMap<String, Type>,
         fragments: Vec<(String, String, Vec<String>)>,
         direct: DirectImportedMacroResult,
+        direct_consumed_dst_is_result: bool,
         pushed: Vec<String>,
         released_temps: Vec<u32>,
         funcs: HashSet<String>,
@@ -292,6 +315,7 @@ mod tests {
                     emitted: false,
                     consumed_dst: None,
                 },
+                direct_consumed_dst_is_result: false,
                 pushed: vec![],
                 released_temps: vec![],
                 funcs: HashSet::new(),
@@ -386,9 +410,17 @@ mod tests {
         fn emit_direct_imported_macro_call(
             &mut self,
             _macro_name: &str,
-            _arg_names: &[String],
+            arg_names: &[String],
             _known_init_func: Option<&str>,
         ) -> Result<DirectImportedMacroResult> {
+            if self.direct_consumed_dst_is_result {
+                // arg_names[0] is the dst symbol (expression plans).
+                let dst = self.builder.intern(&arg_names[0]);
+                return Ok(DirectImportedMacroResult {
+                    emitted: true,
+                    consumed_dst: Some(dst),
+                });
+            }
             Ok(self.direct)
         }
         fn emit_std_macro_fragment(
@@ -574,6 +606,89 @@ mod tests {
         let reg =
             expand_imported_macro_call(&mut host, &plan(true), &args, None, Some(&result_ty))
                 .unwrap();
+        assert_eq!(host.builder.symbol_name(reg), "tmp_0");
+        let module = host.builder.finish();
+        assert!(module
+            .instructions
+            .iter()
+            .all(|i| i.kind != crate::ir::InstKind::StackAlloc));
+    }
+
+    fn strptr_call() -> Node {
+        Node::CallExpr(sla_ast::CallExpr {
+            func_name: "STR_PTR".to_string(), associated_target: None,
+            generics: vec![], args: vec![], callee: None,
+        })
+    }
+
+    fn consumed_dst_host() -> (MockHost, ImportedMacroCallPlan) {
+        let mut host = MockHost::new();
+        host.all_regs_non_local = true;
+        host.direct_consumed_dst_is_result = true;
+        let mut p = plan(true);
+        p.macro_name = "PTR_BYTE_ADD".to_string();
+        (host, p)
+    }
+
+    /// DEF-RUST-STRPTR-ARG-ADDR-TEMP: the direct emitter's
+    /// derivation verdict (consumed_dst) marks a pointer result
+    /// borrow-derived even when no argument is a borrow
+    /// expression — the STR_PTR literal form is a nested call
+    /// whose result borrows the string const label, and that
+    /// call argument's temp is released by this very call. The
+    /// result must be re-materialised through the slot exactly
+    /// as in the borrow-expression case, or the let's assign
+    /// traps UseAfterMove 1009.
+    #[test]
+    fn consumed_dst_pointer_result_is_rematerialized_through_slot() {
+        let (mut host, p) = consumed_dst_host();
+        let args = vec![strptr_call()];
+        typed(&mut host, &args[0]);
+        let result_ty = Type::Primitive(Primitive::RawPtr);
+        let reg = expand_imported_macro_call(&mut host, &p, &args, None, Some(&result_ty))
+            .unwrap();
+        let dst_id = host.builder.intern("tmp_0");
+        assert_ne!(reg, dst_id);
+        // The slot shape is pinned in detail by the W1 test
+        // above; here ordering + returned-reg distinction do.
+        let module = host.builder.finish();
+        let kinds: Vec<crate::ir::InstKind> =
+            module.instructions.iter().map(|i| i.kind).collect();
+        let pos = |k: crate::ir::InstKind| kinds.iter().position(|x| *x == k).unwrap();
+        assert!(pos(crate::ir::InstKind::StackAlloc) < pos(crate::ir::InstKind::Store));
+        assert!(pos(crate::ir::InstKind::Store) < pos(crate::ir::InstKind::Load));
+    }
+
+    /// DEF-RUST-STRPTR-ARG-ADDR-TEMP gate control: when the
+    /// base is a caller binding this call does NOT release (an
+    /// identifier argument), the consumed_dst verdict alone
+    /// must not re-materialise — the plain assign consumes the
+    /// result legally, a slot detour would orphan it.
+    #[test]
+    fn consumed_dst_with_surviving_base_is_not_rematerialized() {
+        let (mut host, p) = consumed_dst_host();
+        let args = vec![Node::Identifier("x".to_string())];
+        typed(&mut host, &args[0]);
+        let result_ty = Type::Primitive(Primitive::RawPtr);
+        let reg = expand_imported_macro_call(&mut host, &p, &args, None, Some(&result_ty))
+            .unwrap();
+        assert_eq!(host.builder.symbol_name(reg), "tmp_0");
+        let module = host.builder.finish();
+        assert!(module
+            .instructions
+            .iter()
+            .all(|i| i.kind != crate::ir::InstKind::StackAlloc));
+    }
+
+    /// DEF-RUST-STRPTR-ARG-ADDR-TEMP gate control: the
+    /// consumed_dst verdict alone does not re-materialise a
+    /// result without a pointer-scalar result type.
+    #[test]
+    fn consumed_dst_without_result_type_is_not_rematerialized() {
+        let (mut host, p) = consumed_dst_host();
+        let args = vec![strptr_call()];
+        typed(&mut host, &args[0]);
+        let reg = expand_imported_macro_call(&mut host, &p, &args, None, None).unwrap();
         assert_eq!(host.builder.symbol_name(reg), "tmp_0");
         let module = host.builder.finish();
         assert!(module

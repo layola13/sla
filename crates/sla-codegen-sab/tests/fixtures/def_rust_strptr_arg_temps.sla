@@ -1,0 +1,42 @@
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+
+fn strptr_take_ptr(p: ptr, n: u64) -> u64 { return n; }
+fn strptr_mk_n() -> u64 { return 5; }
+fn strptr_take_n(a: u64, b: u64) -> u64 { return a + b; }
+
+@test "ptr_add over strptr base, result as call arg"() {
+    let p: ptr = PTR_BYTE_ADD(STR_PTR("hello"), 0);
+    let rc = strptr_take_ptr(p, 5);
+    if rc != 5 { panic(103); };
+}
+
+@test "ptr_add over strptr base, result copied then read"() {
+    let p: ptr = PTR_BYTE_ADD(STR_PTR("hello"), 0);
+    let q: ptr = p;
+    let b = PTR_READ_U8(q);
+    if b != 104 { panic(107); };
+}
+
+@test "strptr as direct call arg"() {
+    let rc = strptr_take_ptr(STR_PTR("hello"), 5);
+    if rc != 5 { panic(104); };
+}
+
+@test "nested call result as direct call arg"() {
+    let rc = strptr_take_n(strptr_mk_n(), 5);
+    if rc != 10 { panic(110); };
+}
+
+@test "ptr_add over strptr base, read in place (control)"() {
+    let p: ptr = PTR_BYTE_ADD(STR_PTR("hello"), 0);
+    let b = PTR_READ_U8(p);
+    if b != 104 { panic(105); };
+}
+
+@test "ident bound strptr then ptr_add (control)"() {
+    let s = STR_PTR("hello");
+    let p: ptr = PTR_BYTE_ADD(s, 0);
+    let rc = strptr_take_ptr(p, 5);
+    if rc != 5 { panic(106); };
+}
