@@ -86,14 +86,23 @@ impl<'c> Driver<'c> {
         call: &CallExpr,
         plan: ImportedMacroCallPlan,
     ) -> Result<u32> {
-        let reg = crate::macro_expand::expand_imported_macro_call(self, &plan, &call.args, None)?;
-        // Zig genCall: `if (typeIsPointerScalarValue(ty))
-        // markNonOwningReg(reg)` over the call's result type.
+        // The result type is computed before expansion: the
+        // expansion's W1 re-materialisation gate needs it, and the
+        // checker query is independent of codegen state.
         let result_ty = self
             .check
             .expr_type(expr)
             .cloned()
             .or_else(|| literal_fallback_type(expr));
+        let reg = crate::macro_expand::expand_imported_macro_call(
+            self,
+            &plan,
+            &call.args,
+            None,
+            result_ty.as_ref(),
+        )?;
+        // Zig genCall: `if (typeIsPointerScalarValue(ty))
+        // markNonOwningReg(reg)` over the call's result type.
         if let Some(ty) = &result_ty {
             if crate::release_emit::type_is_pointer_scalar_value(ty) {
                 crate::release_meta::mark_non_owning_reg(&mut self.state, reg);

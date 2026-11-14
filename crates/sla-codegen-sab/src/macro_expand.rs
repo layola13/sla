@@ -22,7 +22,8 @@
 use sla_ast::{Node, Type};
 
 use crate::callsite_args::{
-    emit_store, gen_imported_macro_arg, MacroCallHost, SabLoweredCallArg,
+    emit_load, emit_stack_alloc, emit_store, gen_imported_macro_arg, MacroCallHost,
+    SabLoweredCallArg,
 };
 use crate::error::{Error, Result};
 use crate::ir::PrimType;
@@ -86,12 +87,16 @@ struct OutputStore {
     ty: PrimType,
 }
 
-/// Zig `genImportedMacroCall` (sab_codegen.zig:15072).
+/// Zig `genImportedMacroCall` (sab_codegen.zig:15072 in the port's
+/// reference tree; the current Zig tree carries the
+/// W1-DEF-SAB-PTRBYTEADD-MOVE re-materialisation near its tail,
+/// flowed back here — see the `result_alias_risk` block below).
 pub fn expand_imported_macro_call<H: MacroExpandHost>(
     host: &mut H,
     plan: &ImportedMacroCallPlan,
     call_args: &[Node],
     ctx: Option<&MacroExpansionContext>,
+    result_ty: Option<&Type>,
 ) -> Result<u32> {
     let import_path = plan.import_path.clone().ok_or_else(|| {
         Error::UnsupportedSabDirectFeature(format!(
@@ -112,6 +117,15 @@ pub fn expand_imported_macro_call<H: MacroExpandHost>(
     let mut restores: Vec<Restore> = Vec::new();
     let mut output_rebindings: Vec<OutputRebinding> = Vec::new();
     let mut output_stores: Vec<OutputStore> = Vec::new();
+    // W1-DEF-SAB-PTRBYTEADD-MOVE: set when a borrow-expression
+    // argument contributed a temp that this call releases at its
+    // end (the explicit borrow the SAB lowering forms for
+    // `&place`, or an address temp). A pointer result derived
+    // from that borrow is an interior child of it, and the host
+    // verifier consumes interior children when the parent borrow
+    // is released — retiring the result before its first real
+    // use. (Zig comment, genImportedMacroCall.)
+    let mut result_alias_risk = false;
 
     if let Some(reg) = dst {
         arg_names.push(host.builder().symbol_name(reg).to_string());
@@ -135,6 +149,11 @@ pub fn expand_imported_macro_call<H: MacroExpandHost>(
             gen_imported_macro_arg(host_dyn, plan, i, arg, ctx)?
         };
         arg_names.push(lowered_arg.operand.clone());
+        if matches!(arg, Node::BorrowExpr(_))
+            && (lowered_arg.release_reg.is_some() || !lowered_arg.release_regs.is_empty())
+        {
+            result_alias_risk = true;
+        }
         if let Some(reg) = host.planned_call_arg_release_reg(lowered_arg.release_reg) {
             release_regs.push(reg);
         }
@@ -204,8 +223,37 @@ pub fn expand_imported_macro_call<H: MacroExpandHost>(
             host_dyn.emit_release(store.value)?;
         }
     }
-    host.release_non_local_temps(&release_regs)?;
+    // W1-DEF-SAB-PTRBYTEADD-MOVE: with a borrow-derived pointer
+    // result at risk (see result_alias_risk above), re-materialize
+    // the result through a stack slot BEFORE the argument borrows
+    // are released — the same store/load shape the legal
+    // bound-variable form takes. The loaded register is parented
+    // to the slot, which outlives every later use of the result;
+    // the store itself consumes the interior child while its
+    // parent borrow is still live, which the verifier accepts.
+    let mut effective_dst = dst;
     if let Some(reg) = dst {
+        if result_alias_risk {
+            if let Some(ty) = result_ty {
+                if host.type_is_pointer_scalar_value(ty) {
+                    let slot = host.builder().new_tmp();
+                    {
+                        let host_dyn: &mut dyn MacroCallHost = host;
+                        emit_stack_alloc(host_dyn, slot, 8);
+                        emit_store(host_dyn, slot, 0, reg, PrimType::Ptr);
+                    }
+                    let fresh = host.builder().new_tmp();
+                    {
+                        let host_dyn: &mut dyn MacroCallHost = host;
+                        emit_load(host_dyn, fresh, slot, 0, PrimType::Ptr);
+                    }
+                    effective_dst = Some(fresh);
+                }
+            }
+        }
+    }
+    host.release_non_local_temps(&release_regs)?;
+    if let Some(reg) = effective_dst {
         return Ok(reg);
     }
     let sentinel = host.builder().new_tmp();
@@ -230,6 +278,7 @@ mod tests {
         pushed: Vec<String>,
         released_temps: Vec<u32>,
         funcs: HashSet<String>,
+        all_regs_non_local: bool,
     }
 
     impl MockHost {
@@ -246,6 +295,7 @@ mod tests {
                 pushed: vec![],
                 released_temps: vec![],
                 funcs: HashSet::new(),
+                all_regs_non_local: false,
             }
         }
     }
@@ -298,7 +348,7 @@ mod tests {
         }
         fn note_stack_alloc(&mut self, _reg: u32) {}
         fn is_local_reg(&self, _reg: u32) -> bool {
-            true
+            !self.all_regs_non_local
         }
         fn has_global_scalar_const(&self, _name: &str) -> bool {
             false
@@ -315,8 +365,8 @@ mod tests {
         fn has_constructor_surface_rule(&self, _t: &str, _n: &str) -> bool {
             false
         }
-        fn type_is_pointer_scalar_value(&self, _ty: &Type) -> bool {
-            false
+        fn type_is_pointer_scalar_value(&self, ty: &Type) -> bool {
+            crate::release_emit::type_is_pointer_scalar_value(ty)
         }
         fn emit_release(&mut self, _reg: u32) -> Result<()> {
             Ok(())
@@ -391,7 +441,7 @@ mod tests {
         for a in &args {
             typed(&mut host, a);
         }
-        let reg = expand_imported_macro_call(&mut host, &plan(false), &args, None).unwrap();
+        let reg = expand_imported_macro_call(&mut host, &plan(false), &args, None, None).unwrap();
         assert_eq!(host.fragments.len(), 1);
         assert_eq!(host.fragments[0].0, "sa_std/vec.sa");
         assert_eq!(host.fragments[0].2, vec!["val100", "val101"]);
@@ -410,7 +460,7 @@ mod tests {
         let mut host = MockHost::new();
         let args = vec![Node::Identifier("x".to_string())];
         typed(&mut host, &args[0]);
-        let reg = expand_imported_macro_call(&mut host, &plan(true), &args, None).unwrap();
+        let reg = expand_imported_macro_call(&mut host, &plan(true), &args, None, None).unwrap();
         // dst is the first tmp; arg names lead with it.
         assert_eq!(host.fragments[0].2[0], "tmp_0");
         assert_eq!(host.builder.symbol_name(reg), "tmp_0");
@@ -425,7 +475,7 @@ mod tests {
         };
         let args = vec![Node::Identifier("x".to_string())];
         typed(&mut host, &args[0]);
-        expand_imported_macro_call(&mut host, &plan(false), &args, None).unwrap();
+        expand_imported_macro_call(&mut host, &plan(false), &args, None, None).unwrap();
         assert!(host.fragments.is_empty());
     }
 
@@ -434,7 +484,101 @@ mod tests {
         let mut host = MockHost::new();
         let mut p = plan(false);
         p.import_path = None;
-        let err = expand_imported_macro_call(&mut host, &p, &[], None).unwrap_err();
+        let err = expand_imported_macro_call(&mut host, &p, &[], None, None).unwrap_err();
         assert!(matches!(err, Error::UnsupportedSabDirectFeature(_)));
+    }
+
+    /// DEF-RUST-PTRADD-BORROW-CONSUMED (W1-DEF-SAB-PTRBYTEADD-MOVE):
+    /// a borrow-expression argument whose temp this call releases
+    /// at its end leaves a borrow-derived pointer result an
+    /// interior child of the borrow; the host verifier consumes
+    /// interior children when the parent borrow is released, so
+    /// the first later use traps UseAfterMove 1009. The expansion
+    /// must re-materialise a pointer-scalar result through a stack
+    /// slot before the releases and return the loaded register.
+    /// Source-level reproducers (trap pre-fix / pass post-fix
+    /// under the CLI): tests/fixtures/def_rust_ptradd_borrow_minims.sla;
+    /// corpus carriers test_smoke1_fs and the sla2b copy of
+    /// test_unit_wrap_net_smoke.
+    #[test]
+    fn borrow_arg_pointer_result_is_rematerialized_through_slot() {
+        let mut host = MockHost::new();
+        host.all_regs_non_local = true;
+        host.direct = DirectImportedMacroResult {
+            emitted: true,
+            consumed_dst: None,
+        };
+        let args = vec![Node::BorrowExpr(sla_ast::BorrowExpr {
+            expr: Box::new(Node::Identifier("buf".to_string())),
+        })];
+        typed(&mut host, &args[0]);
+        let result_ty = Type::Primitive(Primitive::RawPtr);
+        let reg =
+            expand_imported_macro_call(&mut host, &plan(true), &args, None, Some(&result_ty))
+                .unwrap();
+        let dst_id = host.builder.intern("tmp_0");
+        let borrow_id = host.builder.intern("val100");
+        // The returned register is the loaded fresh tmp, not dst,
+        // and the borrow temp was collected for release.
+        assert_ne!(reg, dst_id);
+        assert_eq!(host.released_temps, vec![borrow_id]);
+        // The module carries stack_alloc -> store(dst) -> load(reg).
+        let module = host.builder.finish();
+        let kinds: Vec<crate::ir::InstKind> =
+            module.instructions.iter().map(|i| i.kind).collect();
+        let pos = |k: crate::ir::InstKind| kinds.iter().position(|x| *x == k).unwrap();
+        assert!(pos(crate::ir::InstKind::StackAlloc) < pos(crate::ir::InstKind::Store));
+        assert!(pos(crate::ir::InstKind::Store) < pos(crate::ir::InstKind::Load));
+        let store = &module.instructions[pos(crate::ir::InstKind::Store)];
+        assert!(matches!(store.operands[2], crate::ir::Operand::Reg(r) if r == dst_id));
+        let load = &module.instructions[pos(crate::ir::InstKind::Load)];
+        assert!(matches!(load.operands[0], crate::ir::Operand::Reg(r) if r == reg));
+    }
+
+    /// W1 gate control: without a pointer-scalar result type the
+    /// same borrow argument leaves dst untouched.
+    #[test]
+    fn borrow_arg_without_result_type_is_not_rematerialized() {
+        let mut host = MockHost::new();
+        host.all_regs_non_local = true;
+        host.direct = DirectImportedMacroResult {
+            emitted: true,
+            consumed_dst: None,
+        };
+        let args = vec![Node::BorrowExpr(sla_ast::BorrowExpr {
+            expr: Box::new(Node::Identifier("buf".to_string())),
+        })];
+        typed(&mut host, &args[0]);
+        let reg = expand_imported_macro_call(&mut host, &plan(true), &args, None, None).unwrap();
+        assert_eq!(host.builder.symbol_name(reg), "tmp_0");
+        let module = host.builder.finish();
+        assert!(module
+            .instructions
+            .iter()
+            .all(|i| i.kind != crate::ir::InstKind::StackAlloc));
+    }
+
+    /// W1 gate control: a non-borrow argument never puts the
+    /// result at risk, even with a pointer-scalar result type.
+    #[test]
+    fn non_borrow_arg_pointer_result_is_not_rematerialized() {
+        let mut host = MockHost::new();
+        host.all_regs_non_local = true;
+        host.direct = DirectImportedMacroResult {
+            emitted: true,
+            consumed_dst: None,
+        };
+        let args = vec![Node::Identifier("x".to_string())];
+        typed(&mut host, &args[0]);
+        let result_ty = Type::Primitive(Primitive::RawPtr);
+        let reg =
+            expand_imported_macro_call(&mut host, &plan(true), &args, None, Some(&result_ty))
+                .unwrap();
+        assert_eq!(host.builder.symbol_name(reg), "tmp_0");
+        let module = host.builder.finish();
+        assert!(module
+            .instructions
+            .iter()
+            .all(|i| i.kind != crate::ir::InstKind::StackAlloc));
     }
 }

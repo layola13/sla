@@ -1,0 +1,38 @@
+// DEF-RUST-PTRADD-BORROW-CONSUMED reproducers (W1-DEF-SAB-PTRBYTEADD-MOVE).
+//
+// A PTR_BYTE_ADD result derived from an explicit `&place` borrow
+// was born Consumed in the Rust SAB emission: the expansion
+// released the borrow temp before the result's first real use,
+// and the host verifier consumes interior children of a released
+// borrow (trap UseAfterMove 1009). Zig re-materialises such a
+// result through a stack slot before releasing the borrow; the
+// Rust port of genImportedMacroCall missed that block.
+//
+// Pre-fix: `sla test` on this file traps 1009. Post-fix: all
+// tests pass. Corpus carriers: test_smoke1_fs (let form) and the
+// sla2b copy of test_unit_wrap_net_smoke (call-arg form).
+@import "sa_std/ptr.sa"
+
+fn take_ptr(p: ptr, n: u64) -> u64 { return n; }
+
+@test "ptradd let-bound result used later"() {
+    let buf = [0u8; 64];
+    let p: ptr = PTR_BYTE_ADD(&buf, 0);
+    let rc = take_ptr(p, 5);
+    if rc != 5 { panic(101); };
+}
+
+@test "ptradd result used directly as call arg"() {
+    let buf = [0u8; 64];
+    let rc = take_ptr(PTR_BYTE_ADD(&buf, 0), 5);
+    if rc != 5 { panic(102); };
+}
+
+@test "ptradd result reads back buffer contents"() {
+    let buf = [0u8; 64];
+    buf[0] = 104;
+    buf[4] = 111;
+    let p: ptr = PTR_BYTE_ADD(&buf, 4);
+    let v = PTR_READ_U8(p);
+    if v != 111 { panic(105); };
+}
