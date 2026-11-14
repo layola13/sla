@@ -237,8 +237,14 @@
 }
 
 @test "wrap sa_std_ws_unmask"() {
+    let payload_wbuf = [0u8; 64];
+    payload_wbuf[0] = 104;
+    payload_wbuf[1] = 101;
+    payload_wbuf[2] = 108;
+    payload_wbuf[3] = 108;
+    payload_wbuf[4] = 111;
     let mask_cell = [0u64; 32];
-    let r = sla_std_ws_unmask(STR_PTR("hello"), STR_LEN("hello"), &mask_cell[0]);
+    let r = sla_std_ws_unmask(PTR_BYTE_ADD(&payload_wbuf, 0), STR_LEN("hello"), &mask_cell[0]);
 }
 
 @test "wrap sa_std_ws_frame_build"() {
