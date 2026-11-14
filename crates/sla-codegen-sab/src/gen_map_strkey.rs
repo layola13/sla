@@ -122,13 +122,18 @@ impl<'c> Driver<'c> {
     }
 
     /// Retire a probe key this call materialized as an owned
-    /// String: free the buffer (the `_STR` probe does not adopt
-    /// the key; the canonical emission frees it with
-    /// `@sa_vec_free(^key)`) and release the register.
+    /// String: the `_STR` probe does not adopt the key, so free
+    /// the buffer with `@sa_vec_free(^key)`. That call consumes
+    /// the register and is itself the retire (the canonical
+    /// `emit_owned_buffer_free` shape): only mark the register
+    /// released in the builder bookkeeping - an emitted
+    /// `release` after the consuming free traps UseAfterMove
+    /// in the host verifier.
     pub(crate) fn retire_owned_probe_key(&mut self, key_reg: u32) -> Result<()> {
         self.ensure_method_std_deps("sa_std/alloc/vec.sa", &["sa_vec_free"])?;
         let key_name = self.b().symbol_name(key_reg).to_string();
         self.emit_method_call_body(None, format!("@sa_vec_free(^{key_name})"))?;
-        self.emit_release(key_reg)
+        crate::release_prim::mark_released(&mut self.state, key_reg);
+        Ok(())
     }
 }
