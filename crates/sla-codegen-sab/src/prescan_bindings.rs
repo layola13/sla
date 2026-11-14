@@ -192,22 +192,37 @@ pub fn binding_needs_copy_scalar_reuse_slot(ty: &Type, used_later_in_current_blo
 /// needs from lowering `planImportedMacroCall` (lowering_rules
 /// 3109–3123 + `addressableIdentifierArgName` 596–601): for call
 /// argument `i`, the identifier name to mark borrowed, if the
-/// macro plan makes that argument addressable. sla-lowering has
-/// not ported the imported-macro plan yet, so the driver-side
-/// provider returns `None` for every call: within the driver's
-/// subset imported-macro calls stop loudly in `gen_call` anyway,
-/// but a program whose *only* imported-macro use sits inside a
-/// borrowed-binding scan would under-collect versus Zig until
-/// the plan lands in sla-lowering (SAB-D23).
+/// macro plan makes that argument addressable. The plan itself
+/// is ported (`macro_plan.rs`, constructed from the checker
+/// registry by `Driver::plan_imported_macro_call` in
+/// `gen_macro.rs`), and the driver wires it into both prescan
+/// sites through `DriverImportedMacroPlans`, so the scan marks
+/// the same bindings Zig's `collectBorrowedBindingsInNode`
+/// marks. (SAB-D23, closed by DEF-RUST-PTRADD-STATEMENT-FORM:
+/// while the sites passed the declining stub below, the scan
+/// under-collected every imported-macro addressable arg, so a
+/// leading-output binding such as `dp` in
+/// `PTR_BYTE_ADD(dp, &buf, n);` never earned the stack slot the
+/// statement-form expansion's store-back keys on, and the
+/// borrow-derived result died with the borrow temp's release —
+/// UseAfterMove 1009 on the first later use.)
 pub trait ImportedMacroPlans {
-    fn addressable_identifier_arg_name(&self, call: &CallExpr, arg_index: usize) -> Option<&str>;
+    fn addressable_identifier_arg_name<'a>(
+        &self,
+        call: &'a CallExpr,
+        arg_index: usize,
+    ) -> Option<&'a str>;
 }
 
 /// A plan provider with no imported macros: every query declines.
 pub struct NoImportedMacroPlans;
 
 impl ImportedMacroPlans for NoImportedMacroPlans {
-    fn addressable_identifier_arg_name(&self, _call: &CallExpr, _arg_index: usize) -> Option<&str> {
+    fn addressable_identifier_arg_name<'a>(
+        &self,
+        _call: &'a CallExpr,
+        _arg_index: usize,
+    ) -> Option<&'a str> {
         None
     }
 }

@@ -53,7 +53,7 @@
 
 use std::collections::HashMap;
 
-use sla_ast::{FuncDecl, Node, Primitive, TestDecl, Type};
+use sla_ast::{CallExpr, FuncDecl, Node, Primitive, TestDecl, Type};
 use sla_lowering::{
     abi_cap_kind_from_type, by_value_raw_pointer_param, is_borrow_like_type,
     is_void_type, shared_abi_param_cap, AbiCapKind,
@@ -480,7 +480,7 @@ impl<'c> Driver<'c> {
             let mut set = std::collections::HashSet::new();
             prescan_bindings::collect_borrowed_bindings_in_block(
                 &f.body,
-                &prescan_bindings::NoImportedMacroPlans,
+                &DriverImportedMacroPlans { driver: &*self },
                 &mut set,
             );
             set
@@ -585,7 +585,7 @@ impl<'c> Driver<'c> {
             let mut set = std::collections::HashSet::new();
             prescan_bindings::collect_borrowed_bindings_in_block(
                 &t.body,
-                &prescan_bindings::NoImportedMacroPlans,
+                &DriverImportedMacroPlans { driver: &*self },
                 &mut set,
             );
             set
@@ -652,6 +652,39 @@ impl<'c> Driver<'c> {
 
 /// B4 entry point: drive `program` through the orchestration above
 /// and encode the resulting module.
+
+/// The C2 borrowed scan's imported-macro plan provider: the
+/// real plan, delegating to `Driver::plan_imported_macro_call`
+/// (Zig `planImportedMacroCall` over the checker registry), so
+/// the scan marks the bindings Zig's
+/// `collectBorrowedBindingsInNode` call arm marks — an argument
+/// the macro plan makes addressable (a leading output such as
+/// `dp` in `PTR_BYTE_ADD(dp, &buf, n);`, an address-slot param)
+/// counts as a use of the binding's address, and the binding
+/// earns the stack slot its expansion's store-back requires.
+/// Until DEF-RUST-PTRADD-STATEMENT-FORM both prescan sites
+/// passed `NoImportedMacroPlans`, so no imported-macro argument
+/// ever marked its binding borrowed: the binding stayed a plain
+/// register, the ptr_add result was written straight into it,
+/// and a borrow-derived result died when the expansion released
+/// the borrow temp (UseAfterMove 1009 on the first later use).
+/// Experience flow-back, Zig -> Rust: Zig's scan consults the
+/// live plan; this wiring restores that exact behaviour.
+pub(crate) struct DriverImportedMacroPlans<'d, 'c> {
+    driver: &'d Driver<'c>,
+}
+
+impl prescan_bindings::ImportedMacroPlans for DriverImportedMacroPlans<'_, '_> {
+    fn addressable_identifier_arg_name<'a>(
+        &self,
+        call: &'a CallExpr,
+        arg_index: usize,
+    ) -> Option<&'a str> {
+        let plan = self.driver.plan_imported_macro_call(call)?;
+        plan.addressable_identifier_arg_name(arg_index, call.args.get(arg_index)?)
+    }
+}
+
 pub fn generate_from_program(program: &Node, check: &dyn CheckInfo) -> Result<Vec<u8>> {
     Driver::new(check).generate(program)
 }
@@ -678,4 +711,91 @@ pub fn generate_from_program_with_flattener(
     driver.surface_roots = roots;
     driver.flattener = flattener;
     driver.generate(program)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prescan_bindings::ImportedMacroPlans;
+    use sla_lowering::{ImportedMacroView, MapCheckInfo};
+
+    fn ptr_byte_add_call() -> CallExpr {
+        CallExpr {
+            func_name: "PTR_BYTE_ADD".to_string(),
+            associated_target: None,
+            generics: Vec::new(),
+            args: vec![
+                Node::Identifier("dp".to_string()),
+                Node::BorrowExpr(sla_ast::BorrowExpr {
+                    expr: Box::new(Node::Identifier("buf".to_string())),
+                }),
+                Node::Identifier("pos".to_string()),
+            ],
+            callee: None,
+        }
+    }
+
+    fn check_with_ptr_byte_add(borrowed_arg_mask: u64) -> MapCheckInfo {
+        let mut check = MapCheckInfo::new();
+        check.add_imported_macro(
+            "PTR_BYTE_ADD",
+            ImportedMacroView {
+                arity: 3,
+                leading_outputs: 1,
+                import_path: Some("sa_std/ptr.sa".to_string()),
+                borrowed_arg_mask,
+                address_slot_arg_mask: 0,
+                direct_callees: Vec::new(),
+            },
+        );
+        check
+    }
+
+    /// DEF-RUST-PTRADD-STATEMENT-FORM: the C2 borrowed scan's
+    /// plan provider must surface the leading-output binding of
+    /// a statement-form imported-macro call (the plan makes the
+    /// out param addressable), or the binding never earns the
+    /// stack slot its expansion's store-back keys on and
+    /// `PTR_BYTE_ADD(dp, &buf, n);` traps UseAfterMove 1009 on
+    /// the first later use of `dp`. While the prescan sites
+    /// passed `NoImportedMacroPlans` this delegation did not
+    /// exist and every query declined. Source-level reproducers
+    /// (trap pre-fix / pass post-fix under the CLI):
+    /// tests/fixtures/def_rust_ptradd_stmt_minims.sla; corpus
+    /// carrier test_unit_ptr_byte_add_write_slot.
+    #[test]
+    fn macro_plans_provider_marks_leading_output_borrowed() {
+        let check = check_with_ptr_byte_add(0b001);
+        let driver = Driver::new(&check);
+        let plans = DriverImportedMacroPlans { driver: &driver };
+        let call = ptr_byte_add_call();
+        assert_eq!(plans.addressable_identifier_arg_name(&call, 0), Some("dp"));
+        // The borrow source and the offset are not addressable
+        // identifier args of this macro.
+        assert_eq!(plans.addressable_identifier_arg_name(&call, 1), None);
+        assert_eq!(plans.addressable_identifier_arg_name(&call, 2), None);
+    }
+
+    /// Control: with no addressable bit in the plan the provider
+    /// declines, exactly like the stub it replaced at the sites.
+    #[test]
+    fn macro_plans_provider_declines_without_addressable_bit() {
+        let check = check_with_ptr_byte_add(0);
+        let driver = Driver::new(&check);
+        let plans = DriverImportedMacroPlans { driver: &driver };
+        let call = ptr_byte_add_call();
+        assert_eq!(plans.addressable_identifier_arg_name(&call, 0), None);
+    }
+
+    /// Control: a call with no imported-macro plan at all
+    /// declines.
+    #[test]
+    fn macro_plans_provider_declines_unknown_callee() {
+        let check = check_with_ptr_byte_add(0b001);
+        let driver = Driver::new(&check);
+        let plans = DriverImportedMacroPlans { driver: &driver };
+        let mut call = ptr_byte_add_call();
+        call.func_name = "some_user_fn".to_string();
+        assert_eq!(plans.addressable_identifier_arg_name(&call, 0), None);
+    }
 }

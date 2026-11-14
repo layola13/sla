@@ -1,0 +1,65 @@
+@import "sa_std/ptr.sa"
+
+// DEF-RUST-PTRADD-STATEMENT-FORM reproducers (trap pre-fix / pass
+// post-fix under the CLI). Statement-form PTR_BYTE_ADD with a
+// borrow-derived source: the output binding `dp` must earn a stack
+// slot from the C2 borrowed scan (the macro plan makes the leading
+// output addressable), so the expansion stores the ptr_add temp
+// back into the slot before releasing the borrow temp. With the
+// scan's declining plan stub the binding stayed a plain register,
+// the borrow-derived result was written straight into it, and the
+// borrow temp's release consumed it — UseAfterMove 1009 on the
+// first later use. The owned-source form below passed throughout
+// (control); corpus carrier: test_unit_ptr_byte_add_write_slot.
+
+@test "stmt form borrow source"() {
+    let buf: [u8; 16] = [0u8; 16];
+    let dp: ptr = PTR_NULL();
+    PTR_BYTE_ADD(dp, &buf, 5);
+    PTR_WRITE_U8(dp, 88);
+    if buf[5] != 88 {
+        panic(44201);
+    };
+    if buf[4] != 0 {
+        panic(44202);
+    };
+}
+
+@test "stmt form read back after statement"() {
+    let buf: [u8; 16] = [0u8; 16];
+    let dp: ptr = PTR_NULL();
+    PTR_BYTE_ADD(dp, &buf, 7);
+    PTR_WRITE_U8(dp, 99);
+    let v: u8 = PTR_READ_U8(dp);
+    if v != 99 {
+        panic(44301);
+    };
+    if buf[7] != 99 {
+        panic(44302);
+    };
+}
+
+fn write_via_stmt_owned_loop(bp: ptr, n: u64, v: u8) -> void {
+    let pos: u64 = 0;
+    while pos < n {
+        let dp: ptr = PTR_NULL();
+        PTR_BYTE_ADD(dp, bp, pos);
+        PTR_WRITE_U8(dp, v);
+        pos = pos + 1;
+    }
+}
+
+@test "stmt form owned source in loop"() {
+    let buf: [u8; 16] = [0u8; 16];
+    let bp = PTR_BYTE_ADD(&buf, 0);
+    write_via_stmt_owned_loop(bp, 4, 66);
+    if buf[0] != 66 {
+        panic(44401);
+    };
+    if buf[3] != 66 {
+        panic(44402);
+    };
+    if buf[4] != 0 {
+        panic(44403);
+    };
+}
