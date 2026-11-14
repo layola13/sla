@@ -1,0 +1,36 @@
+// DEF-RUST-STACKESCAPE-BEND2 regression: a BTreeMap insert stages
+// its value through a stack slot that codegen marks non-owning;
+// retiring that slot must be bookkeeping-only. Before the fix, the
+// SAB codegen emitted `move_` on the slot register and the host
+// verifier trapped StackEscape (1025) — first observed in
+// test_unit_bend2_parity_map once the DEF-2B trap ahead of it was
+// fixed. HashMap inserts stage through a heap cell and never hit
+// the path (control test below).
+@import "sa_std/vec.sa"
+@import "sa_std/hashmap.sa"
+@import "sa_std/btree_map.sa"
+@import "sa_std/core/option.sa"
+
+@test "def rust stackescape btree insert only"() {
+    let b = BTreeMap::new();
+    b.insert("a", 1);
+    if len(b) != 1 { panic(73201); };
+}
+
+@test "def rust stackescape btree insert replace"() {
+    let b = BTreeMap::new();
+    b.insert("a", 1);
+    b.insert("a", 7);
+    if len(b) != 1 { panic(73202); };
+    let ga = b.get("a");
+    if ga.copied().unwrap_or(0) != 7 { panic(73203); };
+}
+
+@test "def rust stackescape hashmap insert control"() {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    m.insert("a", 7);
+    if len(m) != 1 { panic(73204); };
+    let ga = m.get("a");
+    if ga.copied().unwrap_or(0) != 7 { panic(73205); };
+}

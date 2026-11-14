@@ -182,6 +182,24 @@ impl<'c> Driver<'c> {
                 "4426-4431",
             ));
         }
+        if self.state.frame.reg_state(reg) == RegState::StackAlloc
+            || self.state.frame.stack_alloc_emitted.contains(&reg)
+        {
+            // Zig `emitRelease` stack-alloc arm: stack slots die
+            // with their scope — never emit release/move_ on them
+            // (the host verifier traps StackEscape on any consuming
+            // use of a stack allocation). Zig keeps stack_alloc_regs
+            // and non_owning_regs as independent sets, so a slot
+            // marked non-owning still retires silently; the port's
+            // single RegState loses StackAlloc to a later
+            // mark_non_owning (gen_map_insert_call's BTreeMap value
+            // slot), so stack_alloc_emitted membership — the
+            // stack_alloc_regs record — must decide, exactly as in
+            // release_emit::emit_release.
+            // (DEF-RUST-STACKESCAPE-BEND2)
+            self.state.frame.reg_states.insert(reg, RegState::Released);
+            return Ok(());
+        }
         match self.state.frame.reg_state(reg) {
             RegState::StackAlloc => {
                 self.state.frame.reg_states.insert(reg, RegState::Released);
