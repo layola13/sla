@@ -1,0 +1,19 @@
+@import "sa_std/vec.sa"
+@import "sa_std/string.sa"
+
+// RUST-TEXT-EMITTER-1 regression: the format(...) builtin
+// (genFormatCall + FORMAT_PUSH_* helpers). On the pristine text
+// emitter every format call stopped at `format builtin call`.
+
+@test "text format builtin"() {
+    let plain = format("run");
+    let with_int = format("n={}", 42);
+    let with_str = format("hi {}", "there");
+    let with_bool = format("b={}", true);
+    let v: Vec<String> = Vec::new();
+    v.push(plain);
+    v.push(with_int);
+    v.push(with_str);
+    v.push(with_bool);
+    if len(v) != 4 { panic(1); };
+}

@@ -12,7 +12,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use sla_ast::{FuncDecl, Literal, Node, Type};
+use sla_ast::{FuncDecl, Literal, Node, Primitive, Type};
 use sla_lowering::{
     abi_return_type_string, abi_type_size, abi_type_string, expr_result_needs_release,
     is_main_name, CheckInfo,
@@ -48,6 +48,11 @@ pub struct Codegen<'c> {
     pub(crate) global_const_bindings: HashSet<String>,
     pub(crate) global_scalar_consts: Vec<(String, Literal)>,
     pub(crate) func_index: Vec<(String, FuncDecl)>,
+    /// Enum declarations by name, collected from the program's
+    /// decls in `generate_program` (the SAB driver keeps the same
+    /// index; the checker's own enum table keeps only variant
+    /// names, not fields/discriminants).
+    pub(crate) enum_index: Vec<(String, sla_ast::EnumDecl)>,
 
     // Loop state.
     pub(crate) loop_break_labels: Vec<String>,
@@ -78,6 +83,7 @@ impl<'c> Codegen<'c> {
             global_const_bindings: HashSet::new(),
             global_scalar_consts: Vec::new(),
             func_index: Vec::new(),
+            enum_index: Vec::new(),
             loop_break_labels: Vec::new(),
             loop_continue_labels: Vec::new(),
             loop_body_local_scopes: Vec::new(),
@@ -198,6 +204,15 @@ impl<'c> Codegen<'c> {
             }
         }
         None
+    }
+
+    /// Enum declaration from the program index (collected in
+    /// `generate_program`, including imported modules' decls).
+    pub(crate) fn enum_decl(&self, name: &str) -> Option<&sla_ast::EnumDecl> {
+        self.enum_index
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, d)| d)
     }
 
     pub(crate) fn expr_type(&self, node: &Node) -> Option<Type> {
@@ -450,19 +465,27 @@ pub(crate) fn escaped_string_byte_len(value: &str) -> usize {
     len
 }
 
-/// codegen.zig:3055/3059 shape facts used by the println emitter: the
-/// format-string type is the user-defined `String`; string-like types
-/// are string slices / `str`-shaped borrows. Only consulted for
-/// non-literal println arguments (outside the slice's shapes, where
-/// the emitter fails loudly before relying on these).
+/// codegen.zig:3055/3059 shape facts used by the println and
+/// format emitters, mirroring lowering_rules.isFormatStringType /
+/// isStringLikeType exactly (borrow/pointer peeled first).
 pub(crate) fn is_format_string_type(ty: &Type) -> bool {
-    matches!(ty, Type::UserDefined(ud) if ud.name == "String")
+    // lowering_rules.isFormatStringType: peel borrow/pointer,
+    // then the user-defined `String`.
+    matches!(
+        sla_lowering::peel_borrow_pointer_type(ty),
+        Type::UserDefined(ud) if ud.name == "String"
+    )
 }
 
 pub(crate) fn is_string_like_type(ty: &Type) -> bool {
-    match ty {
-        Type::Borrow(inner) => matches!(&**inner, Type::Array(_)),
-        Type::UserDefined(ud) => ud.name == "str",
+    // lowering_rules.isStringLikeType (5280): peel borrow/pointer,
+    // then raw pointers, arrays and `String` are string-like. The
+    // earlier reduced form (Borrow(Array) / `str` only) missed
+    // raw-pointer-typed string literals in format/println args.
+    match sla_lowering::peel_borrow_pointer_type(ty) {
+        Type::Primitive(Primitive::RawPtr) => true,
+        Type::Array(_) => true,
+        Type::UserDefined(ud) => ud.name == "String",
         _ => false,
     }
 }

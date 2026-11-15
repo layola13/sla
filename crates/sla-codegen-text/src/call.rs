@@ -12,7 +12,7 @@
 //! the catch-all that treats an unknown callee name as a macro
 //! EXPAND rather than an error.
 
-use sla_ast::{Literal, Node, Param, Type};
+use sla_ast::{Literal, Node, Param, Primitive, Type, UserDefined};
 use sla_lowering::{
     abi_call_arg_cap_kind, abi_param_needs_borrow_arg, call_arg_is_copy_struct_value,
     call_arg_needs_release, is_panic_builtin_name, is_println_call,
@@ -199,12 +199,19 @@ impl<'c> Codegen<'c> {
                 if plan.transfers_ownership {
                     // The Vec-clone preservation arm (identifier must
                     // stay live for a later use) needs the collection
-                    // family; plain transfers consume directly.
+                    // family; plain transfers consume directly. The
+                    // consume_reg carries the ^-prefixed register
+                    // (as in the Zig): its forget is a bookkeeping
+                    // mark only, since the call operand's own `^`
+                    // already consumed the value — a raw consume_reg
+                    // here emitted a second `^reg` line and the host
+                    // rejected it with UseAfterMove.
+                    let mv = format!("^{raw_reg}");
                     return Ok(LoweredCallArg {
-                        reg: format!("^{raw_reg}"),
+                        reg: mv.clone(),
                         release_after_call: false,
                         release_reg: None,
-                        consume_reg: Some(raw_reg),
+                        consume_reg: Some(mv),
                     });
                 }
                 let cap = param.map(|p| abi_call_arg_cap_kind(p.is_borrow, p.is_move));
@@ -240,6 +247,37 @@ impl<'c> Codegen<'c> {
                     reg: format!("&{raw_reg}"),
                     release_after_call: false,
                     release_reg: if release { Some(raw_reg) } else { None },
+                    consume_reg: None,
+                })
+            }
+            CallArgMaterializationKind::RawPointerStringLiteral => {
+                // codegen.zig:12872 + 14312: a string literal for a
+                // raw-pointer-backed parameter materialises as a
+                // NUL-terminated @const and its address. A `^`
+                // parameter consumes that address directly.
+                let value = match arg {
+                    Node::Literal(Literal::StringVal(s)) => s.clone(),
+                    _ => {
+                        return unsupported(
+                            "raw-pointer string literal for non-literal arg",
+                            "codegen.zig:12872 (genCallArgFromMaterializationPlan)",
+                        )
+                    }
+                };
+                let ptr_reg = self.gen_raw_pointer_string_literal_arg(&value);
+                if param.map(|p| p.is_move).unwrap_or(false) {
+                    let mv = format!("^{ptr_reg}");
+                    return Ok(LoweredCallArg {
+                        reg: mv.clone(),
+                        release_after_call: false,
+                        release_reg: None,
+                        consume_reg: Some(mv),
+                    });
+                }
+                Ok(LoweredCallArg {
+                    reg: ptr_reg,
+                    release_after_call: plan.release_after_call,
+                    release_reg: None,
                     consume_reg: None,
                 })
             }
@@ -327,10 +365,7 @@ impl<'c> Codegen<'c> {
                 return Ok(result);
             }
             "format" => {
-                return unsupported(
-                    "format builtin call",
-                    "codegen.zig:14520 (format builtin)",
-                )
+                return self.gen_format_call(call);
             }
             _ => {}
         }
@@ -338,11 +373,17 @@ impl<'c> Codegen<'c> {
         if is_panic_builtin_name(&func_name) {
             return self.gen_panic_call(call);
         }
+        if let Some(view) = self.check.imported_macro(&func_name) {
+            return self.gen_imported_macro_call_expr(call, &view);
+        }
         if self.check.is_macro(&func_name) {
             return unsupported(
                 "user macro call expansion",
                 "codegen.zig:15480 (imported/user macro call plans)",
             );
+        }
+        if let Some(sig) = self.check.extern_sig(&func_name) {
+            return self.gen_extern_call(call, &sig);
         }
 
         if let Some(decl) = self.func_decl(&func_name) {
@@ -379,6 +420,18 @@ impl<'c> Codegen<'c> {
         self.ins(&line);
         let _ = call_arg_needs_release;
         Ok(result)
+    }
+
+    /// codegen.zig:14312 `genRawPointerStringLiteralArg`: the
+    /// @const carries a NUL terminator so the pointer can also
+    /// be scanned as a C string; explicit-length users pass the
+    /// escaped byte length, which excludes the terminator.
+    fn gen_raw_pointer_string_literal_arg(&mut self, value: &str) -> String {
+        let label = self.new_string_const();
+        self.ins(&format!("@const {label} = utf8:\"{value}\\0\""));
+        let ptr_reg = self.new_tmp();
+        self.ins(&format!("{ptr_reg} = &{label}"));
+        ptr_reg
     }
 
     /// codegen.zig panic builtin path.
@@ -438,11 +491,17 @@ impl<'c> Codegen<'c> {
             );
         }
         let func_name = call.func_name.clone();
+        if let Some(view) = self.check.imported_macro(&func_name) {
+            return self.gen_imported_macro_call_stmt(call, &view);
+        }
         if self.check.is_macro(&func_name) {
             return unsupported(
                 "user macro statement call",
                 "codegen.zig:1900 (genCallStmt macro path)",
             );
+        }
+        if let Some(sig) = self.check.extern_sig(&func_name) {
+            return self.gen_extern_call_stmt(expr, call, &sig);
         }
         if let Some(decl) = self.func_decl(&func_name) {
             let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;
@@ -458,9 +517,58 @@ impl<'c> Codegen<'c> {
     }
 
     fn stack_alloc_size_of(&self, expr: &Node) -> i64 {
+        stack_alloc_size_of(expr, self)
+    }
+}
+
+/// Map a contract ABI type spelling to the AST type the call-arg
+/// planner consumes (the planner only reads shape facts from it:
+/// copy-struct-ness, borrow needs, pointer-ness). Spellings are
+/// the `.sai` surface forms (`i32`, `ptr`, `*u8`, `Slice`, …);
+/// anything unrecognised becomes a plain user-defined name, which
+/// the planner treats as an opaque value — the same treatment the
+/// SAB side's `abi_prim_type` gives unknown spellings.
+pub(crate) fn abi_type_from_spelling(spelling: &str) -> Type {
+    let s = spelling.trim().trim_end_matches('!').trim();
+    if let Some(inner) = s.strip_prefix('*') {
+        return Type::Pointer(Box::new(abi_type_from_spelling(inner)));
+    }
+    if let Some(inner) = s.strip_prefix('&') {
+        return Type::Borrow(Box::new(abi_type_from_spelling(inner)));
+    }
+    let prim = match s {
+        "i8" => Some(Primitive::I8),
+        "i16" => Some(Primitive::I16),
+        "i32" => Some(Primitive::I32),
+        "i64" => Some(Primitive::I64),
+        "isize" => Some(Primitive::Isize),
+        "u8" => Some(Primitive::U8),
+        "u16" => Some(Primitive::U16),
+        "u32" => Some(Primitive::U32),
+        "u64" => Some(Primitive::U64),
+        "usize" => Some(Primitive::Usize),
+        "f32" => Some(Primitive::F32),
+        "f64" => Some(Primitive::F64),
+        "bool" => Some(Primitive::Boolean),
+        "ptr" | "raw_ptr" => Some(Primitive::RawPtr),
+        "void" => Some(Primitive::VoidType),
+        "integer" => Some(Primitive::Integer),
+        "float" => Some(Primitive::Float),
+        _ => None,
+    };
+    match prim {
+        Some(p) => Type::Primitive(p),
+        None => Type::UserDefined(UserDefined {
+            name: s.to_string(),
+            generics: Vec::new(),
+        }),
+    }
+}
+
+fn stack_alloc_size_of(expr: &Node, cg: &Codegen) -> i64 {
         if let Node::CallExpr(call) = expr {
             if let Some(first) = call.args.first() {
-                let lookup = |name: &str| match self.global_scalar_const(name) {
+                let lookup = |name: &str| match cg.global_scalar_const(name) {
                     Some(Literal::IntVal(v)) => Some(v),
                     _ => None,
                 };
@@ -470,5 +578,4 @@ impl<'c> Codegen<'c> {
             }
         }
         8
-    }
 }

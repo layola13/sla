@@ -39,17 +39,31 @@ impl<'c> Codegen<'c> {
 
         self.loop_continue_labels.push(head_label.clone());
         self.loop_break_labels.push(exit_label.clone());
+        // Zig: `defer self.popLoopBodyLocalScope()` — the scope
+        // stays live across the back-edge cleanups below and is
+        // popped on EVERY exit path, including a gen_block error.
+        // The previous shape popped immediately after gen_block
+        // (so the cleanups read the OUTER scope or none) and
+        // skipped the pop entirely on the error path, leaking a
+        // zero depth entry that the enclosing gen_block's
+        // leave-tracking then decremented — a subtract-overflow
+        // panic masking the real error (14 corpus files).
         self.push_loop_body_local_scope();
-        self.gen_block(&while_stmt.body)?;
-        self.pop_loop_body_local_scope();
+        let mut flow = self.gen_block(&while_stmt.body);
         self.loop_continue_labels.pop();
         self.loop_break_labels.pop();
 
-        if !block_terminates(&while_stmt.body) {
-            self.emit_active_loop_body_local_cleanups(None, false)?;
-            self.emit_loop_body_top_level_local_cleanups(&while_stmt.body)?;
-            self.w(&format!("    jmp {head_label}\n\n"));
+        if flow.is_ok() && !block_terminates(&while_stmt.body) {
+            flow = self.emit_active_loop_body_local_cleanups(None, false);
+            if flow.is_ok() {
+                flow = self.emit_loop_body_top_level_local_cleanups(&while_stmt.body);
+            }
+            if flow.is_ok() {
+                self.w(&format!("    jmp {head_label}\n\n"));
+            }
         }
+        self.pop_loop_body_local_scope();
+        flow?;
         self.wl(&format!("{cond_false_label}:"));
         self.w(&format!("    !{cond_reg}\n"));
         self.w(&format!("    jmp {exit_label}\n\n"));

@@ -1,0 +1,50 @@
+@import "sa_std/vec.sa"
+@import "sa_std/string.sa"
+
+// RUST-TEXT-EMITTER-1 regression: aggregate literal materialisation
+// (the gen*LiteralInto family) in let position and expression
+// position, struct field reads, and borrows of local bindings.
+// On the pristine text emitter every shape here stopped at
+// `literal let materialization (Into emitters deferred)` or the
+// genExpr catch-all for struct_literal / field_expr / borrow_expr.
+
+struct Point { x: i64, y: i64 }
+
+enum Shape { Circle(i64), Rect(i64, i64) }
+
+fn point_sum(p: Point) -> i64 {
+    return p.x + p.y;
+}
+
+@test "text into literals"() {
+    let p = Point { x: 3, y: 4 };
+    if p.x != 3 { panic(1); };
+    if p.y != 4 { panic(2); };
+    if point_sum(p) != 7 { panic(3); };
+
+    let arr = [10, 20, 30];
+    if arr[0] != 10 { panic(4); };
+    if arr[2] != 30 { panic(5); };
+
+    let buf = [0u8; 8];
+    if buf[7] != 0 { panic(6); };
+
+    let wide = [5u64; 40];
+    if wide[39] != 5 { panic(7); };
+
+    let pair = (11, 22);
+    if pair.0 != 11 { panic(8); };
+    if pair.1 != 22 { panic(9); };
+
+    let s = Shape::Rect(6, 7);
+    let c = Shape::Circle(9);
+    if point_sum(Point { x: 1, y: 2 }) != 3 { panic(10); };
+}
+
+@test "text borrow of local"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(104);
+    v.push(105);
+    let r = &v;
+    if len(r) != 2 { panic(20); };
+}

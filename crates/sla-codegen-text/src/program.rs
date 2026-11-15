@@ -57,6 +57,9 @@ impl<'c> Codegen<'c> {
             if let Node::FuncDecl(f) = decl {
                 self.func_index.push((f.name.clone(), f.clone()));
             }
+            if let Node::EnumDecl(e) = decl {
+                self.enum_index.push((e.name.clone(), e.clone()));
+            }
         }
 
         // 1. Imports in declaration order (`using` emits nothing).

@@ -1,0 +1,40 @@
+@import "sa_std/vec.sa"
+@import "sa_std/string.sa"
+
+// RUST-TEXT-EMITTER-1 regression: while-loop body locals must be
+// cleaned up on the back edge with the loop-body scope still
+// live, and an erroring while body must surface its real error,
+// never a codegen panic. On the pristine text emitter the scope
+// was popped before the cleanups were emitted (so they read the
+// outer scope or nothing), and on the error path the pop was
+// skipped entirely, leaking a zero depth entry that the enclosing
+// block's leave-tracking decremented — a subtract-overflow panic
+// at block.rs:191 masking the real error (14 corpus files).
+
+@test "text while local cleanup"() {
+    let total: u64 = 0;
+    let i: u64 = 0;
+    while i < 50 {
+        let scratch: Vec<u8> = Vec::new();
+        scratch.push(1);
+        scratch.push(2);
+        let s = format("x");
+        total = total + len(scratch);
+        i = i + 1;
+    }
+    if total != 100 { panic(1); };
+}
+
+@test "text while break continue cleanup"() {
+    let seen: u64 = 0;
+    let i: u64 = 0;
+    while i < 10 {
+        let item: Vec<u8> = Vec::new();
+        item.push(9);
+        i = i + 1;
+        if i == 3 { continue; };
+        if i == 7 { break; };
+        seen = seen + len(item);
+    }
+    if seen != 5 { panic(2); };
+}

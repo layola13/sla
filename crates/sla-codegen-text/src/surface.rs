@@ -18,7 +18,7 @@
 //! `consume_value` rule forgets a consumed temp instead of
 //! releasing it (the value now lives inside the container).
 
-use sla_ast::{CallExpr, Node, Type};
+use sla_ast::{CallExpr, Node, Param, Type};
 
 use crate::call::LoweredCallArg;
 use crate::codegen::{type_size, Codegen};
@@ -71,6 +71,53 @@ impl<'c> Codegen<'c> {
 
     fn surface_value(&mut self, call: &CallExpr, idx: usize) -> Result<LoweredCallArg> {
         self.gen_planned_call_arg(&call.args[idx], None, false)
+    }
+
+    /// Plan a value the surface operation CONSUMES (push / insert
+    /// / set / heap-cell new): the argument is planned against a
+    /// by-value parameter of its own checker type, so an owned
+    /// non-Copy value plans as an ownership transfer (`^reg` +
+    /// consume mark). Planning with no parameter left the source
+    /// register Active while the checker's cleanup lists already
+    /// considered it moved — a MemoryLeak at function exit
+    /// (caught against a Vec<String> push of format results).
+    fn surface_value_consumed(
+        &mut self,
+        call: &CallExpr,
+        idx: usize,
+    ) -> Result<LoweredCallArg> {
+        // String literals keep the unplanned path: planning them
+        // against a String parameter selects the
+        // RawPointerStringLiteral kind (a C-string pointer),
+        // which collection inserts do not accept — they take the
+        // string value the literal materialises as.
+        if matches!(
+            &call.args[idx],
+            Node::Literal(sla_ast::Literal::StringVal(_))
+        ) {
+            return self.surface_value(call, idx);
+        }
+        let param = self.expr_type(&call.args[idx]).map(|ty| Param {
+            name: String::new(),
+            ty: Box::new(ty),
+            is_borrow: false,
+            is_move: false,
+            fallible_sugar: false,
+            is_var: false,
+        });
+        let mut planned = self.gen_planned_call_arg(&call.args[idx], param.as_ref(), false)?;
+        // EXPAND operands do not carry the `^` capability prefix
+        // (the host rejects it with CapabilityMismatch): the
+        // transfer is expressed by the plain operand plus the
+        // post-EXPAND forget in surface_finish_value — the same
+        // plain-store + consume-mark shape as aggregate element
+        // stores (DEF-ACL).
+        if let Some(raw) = planned.reg.strip_prefix('^') {
+            let raw = raw.to_string();
+            planned.reg = raw.clone();
+            planned.consume_reg = Some(raw);
+        }
+        Ok(planned)
     }
 
     /// Release/forget bookkeeping for one value operand after
@@ -202,7 +249,11 @@ impl<'c> Codegen<'c> {
                         (target.as_str(), name),
                         ("Box", "from_raw")
                     );
-                    let planned = self.surface_value(call, 0)?;
+                    let planned = if consumed {
+                        self.surface_value_consumed(call, 0)?
+                    } else {
+                        self.surface_value(call, 0)?
+                    };
                     let value = planned.reg.clone();
                     let reg = self.new_tmp();
                     self.ins(&format!("EXPAND {macro_name} {reg}, {value}"));
@@ -339,7 +390,7 @@ impl<'c> Codegen<'c> {
                 } else {
                     "GROWVEC_PUSH"
                 };
-                let planned = self.surface_value(call, 1)?;
+                let planned = self.surface_value_consumed(call, 1)?;
                 let value = planned.reg.clone();
                 self.ins(&format!(
                     "EXPAND {macro_name} {recv}, {value}, {}",
@@ -363,7 +414,11 @@ impl<'c> Codegen<'c> {
                     _ => "BTREE_SET_CONTAINS",
                 };
                 let consumed = name == "insert";
-                let planned = self.surface_value(call, 1)?;
+                let planned = if consumed {
+                    self.surface_value_consumed(call, 1)?
+                } else {
+                    self.surface_value(call, 1)?
+                };
                 let value = planned.reg.clone();
                 let reg = self.new_tmp();
                 self.ins(&format!("EXPAND {macro_name} {reg}, {recv}, {value}"));
@@ -375,9 +430,9 @@ impl<'c> Codegen<'c> {
                     return Err(missing_fact());
                 }
                 let (recv, _, _) = self.surface_receiver(call)?;
-                let key = self.surface_value(call, 1)?;
+                let key = self.surface_value_consumed(call, 1)?;
                 let key_reg = key.reg.clone();
-                let value = self.surface_value(call, 2)?;
+                let value = self.surface_value_consumed(call, 2)?;
                 let value_reg = value.reg.clone();
                 let key_ty = self.expr_type(&call.args[1]);
                 let str_key =
@@ -420,7 +475,7 @@ impl<'c> Codegen<'c> {
                     return Err(missing_fact());
                 }
                 let (recv, _, _) = self.surface_receiver(call)?;
-                let planned = self.surface_value(call, 1)?;
+                let planned = self.surface_value_consumed(call, 1)?;
                 let value = planned.reg.clone();
                 self.ins(&format!("EXPAND CELL_SET {recv}, {value}"));
                 self.surface_finish_value(&planned, true)?;

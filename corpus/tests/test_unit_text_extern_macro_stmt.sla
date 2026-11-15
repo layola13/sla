@@ -1,0 +1,48 @@
+@import "sa_std/vec.sa"
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+@import "sa_std/core/slice.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/num.sa"
+
+// RUST-TEXT-EMITTER-1 regression: extern calls and imported-macro
+// calls in statement and expression position. On the pristine
+// text emitter the statement forms hit the genCallStmt fallthrough
+// (`unknown statement call`) and expression-position extern calls
+// fell into the EXPAND catch-all, which the host rejected with
+// error[UndefinedMacro]. The contract borrow prefix on
+// sa_print_bytes must survive (DEF-10).
+
+fn checked_add_slot(start_tick: u64, duration_tick: u64) -> u64 {
+    let add_ok: u64 = 0;
+    let end_tick: u64 = 0;
+    NUM_U64_CHECKED_ADD(add_ok, end_tick, start_tick, duration_tick);
+    if add_ok != 1 {
+        return 0;
+    };
+    return end_tick;
+}
+
+@test "text extern stmt borrow"() {
+    sa_print_bytes(STR_PTR("hi"), 2);
+}
+
+@test "text extern stmt bound ptr"() {
+    let p = STR_PTR("hi");
+    sa_print_bytes(p, 2);
+}
+
+@test "text macro stmt outputs"() {
+    let got = checked_add_slot(5, 7);
+    if got != 12 { panic(1); };
+}
+
+@test "text macro expr slice ptr"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(104);
+    v.push(105);
+    let sl: Slice<u8> = VEC_AS_SLICE(v);
+    let p: ptr = PTR_NULL();
+    SLICE_AS_PTR(p, sl);
+    sa_print_bytes(p, 2);
+}

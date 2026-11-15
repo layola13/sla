@@ -24,13 +24,26 @@ impl<'c> Codegen<'c> {
                 // Vec/GrowVec scalar-element reads
                 // (codegen.zig `genVecIndexRead`): bounds check
                 // with panic(32), then ptr arithmetic + load.
-                // Other target shapes (arrays, slices, non-scalar
-                // elements) stay on the loud path.
+                // Plain arrays and slices go through the
+                // genIndexAddress fallthrough (ptr arithmetic +
+                // slot load, no bounds check in the Zig arm).
                 let target_ty = self.expr_type(&idx.target).ok_or_else(|| {
                     TextError::MissingType {
                         context: "index target type".to_string(),
                     }
                 })?;
+                let peeled = sla_lowering::peel_borrow_pointer_type(&target_ty).clone();
+                if let Type::Array(arr) = &peeled {
+                    let elem = (*arr.elem).clone();
+                    return self.gen_array_index_read(expr, idx, &elem);
+                }
+                if let Type::UserDefined(u) = &peeled {
+                    if u.name == "Slice" {
+                        if let Some(elem) = u.generics.first().cloned() {
+                            return self.gen_slice_index_read(idx, &elem);
+                        }
+                    }
+                }
                 let (tname, elem) = match &target_ty {
                     Type::UserDefined(u) if u.name == "Vec" || u.name == "GrowVec" => {
                         (u.name.clone(), u.generics.first().cloned())
@@ -96,6 +109,33 @@ impl<'c> Codegen<'c> {
                 if vec_needs_release {
                     self.emit_release(&vec_reg)?;
                 }
+                Ok(reg)
+            }
+            Node::BorrowExpr(_) => self.gen_borrow_expr(expr),
+            Node::FieldExpr(_) => self.gen_field_expr(expr),
+            Node::StructLiteral(lit) => {
+                let reg = self.new_tmp();
+                self.gen_struct_literal_into(&reg, lit)?;
+                Ok(reg)
+            }
+            Node::EnumLiteral(lit) => {
+                let reg = self.new_tmp();
+                self.gen_enum_literal_into(&reg, lit)?;
+                Ok(reg)
+            }
+            Node::TupleLiteral(lit) => {
+                let reg = self.new_tmp();
+                self.gen_tuple_literal_into(&reg, lit)?;
+                Ok(reg)
+            }
+            Node::ArrayLiteral(lit) => {
+                let reg = self.new_tmp();
+                self.gen_array_literal_into(&reg, expr, lit)?;
+                Ok(reg)
+            }
+            Node::RepeatArrayLiteral(lit) => {
+                let reg = self.new_tmp();
+                self.gen_repeat_array_literal_into(&reg, expr, lit)?;
                 Ok(reg)
             }
             Node::MoveExpr(inner) => {
@@ -222,6 +262,96 @@ impl<'c> Codegen<'c> {
                 zig_ref: "codegen.zig:12824 (genExpr)",
             }),
         }
+    }
+
+    /// codegen.zig:16815 `genIndexAddress` array fallthrough +
+    /// `genLoadSlotValue` + `finishIndexAddress`: element address
+    /// is base + index * typeSize(elem); scalar elements load,
+    /// pointer-represented aggregate elements ARE the slot
+    /// address. No bounds check in this Zig arm.
+    fn gen_array_index_read(
+        &mut self,
+        expr: &Node,
+        idx: &sla_ast::IndexExpr,
+        elem: &Type,
+    ) -> Result<String> {
+        let base_reg = self.gen_expr(&idx.target)?;
+        let base_needs_release = self.expr_result_reg_needs_release(&idx.target);
+        let index_reg = self.gen_expr(&idx.index)?;
+        let offset_reg = self.new_tmp();
+        self.ins(&format!(
+            "{offset_reg} = mul {index_reg}, {}",
+            crate::codegen::type_size(elem)
+        ));
+        let ptr_reg = self.new_tmp();
+        self.ins(&format!("{ptr_reg} = ptr_add {base_reg}, {offset_reg}"));
+        self.emit_release(&offset_reg)?;
+        if sla_lowering::call_arg_needs_release(&idx.index) {
+            self.emit_release(&index_reg)?;
+        }
+        let value_ty = self.expr_type(expr).unwrap_or_else(|| elem.clone());
+        let reg = if matches!(
+            value_ty,
+            Type::Primitive(_) | Type::Pointer(_) | Type::Borrow(_)
+        ) {
+            let reg = self.new_tmp();
+            self.ins(&format!(
+                "{reg} = load {ptr_reg}+0 as {}",
+                crate::codegen::type_string(&value_ty)
+            ));
+            self.emit_release(&ptr_reg)?;
+            reg
+        } else {
+            ptr_reg
+        };
+        if base_needs_release {
+            self.emit_release(&base_reg)?;
+        }
+        Ok(reg)
+    }
+
+    /// codegen.zig:16815 `genIndexAddress` slice branch: the data
+    /// pointer lives at the slice's `Slice_ptr` field.
+    fn gen_slice_index_read(
+        &mut self,
+        idx: &sla_ast::IndexExpr,
+        elem: &Type,
+    ) -> Result<String> {
+        let slice_reg = self.gen_expr(&idx.target)?;
+        let slice_needs_release = self.expr_result_reg_needs_release(&idx.target);
+        let base_reg = self.new_tmp();
+        self.ins(&format!("{base_reg} = load {slice_reg}+Slice_ptr as ptr"));
+        let index_reg = self.gen_expr(&idx.index)?;
+        let offset_reg = self.new_tmp();
+        self.ins(&format!(
+            "{offset_reg} = mul {index_reg}, {}",
+            crate::codegen::type_size(elem)
+        ));
+        let ptr_reg = self.new_tmp();
+        self.ins(&format!("{ptr_reg} = ptr_add {base_reg}, {offset_reg}"));
+        self.emit_release(&offset_reg)?;
+        if sla_lowering::call_arg_needs_release(&idx.index) {
+            self.emit_release(&index_reg)?;
+        }
+        let reg = if matches!(
+            elem,
+            Type::Primitive(_) | Type::Pointer(_) | Type::Borrow(_)
+        ) {
+            let reg = self.new_tmp();
+            self.ins(&format!(
+                "{reg} = load {ptr_reg}+0 as {}",
+                crate::codegen::type_string(elem)
+            ));
+            self.emit_release(&ptr_reg)?;
+            reg
+        } else {
+            ptr_reg
+        };
+        self.emit_release(&base_reg)?;
+        if slice_needs_release {
+            self.emit_release(&slice_reg)?;
+        }
+        Ok(reg)
     }
 
     fn gen_literal(&mut self, lit: &Literal) -> Result<String> {

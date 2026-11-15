@@ -256,14 +256,29 @@ impl<'c> Codegen<'c> {
         }
 
         match &*let_stmt.value {
-            Node::ClosureLiteral(_)
-            | Node::StructLiteral(_)
-            | Node::EnumLiteral(_)
-            | Node::TupleLiteral(_)
-            | Node::ArrayLiteral(_)
-            | Node::RepeatArrayLiteral(_) => {
+            Node::StructLiteral(lit) => {
+                self.gen_struct_literal_into(&resolved_name, lit)?;
+                return Ok(());
+            }
+            Node::EnumLiteral(lit) => {
+                self.gen_enum_literal_into(&resolved_name, lit)?;
+                return Ok(());
+            }
+            Node::TupleLiteral(lit) => {
+                self.gen_tuple_literal_into(&resolved_name, lit)?;
+                return Ok(());
+            }
+            Node::ArrayLiteral(lit) => {
+                self.gen_array_literal_into(&resolved_name, &let_stmt.value, lit)?;
+                return Ok(());
+            }
+            Node::RepeatArrayLiteral(lit) => {
+                self.gen_repeat_array_literal_into(&resolved_name, &let_stmt.value, lit)?;
+                return Ok(());
+            }
+            Node::ClosureLiteral(_) => {
                 return unsupported(
-                    "literal let materialization (Into emitters deferred)",
+                    "closure literal let materialization",
                     "codegen.zig:10830 (gen*LiteralInto family)",
                 );
             }
