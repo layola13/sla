@@ -29,6 +29,7 @@ mod call_plan;
 mod codegen;
 mod copy;
 mod family_macros;
+mod liveness;
 mod surface;
 mod collect;
 mod expr;

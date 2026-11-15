@@ -76,6 +76,16 @@ pub struct Codegen<'c> {
     pub(crate) loop_continue_labels: Vec<String>,
     pub(crate) loop_body_local_scopes: Vec<Vec<String>>,
     pub(crate) loop_body_block_depths: Vec<usize>,
+
+    // Statement tracking (liveness.rs): the innermost block being
+    // generated, as a raw pointer + len (the AST outlives codegen;
+    // reconstructed only inside the liveness accessors), the index
+    // of the statement being generated, and the REG-BR-6 move-out
+    // claim (assign-statement node key + source name).
+    pub(crate) current_block: Option<(*const Node, usize)>,
+    pub(crate) current_stmt_index: usize,
+    pub(crate) move_out_stmt: Option<usize>,
+    pub(crate) move_out_name: Option<String>,
 }
 
 impl<'c> Codegen<'c> {
@@ -108,6 +118,10 @@ impl<'c> Codegen<'c> {
             loop_continue_labels: Vec::new(),
             loop_body_local_scopes: Vec::new(),
             loop_body_block_depths: Vec::new(),
+            current_block: None,
+            current_stmt_index: 0,
+            move_out_stmt: None,
+            move_out_name: None,
         }
     }
 
@@ -210,6 +224,10 @@ impl<'c> Codegen<'c> {
         self.clear_binding_aliases();
         self.let_binding_aliases.clear();
         self.hoisted_allocs.clear();
+        self.current_block = None;
+        self.current_stmt_index = 0;
+        self.move_out_stmt = None;
+        self.move_out_name = None;
     }
 
     // -- lookups --------------------------------------------------------

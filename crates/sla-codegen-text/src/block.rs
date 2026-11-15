@@ -16,14 +16,17 @@ impl<'c> Codegen<'c> {
     /// codegen.zig:7939 `genBlock`.
     pub(crate) fn gen_block(&mut self, block: &[Node]) -> Result<()> {
         self.enter_block_for_loop_local_tracking();
+        let saved_tracking = self.enter_block_tracking(block);
         let result = self.gen_block_inner(block);
+        self.exit_block_tracking(saved_tracking);
         self.leave_block_for_loop_local_tracking();
         result
     }
 
     fn gen_block_inner(&mut self, block: &[Node]) -> Result<()> {
         let mut scoped_aliases: Vec<String> = Vec::new();
-        for stmt in block {
+        for (index, stmt) in block.iter().enumerate() {
+            self.current_stmt_index = index;
             if let Node::LetStmt(let_stmt) = stmt {
                 if !is_discard_name(&let_stmt.name) {
                     let source_name = let_stmt.name.clone();
@@ -70,15 +73,27 @@ impl<'c> Codegen<'c> {
     /// scoped alias for the block's duration.
     pub(crate) fn gen_scoped_block(&mut self, block: &[Node]) -> Result<()> {
         let mut scoped_var_aliases: Vec<String> = Vec::new();
-        for stmt in block {
+        let saved_tracking = self.enter_block_tracking(block);
+        let result = self.gen_scoped_block_inner(block, &mut scoped_var_aliases);
+        self.exit_block_tracking(saved_tracking);
+        for name in scoped_var_aliases.iter().rev() {
+            self.pop_binding_alias(name);
+        }
+        result
+    }
+
+    fn gen_scoped_block_inner(
+        &mut self,
+        block: &[Node],
+        scoped_var_aliases: &mut Vec<String>,
+    ) -> Result<()> {
+        for (index, stmt) in block.iter().enumerate() {
+            self.current_stmt_index = index;
             if let Node::VarStmt(v) = stmt {
                 self.push_binding_alias(&v.name);
                 scoped_var_aliases.push(v.name.clone());
             }
             self.gen_stmt(stmt)?;
-        }
-        for name in scoped_var_aliases.iter().rev() {
-            self.pop_binding_alias(name);
         }
         Ok(())
     }
@@ -92,11 +107,24 @@ impl<'c> Codegen<'c> {
         target_ptr: &str,
         target_ty: &Type,
     ) -> Result<()> {
+        let saved_tracking = self.enter_block_tracking(block);
+        let result = self.gen_block_tail_value_store_inner(block, target_ptr, target_ty);
+        self.exit_block_tracking(saved_tracking);
+        result
+    }
+
+    fn gen_block_tail_value_store_inner(
+        &mut self,
+        block: &[Node],
+        target_ptr: &str,
+        target_ty: &Type,
+    ) -> Result<()> {
         if block.is_empty() {
             return unsupported("empty block tail value store", "codegen.zig:8069");
         }
         let split = block.len() - 1;
-        for stmt in &block[..split] {
+        for (index, stmt) in block[..split].iter().enumerate() {
+            self.current_stmt_index = index;
             self.gen_stmt(stmt)?;
         }
         let last = &block[split];
@@ -104,6 +132,7 @@ impl<'c> Codegen<'c> {
             Node::ExprStmt(expr) => expr,
             _ => return unsupported("block tail is not an expr statement", "codegen.zig:8069"),
         };
+        self.current_stmt_index = split;
         let value_reg = self.gen_expr(value_expr)?;
         let value_ty = self.require_expr_type(value_expr, "block tail value")?;
 
@@ -143,11 +172,23 @@ impl<'c> Codegen<'c> {
         block: &[Node],
         target: &str,
     ) -> Result<()> {
+        let saved_tracking = self.enter_block_tracking(block);
+        let result = self.gen_block_tail_value_into_inner(block, target);
+        self.exit_block_tracking(saved_tracking);
+        result
+    }
+
+    fn gen_block_tail_value_into_inner(
+        &mut self,
+        block: &[Node],
+        target: &str,
+    ) -> Result<()> {
         if block.is_empty() {
             return unsupported("empty block tail value into", "codegen.zig:8039");
         }
         let split = block.len() - 1;
-        for stmt in &block[..split] {
+        for (index, stmt) in block[..split].iter().enumerate() {
+            self.current_stmt_index = index;
             self.gen_stmt(stmt)?;
         }
         let last = &block[split];
@@ -155,6 +196,7 @@ impl<'c> Codegen<'c> {
             Node::ExprStmt(expr) => expr,
             _ => return unsupported("block tail is not an expr statement", "codegen.zig:8039"),
         };
+        self.current_stmt_index = split;
         let value_reg = self.gen_expr(value_expr)?;
         let value_ty = self.require_expr_type(value_expr, "block tail value")?;
         if matches!(&**value_expr, Node::Identifier(_)) && matches!(value_ty, Type::Primitive(_)) {

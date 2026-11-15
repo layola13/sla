@@ -606,7 +606,28 @@ impl<'c> Codegen<'c> {
         };
 
         let mut renamed_from_source = false;
-        if self.assigned_value_slots.contains(&resolved_name) {
+        // Zig REG-BR-6 move-out (codegen.zig ~15558): the
+        // right-hand tail call claimed this target (it consumed the
+        // binding itself), so the slot's old value no longer exists.
+        // Storing the result through the consumed slot register
+        // trips the SA referee (UseAfterMove); rebind the register
+        // instead, which is the form the referee accepts and branch
+        // merging expects for a live target. (The generalized
+        // rebind form is not ported; only the self-assign claim.)
+        let move_out_rebind = self.assign_has_self_move_out_claim(stmt, &target_name)
+            && (self.assigned_value_slots.contains(&resolved_name)
+                || self.addressable_bindings.contains(&target_name)
+                || self.stack_alloc_bindings.contains(&resolved_name));
+        if move_out_rebind {
+            if matches!(target_ty, Some(Type::Primitive(_)))
+                && !matches!(&*assign.value, Node::MoveExpr(_))
+            {
+                let ty = target_ty.as_ref().unwrap();
+                self.emit_primitive_copy(&resolved_name, &stored_val, ty)?;
+            } else {
+                self.ins(&format!("{resolved_name} = {stored_val}"));
+            }
+        } else if self.assigned_value_slots.contains(&resolved_name) {
             let ty = target_ty
                 .as_ref()
                 .ok_or_else(|| TextError::MissingType {

@@ -58,6 +58,27 @@ impl<'c> Codegen<'c> {
                 is_var: false,
             });
             let planned = self.gen_planned_call_arg(arg, param.as_ref(), false)?;
+            let mut planned = planned;
+            // Zig `appendExternLoweredCallArgCleanups`
+            // (codegen.zig:3913 in the box tree): for an extern
+            // is_move parameter the call itself consumes the
+            // argument — force release_after_call=false and
+            // consume the display register, so the cleanup phase
+            // marks it consumed instead of releasing the
+            // already-moved register (the old plan released it and
+            // the next `!reg` trapped UseAfterMove:
+            // test_unit_fallible_result_direct,
+            // test_unit_reg1_dns_client_a). When the planner
+            // already moved the argument (its reg carries `^` and
+            // consume_reg is set) the plan is left alone.
+            if view.map(|p| p.is_move).unwrap_or(false)
+                && !planned.reg.starts_with('^')
+                && !planned.reg.starts_with('&')
+            {
+                planned.release_after_call = false;
+                planned.release_reg = None;
+                planned.consume_reg = Some(format!("^{}", planned.reg));
+            }
             let reg = match view {
                 Some(p) if p.is_raw => Self::raw_prefixed_arg(&planned.reg),
                 Some(p) if p.is_borrow => Self::prefix_cap(&planned.reg, '&'),
@@ -73,12 +94,18 @@ impl<'c> Codegen<'c> {
     /// codegen.zig:3342 `genExternPayloadCall`. Before this arm
     /// existed, expression-position extern calls fell into the
     /// EXPAND catch-all below and the host rejected them with
-    /// error[UndefinedMacro] (14 corpus files).
+    /// error[UndefinedMacro] (14 corpus files). Fallible externs
+    /// (`T!` returns) go through `gen_fallible_extern_result_call`
+    /// instead: the runtime returns a `Fallible(T)` record pointer
+    /// (status i32 at +0, payload after), not a `Result` record.
     pub(crate) fn gen_extern_call(
         &mut self,
         call: &sla_ast::CallExpr,
         sig: &ExternSigView,
     ) -> Result<String> {
+        if sig.fallible {
+            return self.gen_fallible_extern_result_call(call, sig);
+        }
         let (display, planned_args) = self.plan_extern_call_args(call, sig)?;
         let result = self.new_tmp();
         let lowered = self.lowered_func_symbol(&call.func_name);
@@ -87,6 +114,74 @@ impl<'c> Codegen<'c> {
             display.join(", ")
         ));
         self.emit_lowered_call_arg_cleanups(&planned_args, Some(&call.func_name))?;
+        Ok(result)
+    }
+
+    /// codegen.zig:3255 `genFallibleExternResultCall` (A_min
+    /// fallible `T!` batch): a fallible extern call materializes
+    /// its cell into a `Result<T, i32>` value. The status word at
+    /// offset 0 selects the variant; the payload is loaded only on
+    /// the Ok arm (on the Err arm it is not a value), and the
+    /// status itself becomes the Err payload. Without this arm the
+    /// raw `Fallible(T)` pointer was bound as a `Result` record
+    /// and the match read its payload past the end of the struct
+    /// (test_unit_fallible_result_direct panicked 45141 with a
+    /// garbage Ok payload; test_unit_reg1_dns_client_a trapped
+    /// StackEscape the same way). Branch/temp discipline mirrors
+    /// File::open's RESULT_NEW_OK / RESULT_NEW_ERR emission.
+    fn gen_fallible_extern_result_call(
+        &mut self,
+        call: &sla_ast::CallExpr,
+        sig: &ExternSigView,
+    ) -> Result<String> {
+        if !Self::abi_fallible_payload_supported(&sig.ret_abi) {
+            return crate::unsupported(
+                "fallible extern payload outside the scalar set",
+                "lowering_rules.zig:1505 (abiFalliblePayloadSupported)",
+            );
+        }
+        let (display, planned_args) = self.plan_extern_call_args(call, sig)?;
+        let fallible_reg = self.new_tmp();
+        let result = self.new_tmp();
+        let lowered = self.lowered_func_symbol(&call.func_name);
+        self.ins(&format!(
+            "{fallible_reg} = call @{lowered}({})",
+            display.join(", ")
+        ));
+        self.emit_lowered_call_arg_cleanups(&planned_args, Some(&call.func_name))?;
+        let status_reg = self.new_tmp();
+        self.ins(&format!(
+            "{status_reg} = load {fallible_reg}+0 as i32"
+        ));
+        let ok_reg = self.new_tmp();
+        self.ins(&format!("{ok_reg} = eq {status_reg}, 0"));
+        let ok_label = self.new_label("L_FALLIBLE_OK");
+        let err_label = self.new_label("L_FALLIBLE_ERR");
+        let end_label = self.new_label("L_FALLIBLE_END");
+        self.w(&format!(
+            "    br {ok_reg} -> {ok_label}, {err_label}\n\n"
+        ));
+        self.wl(&format!("{ok_label}:"));
+        let payload_reg = self.new_tmp();
+        self.ins(&format!(
+            "{payload_reg} = load {fallible_reg}+{} as {}",
+            Self::abi_fallible_payload_offset(&sig.ret_abi),
+            Self::abi_raw_payload_type_string(&sig.ret_abi),
+        ));
+        self.ins(&format!(
+            "EXPAND RESULT_NEW_OK {result}, {payload_reg}"
+        ));
+        self.w(&format!("    !{status_reg}\n    !{payload_reg}\n"));
+        self.w(&format!("    jmp {end_label}\n\n"));
+        self.wl(&format!("{err_label}:"));
+        self.ins(&format!(
+            "EXPAND RESULT_NEW_ERR {result}, {status_reg}"
+        ));
+        self.w(&format!("    !{status_reg}\n"));
+        self.w(&format!("    jmp {end_label}\n\n"));
+        self.wl(&format!("{end_label}:"));
+        self.emit_release(&ok_reg)?;
+        self.emit_release(&fallible_reg)?;
         Ok(result)
     }
 
@@ -102,6 +197,17 @@ impl<'c> Codegen<'c> {
         call: &sla_ast::CallExpr,
         sig: &ExternSigView,
     ) -> Result<()> {
+        // A fallible extern in statement position still
+        // materializes its Result cell (Zig genCallStmt skips the
+        // DEF-10 void block for return_fallible); the discarded
+        // Result is released like any discarded surface value.
+        if sig.fallible {
+            let reg = self.gen_extern_call(call, sig)?;
+            if self.expr_result_reg_needs_release(expr) {
+                self.emit_release(&reg)?;
+            }
+            return Ok(());
+        }
         let ret = sig
             .ret_abi
             .trim()
@@ -122,7 +228,70 @@ impl<'c> Codegen<'c> {
         Ok(())
     }
 
-    /// One imported-macro operand (Zig `genImportedMacroArg`,
+    /// lowering_rules.zig:3985 `abiFalliblePayloadOffset`: offset of
+/// the payload word inside the runtime `Fallible(T)` record
+/// (`status: i32` at +0, payload aligned after it: 8-byte payloads
+/// at +8, 4-byte payloads at +4).
+fn abi_fallible_payload_offset(ret_abi: &str) -> usize {
+    let name = Self::abi_fallible_payload_name(ret_abi);
+    let payload_align: usize = match name {
+        "ptr" | "i64" | "u64" | "isize" | "usize" | "int" | "f64" | "float" => 8,
+        _ => 4,
+    };
+    (4 + payload_align - 1) & !(payload_align - 1)
+}
+
+/// lowering_rules.zig:1505 `abiRawPayloadTypeString`: the SA load
+/// type for a fallible payload spelling. Anything outside the
+/// scalar set maps to `ptr` here; callers must gate on
+/// `abi_fallible_payload_supported` first.
+fn abi_raw_payload_type_string(ret_abi: &str) -> &'static str {
+    match Self::abi_fallible_payload_name(ret_abi) {
+        "ptr" => "ptr",
+        "bool" => "u8",
+        "i8" => "i8",
+        "i16" => "i16",
+        "i32" => "i32",
+        "i64" | "int" | "isize" => "i64",
+        "u8" => "u8",
+        "u16" => "u16",
+        "u32" => "u32",
+        "u64" | "usize" => "u64",
+        "f32" => "f32",
+        "f64" | "float" => "f64",
+        _ => "ptr",
+    }
+}
+
+/// lowering_rules.zig `abiFalliblePayloadSupported`: the payload
+/// scalar set the fallible ABI can carry. Anything else must be
+/// rejected loudly at the contract boundary instead of being
+/// silently treated as pointer-width.
+fn abi_fallible_payload_supported(ret_abi: &str) -> bool {
+    matches!(
+        Self::abi_fallible_payload_name(ret_abi),
+        "ptr" | "bool"
+            | "i8" | "i16" | "i32" | "i64" | "int" | "isize"
+            | "u8" | "u16" | "u32" | "u64" | "usize"
+            | "f32" | "f64" | "float"
+    )
+}
+
+/// Shared spelling normalization for the fallible helpers: strip
+/// a leading capability marker (`&`/`^`/`*`), surrounding
+/// whitespace, and a trailing `!`.
+fn abi_fallible_payload_name(ret_abi: &str) -> &str {
+    let mut name = ret_abi.trim();
+    if let Some(rest) = name.strip_prefix(['&', '^', '*']) {
+        name = rest.trim();
+    }
+    if let Some(rest) = name.strip_suffix('!') {
+        name = rest.trim();
+    }
+    name
+}
+
+/// One imported-macro operand (Zig `genImportedMacroArg`,
     /// core subset): address-slot operands take the argument's
     /// address — a stack-slot binding passes the slot itself, any
     /// other identifier its `&name`; borrowed operands take

@@ -169,15 +169,45 @@ impl<'c> Codegen<'c> {
                     }
                 }
                 if plan.transfers_ownership {
-                    // The Vec-clone preservation arm (identifier must
-                    // stay live for a later use) needs the collection
-                    // family; plain transfers consume directly. The
-                    // consume_reg carries the ^-prefixed register
-                    // (as in the Zig): its forget is a bookkeeping
-                    // mark only, since the call operand's own `^`
-                    // already consumed the value — a raw consume_reg
-                    // here emitted a second `^reg` line and the host
-                    // rejected it with UseAfterMove.
+                    // Zig REG-BR-6 self-assignment move-out
+                    // (codegen.zig ~12979): when this identifier
+                    // argument IS the assignment target in the tail
+                    // call chain, the call consumes the binding
+                    // directly and the assignment rebinds the slot
+                    // (gen_assign_stmt) — no clone. Otherwise, when
+                    // the identifier must stay live for a later use
+                    // (liveness.rs), clone the Vec/GrowVec and move
+                    // the clone; the source binding stays live and
+                    // owning. The consume_reg carries the ^-prefixed
+                    // register (as in the Zig): its forget is a
+                    // bookkeeping mark only, since the call operand's
+                    // own `^` already consumed the value — a raw
+                    // consume_reg here emitted a second `^reg` line
+                    // and the host rejected it with UseAfterMove.
+                    if let Node::Identifier(name) = arg {
+                        if self.is_self_assign_move_out_arg(arg) {
+                            self.claim_self_assign_move_out(arg);
+                        } else if self.identifier_must_stay_live_for_later_use(name) {
+                            if let Some(ty) = self.expr_type(arg) {
+                                if let Some((is_grow, elem)) =
+                                    crate::place::vec_like_element_type(&ty)
+                                {
+                                    let cloned = if is_grow {
+                                        self.gen_growvec_clone_value(&raw_reg, &elem)
+                                    } else {
+                                        self.gen_vec_clone_value(&raw_reg, &elem)
+                                    };
+                                    let mv = format!("^{cloned}");
+                                    return Ok(LoweredCallArg {
+                                        reg: mv.clone(),
+                                        release_after_call: false,
+                                        release_reg: None,
+                                        consume_reg: Some(mv),
+                                    });
+                                }
+                            }
+                        }
+                    }
                     let mv = format!("^{raw_reg}");
                     return Ok(LoweredCallArg {
                         reg: mv.clone(),
