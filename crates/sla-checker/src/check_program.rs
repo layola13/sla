@@ -388,6 +388,8 @@ impl Checker {
                     Some(t) => (**t).clone(),
                     None => val_ty.clone(),
                 };
+                // DEF-RUST-STRPTR-CHECKER: top-level const refinement (Zig :6773).
+                let val_ty = self.refine_string_literal_for_slot(&c.value, val_ty, &declared_ty);
                 if c.ty.is_some() {
                     if let (Type::Array(_), Type::Array(_)) = (&declared_ty, &val_ty) {
                         self.expr_types
@@ -526,6 +528,8 @@ impl Checker {
                 "function tail expression has no recorded type",
             ));
         };
+        // DEF-RUST-STRPTR-CHECKER: tail-site refinement (Zig :7239).
+        let ty = self.refine_string_literal_for_slot(inner, ty, ret_ty);
         if value_assignable_to(ret_ty, &ty) {
             Ok(())
         } else {

@@ -6,9 +6,11 @@ use sla_ast::exprs::Literal;
 use sla_ast::node::Node;
 use sla_ast::types::{Primitive, Type, UserDefined};
 
+use crate::checker::Checker;
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::types_util::{
-    btree_map_types, hash_map_types, is_numeric_type, is_string_type, type_desc, types_equal,
+    btree_map_types, hash_map_types, is_numeric_type, is_string_type, node_key_of, type_desc,
+    types_equal,
 };
 
 /// Deref peeling: pointers and borrows, plus the smart-pointer /
@@ -93,6 +95,33 @@ pub fn refine_string_literal_key(arg: &Node, arg_ty: Type, slot_ty: &Type) -> Ty
         })
     } else {
         arg_ty
+    }
+}
+
+impl Checker {
+    /// DEF-RUST-STRPTR-CHECKER: mirror of Zig
+    /// `refineStringLiteralForSlot` (type_checker.zig:5444), the
+    /// value-flow companion to `refineStringLiteralArg`. When a
+    /// string literal flows into a value slot (let / const /
+    /// assign / return / tail) whose slot type is String or still
+    /// inferred, the literal denotes an owned String: refine its
+    /// type and RECORD the refined type on the node, so codegen
+    /// materializes an owned String handle instead of the
+    /// literal's Slice view. Without this the standalone literal
+    /// type (raw_ptr) met the slot check head-on and every
+    /// `let s: String = "hello"` was a TypeMismatch, where Zig
+    /// accepts and materializes a StringBuf.
+    pub fn refine_string_literal_for_slot(
+        &mut self,
+        node: &Node,
+        ty: Type,
+        slot_ty: &Type,
+    ) -> Type {
+        let refined = refine_string_literal_key(node, ty.clone(), slot_ty);
+        if refined != ty {
+            self.expr_types.insert(node_key_of(node), refined.clone());
+        }
+        refined
     }
 }
 

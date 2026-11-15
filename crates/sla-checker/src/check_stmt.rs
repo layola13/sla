@@ -129,6 +129,10 @@ impl Checker {
         is_const: bool,
     ) -> CheckResult<()> {
         let val_ty = self.check_expr(value)?;
+        // DEF-RUST-STRPTR-CHECKER: refineStringLiteralForSlot at
+        // the let / fn-const sites (Zig :7486 / :7620; see helper).
+        let slot_ty = declared.cloned().unwrap_or_else(|| val_ty.clone());
+        let val_ty = self.refine_string_literal_for_slot(value, val_ty, &slot_ty);
         // Slice coercion (Zig let arm only — the const arm has NO
         // slice path): a declared `Slice<T>` accepts a borrow of an
         // array of T, defines the binding, and returns WITHOUT the
@@ -437,6 +441,8 @@ impl Checker {
             // the target's own registered borrows.
             self.check_assign_root_free(name)?;
             let val_ty = self.check_expr(value)?;
+            // DEF-RUST-STRPTR-CHECKER: assign-site refinement (Zig :7693).
+            let val_ty = self.refine_string_literal_for_slot(value, val_ty, &target_ty);
             if !value_assignable_to(&target_ty, &val_ty) {
                 return Err(Diagnostic::new(
                     ErrorKind::TypeMismatch,
@@ -473,6 +479,8 @@ impl Checker {
         }
         let target_ty = self.check_expr(target)?;
         let val_ty = self.check_expr(value)?;
+        // DEF-RUST-STRPTR-CHECKER: assign-site refinement (Zig :7693).
+        let val_ty = self.refine_string_literal_for_slot(value, val_ty, &target_ty);
         if !value_assignable_to(&target_ty, &val_ty) {
             return Err(Diagnostic::new(
                 ErrorKind::TypeMismatch,
@@ -504,6 +512,8 @@ impl Checker {
         }
         if let Some(v) = value {
             let val_ty = self.check_expr(v)?;
+            // DEF-RUST-STRPTR-CHECKER: return-site refinement (Zig :7807).
+            let val_ty = self.refine_string_literal_for_slot(v, val_ty, &ret_ty);
             let ret_is_void = matches!(ret_ty, Type::Primitive(Primitive::VoidType));
             if ret_is_void && !matches!(val_ty, Type::Primitive(Primitive::VoidType)) {
                 return Err(Diagnostic::new(

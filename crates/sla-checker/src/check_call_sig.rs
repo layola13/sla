@@ -7,10 +7,10 @@ use crate::checker::{Checker, FuncSig};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::rules::MacroParamConsumption;
 use crate::types_util::{
-    raw_ptr_ty, type_desc, types_equal, types_structurally_equal, value_assignable_to,
-    void_ty,
+    is_string_type, raw_ptr_ty, type_desc, types_equal, types_structurally_equal,
+    value_assignable_to, void_ty,
 };
-use sla_ast::exprs::CallExpr;
+use sla_ast::exprs::{CallExpr, Literal};
 use sla_ast::node::Node;
 use sla_ast::types::Type;
 
@@ -181,6 +181,15 @@ impl Checker {
                 a.len == b.len && types_structurally_equal(&a.elem, &b.elem)
             } else {
                 types_equal(&param.ty, &arg_ty)
+                    // DEF-RUST-STRPTR-CHECKER: Zig's
+                    // plainCallArgMatches string-literal arm
+                    // (type_checker.zig:4634) — the method path
+                    // (check_method.rs plain_call_arg_matches) has
+                    // always had it; the plain-call path here never
+                    // consulted it, so a literal passed to a String
+                    // parameter was a TypeMismatch on this path only.
+                    || (matches!(arg, Node::Literal(Literal::StringVal(_)))
+                        && is_string_type(&param.ty))
             };
             if !matched {
                 return Err(Diagnostic::new(

@@ -274,3 +274,97 @@ fn r1_hashmap_insert_wrong_value_rejected() {
         "fn main() -> i32 {\n    let m = HashMap::new();\n    m.insert(1, 40);\n    m.insert(2, \"text\");\n    return 0;\n}\n",
     );
 }
+
+// -- DEF-RUST-STRPTR-CHECKER: string-literal value-flow slots --------
+//
+// Zig refines a string literal flowing into a String slot
+// (refineStringLiteralForSlot, type_checker.zig:5444) at the let,
+// const, assign, return and tail sites, and accepts a literal
+// against a String parameter (plainCallArgMatches, :4634). The
+// Rust checker had the refinement only for HashMap key slots, so
+// every shape below failed pre-fix with "expected String, actual
+// raw_ptr"; the negative pins keep the non-String slots closed.
+
+#[test]
+fn strptr_let_bound_string_ok() {
+    assert_ok("fn f() -> String {\n    let s: String = \"hello\";\n    return s;\n}\n");
+}
+
+#[test]
+fn strptr_fn_const_string_ok() {
+    assert_ok("fn f() -> String {\n    const s: String = \"hello\";\n    return s;\n}\n");
+}
+
+#[test]
+fn strptr_top_level_const_string_ok() {
+    assert_ok("const S: String = \"hello\";\nfn f() -> String {\n    return S;\n}\n");
+}
+
+#[test]
+fn strptr_assign_param_string_ok() {
+    assert_ok("fn g(s: String) -> String {\n    s = \"world\";\n    return s;\n}\n");
+}
+
+#[test]
+fn strptr_return_literal_ok() {
+    assert_ok("fn f() -> String {\n    return \"hello\";\n}\n");
+}
+
+#[test]
+fn strptr_tail_literal_ok() {
+    assert_ok("fn f() -> String {\n    \"hello\"\n}\n");
+}
+
+#[test]
+fn strptr_call_arg_literal_ok() {
+    assert_ok(
+        "fn take(s: String) -> u64 {\n    return 0;\n}\nfn f() -> u64 {\n    return take(\"hello\");\n}\n",
+    );
+}
+
+/// The registered defect shape itself: STR_PTR over a let-bound
+/// String (the literal form STR_PTR("hello") always worked).
+#[test]
+fn strptr_macro_over_let_bound_string_ok() {
+    let source = "fn main() -> i32 {\n    let s: String = \"hello\";\n    let p = STR_PTR(s);\n    return 0;\n}\n";
+    let root = sla_parser::parse_program(source).expect("source must parse");
+    let Node::Program(program) = &root else {
+        panic!("parser root must be a Program node");
+    };
+    let mut checker = Checker::new();
+    checker.register_imported_macro(
+        "STR_PTR",
+        ImportedMacroInfo {
+            arity: 2,
+            leading_outputs: 1,
+            import_path: Some("sa_std/string.sa".to_string()),
+            borrowed_arg_mask: 0,
+            address_slot_arg_mask: 0,
+            direct_callees: Vec::new(),
+        },
+    );
+    let result = checker.check_program(program);
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+}
+
+#[test]
+fn strptr_let_wrong_slot_type_rejected() {
+    assert_err("fn f() -> u64 {\n    let n: u64 = \"hello\";\n    return n;\n}\n");
+}
+
+#[test]
+fn strptr_return_int_for_string_rejected() {
+    assert_err("fn f() -> String {\n    return 42;\n}\n");
+}
+
+#[test]
+fn strptr_call_arg_wrong_type_rejected() {
+    assert_err(
+        "fn take(n: u64) -> u64 {\n    return n;\n}\nfn f() -> u64 {\n    return take(\"hello\");\n}\n",
+    );
+}
+
+#[test]
+fn strptr_assign_wrong_type_rejected() {
+    assert_err("fn g(s: String) -> String {\n    s = 42;\n    return s;\n}\n");
+}
