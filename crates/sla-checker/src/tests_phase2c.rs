@@ -346,6 +346,7 @@ fn imported_macro_expression_output_and_arity() {
             import_path: None,
             borrowed_arg_mask: 0,
             address_slot_arg_mask: 0,
+            assigned_output_mask: 0,
             direct_callees: vec![],
         },
     );
@@ -372,6 +373,7 @@ fn imported_macro_expression_output_and_arity() {
             import_path: None,
             borrowed_arg_mask: 0,
             address_slot_arg_mask: 0,
+            assigned_output_mask: 0,
             direct_callees: vec![],
         },
     );
@@ -398,6 +400,7 @@ fn imported_macro_expression_output_and_arity() {
             import_path: None,
             borrowed_arg_mask: 0,
             address_slot_arg_mask: 0,
+            assigned_output_mask: 0,
             direct_callees: vec![],
         },
     );

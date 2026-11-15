@@ -10,6 +10,21 @@ use crate::call::{abi_type_from_spelling, LoweredCallArg};
 use crate::codegen::Codegen;
 use crate::{unsupported, Result};
 
+/// Zig `AggregateOutputWriteback` (codegen.zig:14084, dns1006):
+/// how an assigned-output aggregate held in a fresh expansion
+/// temp is written back into the caller's binding after the
+/// macro expansion.
+enum AggregateOutputWriteback {
+    /// Plain register binding: release the old value, rebind.
+    Rebind(String),
+    /// `assigned_value_slots` binding: the register is a slot
+    /// pointer; store the value pointer back at +0.
+    StorePtrBack(String),
+    /// `stack_alloc_bindings` binding: memcpy the value into the
+    /// stack slot.
+    CopyIntoSlot(String),
+}
+
 impl<'c> Codegen<'c> {
     /// Prefix a display register with a capability marker unless
     /// it already carries one (Zig `abiPrefixedArg`).
@@ -444,10 +459,58 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
             );
         }
         let mut operands: Vec<String> = Vec::new();
+        let mut writebacks: Vec<(AggregateOutputWriteback, Type, String)> = Vec::new();
         for (i, arg) in call.args.iter().enumerate() {
             if i < view.leading_outputs {
                 match arg {
-                    Node::Identifier(name) => operands.push(self.resolve_binding_name(name)),
+                    Node::Identifier(name) => {
+                        let resolved = self.resolve_binding_name(name);
+                        // dns1006 (codegen.zig:14084): when the
+                        // macro body's first reference to a leading
+                        // output parameter is its assignment and the
+                        // caller's binding is an aggregate
+                        // (user-defined) local passed through as its
+                        // own register, the expansion's assignment
+                        // would redefine that live register -- an
+                        // alloc/call-slot storage pointer -- and the
+                        // SA referee traps RegisterRedefinition
+                        // (1006), e.g. SLICE_GET(rec, sl, i) on a
+                        // DnsRecord local in dns_records_of_type.
+                        // Scalar outputs are plain value registers
+                        // and the expansion may assign them directly.
+                        // Pass a fresh temp to the expansion instead
+                        // and write the result back into the binding
+                        // afterwards, mirroring SAB's output_bind
+                        // rebind. The lowered reg IS the resolved
+                        // binding here (leading outputs bypass
+                        // gen_imported_macro_arg), so Zig's
+                        // `lowered_arg.reg == resolved` condition
+                        // holds by construction. The store-back
+                        // block Zig runs before the writebacks
+                        // (codegen.zig:14196) is vacuous here for
+                        // the same reason: a leading output never
+                        // takes the load-temp path, so its passed
+                        // reg always equals its slot.
+                        let arg_ty = self.expr_type(arg);
+                        if view.call_arg_is_assigned_output(i)
+                            && matches!(&arg_ty, Some(Type::UserDefined(_)))
+                        {
+                            let arg_ty = arg_ty.expect("assigned-output aggregate arg type");
+                            let temp = self.new_tmp();
+                            let writeback =
+                                if self.assigned_value_slots.contains(&resolved) {
+                                    AggregateOutputWriteback::StorePtrBack(resolved)
+                                } else if self.stack_alloc_bindings.contains(&resolved) {
+                                    AggregateOutputWriteback::CopyIntoSlot(resolved)
+                                } else {
+                                    AggregateOutputWriteback::Rebind(resolved)
+                                };
+                            writebacks.push((writeback, arg_ty, temp.clone()));
+                            operands.push(temp);
+                        } else {
+                            operands.push(resolved);
+                        }
+                    }
                     _ => {
                         return unsupported(
                             "imported macro statement output argument",
@@ -464,6 +527,59 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
             call.func_name,
             operands.join(", ")
         ));
+        // Write back assigned-output aggregate results held in
+        // temps (dns1006): the expansion assigned the temp, so
+        // move its value into the caller's binding by the
+        // binding's storage class.
+        for (writeback, arg_ty, temp) in &writebacks {
+            // REG3-DEF-2: writebacks exist only for assigned
+            // outputs, and an assigned output takes ownership of
+            // whatever value the expansion left in the temp. When
+            // that value is an element-load result (SLICE_GET on
+            // a Vec<Struct>), the temp holds the parent's element
+            // pointer itself -- an alias, not an owned value --
+            // and handing it to the binding makes the binding's
+            // drop free the parent's buffers. Clone-on-extract:
+            // when the type has deep-clone machinery, the binding
+            // takes a fresh clone and the raw temp is retired
+            // without a drop below, mirroring
+            // cloneBorrowedHandleFieldValue for field reads.
+            let value = match self.gen_deep_clone_value(temp, arg_ty)? {
+                Some(cloned) => cloned,
+                None => temp.clone(),
+            };
+            match writeback {
+                AggregateOutputWriteback::Rebind(name) => {
+                    self.emit_release(name)?;
+                    self.ins(&format!("{name} = {value}"));
+                    self.consumed_bindings.remove(name);
+                }
+                AggregateOutputWriteback::StorePtrBack(name) => {
+                    self.ins(&format!(
+                        "store {name}+0, {value} as {}",
+                        crate::codegen::type_string(arg_ty)
+                    ));
+                    self.emit_release(&value)?;
+                }
+                AggregateOutputWriteback::CopyIntoSlot(name) => {
+                    let size_reg = self.new_tmp();
+                    self.emit_int_const(&size_reg, crate::codegen::type_size(arg_ty) as i64);
+                    self.ins(&format!(
+                        "call @sa_mem_copy(&{name}, &{value}, {size_reg})"
+                    ));
+                    self.emit_release(&size_reg)?;
+                    self.emit_release(&value)?;
+                }
+            }
+            if value != *temp {
+                // REG3-DEF-2: the raw expansion temp's value
+                // stayed with its original owner (e.g. the parent
+                // Vec's element); the binding took the clone
+                // above, so retire the temp register without
+                // dropping it.
+                self.emit_release(temp)?;
+            }
+        }
         Ok(())
     }
 

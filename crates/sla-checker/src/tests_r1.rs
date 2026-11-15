@@ -219,6 +219,7 @@ fn r1_imported_macro_registered_resolves() {
             import_path: Some("sa_std/string.sa".to_string()),
             borrowed_arg_mask: 0,
             address_slot_arg_mask: 0,
+            assigned_output_mask: 0,
             direct_callees: Vec::new(),
         },
     );
@@ -340,6 +341,7 @@ fn strptr_macro_over_let_bound_string_ok() {
             import_path: Some("sa_std/string.sa".to_string()),
             borrowed_arg_mask: 0,
             address_slot_arg_mask: 0,
+            assigned_output_mask: 0,
             direct_callees: Vec::new(),
         },
     );

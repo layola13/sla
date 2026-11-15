@@ -174,6 +174,14 @@ pub struct ImportedMacroInfo {
     pub import_path: Option<String>,
     pub borrowed_arg_mask: u64,
     pub address_slot_arg_mask: u64,
+    /// Zig `ImportedMacroCallPlan.assigned_output_mask`: bit `i`
+    /// set when the macro body's first reference to parameter `i`
+    /// is its assignment. The text backend's dns1006 port
+    /// (extern_macro.rs) keys the aggregate-output temp +
+    /// writeback on this mask; without it an assigned-output
+    /// aggregate local is passed straight through and the
+    /// expansion's assignment traps RegisterRedefinition (1006).
+    pub assigned_output_mask: u64,
     pub direct_callees: Vec<String>,
 }
 

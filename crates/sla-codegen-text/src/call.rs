@@ -146,6 +146,40 @@ impl<'c> Codegen<'c> {
     ) -> Result<LoweredCallArg> {
         match plan.kind {
             CallArgMaterializationKind::Value => {
+                // R1b (stage-5a resume): Zig BM-D2 (codegen.zig
+                // ~21843/21923/22009, method / known-function /
+                // associated-target call paths): a string literal for
+                // a String-typed parameter materializes as an owned
+                // String handle, not the stack Slice view. A by-value
+                // String parameter consumes its argument (`^s`
+                // contract): the owned handle is MOVED in like a
+                // format() result. Passing the slice plain traps
+                // CapabilityMismatch; moving the slice traps
+                // StackEscape ("stack allocation cannot be passed by
+                // move"). A borrow parameter takes the owned handle
+                // plain and releases it after the call.
+                if let Node::Literal(Literal::StringVal(text)) = arg {
+                    if let Some(p) = param {
+                        if crate::codegen::is_format_string_type(&p.ty) {
+                            let owned = self.gen_owned_string_literal(text)?;
+                            if p.is_borrow {
+                                return Ok(LoweredCallArg {
+                                    reg: owned,
+                                    release_after_call: true,
+                                    release_reg: None,
+                                    consume_reg: None,
+                                });
+                            }
+                            let mv = format!("^{owned}");
+                            return Ok(LoweredCallArg {
+                                reg: mv.clone(),
+                                release_after_call: false,
+                                release_reg: None,
+                                consume_reg: Some(mv),
+                            });
+                        }
+                    }
+                }
                 let raw_reg = self.gen_expr(arg)?;
                 // codegen.zig Value arm head: `&ident` of an
                 // addressable binding is passed as `&` of its
@@ -651,18 +685,25 @@ impl<'c> Codegen<'c> {
     /// Stage 4: the `str_eq` checker builtin (check_builtin.rs
     /// venue :8832). Both arguments are string-like; each is
     /// materialized as a slice register and compared with the
-    /// std SLICE_EQ macro (byte-wise slice equality from
-    /// sa_std/core/slice.sa). A `String` argument goes through
+    /// std STR_EQ macro (byte-wise string equality from
+    /// sa_std/string.sa). A `String` argument goes through
     /// STRING_BUF_AS_STR, mirroring the format-push path
     /// (format.rs emit_format_push_string_like); any other
     /// string-like argument already evaluates to a slice
     /// register (string literals included, codegen.rs
     /// gen_literal_value).
+    ///
+    /// R3 (stage-5a resume): this used to emit SLICE_EQ, whose
+    /// SLICE_EQ_U64 body compares u64 words at stride 8 — it
+    /// over-reads past the end of any byte string whose length
+    /// is not a multiple of 8, so `str_eq(&s, "[a]")` failed
+    /// while `len(s) == 3` passed. Zig emits STR_EQ here
+    /// (codegen.zig:20085-20103).
     fn gen_str_eq_call(&mut self, call: &sla_ast::CallExpr) -> Result<String> {
         let left = self.gen_str_eq_slice(&call.args[0])?;
         let right = self.gen_str_eq_slice(&call.args[1])?;
         let result = self.new_tmp();
-        self.ins(&format!("EXPAND SLICE_EQ {result}, {left}, {right}"));
+        self.ins(&format!("EXPAND STR_EQ {result}, {left}, {right}"));
         self.emit_release(&left)?;
         self.emit_release(&right)?;
         Ok(result)

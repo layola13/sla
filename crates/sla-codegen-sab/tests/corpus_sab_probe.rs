@@ -317,6 +317,7 @@ fn probe_file(path: &Path, sa_exe: &str) -> String {
                 import_path: record.import_path.clone(),
                 borrowed_arg_mask: record.borrowed_arg_mask,
                 address_slot_arg_mask: record.address_slot_arg_mask,
+                assigned_output_mask: record.assigned_output_mask,
                 direct_callees: record.direct_callees.clone(),
             },
         );

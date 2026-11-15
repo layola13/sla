@@ -71,9 +71,10 @@ pub fn decl_import_paths(program: &Program) -> Vec<String> {
 }
 
 /// Convert one imported-macro record into the checker's
-/// registration shape. `assigned_output_mask` has no field to land
-/// in (IMP-2) and is dropped here, audibly, in the same way
-/// `return_fallible` is dropped for externs (INT2-2).
+/// registration shape. The `assigned_output_mask` is carried
+/// through (dns1006: the text backend's aggregate-output temp +
+/// writeback keys on it); IMP-2 recorded the old drop, closed by
+/// the mask now having a field to land in at every boundary.
 pub fn imported_macro_info_of(record: &ImportedMacroRecord) -> ImportedMacroInfo {
     ImportedMacroInfo {
         arity: record.arity,
@@ -81,6 +82,7 @@ pub fn imported_macro_info_of(record: &ImportedMacroRecord) -> ImportedMacroInfo
         import_path: record.import_path.clone(),
         borrowed_arg_mask: record.borrowed_arg_mask,
         address_slot_arg_mask: record.address_slot_arg_mask,
+        assigned_output_mask: record.assigned_output_mask,
         direct_callees: record.direct_callees.clone(),
     }
 }

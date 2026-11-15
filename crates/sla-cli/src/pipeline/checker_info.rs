@@ -110,6 +110,7 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
             import_path: info.import_path.clone(),
             borrowed_arg_mask: info.borrowed_arg_mask,
             address_slot_arg_mask: info.address_slot_arg_mask,
+            assigned_output_mask: info.assigned_output_mask,
             direct_callees: info.direct_callees.clone(),
         })
     }

@@ -62,7 +62,25 @@ pub struct ImportedMacroView {
     pub import_path: Option<String>,
     pub borrowed_arg_mask: u64,
     pub address_slot_arg_mask: u64,
+    /// Zig `ImportedMacroCallPlan.assigned_output_mask` (see
+    /// `ImportedMacroInfo`): bit `i` set when the macro body's
+    /// first reference to parameter `i` is its assignment.
+    pub assigned_output_mask: u64,
     pub direct_callees: Vec<String>,
+}
+
+impl ImportedMacroView {
+    /// Zig `ImportedMacroCallPlan.callArgIsAssignedOutput`
+    /// (`lowering_rules.zig:612`) for statement position, where
+    /// `macroParamIndexForCallArg` is the identity (no
+    /// expression-output shift). The expression-position caller
+    /// never asks: its leading output is a fresh result register.
+    pub fn call_arg_is_assigned_output(&self, call_arg_index: usize) -> bool {
+        if call_arg_index >= 64 {
+            return false;
+        }
+        (self.assigned_output_mask & (1u64 << call_arg_index)) != 0
+    }
 }
 
 /// Read-only view of everything the text emitter needs from checking.

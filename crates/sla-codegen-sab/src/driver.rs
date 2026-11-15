@@ -745,6 +745,7 @@ mod tests {
                 import_path: Some("sa_std/ptr.sa".to_string()),
                 borrowed_arg_mask,
                 address_slot_arg_mask: 0,
+                assigned_output_mask: 0,
                 direct_callees: Vec::new(),
             },
         );

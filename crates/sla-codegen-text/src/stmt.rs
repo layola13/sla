@@ -4,7 +4,7 @@
 //! loudly instead (intentional divergence, logged in
 //! docs/divergences/lowering-text.md).
 
-use sla_ast::{CallExpr, Node, Type};
+use sla_ast::{CallExpr, Literal, Node, Type};
 use sla_lowering::{
     call_arg_needs_release, is_borrow_like_type, is_discard_name, is_panic_builtin_name,
     is_println_call, is_stack_alloc_node, is_void_type, node_key, root_identifier,
@@ -213,7 +213,10 @@ impl<'c> Codegen<'c> {
         if self.binding_needs_addressable_storage(&resolved_name, &ty_or_err)
             && !is_stack_alloc_node(&let_stmt.value)
         {
-            let val = self.gen_expr(&let_stmt.value)?;
+            let val = match self.gen_let_string_literal_value(&let_stmt.value, &ty_or_err)? {
+                Some(owned) => owned,
+                None => self.gen_expr(&let_stmt.value)?,
+            };
             self.stack_alloc_bindings.insert(resolved_name.clone());
             self.ins(&format!(
                 "{resolved_name} = stack_alloc {}",
@@ -232,7 +235,10 @@ impl<'c> Codegen<'c> {
         if self.binding_needs_assigned_value_slot(&resolved_name, &ty_or_err)
             && !is_stack_alloc_node(&let_stmt.value)
         {
-            let val = self.gen_expr(&let_stmt.value)?;
+            let val = match self.gen_let_string_literal_value(&let_stmt.value, &ty_or_err)? {
+                Some(owned) => owned,
+                None => self.gen_expr(&let_stmt.value)?,
+            };
             self.stack_alloc_bindings.insert(resolved_name.clone());
             self.assigned_value_slots.insert(resolved_name.clone());
             self.ins(&format!(
@@ -270,7 +276,35 @@ impl<'c> Codegen<'c> {
                 return Ok(());
             }
             Node::ArrayLiteral(lit) => {
-                self.gen_array_literal_into(&resolved_name, &let_stmt.value, lit)?;
+                // R2b (stage-5a resume): an annotated array let of
+                // bare integer elements (`let suffix: [u8; 13] =
+                // [46, 105, ...]`) must lay out at the ANNOTATION's
+                // stride. The checker's literal type is [i64; 13]
+                // (untyped ints default to i64), so the untyped
+                // fallback stored each byte at i64 stride and every
+                // read at index >= 1 came back 0 (Zig
+                // genArrayLiteralInto :16365-16371 takes the element
+                // type from the annotation recorded for the whole
+                // node). Take the element type from the let's type
+                // when it is an array; without an annotation let_ty
+                // IS the literal's own type, so the un-annotated
+                // path is unchanged.
+                match &let_ty {
+                    Some(Type::Array(arr)) => {
+                        self.gen_array_literal_into_typed(
+                            &resolved_name,
+                            lit,
+                            &arr.elem,
+                        )?;
+                    }
+                    _ => {
+                        self.gen_array_literal_into(
+                            &resolved_name,
+                            &let_stmt.value,
+                            lit,
+                        )?;
+                    }
+                }
                 return Ok(());
             }
             Node::RepeatArrayLiteral(lit) => {
@@ -297,6 +331,15 @@ impl<'c> Codegen<'c> {
             return self.gen_copy_value_into(&resolved_name, &val, value_ty.as_ref().unwrap());
         }
 
+        // String-typed let of a string literal (Zig genLetStmt
+        // :15009/:15054): the literal denotes an owned String
+        // handle, not the Slice view the generic path would rename
+        // into the binding (StackEscape + missing cap slot).
+        if let Some(owned) = self.gen_let_string_literal_value(&let_stmt.value, &ty_or_err)? {
+            self.ins(&format!("{resolved_name} = {owned}"));
+            return Ok(());
+        }
+
         // Generic path.
         let val = self.gen_expr(&let_stmt.value)?;
         // The binding takes over the value register; a recorded
@@ -318,6 +361,32 @@ impl<'c> Codegen<'c> {
             self.ins(&format!("{resolved_name} = {val}"));
         }
         Ok(())
+    }
+
+    /// R1 (stage-5a resume): Zig `genLetStmt` materializes a string
+    /// literal bound into a String-typed let as an owned String
+    /// handle (`genOwnedStringLiteral`, codegen.zig:14295, called
+    /// from the addressable :14940, assigned-slot :14964, and
+    /// literal :15009/:15054 arms). The literal's default form is
+    /// a stack-allocated Slice view; renaming it into a String
+    /// binding trips the host StackEscape, and the view lacks the
+    /// cap slot String consumers read. Returns `Some(owned_reg)`
+    /// only for exactly `String` + string literal (no borrow peel:
+    /// a `&String` let must not take the owned form); `None`
+    /// leaves the caller's existing path untouched (fail-safe: a
+    /// missed fire keeps the old loud emission).
+    fn gen_let_string_literal_value(
+        &mut self,
+        value: &Node,
+        ty: &Type,
+    ) -> Result<Option<String>> {
+        let Node::Literal(Literal::StringVal(text)) = value else {
+            return Ok(None);
+        };
+        if !matches!(ty, Type::UserDefined(u) if u.name == "String") {
+            return Ok(None);
+        }
+        Ok(Some(self.gen_owned_string_literal(text)?))
     }
 
     /// codegen.zig:11044 `genConstStmt` shares the generic path above
