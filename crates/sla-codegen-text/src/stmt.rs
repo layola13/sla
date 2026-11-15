@@ -605,6 +605,7 @@ impl<'c> Codegen<'c> {
             None => val.clone(),
         };
 
+        let mut renamed_from_source = false;
         if self.assigned_value_slots.contains(&resolved_name) {
             let ty = target_ty
                 .as_ref()
@@ -636,9 +637,13 @@ impl<'c> Codegen<'c> {
                 self.emit_primitive_copy(&resolved_name, &stored_val, ty)?;
             } else {
                 self.ins(&format!("{resolved_name} = {stored_val}"));
+                renamed_from_source = true;
             }
         }
 
+        if renamed_from_source {
+            self.finish_assign_rename_source(&assign.value, &stored_val, &target_ty);
+        }
         if stored_identifier_needs_release(&assign.value, &stored_val) {
             if let Some(src) = root_identifier(&assign.value) {
                 let src_resolved = self.resolve_binding_name(src);

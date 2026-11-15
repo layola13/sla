@@ -45,6 +45,11 @@ pub struct Codegen<'c> {
     /// place-address consumers (remember*Source) and consumed by
     /// emitRelease's borrow-address-temp cascade step.
     pub(crate) borrow_source_temps: HashMap<String, String>,
+    /// codegen.zig `hashmap_key_slots`: string literal -> the
+    /// cached slice-slot register materialised for it in this
+    /// function (identity-keyed map/set probes for the same
+    /// literal must hit the same slot).
+    pub(crate) hashmap_key_slots: HashMap<String, String>,
     pub(crate) let_binding_aliases: HashMap<usize, String>,
     pub(crate) local_binding_types: Vec<(String, Type)>,
     pub(crate) hoisted_allocs: Vec<String>,
@@ -83,6 +88,7 @@ impl<'c> Codegen<'c> {
             repeated_let_bindings: HashSet::new(),
             binding_aliases: Vec::new(),
             borrow_source_temps: HashMap::new(),
+            hashmap_key_slots: HashMap::new(),
             let_binding_aliases: HashMap::new(),
             local_binding_types: Vec::new(),
             hoisted_allocs: Vec::new(),
@@ -191,6 +197,7 @@ impl<'c> Codegen<'c> {
         self.stack_alloc_bindings.clear();
         self.consumed_bindings.clear();
         self.borrow_source_temps.clear();
+        self.hashmap_key_slots.clear();
         self.local_binding_types.clear();
         self.clear_binding_aliases();
         self.let_binding_aliases.clear();

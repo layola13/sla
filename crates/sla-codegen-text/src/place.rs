@@ -435,4 +435,29 @@ impl<'c> Codegen<'c> {
             source_temp: if track { Some(base) } else { None },
         })
     }
+
+    /// Assignment bookkeeping for the plain-rename branch of
+    /// gen_assign_stmt: renaming a non-primitive identifier
+    /// source is a MOVE at the host — the source register is
+    /// Consumed by the assignment itself, so scope cleanup must
+    /// not release it again (the loop-body cleanup for
+    /// `boxed = next` emitted a second `!next`, UseAfterMove).
+    /// Primitive sources go through emit_primitive_copy and
+    /// stay live; materialised-copy sources arrive as temps and
+    /// do not name the binding here.
+    pub(crate) fn finish_assign_rename_source(
+        &mut self,
+        value: &Node,
+        stored_val: &str,
+        target_ty: &Option<Type>,
+    ) {
+        if let Node::Identifier(src) = value {
+            if stored_val == self.resolve_binding_name(src)
+                && !matches!(target_ty, Some(Type::Primitive(_)))
+            {
+                let src_resolved = self.resolve_binding_name(src);
+                self.mark_consumed_binding(&src_resolved);
+            }
+        }
+    }
 }

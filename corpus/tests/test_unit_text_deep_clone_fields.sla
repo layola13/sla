@@ -1,0 +1,46 @@
+// Stage-3 F2 regression: copying a record whose fields are
+// heap handles deep-clones the fields (Zig genDeepCloneValue
+// family). Before the dispatcher port these shapes trapped
+// UseAfterMove at the host (the shallow field copy aliased the
+// source's buffer) or failed to compile.
+
+@import "sa_std/vec.sa"
+
+struct V { xs: Vec<i32> }
+fn take_v(v: V) -> i32 { return v.xs[0] + v.xs[1]; }
+
+struct B { b: Box<i32>, n: i32 }
+fn take_b(v: B) -> i32 { return v.n; }
+
+struct A { a: [i32; 2] }
+fn take_a(v: A) -> i32 { return v.a[0] + v.a[1]; }
+
+struct T { t: (i32, i32), r: Rc<i32>, n: i32 }
+fn take_t(v: T) -> i32 { return v.t.0 + v.t.1 + v.n; }
+
+@test "text deep clone vec field"() {
+    let xs: Vec<i32> = Vec::new();
+    xs.push(10);
+    xs.push(20);
+    let v = V { xs: xs };
+    if take_v(v) != 30 { panic(9201); };
+    if v.xs[0] != 10 { panic(9202); };
+}
+
+@test "text deep clone box field"() {
+    let v = B { b: Box::new(7), n: 7 };
+    if take_b(v) != 7 { panic(9203); };
+    if take_b(v) != 7 { panic(9204); };
+}
+
+@test "text deep clone array field"() {
+    let v = A { a: [3, 4] };
+    if take_a(v) != 7 { panic(9205); };
+    if v.a[1] != 4 { panic(9206); };
+}
+
+@test "text deep clone tuple and rc fields"() {
+    let v = T { t: (1, 2), r: Rc::new(40), n: 40 };
+    if take_t(v) != 43 { panic(9207); };
+    if take_t(v) != 43 { panic(9208); };
+}

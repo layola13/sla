@@ -373,6 +373,13 @@ impl<'c> Codegen<'c> {
                 let value = planned.reg.clone();
                 let reg = self.new_tmp();
                 self.ins(&format!("EXPAND {macro_name} {reg}, {recv}, {value}"));
+                // The receiver IS retired when it is an owned
+                // temp (codegen.zig:20665, isUnwrapOrCall arm):
+                // a copied()/call-result Option temp otherwise
+                // leaks at function exit.
+                if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                    self.emit_release(&recv)?;
+                }
                 // No post-call disposition for the default
                 // (Zig DEF-R8-FIX): passing it to EXPAND already
                 // retires the register — the macro moves it into
@@ -427,13 +434,61 @@ impl<'c> Codegen<'c> {
                     return Err(missing_fact());
                 }
                 let (recv, _, _) = self.surface_receiver(call)?;
+                let consumed = name == "insert";
+                // HashSet<String> membership keys on string
+                // CONTENT (Zig bridge set_insert / set_contains,
+                // codegen.zig:13912): the identity SET_* macros
+                // never match a fresh equal-content string.
+                let elem_ty = generics.first().cloned();
+                let str_elem = tname == "HashSet"
+                    && elem_ty
+                        .as_ref()
+                        .map(|t| crate::map::is_string_key_type(t))
+                        .unwrap_or(false);
+                if str_elem {
+                    let lit = self.gen_hashmap_literal_key_reg(
+                        &call.args[1],
+                        elem_ty.as_ref(),
+                    )?;
+                    let (value_reg, planned, owned_literal) = match lit {
+                        Some(kr) => (kr.reg, None, kr.owned_literal_string),
+                        None => {
+                            let planned = if consumed {
+                                self.surface_value_consumed(call, 1)?
+                            } else {
+                                self.surface_value(call, 1)?
+                            };
+                            let reg = planned.reg.clone();
+                            (reg, Some(planned), false)
+                        }
+                    };
+                    let func_name = if consumed {
+                        "@sa_set_insert_str"
+                    } else {
+                        "@sa_set_contains_str"
+                    };
+                    let reg = self.new_tmp();
+                    self.ins(&format!(
+                        "{reg} = call {func_name}(&{recv}, &{value_reg})"
+                    ));
+                    if let Some(planned) = &planned {
+                        self.surface_finish_value(planned, consumed)?;
+                    }
+                    if owned_literal {
+                        if consumed {
+                            self.emit_forget_moved_value(&value_reg)?;
+                        } else {
+                            self.emit_release(&value_reg)?;
+                        }
+                    }
+                    return Ok(Some(SurfaceCall::Value(reg)));
+                }
                 let macro_name = match (tname.as_str(), name) {
                     ("HashSet", "insert") => "SET_INSERT",
                     ("HashSet", _) => "SET_CONTAINS",
                     ("BTreeSet", "insert") => "BTREE_SET_INSERT",
                     _ => "BTREE_SET_CONTAINS",
                 };
-                let consumed = name == "insert";
                 let planned = if consumed {
                     self.surface_value_consumed(call, 1)?
                 } else {
@@ -450,36 +505,113 @@ impl<'c> Codegen<'c> {
                     return Err(missing_fact());
                 }
                 let (recv, _, _) = self.surface_receiver(call)?;
-                let key = self.surface_value_consumed(call, 1)?;
-                let key_reg = key.reg.clone();
+                let is_btree = tname == "BTreeMap";
+                // Bridge classification (Zig `mapMacroBridge` +
+                // the method arms at codegen.zig:21362): the
+                // STR/identity routing keys on the RECEIVER's key
+                // type, never the argument's — a string literal
+                // argument is a Slice on its own and would always
+                // misroute to the identity macros.
+                let key_ty = generics.first().cloned();
+                let lit_key = self.gen_hashmap_literal_key_reg(
+                    &call.args[1],
+                    if is_btree { None } else { key_ty.as_ref() },
+                )?;
+                let (key_reg, key_planned, key_owned_literal) = match lit_key {
+                    Some(kr) => (kr.reg, None, kr.owned_literal_string),
+                    None => {
+                        let planned = self.surface_value_consumed(call, 1)?;
+                        let reg = planned.reg.clone();
+                        (reg, Some(planned), false)
+                    }
+                };
+                if is_btree {
+                    // BTreeMap keeps the plain value register
+                    // (its nodes store the word; no heap cell —
+                    // codegen.zig:21453).
+                    let value = self.surface_value_consumed(call, 2)?;
+                    let value_reg = value.reg.clone();
+                    let reg = self.new_tmp();
+                    self.ins(&format!(
+                        "EXPAND SLA_BTREE_MAP_INSERT_OPTION_U64 {reg}, {recv}, {key_reg}, {value_reg}"
+                    ));
+                    if let Some(kp) = &key_planned {
+                        self.surface_finish_value(kp, true)?;
+                    }
+                    self.surface_finish_value(&value, true)?;
+                    return Ok(Some(SurfaceCall::Value(reg)));
+                }
+                // DEF-HASHMAP-XTALK A-form: the value is staged
+                // into a per-entry heap cell and the cell is
+                // forgotten into the map after the expansion.
                 let value = self.surface_value_consumed(call, 2)?;
                 let value_reg = value.reg.clone();
-                let key_ty = self.expr_type(&call.args[1]);
-                let str_key =
-                    matches!(key_ty, Some(Type::UserDefined(u)) if u.name == "String");
-                let macro_name = match (tname.as_str(), str_key) {
-                    ("HashMap", true) => "SLA_MAP_INSERT_STR_OPTION_U64",
-                    ("HashMap", false) => "SLA_MAP_INSERT_OPTION_U64",
-                    _ => "SLA_BTREE_MAP_INSERT_OPTION_U64",
+                let cell = self.gen_hashmap_value_slot(&value_reg);
+                self.surface_finish_value(&value, true)?;
+                let str_key = key_ty
+                    .as_ref()
+                    .map(|t| crate::map::is_string_key_type(t))
+                    .unwrap_or(false);
+                let macro_name = if str_key {
+                    "SLA_MAP_INSERT_STR_OPTION_U64"
+                } else {
+                    "SLA_MAP_INSERT_OPTION_U64"
                 };
                 let reg = self.new_tmp();
                 self.ins(&format!(
-                    "EXPAND {macro_name} {reg}, {recv}, {key_reg}, {value_reg}"
+                    "EXPAND {macro_name} {reg}, {recv}, {key_reg}, {cell}"
                 ));
-                self.surface_finish_value(&key, true)?;
-                self.surface_finish_value(&value, true)?;
+                self.emit_forget_moved_value(&cell)?;
+                if let Some(kp) = &key_planned {
+                    self.surface_finish_value(kp, true)?;
+                }
+                if key_owned_literal {
+                    // The map adopts the owned literal key
+                    // (codegen.zig:21377).
+                    self.emit_forget_moved_value(&key_reg)?;
+                }
                 Ok(Some(SurfaceCall::Value(reg)))
+            }
+            ("HashMap", "clear") | ("BTreeMap", "clear") => {
+                if call.args.len() != 1 {
+                    return Err(missing_fact());
+                }
+                let (recv, _, _) = self.surface_receiver(call)?;
+                if tname == "HashMap" {
+                    // A-form ownership (codegen.zig:21440):
+                    // return every entry's heap value cell
+                    // before the std clear zeroes the slots.
+                    self.emit_hashmap_value_cells_free(&recv)?;
+                    self.ins(&format!("EXPAND MAP_CLEAR {recv}"));
+                } else {
+                    self.ins(&format!("EXPAND BTREE_MAP_CLEAR {recv}"));
+                }
+                Ok(Some(SurfaceCall::Void))
             }
             ("HashMap", "get") | ("BTreeMap", "get") => {
                 if call.args.len() != 2 {
                     return Err(missing_fact());
                 }
                 let (recv, _, _) = self.surface_receiver(call)?;
-                let key = self.surface_value(call, 1)?;
-                let key_reg = key.reg.clone();
-                let key_ty = self.expr_type(&call.args[1]);
-                let str_key =
-                    matches!(key_ty, Some(Type::UserDefined(u)) if u.name == "String");
+                let is_btree = tname == "BTreeMap";
+                let key_ty = generics.first().cloned();
+                let lit_key = self.gen_hashmap_literal_key_reg(
+                    &call.args[1],
+                    if is_btree { None } else { key_ty.as_ref() },
+                )?;
+                let (key_reg, key_planned, key_owned_literal) = match lit_key {
+                    Some(kr) => (kr.reg, None, kr.owned_literal_string),
+                    None => {
+                        let planned = self.surface_value(call, 1)?;
+                        let reg = planned.reg.clone();
+                        (reg, Some(planned), false)
+                    }
+                };
+                let str_key = !is_btree
+                    && key_ty
+                        .as_ref()
+                        .map(|t| crate::map::is_string_key_type(t))
+                        .unwrap_or(false);
                 let macro_name = match (tname.as_str(), str_key) {
                     ("HashMap", true) => "SLA_MAP_TRY_GET_STR_OPTION",
                     ("HashMap", false) => "SLA_MAP_TRY_GET_OPTION",
@@ -487,7 +619,14 @@ impl<'c> Codegen<'c> {
                 };
                 let reg = self.new_tmp();
                 self.ins(&format!("EXPAND {macro_name} {reg}, {recv}, {key_reg}"));
-                self.surface_finish_value(&key, false)?;
+                if let Some(kp) = &key_planned {
+                    self.surface_finish_value(kp, false)?;
+                }
+                if key_owned_literal {
+                    // A probe does not adopt its key
+                    // (codegen.zig:21394).
+                    self.emit_release(&key_reg)?;
+                }
                 Ok(Some(SurfaceCall::Value(reg)))
             }
             ("Cell", "set") => {

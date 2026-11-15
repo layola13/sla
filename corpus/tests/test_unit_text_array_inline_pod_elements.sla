@@ -1,0 +1,33 @@
+// Stage-3 F2 regression: an inline-POD struct element of an
+// array literal is stored as its packed record image, not as
+// the record pointer (Zig genArrayLiteralInto CLASSB segment
+// 3). Before the fix the literal form read back garbage
+// (panics 901/902/903 in def_batch1_r4) and the field-array
+// form trapped in cleanup (panic 1300 in
+// array_struct_field_cleanup).
+
+struct E { x: i32, y: i32 }
+
+fn mk(v: i32) -> E { return E { x: v, y: v + 1 }; }
+
+struct Bag { items: [E; 2] }
+
+@test "text array inline pod literal elements"() {
+    let a = [E { x: 1, y: 2 }, E { x: 3, y: 4 }];
+    if a[0].x + a[0].y + a[1].x + a[1].y != 10 { panic(9101); };
+}
+
+@test "text array inline pod call elements"() {
+    let a = [mk(5), mk(7)];
+    if a[0].x + a[1].y != 13 { panic(9102); };
+}
+
+@test "text array inline pod repeat element"() {
+    let a = [E { x: 9, y: 9 }; 2];
+    if a[0].y + a[1].x != 18 { panic(9103); };
+}
+
+@test "text struct field array of inline pod"() {
+    let bag = Bag { items: [E { x: 1, y: 1 }, E { x: 2, y: 2 }] };
+    if bag.items[0].x + bag.items[1].y != 3 { panic(9104); };
+}

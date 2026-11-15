@@ -304,7 +304,18 @@ impl<'c> Codegen<'c> {
         is_btree: bool,
     ) -> Result<String> {
         let map_reg = self.gen_expr(&idx.target)?;
-        let key_reg = self.gen_expr(&idx.index)?;
+        // Zig genHashMapKeyReg (codegen.zig:19242): the key is
+        // materialised against the receiver's key type — an
+        // owned String handle for a literal in a String-keyed
+        // map, a cached slice slot for a literal anywhere else.
+        let lit_key = self.gen_hashmap_literal_key_reg(
+            &idx.index,
+            if is_btree { None } else { Some(key_ty) },
+        )?;
+        let (key_reg, key_owned_literal) = match lit_key {
+            Some(kr) => (kr.reg, kr.owned_literal_string),
+            None => (self.gen_expr(&idx.index)?, false),
+        };
         let string_key = matches!(
             sla_lowering::peel_borrow_pointer_type(key_ty),
             Type::UserDefined(u) if u.name == "String"
@@ -365,10 +376,8 @@ impl<'c> Codegen<'c> {
         }
         // An owned literal String key is released after the
         // probe (Zig keyRegIsOwnedLiteralString).
-        if string_key {
-            if let Node::Literal(sla_ast::Literal::StringVal(_)) = &*idx.index {
-                self.emit_release(&key_reg)?;
-            }
+        if key_owned_literal {
+            self.emit_release(&key_reg)?;
         }
         if self.expr_result_reg_needs_release(&idx.target) {
             self.emit_release(&map_reg)?;

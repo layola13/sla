@@ -1,12 +1,13 @@
 //! Record-copy materialisation: Zig `genCopyValueInto`
 //! (codegen.zig:3913), `genShallowCopyCallArgValue` (:5705) and
 //! the CLASSB-DEF1 push copy (`pushArgCopyMaterialization`,
-//! :5043). Plain-field subset: a copy is emitted only when every
-//! field (recursively) is a plain word (primitive / pointer /
-//! borrow / fn-ptr / enum) or a nested plain struct; a field
-//! owning a heap handle (Vec / String / map / Box / ...) makes
-//! the copy bail to the caller's previous behaviour — the deep
-//! clone dispatcher for handle fields is a separate family.
+//! :5043). Plain-field subset first: a copy whose fields are all
+//! plain words (primitive / pointer / borrow / fn-ptr / enum)
+//! or nested plain structs copies field by field. A field
+//! owning a heap handle (Vec / String / Box / array / ...) is
+//! copied by the deep clone dispatcher (clone.rs,
+//! `genDeepCloneValue`); a map/set field stays uncloneable and
+//! a recursive clone graph stays loud (per-type helper fork).
 
 use sla_ast::{CallExpr, Node, StructDecl, Type};
 use sla_lowering::is_borrow_like_type;
@@ -169,8 +170,21 @@ impl<'c> Codegen<'c> {
         Ok(true)
     }
 
+    /// Whether a record copy of `ty` is emittable at all: the
+    /// plain-field subset, or the deep clone dispatcher
+    /// (clone.rs) for a shallow-copyable record with no
+    /// uncloneable (map/set) member and no recursive clone
+    /// graph.
+    pub(crate) fn record_copyable(&self, ty: &Type) -> bool {
+        self.record_copy_plain(ty, 0)
+            || (self.shallow_copy_call_arg_value(ty, 0)
+                && self.uncloneable_type_name(ty, 0).is_none()
+                && !self.type_has_recursive_clone(ty))
+    }
+
     /// A fresh record copy of the value in `source_reg`, or None
-    /// when the type is outside the plain subset.
+    /// when the type is outside both the plain subset and the
+    /// deep clone dispatcher's record arm.
     pub(crate) fn gen_record_copy(
         &mut self,
         source_reg: &str,
@@ -180,7 +194,7 @@ impl<'c> Codegen<'c> {
         if self.gen_copy_value_into_inner(&target, source_reg, ty)? {
             Ok(Some(target))
         } else {
-            Ok(None)
+            self.gen_shallow_record_clone(source_reg, ty)
         }
     }
 
@@ -215,7 +229,14 @@ impl<'c> Codegen<'c> {
         if !self.check.type_is_copy_struct(elem) && !self.shallow_copy_call_arg_value(elem, 0) {
             return Ok(None);
         }
-        if !self.record_copy_plain(elem, 0) {
+        if !self.record_copyable(elem) {
+            return Ok(None);
+        }
+        // A String in the element closure means the checker
+        // consumes the binding at this push (its copy plan
+        // spares Vec-field structs, not String-field ones):
+        // cloning would orphan the original (arena Cmd case).
+        if self.type_contains_string(elem, 0) {
             return Ok(None);
         }
         let raw = self.gen_expr(arg)?;

@@ -102,21 +102,21 @@ impl<'c> Codegen<'c> {
             target: CallArgTarget::SaText,
         };
         let plan = plan_call_arg_materialization(arg, &input);
-        // The shallow-copy plan is only actionable inside the
-        // plain-record subset (copy.rs): a record with heap
-        // handle fields needs Zig's deep clone dispatcher
-        // (genDeepCloneValue), which is not ported. Re-plan such
-        // an argument without the shallow fact — it takes the
-        // ordinary Value (ownership-transfer) plan, the
-        // treatment this emitter gave it before the shallow
-        // fact existed. If the source binding is used after the
-        // call the host traps loudly (UseAfterMove); it never
-        // silently miscompiles.
+        // The shallow-copy plan is actionable inside the
+        // plain-record subset (copy.rs) and, since stage 3, for
+        // any record the deep clone dispatcher (clone.rs) can
+        // copy. Re-plan an argument without the shallow fact
+        // only when neither applies — it takes the ordinary
+        // Value (ownership-transfer) plan, the treatment this
+        // emitter gave it before the shallow fact existed. If
+        // the source binding is used after the call the host
+        // traps loudly (UseAfterMove); it never silently
+        // miscompiles.
         let plan = if plan.kind
             == sla_lowering::CallArgMaterializationKind::ShallowCopyPreservedValue
             && !arg_ty
                 .as_ref()
-                .map(|t| self.record_copy_plain(t, 0))
+                .map(|t| self.record_copyable(t) && !self.type_contains_string(t, 0))
                 .unwrap_or(false)
         {
             let mut input_no_shallow = input.clone();

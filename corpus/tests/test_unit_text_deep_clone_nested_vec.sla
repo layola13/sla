@@ -1,0 +1,36 @@
+// Stage-3 F2 regression: a Vec whose elements themselves
+// need a deep clone replaces each element with its clone
+// (Zig genReplaceBufferElementsWithClones), and a struct
+// field holding such a Vec clones through the shallow-record
+// dispatcher.
+
+@import "sa_std/vec.sa"
+
+struct Inner { xs: Vec<i32> }
+struct Outer { inner: Inner, tag: i32 }
+fn take_o(o: Outer) -> i32 { return o.inner.xs[0] + o.tag; }
+
+@test "text deep clone nested struct vec field"() {
+    let xs: Vec<i32> = Vec::new();
+    xs.push(5);
+    let o = Outer { inner: Inner { xs: xs }, tag: 2 };
+    if take_o(o) != 7 { panic(9301); };
+    if o.inner.xs[0] != 5 { panic(9302); };
+}
+
+struct Wrap { vv: Vec<Vec<i32>> }
+fn take_w(w: Wrap) -> i32 { return w.vv[1][0]; }
+
+@test "text deep clone vec of vec field"() {
+    let a: Vec<i32> = Vec::new();
+    a.push(1);
+    a.push(2);
+    let b: Vec<i32> = Vec::new();
+    b.push(3);
+    let vv: Vec<Vec<i32>> = Vec::new();
+    vv.push(a);
+    vv.push(b);
+    let w = Wrap { vv: vv };
+    if take_w(w) != 3 { panic(9303); };
+    if w.vv[0][1] != 2 { panic(9304); };
+}

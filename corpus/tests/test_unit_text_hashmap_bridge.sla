@@ -1,0 +1,56 @@
+// Stage-3 F1 regression: the HashMap bridge A-form
+// (DEF-HASHMAP-XTALK). Values live in per-entry heap cells;
+// string literals are materialised against the receiver's key
+// type (owned String handle for String keys, one cached slice
+// slot per literal otherwise); clear returns the cells before
+// the std clear zeroes the slots.
+
+@import "sa_std/hashmap.sa"
+@import "sa_std/core/option.sa"
+
+@test "text hashmap loop inserts keep distinct values"() {
+    let m = HashMap::new();
+    let i: i32 = 0;
+    while i < 8 {
+        m.insert(i, i * 100);
+        i = i + 1;
+    }
+    if m.get(3).copied().unwrap_or(0 - 1) != 300 { panic(9401); };
+    if m.get(7).copied().unwrap_or(0 - 1) != 700 { panic(9402); };
+}
+
+@test "text hashmap literal overwrite keeps len"() {
+    let m = HashMap::new();
+    m.insert("a", 1);
+    m.insert("a", 2);
+    if len(m) != 1 { panic(9403); };
+    if m.get("a").copied().unwrap_or(0) != 2 { panic(9404); };
+}
+
+@test "text hashmap string key fresh handles"() {
+    let m: HashMap<String, i32> = HashMap::new();
+    let k1: String = format("key");
+    m.insert(k1, 5);
+    let k2: String = format("key");
+    if m.get(k2).copied().unwrap_or(0) != 5 { panic(9405); };
+}
+
+@test "text hashmap clear returns cells and reuses"() {
+    let m = HashMap::new();
+    m.insert(1, 10);
+    m.insert(2, 20);
+    m.clear();
+    if len(m) != 0 { panic(9406); };
+    m.insert(3, 30);
+    if m.get(3).copied().unwrap_or(0) != 30 { panic(9407); };
+    m.clear();
+    m.clear();
+    if len(m) != 0 { panic(9408); };
+}
+
+@test "text option unwrap_or temp receiver"() {
+    let m = HashMap::new();
+    m.insert(9, 90);
+    if m.get(9).copied().unwrap_or(0) != 90 { panic(9409); };
+    if m.get(8).copied().unwrap_or(41) != 41 { panic(9410); };
+}

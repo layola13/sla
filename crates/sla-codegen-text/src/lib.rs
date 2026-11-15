@@ -24,6 +24,7 @@
 
 mod block;
 mod call;
+mod clone;
 mod call_plan;
 mod codegen;
 mod copy;
@@ -35,8 +36,10 @@ mod expr_if;
 mod extern_macro;
 mod format;
 mod func;
+mod agg_literal;
 mod into;
 mod layout;
+mod map;
 mod place;
 mod println;
 mod program;
