@@ -593,7 +593,11 @@ impl Checker {
 /// local (Zig's issue013 guard). Collected in declaration order
 /// (D-C6). Raw-pointer bindings are included: the register must
 /// be retired at exit even though nothing is freed.
-fn block_exit_cleanups(bindings: &[crate::scope::Binding]) -> Vec<String> {
+///
+/// Shared with `check_match` (stage 5b checker-plans): an arm
+/// frame's exit cleanups are the same computation over the arm
+/// frame's own (pattern) bindings.
+pub(crate) fn block_exit_cleanups(bindings: &[crate::scope::Binding]) -> Vec<String> {
     let mut names = Vec::new();
     for b in bindings {
         if b.state != ValueState::Active {

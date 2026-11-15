@@ -97,6 +97,18 @@ pub trait CheckInfo {
     /// block whose last statement is the key.
     fn phi_cleanups(&self, stmt: &Node) -> Option<&[String]>;
 
+    /// `tc.match_arm_exit_cleanups` (stage 5b checker-plans):
+    /// the checker's per-arm pattern-binding exit cleanups for
+    /// `expr` (a `MatchExpr` node), arm `arm` in arm order. `None`
+    /// when the checker recorded nothing for this match (a lane
+    /// without the recording, or a harness `MapCheckInfo` with no
+    /// arm data added); `Some(&[])` when the arm's bindings all
+    /// left consumed. The emitter prints the list like phi
+    /// cleanups and drops its arm-exit approximation.
+    fn match_arm_exit_cleanups(&self, _expr: &Node, _arm: usize) -> Option<&[String]> {
+        None
+    }
+
     /// `tc.funcs`: function declarations by (unmangled) name.
     fn func(&self, _name: &str) -> Option<&FuncDecl> {
         None
@@ -166,6 +178,9 @@ pub struct MapCheckInfo {
     pub expr_types: HashMap<usize, Type>,
     pub cleanups: HashMap<usize, Vec<String>>,
     pub phi_cleanups: HashMap<usize, Vec<String>>,
+    /// Stage 5b checker-plans: match node key -> one exit-cleanup
+    /// list per arm, in arm order.
+    pub match_arm_exit_cleanups: HashMap<usize, Vec<Vec<String>>>,
     pub funcs: HashMap<String, FuncDecl>,
     pub extern_funcs: HashSet<String>,
     pub extern_sigs: HashMap<String, ExternSigView>,
@@ -196,6 +211,15 @@ impl MapCheckInfo {
 
     pub fn add_phi_cleanups(&mut self, stmt: &Node, names: Vec<String>) -> &mut Self {
         self.phi_cleanups.insert(node_key(stmt), names);
+        self
+    }
+
+    pub fn add_match_arm_exit_cleanups(
+        &mut self,
+        expr: &Node,
+        names: Vec<Vec<String>>,
+    ) -> &mut Self {
+        self.match_arm_exit_cleanups.insert(node_key(expr), names);
         self
     }
 
@@ -276,6 +300,13 @@ impl CheckInfo for MapCheckInfo {
 
     fn phi_cleanups(&self, stmt: &Node) -> Option<&[String]> {
         self.phi_cleanups.get(&node_key(stmt)).map(|v| v.as_slice())
+    }
+
+    fn match_arm_exit_cleanups(&self, expr: &Node, arm: usize) -> Option<&[String]> {
+        self.match_arm_exit_cleanups
+            .get(&node_key(expr))?
+            .get(arm)
+            .map(|v| v.as_slice())
     }
 
     fn func(&self, name: &str) -> Option<&FuncDecl> {

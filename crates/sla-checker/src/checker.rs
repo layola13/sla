@@ -254,6 +254,13 @@ pub struct Checker {
     /// `phi_cleanups`: bindings consumed on only some branch paths,
     /// released on the paths where they stayed active.
     pub phi_cleanups: HashMap<usize, Vec<String>>,
+    /// `match_arm_exit_cleanups` (stage 5b checker-plans): per-arm
+    /// pattern-binding exit cleanups, keyed by the match node's
+    /// key; the value is one list per arm, in arm order. Recorded
+    /// during `check_match` from each arm frame's still-active
+    /// bindings (mirroring block cleanups), so the emitter prints
+    /// the checker's verdict instead of its arm-exit approximation.
+    pub match_arm_exit_cleanups: HashMap<usize, Vec<Vec<String>>>,
     /// `await_cleanups` (Zig type_checker.zig:150): bindings to
     /// release if an await suspends, keyed by the await node. Kept
     /// apart from `cleanups`, whose await-adjacent entries mean
@@ -343,6 +350,7 @@ impl Checker {
             expr_types: HashMap::new(),
             cleanups: HashMap::new(),
             phi_cleanups: HashMap::new(),
+            match_arm_exit_cleanups: HashMap::new(),
             await_cleanups: HashMap::new(),
             macro_call_try_cleanups: HashMap::new(),
             dyn_box_coercions: HashMap::new(),

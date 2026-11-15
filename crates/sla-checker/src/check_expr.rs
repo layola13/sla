@@ -331,7 +331,7 @@ impl Checker {
             }
             Node::IfExpr(i) => self.check_if_expr(i),
             Node::SwitchExpr(s) => self.check_switch(s),
-            Node::MatchExpr(m) => self.check_match(m),
+            Node::MatchExpr(m) => self.check_match(m, node_key_of(node)),
             Node::GoStmt(g) => self.check_go_stmt(g),
             Node::CallExpr(c) => {
                 // R-3 route-3: plain user calls only (preassoc /

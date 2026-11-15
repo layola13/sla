@@ -97,7 +97,13 @@ impl Checker {
 
     /// Mirrors the `match_expr` arm (type_checker.zig:5494) with its
     /// three paths: infer-from-pattern, Option/Result, plain enum.
-    pub fn check_match(&mut self, expr: &MatchExpr) -> CheckResult<Type> {
+    ///
+    /// Stage 5b checker-plans: each arm's still-active pattern
+    /// bindings are recorded as that arm's exit cleanups (mirroring
+    /// block cleanups) in `match_arm_exit_cleanups`, keyed by
+    /// `match_node_key`, so the emitter prints the checker's
+    /// verdict instead of its arm-exit approximation.
+    pub fn check_match(&mut self, expr: &MatchExpr, match_node_key: usize) -> CheckResult<Type> {
         let mut val_ty = self.check_expr(&expr.val)?;
 
         if matches!(val_ty, Type::Infer) && !expr.cases.is_empty() {
@@ -146,9 +152,9 @@ impl Checker {
         }
 
         if option_inner_type(&val_ty).is_some() || result_ok_type(&val_ty).is_some() {
-            return self.check_match_option_result(expr, &val_ty);
+            return self.check_match_option_result(expr, &val_ty, match_node_key);
         }
-        self.check_match_enum(expr, &val_ty)
+        self.check_match_enum(expr, &val_ty, match_node_key)
     }
 
     /// The Option/Result path: each case's single binding comes
@@ -157,12 +163,14 @@ impl Checker {
         &mut self,
         expr: &MatchExpr,
         val_ty: &Type,
+        match_node_key: usize,
     ) -> CheckResult<Type> {
         let pre = self.scopes.save_states();
         let mut live_states = Vec::new();
         let mut live_bodies: Vec<&[Node]> = Vec::new();
         let mut result_ty: Option<Type> = None;
         let mut has_value_cases = true;
+        let mut arm_exit: Vec<Vec<String>> = Vec::new();
 
         for case in &expr.cases {
             self.scopes.restore_states(&pre);
@@ -183,7 +191,15 @@ impl Checker {
             })();
             let terminated = crate::check_program::block_terminates(&case.body);
             let case_ty = crate::check_program::block_tail_type(self, &case.body);
-            self.scopes.pop_frame();
+            // Stage 5b checker-plans: the arm frame holds exactly
+            // the pattern bindings; their post-body states are the
+            // arm's exit cleanups (a binding the body consumed —
+            // directly, or via a re-alias let move — is Consumed
+            // here and drops out of the list).
+            let arm_frame = self.scopes.pop_frame();
+            arm_exit.push(crate::check_program::block_exit_cleanups(
+                &arm_frame.bindings,
+            ));
             case_result?;
             if !terminated {
                 live_states.push(self.scopes.save_states());
@@ -213,6 +229,8 @@ impl Checker {
         }
 
         self.merge_multi_branch_states(&pre, &live_states, &live_bodies);
+        self.match_arm_exit_cleanups
+            .insert(match_node_key, arm_exit);
         if has_value_cases {
             if let Some(ty) = result_ty {
                 return Ok(ty);
@@ -228,6 +246,7 @@ impl Checker {
         &mut self,
         expr: &MatchExpr,
         val_ty: &Type,
+        match_node_key: usize,
     ) -> CheckResult<Type> {
         let decl_name = match val_ty {
             Type::UserDefined(u) => u.name.clone(),
@@ -254,6 +273,7 @@ impl Checker {
         let mut live_bodies: Vec<&[Node]> = Vec::new();
         let mut result_ty: Option<Type> = None;
         let mut has_value_cases = true;
+        let mut arm_exit: Vec<Vec<String>> = Vec::new();
 
         for case in &expr.cases {
             self.scopes.restore_states(&pre);
@@ -306,7 +326,11 @@ impl Checker {
             })();
             let terminated = crate::check_program::block_terminates(&case.body);
             let case_ty = crate::check_program::block_tail_type(self, &case.body);
-            self.scopes.pop_frame();
+            // Stage 5b checker-plans: see the Option/Result path.
+            let arm_frame = self.scopes.pop_frame();
+            arm_exit.push(crate::check_program::block_exit_cleanups(
+                &arm_frame.bindings,
+            ));
             case_result?;
             if !terminated {
                 live_states.push(self.scopes.save_states());
@@ -336,6 +360,8 @@ impl Checker {
         }
 
         self.merge_multi_branch_states(&pre, &live_states, &live_bodies);
+        self.match_arm_exit_cleanups
+            .insert(match_node_key, arm_exit);
         if has_value_cases && result_ty.is_some() {
             return Ok(result_ty.expect("checked is_some"));
         }

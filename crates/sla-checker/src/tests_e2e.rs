@@ -112,3 +112,80 @@ fn empty_body_passes_per_zig() {
     let result = check_source(source);
     assert!(result.is_ok(), "{result:?}");
 }
+
+// -- stage 5b checker-plans -------------------------------------------
+// Helper: parse + check, keeping the parsed tree and the Checker so
+// the recorded per-arm exit cleanups can be read back (the table is
+// keyed by node address into this tree).
+fn check_source_keep(source: &str) -> (Node, Checker, Result<(), Diagnostic>) {
+    let root = sla_parser::parse_program(source).expect("source must parse");
+    let Node::Program(program) = &root else {
+        panic!("parser root must be a Program node");
+    };
+    let mut checker = Checker::new();
+    let result = checker.check_program(program);
+    (root, checker, result)
+}
+
+/// The match node's key: the first function body's first match
+/// statement.
+fn first_match_key(root: &Node) -> usize {
+    let Node::Program(program) = root else {
+        panic!("root must be a Program node");
+    };
+    for decl in &program.decls {
+        if let Node::FuncDecl(f) = decl {
+            for stmt in &f.body {
+                if let Node::ExprStmt(inner) = stmt {
+                    if matches!(&**inner, Node::MatchExpr(_)) {
+                        return crate::types_util::node_key_of(inner);
+                    }
+                }
+            }
+        }
+    }
+    panic!("no match statement found");
+}
+
+/// Stage 5b checker-plans: `let y = v;` is an implicit let move
+/// (check_let consumes a non-Copy source), so the Ok arm's payload
+/// binding leaves Consumed and drops out of that arm's exit
+/// cleanups — while the untouched Err payload stays listed.
+/// Pre-fix this fails: the table is never recorded (None). The
+/// emitter-side approximation cannot see this: the emitted body
+/// contains no `^<v-alias>`, so it would release `v` after the
+/// value already moved out through `y`.
+#[test]
+fn match_arm_exit_cleanups_realias_move_excluded() {
+    let source = "fn f(r: Result<String, i32>) {\n    match r {\n        Ok(v) => {\n            let y = v;\n        },\n        Err(e) => {\n        },\n    };\n}\n";
+    let (root, checker, result) = check_source_keep(source);
+    assert!(result.is_ok(), "{result:?}");
+    let key = first_match_key(&root);
+    let arms = checker
+        .match_arm_exit_cleanups
+        .get(&key)
+        .expect("check_match must record per-arm exit cleanups");
+    assert_eq!(arms.len(), 2, "one list per arm, got {arms:?}");
+    assert!(
+        arms[0].is_empty(),
+        "re-aliased payload must leave Consumed, got {:?}",
+        arms[0]
+    );
+    assert_eq!(arms[1], vec!["e".to_string()]);
+}
+
+/// Control: a payload the arm body never touches stays listed.
+#[test]
+fn match_arm_exit_cleanups_untouched_payload_listed() {
+    let source = "fn g(r: Result<String, i32>) {\n    match r {\n        Ok(v) => {\n        },\n        Err(e) => {\n        },\n    };\n}\n";
+    let (root, checker, result) = check_source_keep(source);
+    assert!(result.is_ok(), "{result:?}");
+    let key = first_match_key(&root);
+    let arms = checker
+        .match_arm_exit_cleanups
+        .get(&key)
+        .expect("check_match must record per-arm exit cleanups");
+    assert_eq!(arms.len(), 2, "one list per arm, got {arms:?}");
+    assert_eq!(arms[0], vec!["v".to_string()]);
+    assert_eq!(arms[1], vec!["e".to_string()]);
+}

@@ -65,6 +65,16 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
             .get(&sla_lowering::node_key(stmt))
             .map(Vec::as_slice)
     }
+    fn match_arm_exit_cleanups(&self, expr: &Node, arm: usize) -> Option<&[String]> {
+        // Stage 5b checker-plans: the checker keys the table by the
+        // match node's own address, which is the same tree the
+        // emitter reads, so the key lines up exactly.
+        self.checker
+            .match_arm_exit_cleanups
+            .get(&sla_lowering::node_key(expr))?
+            .get(arm)
+            .map(Vec::as_slice)
+    }
     fn type_is_copy_value(&self, ty: &sla_ast::Type) -> bool {
         self.checker.type_is_copy(ty)
     }
