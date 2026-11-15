@@ -324,7 +324,6 @@ impl<'c> Codegen<'c> {
                 self.w(&format!("    !{greg}\n"));
             }
             let terminates = block_terminates(&case.body);
-            let body_start = self.out.len();
             match (&result_slot, terminates) {
                 (Some(slot), false) => {
                     self.gen_block_tail_value_store(&case.body, slot, &expr_ty)?;
@@ -333,26 +332,28 @@ impl<'c> Codegen<'c> {
                     self.gen_block(&case.body)?;
                 }
             }
-            let body_text = self.out[body_start..].to_string();
             self.emit_match_phi_cleanups(case.body.last())?;
-            // Arm-scope exit: pattern bindings are not statements,
-            // so no checker cleanup retires them; release the ones
-            // the body left unconsumed (emit_release no-ops for
-            // consumed / stack / borrow registers). Wildcard
-            // bindings alias the scrutinee itself and are left to
-            // the scrutinee's own cleanup plan. A binding the body
-            // moved out through a `^` call argument or a return is
-            // skipped: that consumption happens inside the call /
-            // return text and is not recorded in the consumed set
-            // (the checker's own cleanups know it; this emitter
-            // plan only sees the emitted text).
+            // Arm-scope exit (stage 5b checker-plans): pattern
+            // bindings are not statements, so no checker cleanup
+            // retires them; the checker recorded each arm's
+            // still-active pattern bindings during check_match and
+            // the emitter prints that list through emit_release
+            // (which no-ops for consumed / stack / borrow registers
+            // and dedups against the phi cleanups just printed).
+            // A binding the body consumed — directly, or through a
+            // re-alias let move the emitted text cannot see — is
+            // absent from the list. Wildcard bindings alias the
+            // scrutinee itself and stay with the scrutinee's own
+            // cleanup plan. When the projection carries nothing
+            // for this match (a harness CheckInfo without arm
+            // data), nothing is printed: the checker is
+            // authoritative, and the old text-scan approximation
+            // (`^alias` / `return alias` substring search over the
+            // emitted body) is gone.
             if !wildcard {
-                for binding in &pushed {
-                    let alias = self.resolve_binding_name(binding);
-                    let moved_out = body_text.contains(&format!("^{alias}"))
-                        || body_text.contains(&format!("return {alias}"));
-                    if !moved_out {
-                        self.emit_release(binding)?;
+                if let Some(list) = self.check.match_arm_exit_cleanups(expr, i) {
+                    for name in list.to_vec() {
+                        self.emit_release(&name)?;
                     }
                 }
             }
