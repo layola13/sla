@@ -328,6 +328,119 @@ impl<'c> Codegen<'c> {
         Ok((display, planned_args))
     }
 
+    /// Resolve an associated call's target to a registered
+    /// function declaration: user impl / overload methods live
+    /// under the method-mangled key (`Target_func`), imported
+    /// module functions under the module key (`target__func` or
+    /// `target::func`); a unique tail match rooted at the target
+    /// is the last resort (mirrors the SAB driver's tail rule).
+    fn resolve_associated_decl(
+        &self,
+        call: &sla_ast::CallExpr,
+    ) -> Option<(String, sla_ast::FuncDecl)> {
+        let target = call.associated_target.as_deref()?;
+        let func = call.func_name.as_str();
+        let mangled = sla_lowering::mangle_method_name(target, func);
+        for (key, d) in &self.assoc_index {
+            if key == &mangled {
+                return Some((key.clone(), d.clone()));
+            }
+        }
+        let candidates = [
+            mangled,
+            format!("{target}__{func}"),
+            format!("{target}::{func}"),
+        ];
+        for key in &candidates {
+            if let Some(d) = self.func_decl(key) {
+                return Some((key.clone(), d));
+            }
+        }
+        if let Some((key, d)) = self.func_decl_tail_match(func) {
+            if key.starts_with(target) {
+                return Some((key, d));
+            }
+        }
+        None
+    }
+
+    /// Receiver-typed method resolution for ordinary method
+    /// calls (`recv.m(...)` keeps the bare name and the receiver
+    /// as args[0]): the receiver's peeled type name keys the
+    /// assoc index. Consulted only after the bare-name lookup
+    /// misses, before the tail match.
+    fn resolve_receiver_method_decl(
+        &self,
+        call: &sla_ast::CallExpr,
+    ) -> Option<(String, sla_ast::FuncDecl)> {
+        let first = call.args.first()?;
+        let ty = self.expr_type(first)?;
+        let mut cur = &ty;
+        let name = loop {
+            match cur {
+                sla_ast::Type::Borrow(inner) | sla_ast::Type::Pointer(inner) => cur = inner,
+                sla_ast::Type::UserDefined(u) => break u.name.as_str(),
+                _ => return None,
+            }
+        };
+        let mangled = sla_lowering::mangle_method_name(name, &call.func_name);
+        for (key, d) in &self.assoc_index {
+            if key == &mangled {
+                return Some((key.clone(), d.clone()));
+            }
+        }
+        None
+    }
+
+    /// codegen.zig:14600 associated-call dispatch for the shapes
+    /// the std surface does not claim: targeted Option/Result
+    /// constructors (same EXPAND forms as the bare-name arms) and
+    /// plain calls to a resolved declaration (impl methods,
+    /// imported module functions). Returns None when neither
+    /// applies, leaving the caller to fail loudly.
+    fn gen_associated_call(
+        &mut self,
+        _expr: &Node,
+        call: &sla_ast::CallExpr,
+    ) -> Result<Option<String>> {
+        let target = call.associated_target.as_deref().unwrap_or("");
+        if matches!(target, "Option" | "Result") {
+            match call.func_name.as_str() {
+                "Some" | "Ok" | "Err" if call.args.len() == 1 => {
+                    let expand_name = match call.func_name.as_str() {
+                        "Some" => "OPTION_NEW_SOME",
+                        "Ok" => "RESULT_NEW_OK",
+                        _ => "RESULT_NEW_ERR",
+                    };
+                    let planned = self.gen_planned_call_arg(&call.args[0], None, false)?;
+                    let result = self.new_tmp();
+                    self.ins(&format!("EXPAND {expand_name} {result}, {}", planned.reg));
+                    let planned_args = vec![planned];
+                    self.emit_lowered_call_arg_cleanups(&planned_args, None)?;
+                    return Ok(Some(result));
+                }
+                "None" if call.args.is_empty() => {
+                    let result = self.new_tmp();
+                    self.ins(&format!("EXPAND OPTION_NEW_NONE {result}"));
+                    return Ok(Some(result));
+                }
+                _ => {}
+            }
+        }
+        if let Some((key, decl)) = self.resolve_associated_decl(call) {
+            let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;
+            let result = self.new_tmp();
+            let lowered = self.lowered_func_symbol(&key);
+            self.ins(&format!(
+                "{result} = call @{lowered}({})",
+                display.join(", ")
+            ));
+            self.emit_lowered_call_arg_cleanups(&planned_args, Some(&key))?;
+            return Ok(Some(result));
+        }
+        Ok(None)
+    }
+
     /// codegen.zig `genExpr` call path (plain known-function arm,
     /// panic arm, constructors, EXPAND fallback).
     pub(crate) fn gen_expr_call(&mut self, expr: &Node) -> Result<String> {
@@ -354,10 +467,16 @@ impl<'c> Codegen<'c> {
             };
         }
         if call.associated_target.is_some() {
-            return unsupported(
-                "associated-target call (method/special families deferred)",
-                "codegen.zig:14600 (associated call dispatch)",
-            );
+            if let Some(reg) = self.gen_associated_call(expr, call)? {
+                return Ok(reg);
+            }
+            return Err(crate::TextError::Unsupported {
+                feature: format!(
+                    "associated-target call target={:?} func={}",
+                    call.associated_target, call.func_name
+                ),
+                zig_ref: "codegen.zig:14600 (associated call dispatch)",
+            });
         }
         let func_name = call.func_name.clone();
 
@@ -396,6 +515,9 @@ impl<'c> Codegen<'c> {
         if is_panic_builtin_name(&func_name) {
             return self.gen_panic_call(call);
         }
+        if func_name == "str_eq" && call.args.len() == 2 {
+            return self.gen_str_eq_call(call);
+        }
         if let Some(view) = self.check.imported_macro(&func_name) {
             return self.gen_imported_macro_call_expr(call, &view);
         }
@@ -416,6 +538,7 @@ impl<'c> Codegen<'c> {
         let known = self
             .func_decl(&func_name)
             .map(|d| (func_name.clone(), d))
+            .or_else(|| self.resolve_receiver_method_decl(call))
             .or_else(|| self.func_decl_tail_match(&func_name));
         if let Some((callee_name, decl)) = known {
             let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;
@@ -493,6 +616,44 @@ impl<'c> Codegen<'c> {
             }
         }
         Ok(self.new_tmp())
+    }
+
+    /// Stage 4: the `str_eq` checker builtin (check_builtin.rs
+    /// venue :8832). Both arguments are string-like; each is
+    /// materialized as a slice register and compared with the
+    /// std SLICE_EQ macro (byte-wise slice equality from
+    /// sa_std/core/slice.sa). A `String` argument goes through
+    /// STRING_BUF_AS_STR, mirroring the format-push path
+    /// (format.rs emit_format_push_string_like); any other
+    /// string-like argument already evaluates to a slice
+    /// register (string literals included, codegen.rs
+    /// gen_literal_value).
+    fn gen_str_eq_call(&mut self, call: &sla_ast::CallExpr) -> Result<String> {
+        let left = self.gen_str_eq_slice(&call.args[0])?;
+        let right = self.gen_str_eq_slice(&call.args[1])?;
+        let result = self.new_tmp();
+        self.ins(&format!("EXPAND SLICE_EQ {result}, {left}, {right}"));
+        self.emit_release(&left)?;
+        self.emit_release(&right)?;
+        Ok(result)
+    }
+
+    fn gen_str_eq_slice(&mut self, arg: &Node) -> Result<String> {
+        let ty = self.expr_type(arg);
+        if let Some(ty) = &ty {
+            if crate::codegen::is_format_string_type(ty) {
+                let string_reg = self.gen_expr(arg)?;
+                let slice_reg = self.new_tmp();
+                self.ins(&format!(
+                    "EXPAND STRING_BUF_AS_STR {slice_reg}, {string_reg}"
+                ));
+                if call_arg_needs_release(arg) {
+                    self.emit_release(&string_reg)?;
+                }
+                return Ok(slice_reg);
+            }
+        }
+        self.gen_expr(arg)
     }
 
     /// codegen.zig:1868 `genCallStmt`.

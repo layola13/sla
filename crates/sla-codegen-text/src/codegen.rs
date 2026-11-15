@@ -58,6 +58,13 @@ pub struct Codegen<'c> {
     pub(crate) global_const_bindings: HashSet<String>,
     pub(crate) global_scalar_consts: Vec<(String, Literal)>,
     pub(crate) func_index: Vec<(String, FuncDecl)>,
+    /// Impl / overload methods by mangled name (`Type_method`,
+    /// `Type__Trait_method`), collected in `generate_program`
+    /// alongside the emission of their bodies. Kept separate from
+    /// `func_index` so bare-name and tail-match resolution keep
+    /// their existing ambiguity behavior; associated calls and
+    /// receiver-typed method calls consult this index.
+    pub(crate) assoc_index: Vec<(String, FuncDecl)>,
     /// Enum declarations by name, collected from the program's
     /// decls in `generate_program` (the SAB driver keeps the same
     /// index; the checker's own enum table keeps only variant
@@ -95,6 +102,7 @@ impl<'c> Codegen<'c> {
             global_const_bindings: HashSet::new(),
             global_scalar_consts: Vec::new(),
             func_index: Vec::new(),
+            assoc_index: Vec::new(),
             enum_index: Vec::new(),
             loop_break_labels: Vec::new(),
             loop_continue_labels: Vec::new(),

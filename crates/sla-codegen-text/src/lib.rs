@@ -33,6 +33,7 @@ mod surface;
 mod collect;
 mod expr;
 mod expr_if;
+mod expr_match;
 mod extern_macro;
 mod format;
 mod func;

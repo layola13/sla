@@ -60,6 +60,31 @@ impl<'c> Codegen<'c> {
             if let Node::EnumDecl(e) = decl {
                 self.enum_index.push((e.name.clone(), e.clone()));
             }
+            // Impl / overload methods under their mangled names,
+            // for associated-call resolution (the bodies are
+            // emitted under the same names in step 4 below).
+            let method_groups: Vec<(&sla_ast::Type, &Option<String>, &[Node])> = match decl {
+                Node::ImplDecl(i) => vec![(&*i.target_ty, &i.trait_name, &i.methods)],
+                Node::OverloadDecl(o) => vec![(&*o.target_ty, &None, &o.methods)],
+                _ => vec![],
+            };
+            for (target_ty, trait_name, methods) in method_groups {
+                if let sla_ast::Type::UserDefined(ud) = target_ty {
+                    for m in methods {
+                        if let Node::FuncDecl(mf) = m {
+                            let mangled = match trait_name {
+                                Some(t) => sla_lowering::mangle_trait_method_name(
+                                    &ud.name,
+                                    t,
+                                    &mf.name,
+                                ),
+                                None => sla_lowering::mangle_method_name(&ud.name, &mf.name),
+                            };
+                            self.assoc_index.push((mangled, mf.clone()));
+                        }
+                    }
+                }
+            }
         }
 
         // 1. Imports in declaration order (`using` emits nothing).
@@ -599,12 +624,6 @@ impl<'c> Codegen<'c> {
         }
         let mut families: std::collections::HashSet<&'static str> = Default::default();
         walk(self.check, program, &mut families);
-        if families.contains("async") {
-            return unsupported(
-                "program needs async/thread macros",
-                "codegen.zig:7060-7130 (programNeeds*Macros)",
-            );
-        }
         for (name, import) in MACRO_FAMILIES {
             if families.contains(name) {
                 self.wl(&format!("@import \"{import}\""));
