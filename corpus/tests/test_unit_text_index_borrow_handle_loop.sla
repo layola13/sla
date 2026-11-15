@@ -1,0 +1,30 @@
+// RUST-TEXT-EMITTER-2 regression: borrowing a heap-handle
+// element in a loop (`&args[i]` where the element is a Vec)
+// yields the loaded handle word, and releasing the borrow
+// settles the slot-base chain in finishIndexAddress order —
+// an immediate slot-base release traps UseAfterMove on the
+// returned borrow, never releasing it traps PhiStateConflict
+// at the loop back-edge.
+
+fn tb_len_of(data: &Vec<u8>) -> u64 {
+    return len(data);
+}
+
+@test "text index borrow handle element in loop"() {
+    let args: Vec<Vec<u8>> = Vec::new();
+    let a: Vec<u8> = Vec::new();
+    a.push(65);
+    a.push(66);
+    args.push(a);
+    let b: Vec<u8> = Vec::new();
+    b.push(67);
+    args.push(b);
+    let total: u64 = 0;
+    let i: u64 = 0;
+    while i < len(args) {
+        total = total + tb_len_of(&args[i]);
+        i = i + 1;
+    }
+    if total != 3 { panic(95801); };
+    if tb_len_of(&args[0]) != 2 { panic(95802); };
+}

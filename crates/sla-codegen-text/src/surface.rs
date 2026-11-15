@@ -373,7 +373,13 @@ impl<'c> Codegen<'c> {
                 let value = planned.reg.clone();
                 let reg = self.new_tmp();
                 self.ins(&format!("EXPAND {macro_name} {reg}, {recv}, {value}"));
-                self.surface_finish_value(&planned, false)?;
+                // No post-call disposition for the default
+                // (Zig DEF-R8-FIX): passing it to EXPAND already
+                // retires the register — the macro moves it into
+                // the result on the None arm and drops it on the
+                // Some arm. Releasing it here freed the live
+                // result (host UseAfterMove on the default temp).
+                let _ = &planned;
                 Ok(Some(SurfaceCall::Value(reg)))
             }
             ("Vec", "push") | ("GrowVec", "push") => {
@@ -390,6 +396,20 @@ impl<'c> Codegen<'c> {
                 } else {
                     "GROWVEC_PUSH"
                 };
+                // CLASSB-DEF1: a copy-like element pushed from a
+                // live binding stores an independent copy; the
+                // source stays usable and owning.
+                if let Some(copy_reg) = self.push_arg_copy_materialization(call, &elem)? {
+                    self.ins(&format!(
+                        "EXPAND {macro_name} {recv}, {copy_reg}, {}",
+                        slot_size(&elem)
+                    ));
+                    // The copy's ownership moves into the vec:
+                    // forget it, never release (a release would
+                    // free the record the new slot references).
+                    self.emit_forget_moved_value(&copy_reg)?;
+                    return Ok(Some(SurfaceCall::Void));
+                }
                 let planned = self.surface_value_consumed(call, 1)?;
                 let value = planned.reg.clone();
                 self.ins(&format!(

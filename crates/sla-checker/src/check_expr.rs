@@ -73,6 +73,13 @@ impl Checker {
             Node::MoveExpr(m) => {
                 if let Node::Identifier(name) = &*m.expr {
                     let ty = self.check_identifier(name)?;
+                    // The fast path bypasses check_expr for the
+                    // inner identifier, so record its type here —
+                    // backends key every fact by node address and
+                    // an unrecorded moved identifier is a
+                    // MissingType hole (e.g. an addressable
+                    // binding moved as a call argument).
+                    self.expr_types.insert(node_key_of(&m.expr), ty.clone());
                     self.consume_binding(name, "explicit move")?;
                     return Ok(ty);
                 }

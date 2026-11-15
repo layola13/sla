@@ -1,0 +1,24 @@
+// RUST-TEXT-EMITTER-2 regression: a `using` extension whose
+// first parameter is declared with a borrow TYPE (&Vec<i32>).
+// The call site keeps the bare method name while the callee is
+// lifted under a module-prefixed key (unique tail-segment
+// match), and the receiver must be auto-borrowed — planning it
+// as a move emitted `^v` against a `&v` contract
+// (CapabilityMismatch).
+
+mod text_borrow_ext {
+    pub fn peek_len(v: &Vec<i32>) -> i32 {
+        return v.len() + 50;
+    }
+}
+
+using text_borrow_ext;
+
+@test "text using ext borrow receiver auto-borrow"() {
+    let v: Vec<i32> = Vec::new();
+    v.push(1);
+    v.push(2);
+    v.push(3);
+    if v.peek_len() != 53 { panic(95501); };
+    if v.len() != 3 { panic(95502); };
+}

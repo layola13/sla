@@ -1,0 +1,22 @@
+// RUST-TEXT-EMITTER-2 regression (CLASSB-DEF1): pushing a
+// shallow-copyable struct binding into a Vec must store an
+// independent copy and keep the source binding live; the slot
+// holds the record pointer, so element reads load the word.
+
+struct Cb2Item {
+    key: i32,
+    val: i32,
+}
+
+@test "text push copies shallow struct binding"() {
+    let v: Vec<Cb2Item> = Vec::new();
+    let it: Cb2Item = Cb2Item { key: 7, val: 70 };
+    v.push(it);
+    if it.key != 7 { panic(95301); };
+    if v[0].key != 7 { panic(95302); };
+    it.key = 9;
+    if v[0].key != 7 { panic(95303); };
+    v.push(it);
+    if v[1].key != 9 { panic(95304); };
+    if v[0].val != 70 { panic(95305); };
+}

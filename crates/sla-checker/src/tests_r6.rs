@@ -171,7 +171,7 @@ fn check(decls: Vec<Node>) -> Result<(), crate::diag::Diagnostic> {
 // neg_fallible_result_discarded.
 
 fn fallible_extern(payload_spelling: &str) -> ExternSig {
-    let parts = vec![("value".to_string(), "i32".to_string(), false, false)];
+    let parts = vec![("value".to_string(), "i32".to_string(), false, false, false)];
     let mut sig = extern_sig_from_parts(&parts, payload_spelling, true, false);
     sig.ret_abi = payload_spelling.to_string();
     sig

@@ -21,14 +21,16 @@ use crate::node_key;
 /// One contract-extern parameter as a backend needs it (Zig
 /// `tc.extern_funcs` param entries): the ABI type spelling plus the
 /// capability the contract declared for the argument (`&name` =
-/// borrow, `^name` = move, anything else = by value; a raw `*name`
-/// pointer parameter is by-value at the call site).
+/// borrow, `^name` = move, `*name` = raw — the SA-text call site
+/// carries the `*` capability prefix, Zig `abiCallArgPrefix`
+/// `.raw`; anything else = by value).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExternParamView {
     pub name: String,
     pub abi_ty: String,
     pub is_borrow: bool,
     pub is_move: bool,
+    pub is_raw: bool,
 }
 
 /// A contract extern's full signature as a backend needs it (Zig

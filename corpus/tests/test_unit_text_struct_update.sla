@@ -1,0 +1,22 @@
+// RUST-TEXT-EMITTER-2 regression: struct update expressions
+// (`S { x: v, ..base }`) fill unnamed fields from the base —
+// plain fields by direct transfer, pointer-backed fields by
+// move out of the base record.
+
+struct Pos2 {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+fn pos2_update(old_item: Pos2) -> Pos2 {
+    return Pos2 { x: old_item.x + 10, ..old_item };
+}
+
+@test "text struct update copies untouched fields"() {
+    let p = Pos2 { x: 1, y: 2, z: 3 };
+    let q = pos2_update(p);
+    if q.x != 11 { panic(95601); };
+    if q.y != 2 { panic(95602); };
+    if q.z != 3 { panic(95603); };
+}

@@ -1,0 +1,41 @@
+// RUST-TEXT-EMITTER-2 regression: the same let name bound in
+// sibling branches. The text codegen used to CLONE the repeated
+// let statement before generating it; checker facts are keyed
+// by node address, so the clone's value missed every lookup
+// (MissingType "let statement value type"). The original node
+// must be generated under its alias.
+
+struct S2Pair {
+    k: int,
+    reg: int,
+}
+
+fn s2_init() -> S2Pair {
+    return S2Pair { k: 0, reg: 0 };
+}
+
+fn s2_store(o: &S2Pair, v: int) {
+    o.k = v;
+    o.reg = v + 10;
+}
+
+fn s2_pick(flag: int) -> int {
+    let total = 0;
+    if flag == 1 {
+        let x = s2_init();
+        s2_store(&x, 3);
+        total = total + x.reg;
+    };
+    if flag == 2 {
+        let x = s2_init();
+        s2_store(&x, 5);
+        total = total + x.reg;
+    };
+    return total;
+}
+
+@test "text repeated let in sibling branches"() {
+    if s2_pick(1) != 13 { panic(95101); };
+    if s2_pick(2) != 15 { panic(95102); };
+    if s2_pick(0) != 0 { panic(95103); };
+}

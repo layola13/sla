@@ -5,14 +5,16 @@
 //! The Zig cascade probes a series of handle-family tables before the
 //! plain `!name` default (mutex guards, RefCell borrow handles, file
 //! and metadata handles, mpsc/string/collection binding sets). The
-//! slice maintains none of those tables — no fixture program creates
-//! such a binding — so those probes are structurally absent here and
-//! the cascade reduces to the guards the slice can hit, in the Zig
-//! order: internal symbol, `&`/`^` prefix, stack-alloc binding, global
-//! const, already-consumed, then the default release. Adding a handle
-//! family means adding its probe at the Zig position, not appending.
+//! slice maintains only one of those tables — `borrow_source_temps`,
+//! populated by the place-address consumers (place.rs) — so the other
+//! probes are structurally absent here and the cascade reduces to
+//! the guards the slice can hit, in the Zig order: internal symbol,
+//! borrow-address-temp plan, `&`/`^` prefix, stack-alloc binding,
+//! global const, already-consumed, then the default release. Adding
+//! a handle family means adding its probe at the Zig position, not
+//! appending.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use sla_ast::Node;
 use sla_lowering::{
@@ -24,15 +26,33 @@ use crate::codegen::Codegen;
 use crate::Result;
 
 impl<'c> Codegen<'c> {
-    /// Snapshot/restore of the consumed set, the slice-visible part of
-    /// the Zig branch-state save/restore (which also snapshots borrow
-    /// and RefCell state the slice does not track).
-    pub(crate) fn snapshot_consumed(&self) -> HashSet<String> {
-        self.consumed_bindings.clone()
+    /// Snapshot/restore of the consumed set and the borrow-source
+    /// table, the slice-visible part of the Zig branch-state
+    /// save/restore (codegen.zig:2417-2452; RefCell state is not
+    /// tracked in this lane).
+    pub(crate) fn snapshot_consumed(&self) -> (HashSet<String>, HashMap<String, String>) {
+        (
+            self.consumed_bindings.clone(),
+            self.borrow_source_temps.clone(),
+        )
     }
 
-    pub(crate) fn restore_consumed(&mut self, snapshot: &HashSet<String>) {
-        self.consumed_bindings = snapshot.clone();
+    pub(crate) fn restore_consumed(
+        &mut self,
+        snapshot: &(HashSet<String>, HashMap<String, String>),
+    ) {
+        self.consumed_bindings = snapshot.0.clone();
+        self.borrow_source_temps = snapshot.1.clone();
+    }
+
+    /// codegen.zig:14942 (the borrow arm of transferValueState):
+    /// a binding that takes over a borrow-address temp inherits
+    /// its source temp, so releasing the binding settles both.
+    pub(crate) fn transfer_borrow_source_to_binding(&mut self, value_reg: &str, binding: &str) {
+        if let Some(source_temp) = self.borrow_source_temps.remove(value_reg) {
+            self.borrow_source_temps
+                .insert(binding.to_string(), source_temp);
+        }
     }
 
     /// codegen.zig:841 `emitRelease`.
@@ -41,8 +61,18 @@ impl<'c> Codegen<'c> {
         if is_internal_symbol(&resolved) {
             return Ok(());
         }
-        // (Zig: borrow-address-temp release plan over
-        // `borrow_source_temps` — empty for every slice program.)
+        // codegen.zig:1143: the borrow-address-temp release plan
+        // (lowering_rules.planBorrowAddressTempRelease): releasing
+        // a recorded borrow address settles the borrow register
+        // itself, then releases its source temp.
+        if let Some(source_temp) = self.borrow_source_temps.remove(&resolved) {
+            if !self.consumed_bindings.contains(&resolved) {
+                self.consumed_bindings.insert(resolved.clone());
+                self.ins(&format!("!{resolved}"));
+            }
+            self.emit_release(&source_temp)?;
+            return Ok(());
+        }
         // (Zig: mutex/rwlock/refcell/file/metadata handle families —
         // no such bindings exist in the slice.)
         if resolved.starts_with('&') || resolved.starts_with('^') {

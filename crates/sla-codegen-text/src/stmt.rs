@@ -50,6 +50,12 @@ impl<'c> Codegen<'c> {
             // fixtures keep compiling (full lowering is R-4
             // jurisdiction).
             Node::GoStmt(_) | Node::DeferStmt(_) | Node::SelectStmt(_) => {},
+            // A `using` declaration inside a function body only
+            // scopes the checker's extension resolution (already
+            // done); it emits nothing, exactly as the SAB
+            // emitter treats it and as the top-level UsingDecl
+            // is treated in generate_program.
+            Node::UsingDecl(_) => {},
             Node::ExprStmt(expr) => self.gen_expr_stmt(expr)?,
             Node::ReturnStmt(_) => self.gen_return_stmt(stmt)?,
             Node::WhileStmt(_) => self.gen_while_stmt(stmt)?,
@@ -59,12 +65,7 @@ impl<'c> Codegen<'c> {
                 let resolved = self.resolve_binding_name(&rel.var_name);
                 self.emit_release(&resolved)?;
             }
-            Node::ForStmt(_) => {
-                return unsupported(
-                    "for statement (emission path not yet ported)",
-                    "codegen.zig:11300 (for_stmt emission)",
-                )
-            }
+            Node::ForStmt(_) => self.gen_for_stmt(stmt)?,
             Node::LetElseStmt(_) => {
                 return unsupported(
                     "let-else statement (pattern family deferred)",
@@ -298,6 +299,9 @@ impl<'c> Codegen<'c> {
 
         // Generic path.
         let val = self.gen_expr(&let_stmt.value)?;
+        // The binding takes over the value register; a recorded
+        // borrow source moves with it (codegen.zig:14942).
+        self.transfer_borrow_source_to_binding(&val, &resolved_name);
         if let Some(moved) = stored_value_moves_identifier(
             &let_stmt.value,
             &ty_or_err,
@@ -334,6 +338,115 @@ impl<'c> Codegen<'c> {
     }
 
     /// codegen.zig:11105 assign statement, identifier-target path.
+    /// codegen.zig:14284 `finishStoredValueAfterSlotStore`: after
+    /// a store into a place, a stored identifier temp is forgotten
+    /// (the slot owns it now); any other release-needing value is
+    /// forgotten when it is a raw pointer or a non-Copy
+    /// non-borrow-like value, and released otherwise.
+    pub(crate) fn finish_stored_value_after_slot_store(
+        &mut self,
+        val_reg: &str,
+        value: &Node,
+    ) -> Result<()> {
+        if stored_identifier_needs_release(value, val_reg) {
+            self.emit_forget_moved_value(val_reg)?;
+            return Ok(());
+        }
+        if sla_lowering::call_arg_needs_release(value) {
+            let val_ty = self.expr_type(value);
+            let is_ptr = val_ty
+                .as_ref()
+                .map(|t| crate::codegen::type_string(t) == "ptr")
+                .unwrap_or(false);
+            let forget = is_ptr
+                || val_ty
+                    .as_ref()
+                    .map(|t| !self.type_is_copy_value(t) && !sla_lowering::is_borrow_like_type(t))
+                    .unwrap_or(false);
+            if forget {
+                self.emit_forget_moved_value(val_reg)?;
+            } else {
+                self.emit_release(val_reg)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The SAB crate's `mark_assignment_moved_source`
+    /// (gen_assign.rs): an identifier value stored into a place
+    /// has moved — mark the binding consumed so its scope cleanup
+    /// does not release it a second time.
+    pub(crate) fn mark_assignment_moved_source(&mut self, target: &Node, value: &Node) {
+        let Some(val_ty) = self.expr_type(value) else {
+            return;
+        };
+        let is_copy = self.type_is_copy_value(&val_ty);
+        if let Some(name) =
+            sla_lowering::release_facts::assignment_moves_identifier(target, value, &val_ty, is_copy)
+        {
+            self.mark_consumed_binding(name);
+        }
+    }
+
+    /// codegen.zig `genIndexAssign` vec arm for owned (non-scalar)
+    /// elements: same bounds/ptr/store shape as the scalar arm,
+    /// but the element word is stored as u64 (a handle/record
+    /// pointer's bits) and the stored value goes through
+    /// finishStoredValueAfterSlotStore. No overwritten-element
+    /// drop is emitted — the SAB crate's index_assign surface
+    /// rules likewise store without one, and these shapes pass
+    /// the host verifier on that route.
+    fn gen_vec_index_assign_owned(
+        &mut self,
+        idx: &sla_ast::IndexExpr,
+        tname: &str,
+        elem: &sla_ast::Type,
+        assign: &sla_ast::AssignStmt,
+    ) -> Result<()> {
+        let (len_def, ptr_def) = if tname == "GrowVec" {
+            ("GrowVec_len", "GrowVec_ptr")
+        } else {
+            ("Vec_len", "Vec_ptr")
+        };
+        let vec_reg = self.gen_expr(&idx.target)?;
+        let index_reg = self.gen_expr(&idx.index)?;
+        let val_reg = self.gen_expr(&assign.value)?;
+        let len_reg = self.new_tmp();
+        let in_bounds_reg = self.new_tmp();
+        let hit_label = self.new_label("L_VEC_INDEX_ASSIGN_OK");
+        let miss_label = self.new_label("L_VEC_INDEX_ASSIGN_OOB");
+        self.ins(&format!("{len_reg} = load {vec_reg}+{len_def} as u64"));
+        self.ins(&format!("{in_bounds_reg} = ult {index_reg}, {len_reg}"));
+        self.ins(&format!("br {in_bounds_reg} -> {hit_label}, {miss_label}"));
+        self.ins(&format!("{miss_label}:"));
+        self.ins("panic(87)");
+        self.ins(&format!("{hit_label}:"));
+        let data_reg = self.new_tmp();
+        let offset_reg = self.new_tmp();
+        let ptr_reg = self.new_tmp();
+        self.ins(&format!("!{in_bounds_reg}"));
+        self.ins(&format!("{data_reg} = load {vec_reg}+{ptr_def} as ptr"));
+        self.ins(&format!(
+            "{offset_reg} = mul {index_reg}, {}",
+            type_size(elem).max(8)
+        ));
+        self.ins(&format!("{ptr_reg} = ptr_add {data_reg}, {offset_reg}"));
+        self.ins(&format!("store {ptr_reg}+0, {val_reg} as u64"));
+        self.finish_stored_value_after_slot_store(&val_reg, &assign.value)?;
+        self.mark_assignment_moved_source(&assign.target, &assign.value);
+        self.emit_release(&ptr_reg)?;
+        self.emit_release(&offset_reg)?;
+        self.emit_release(&data_reg)?;
+        self.emit_release(&len_reg)?;
+        if sla_lowering::call_arg_needs_release(&idx.index) {
+            self.emit_release(&index_reg)?;
+        }
+        if self.expr_result_reg_needs_release(&idx.target) {
+            self.emit_release(&vec_reg)?;
+        }
+        Ok(())
+    }
+
     fn gen_assign_stmt(&mut self, stmt: &Node) -> Result<()> {
         let assign = match stmt {
             Node::AssignStmt(a) => a,
@@ -356,10 +469,7 @@ impl<'c> Codegen<'c> {
             };
             if let Some((tname, Some(elem))) = vec_shape {
                 if !matches!(elem, sla_ast::Type::Primitive(_)) {
-                    return unsupported(
-                        "index assign of non-scalar Vec element",
-                        "codegen.zig:15930 (genIndexAssign drop variants)",
-                    );
+                    return self.gen_vec_index_assign_owned(idx, &tname, &elem, assign);
                 }
                 let (len_def, ptr_def) = if tname == "GrowVec" {
                     ("GrowVec_len", "GrowVec_ptr")
@@ -405,14 +515,62 @@ impl<'c> Codegen<'c> {
                 return Ok(());
             }
         }
+        // Non-identifier targets (codegen.zig genAssignStmt place
+        // arms; release accounting mirrors the SAB crate's
+        // gen_assign, which passes the host verifier on these
+        // shapes without an overwritten-place drop).
+        match &*assign.target {
+            Node::DerefExpr(d) => {
+                let ptr_reg = self.gen_expr(&d.expr)?;
+                let val_reg = self.gen_expr(&assign.value)?;
+                let val_ty = self.require_expr_type(&assign.value, "assign value type")?;
+                self.ins(&format!(
+                    "store {ptr_reg}+0, {val_reg} as {}",
+                    type_string(&val_ty)
+                ));
+                self.finish_stored_value_after_slot_store(&val_reg, &assign.value)?;
+                self.mark_assignment_moved_source(&assign.target, &assign.value);
+                if self.expr_result_reg_needs_release(&d.expr) {
+                    self.emit_release(&ptr_reg)?;
+                }
+                return Ok(());
+            }
+            Node::FieldExpr(f) => {
+                let addr = self.gen_field_address(f)?;
+                self.remember_address_projection_source(&addr);
+                let (_, field_ty) = self.field_address_layout(
+                    &self.require_expr_type(&f.expr, "assign field base type")?,
+                    &f.field_name,
+                )?;
+                let val_reg = self.gen_expr(&assign.value)?;
+                self.ins(&format!(
+                    "store {}+0, {val_reg} as {}",
+                    addr.ptr,
+                    type_string(&field_ty)
+                ));
+                self.finish_stored_value_after_slot_store(&val_reg, &assign.value)?;
+                self.mark_assignment_moved_source(&assign.target, &assign.value);
+                self.emit_release(&addr.ptr)?;
+                return Ok(());
+            }
+            Node::IndexExpr(idx) => {
+                let addr = self.gen_index_address(idx)?;
+                self.remember_index_address_source(&addr);
+                let val_reg = self.gen_expr(&assign.value)?;
+                self.ins(&format!(
+                    "store {}+0, {val_reg} as {}",
+                    addr.ptr,
+                    type_string(&addr.elem_ty)
+                ));
+                self.finish_stored_value_after_slot_store(&val_reg, &assign.value)?;
+                self.mark_assignment_moved_source(&assign.target, &assign.value);
+                self.finish_index_address(&addr)?;
+                return Ok(());
+            }
+            _ => {}
+        }
         let target_name = match &*assign.target {
             Node::Identifier(name) => name.clone(),
-            Node::IndexExpr(_) | Node::DerefExpr(_) | Node::FieldExpr(_) => {
-                return unsupported(
-                    "assign to index/deref/field target",
-                    "codegen.zig:11105 (non-identifier assign targets)",
-                )
-            }
             _ => {
                 return unsupported(
                     "assign target shape",
@@ -421,7 +579,15 @@ impl<'c> Codegen<'c> {
             }
         };
         let resolved_name = self.resolve_binding_name(&target_name);
-        let target_ty = self.expr_type(&assign.target);
+        // The target is a place, not a value expr: the checker
+        // records no expr type for it, so fall back to the
+        // binding's remembered type (without it a primitive
+        // `m = cap` degrades to a plain register move, consuming
+        // the source in one branch only — PhiStateConflict at
+        // the join).
+        let target_ty = self
+            .expr_type(&assign.target)
+            .or_else(|| self.local_binding_type_for_name(&resolved_name));
 
         // Copy-struct target: release + deep copy into (deferred).
         if let Some(ty) = &target_ty {

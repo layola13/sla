@@ -25,6 +25,10 @@ pub struct ContractParam {
     pub ty: String,
     pub is_borrow: bool,
     pub is_move: bool,
+    /// The `*name` raw-capability spelling: the callee
+    /// dereferences the passed pointer slot (Zig
+    /// `contract_parser.Param.is_raw`).
+    pub is_raw: bool,
 }
 
 /// One `@extern` declaration (Zig `contract_parser.ExternalFunction`).
@@ -181,6 +185,7 @@ fn parse_extern_line(line: &str) -> Result<ExternalFunction, ContractParseError>
         );
         let mut is_borrow = false;
         let mut is_move = false;
+        let mut is_raw = false;
         let mut p_name = p_name_raw;
         if let Some(stripped) = p_name.strip_prefix('&') {
             is_borrow = true;
@@ -188,12 +193,16 @@ fn parse_extern_line(line: &str) -> Result<ExternalFunction, ContractParseError>
         } else if let Some(stripped) = p_name.strip_prefix('^') {
             is_move = true;
             p_name = stripped;
+        } else if let Some(stripped) = p_name.strip_prefix('*') {
+            is_raw = true;
+            p_name = stripped;
         }
         params.push(ContractParam {
             name: p_name.to_string(),
             ty: p_ty.to_string(),
             is_borrow,
             is_move,
+            is_raw,
         });
     }
 

@@ -21,6 +21,18 @@ impl<'c> Codegen<'c> {
         }
     }
 
+    /// Zig `abiRawPrefixedArg`: a raw-capability (`*`-marked)
+    /// extern parameter keeps the same register; a borrow/move
+    /// annotation on the operand is REPLACED by the raw `*`
+    /// annotation the SA contract expects.
+    fn raw_prefixed_arg(reg: &str) -> String {
+        if let Some(rest) = reg.strip_prefix(['&', '^']) {
+            format!("*{rest}")
+        } else {
+            Self::prefix_cap(reg, '*')
+        }
+    }
+
     /// Shared extern argument planning (Zig `genExternPayloadCall`
     /// arg loop): each argument is planned against the contract
     /// parameter (the ABI type becomes the AST param type, as in
@@ -47,6 +59,7 @@ impl<'c> Codegen<'c> {
             });
             let planned = self.gen_planned_call_arg(arg, param.as_ref(), false)?;
             let reg = match view {
+                Some(p) if p.is_raw => Self::raw_prefixed_arg(&planned.reg),
                 Some(p) if p.is_borrow => Self::prefix_cap(&planned.reg, '&'),
                 Some(p) if p.is_move => Self::prefix_cap(&planned.reg, '^'),
                 _ => planned.reg.clone(),
@@ -181,6 +194,32 @@ impl<'c> Codegen<'c> {
                 // shapes.
                 _ => self.gen_expr(arg),
             };
+        }
+        // A borrow of a slot-backed or pointer-represented
+        // identifier passes the binding register itself (Zig
+        // planAddressOf identifier shape — the register already
+        // IS the value's address). Macro operands are never
+        // released by the caller emission, so the ptr_add temp
+        // the generic borrow path materialises would leak at
+        // function exit (PTR_BYTE_ADD(&big, 0) in
+        // test_smoke1_net).
+        if let Node::BorrowExpr(b) = arg {
+            if let Node::Identifier(name) = &*b.expr {
+                let resolved = self.resolve_binding_name(name);
+                let pointer_represented = matches!(
+                    self.expr_type(&b.expr),
+                    Some(
+                        Type::Array(_)
+                            | Type::Tuple(_)
+                            | Type::UserDefined(_)
+                            | Type::Pointer(_)
+                            | Type::Borrow(_)
+                    )
+                );
+                if self.stack_alloc_bindings.contains(&resolved) || pointer_represented {
+                    return Ok(resolved);
+                }
+            }
         }
         // Borrowed operands (borrowed_arg_mask) pass their plain
         // register: the mask records that the macro does not

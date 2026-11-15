@@ -40,6 +40,11 @@ pub struct Codegen<'c> {
     pub(crate) assigned_bindings: HashSet<String>,
     pub(crate) repeated_let_bindings: HashSet<String>,
     pub(crate) binding_aliases: Vec<(String, Vec<String>)>,
+    /// codegen.zig `borrow_source_temps`: address temp -> the
+    /// source temp its value derives from, recorded by the
+    /// place-address consumers (remember*Source) and consumed by
+    /// emitRelease's borrow-address-temp cascade step.
+    pub(crate) borrow_source_temps: HashMap<String, String>,
     pub(crate) let_binding_aliases: HashMap<usize, String>,
     pub(crate) local_binding_types: Vec<(String, Type)>,
     pub(crate) hoisted_allocs: Vec<String>,
@@ -77,6 +82,7 @@ impl<'c> Codegen<'c> {
             assigned_bindings: HashSet::new(),
             repeated_let_bindings: HashSet::new(),
             binding_aliases: Vec::new(),
+            borrow_source_temps: HashMap::new(),
             let_binding_aliases: HashMap::new(),
             local_binding_types: Vec::new(),
             hoisted_allocs: Vec::new(),
@@ -184,6 +190,7 @@ impl<'c> Codegen<'c> {
         self.repeated_let_bindings.clear();
         self.stack_alloc_bindings.clear();
         self.consumed_bindings.clear();
+        self.borrow_source_temps.clear();
         self.local_binding_types.clear();
         self.clear_binding_aliases();
         self.let_binding_aliases.clear();
@@ -204,6 +211,29 @@ impl<'c> Codegen<'c> {
             }
         }
         None
+    }
+
+    /// `using` extension callee lookup (mirrors the SAB driver's
+    /// plain-call tail): the call site keeps the bare method name
+    /// while the import expansion lifted the callee under a
+    /// module-prefixed key (`math3__double`); a UNIQUE tail-segment
+    /// match over the program's function index is the callee.
+    /// Ambiguity or absence returns None and the caller keeps its
+    /// existing fallback.
+    pub(crate) fn func_decl_tail_match(&self, name: &str) -> Option<(String, FuncDecl)> {
+        let mut found: Option<&(String, FuncDecl)> = None;
+        for entry in &self.func_index {
+            let key = &entry.0;
+            let tail_hit = key.rsplit("::").next() == Some(name)
+                || key.rsplit("__").next() == Some(name);
+            if tail_hit {
+                if found.is_some() {
+                    return None;
+                }
+                found = Some(entry);
+            }
+        }
+        found.map(|(n, f)| (n.clone(), f.clone()))
     }
 
     /// Enum declaration from the program index (collected in
@@ -419,18 +449,25 @@ impl<'c> Codegen<'c> {
     }
 
     /// Deep-copy emission for Copy structs (codegen.zig:3913
-    /// `genCopyValueInto`). Not ported: no aggregate values in the
-    /// slice. Fails loudly when a Copy-struct path is reached.
+    /// `genCopyValueInto`), plain-field subset in copy.rs: a
+    /// record whose fields are all plain words or nested plain
+    /// structs copies field by field into a fresh record. A
+    /// heap-handle field needs the deep clone dispatcher and
+    /// stays loud.
     pub(crate) fn gen_copy_value_into(
         &mut self,
-        _target: &str,
-        _source: &str,
-        _ty: &Type,
+        target: &str,
+        source: &str,
+        ty: &Type,
     ) -> Result<()> {
-        unsupported(
-            "genCopyValueInto (Copy-struct deep copy)",
-            "codegen.zig:3913",
-        )
+        if self.gen_copy_value_into_inner(target, source, ty)? {
+            Ok(())
+        } else {
+            unsupported(
+                "genCopyValueInto (Copy-struct deep copy of handle fields)",
+                "codegen.zig:3913",
+            )
+        }
     }
 }
 

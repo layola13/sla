@@ -439,6 +439,7 @@ pub fn run_frontend(
                             pp.ty.clone(),
                             pp.is_borrow,
                             pp.is_move,
+                            pp.is_raw,
                         )
                     })
                     .collect::<Vec<_>>(),

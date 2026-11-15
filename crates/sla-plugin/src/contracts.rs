@@ -48,7 +48,7 @@ pub fn extern_sig_of(func: &ExternalFunction) -> ExternSig {
         &func
             .params
             .iter()
-            .map(|pp| (pp.name.clone(), pp.ty.clone(), pp.is_borrow, pp.is_move))
+            .map(|pp| (pp.name.clone(), pp.ty.clone(), pp.is_borrow, pp.is_move, pp.is_raw))
             .collect::<Vec<_>>(),
         &func.ret_ty,
         func.return_fallible,
@@ -143,6 +143,7 @@ mod tests {
                 ty: "u64".to_string(),
                 is_borrow: false,
                 is_move: true,
+                is_raw: false,
             }],
             ret_ty: "i32".to_string(),
             return_fallible: false,

@@ -134,60 +134,11 @@ impl<'c> Codegen<'c> {
         .consumes_temp()
     }
 
-    /// codegen.zig:9986 `genPlannedCallArg`.
-    pub(crate) fn gen_planned_call_arg(
-        &mut self,
-        arg: &Node,
-        param: Option<&Param>,
-        receiver_style_auto_borrow: bool,
-    ) -> Result<LoweredCallArg> {
-        let arg_ty = self.expr_type(arg);
-        let arg_is_copy = arg_ty
-            .as_ref()
-            .map(|t| self.type_is_copy_value(t))
-            .unwrap_or(false);
-        let input = CallArgMaterializationInput {
-            param: param.cloned(),
-            arg_ty: arg_ty.clone(),
-            arg_index: if receiver_style_auto_borrow { 0 } else { 1 },
-            auto_borrow_receiver: receiver_style_auto_borrow,
-            receiver_style_auto_borrow,
-            statement_receiver_auto_borrow: false,
-            abi_borrow_auto_borrow: param
-                .map(|p| abi_param_needs_borrow_arg(p.is_borrow, &p.ty))
-                .unwrap_or(false),
-            array_to_slice_borrow: false,
-            dyn_borrow_trait_name: None,
-            copy_struct_value: call_arg_is_copy_struct_value(
-                arg,
-                param,
-                param
-                    .map(|p| self.check.type_is_copy_struct(&p.ty))
-                    .unwrap_or(false),
-            ),
-            generated_fn_ptr_identifier: false,
-            generated_scalar_const_identifier: false,
-            local_fn_ptr_identifier: matches!(arg, Node::Identifier(_))
-                && matches!(arg_ty, Some(Type::FnPtr(_))),
-            shallow_copy_value: arg_ty
-                .as_ref()
-                .map(|t| self.check.type_is_shallow_copy_call_arg_value(t))
-                .unwrap_or(false),
-            value_arg_transfers_ownership: value_arg_transfers_ownership_from_param(
-                param,
-                arg_ty.as_ref(),
-                arg_is_copy,
-            ),
-            target: CallArgTarget::SaText,
-        };
-        let plan = plan_call_arg_materialization(arg, &input);
-        self.gen_call_arg_from_materialization_plan(arg, param, &plan)
-    }
 
     /// codegen.zig:9860 `genCallArgFromMaterializationPlan`. The
     /// Value and AutoBorrow arms are ported; every other plan kind
     /// belongs to a deferred family and fails loudly.
-    fn gen_call_arg_from_materialization_plan(
+    pub(crate) fn gen_call_arg_from_materialization_plan(
         &mut self,
         arg: &Node,
         param: Option<&Param>,
@@ -196,6 +147,27 @@ impl<'c> Codegen<'c> {
         match plan.kind {
             CallArgMaterializationKind::Value => {
                 let raw_reg = self.gen_expr(arg)?;
+                // codegen.zig Value arm head: `&ident` of an
+                // addressable binding is passed as `&` of its
+                // materialised address register, never as the
+                // bare address (the callee contract is a borrow).
+                if let Some(borrowed_name) = sla_lowering::borrowed_identifier_name(arg) {
+                    let resolved = self.resolve_binding_name(borrowed_name);
+                    if self.addressable_bindings.contains(borrowed_name)
+                        || self.addressable_bindings.contains(&resolved)
+                    {
+                        return Ok(LoweredCallArg {
+                            reg: format!("&{raw_reg}"),
+                            release_after_call: false,
+                            release_reg: if plan.release_after_call {
+                                Some(raw_reg.clone())
+                            } else {
+                                None
+                            },
+                            consume_reg: None,
+                        });
+                    }
+                }
                 if plan.transfers_ownership {
                     // The Vec-clone preservation arm (identifier must
                     // stay live for a later use) needs the collection
@@ -215,7 +187,15 @@ impl<'c> Codegen<'c> {
                     });
                 }
                 let cap = param.map(|p| abi_call_arg_cap_kind(p.is_borrow, p.is_move));
-                if matches!(cap, Some(AbiCapKind::Borrow)) {
+                // lowering_rules.abiParamNeedsBorrowArg: the cap
+                // kind covers the `&param` spelling; a parameter
+                // whose TYPE is a borrow needs the same `&` prefix
+                // (unless the register already carries one).
+                let needs_borrow = matches!(cap, Some(AbiCapKind::Borrow))
+                    || param
+                        .map(|p| p.is_borrow || matches!(&*p.ty, sla_ast::Type::Borrow(_)))
+                        .unwrap_or(false);
+                if needs_borrow && !raw_reg.starts_with('&') {
                     let release = self.call_arg_result_temp_needs_release_for_param(
                         arg,
                         &raw_reg,
@@ -277,6 +257,49 @@ impl<'c> Codegen<'c> {
                 Ok(LoweredCallArg {
                     reg: ptr_reg,
                     release_after_call: plan.release_after_call,
+                    release_reg: None,
+                    consume_reg: None,
+                })
+            }
+            CallArgMaterializationKind::CopyStructValue => {
+                // Zig genCallArgFromMaterializationPlan copy arm:
+                // deep-copy the value into a fresh record; the
+                // copy passes plainly (the Copy-struct contract
+                // is a plain pointer) and is FORGOTTEN after the
+                // call, never released — the callee owns the
+                // by-value parameter and may return it.
+                let target_param = param.ok_or_else(|| crate::TextError::MissingType {
+                    context: "copy struct value parameter".to_string(),
+                })?;
+                let source_reg = self.gen_expr(arg)?;
+                let copied = self.new_tmp();
+                self.gen_copy_value_into(&copied, &source_reg, &target_param.ty)?;
+                Ok(LoweredCallArg {
+                    reg: copied.clone(),
+                    release_after_call: plan.release_after_call,
+                    release_reg: None,
+                    consume_reg: Some(copied),
+                })
+            }
+            CallArgMaterializationKind::ShallowCopyPreservedValue => {
+                // Zig shallow-copy arm: copy the record, pass
+                // the copy as a move; the source binding stays
+                // live and owning.
+                let arg_ty = self
+                    .expr_type(arg)
+                    .ok_or_else(|| crate::TextError::MissingType {
+                        context: "shallow copy argument type".to_string(),
+                    })?;
+                let source_reg = self.gen_expr(arg)?;
+                let copied = self
+                    .gen_record_copy(&source_reg, &arg_ty)?
+                    .ok_or_else(|| crate::TextError::Unsupported {
+                        feature: "shallow copy of handle-field record".to_string(),
+                        zig_ref: "codegen.zig:5705 (genShallowCopyCallArgValue)",
+                    })?;
+                Ok(LoweredCallArg {
+                    reg: format!("^{copied}"),
+                    release_after_call: false,
                     release_reg: None,
                     consume_reg: None,
                 })
@@ -386,15 +409,23 @@ impl<'c> Codegen<'c> {
             return self.gen_extern_call(call, &sig);
         }
 
-        if let Some(decl) = self.func_decl(&func_name) {
+        // Plain known-function call; a `using` extension call
+        // site keeps the bare name, so fall back to the unique
+        // tail-segment match (SAB driver tail) before the
+        // EXPAND catch-all.
+        let known = self
+            .func_decl(&func_name)
+            .map(|d| (func_name.clone(), d))
+            .or_else(|| self.func_decl_tail_match(&func_name));
+        if let Some((callee_name, decl)) = known {
             let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;
             let result = self.new_tmp();
-            let lowered = self.lowered_func_symbol(&func_name);
+            let lowered = self.lowered_func_symbol(&callee_name);
             self.ins(&format!(
                 "{result} = call @{lowered}({})",
                 display.join(", ")
             ));
-            self.emit_lowered_call_arg_cleanups(&planned_args, Some(&func_name))?;
+            self.emit_lowered_call_arg_cleanups(&planned_args, Some(&callee_name))?;
             return Ok(result);
         }
 

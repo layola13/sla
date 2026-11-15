@@ -380,7 +380,16 @@ pub fn plan_call_arg_materialization(
         }
     }
     if input.copy_struct_value {
-        return plan(CallArgMaterializationKind::CopyStructValue, true);
+        // Zig planCallArgMaterialization: the copy is a fresh
+        // owning allocation handed to the callee's by-value
+        // parameter; the caller must NOT release it after the
+        // call (the callee may return the parameter, and the
+        // returned value aliases this very copy) — emitters
+        // forget the copy instead. (The Rust port previously
+        // returned `true` here, which made the text emitter
+        // release AND forget the copy: host UseAfterMove on
+        // test_unit_reg2_ipv6_classify.)
+        return plan(CallArgMaterializationKind::CopyStructValue, false);
     }
     if input.target == CallArgTarget::DirectSab {
         if input.generated_fn_ptr_identifier {

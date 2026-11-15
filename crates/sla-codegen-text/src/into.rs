@@ -118,12 +118,6 @@ impl<'c> Codegen<'c> {
         target: &str,
         lit: &StructLiteral,
     ) -> Result<()> {
-        if lit.update_expr.is_some() {
-            return unsupported(
-                "struct literal update expression",
-                "codegen.zig:16051 (genStructLiteralInto update arm)",
-            );
-        }
         let type_name = match &*lit.ty {
             Type::UserDefined(u) => u.name.clone(),
             _ => {
@@ -140,19 +134,83 @@ impl<'c> Codegen<'c> {
             }
         })?;
         self.ins(&format!("{target} = alloc {}", layout::struct_size(&decl)));
+        // Update arm (Zig genStructLiteralInto :15978): fields
+        // the literal does not name are filled from the update
+        // base — plain fields by direct word transfer,
+        // Copy-struct fields by deep copy, other pointer-backed
+        // fields by move out of the base record.
+        if let Some(update_expr) = &lit.update_expr {
+            let update_reg = self.gen_expr(update_expr)?;
+            for decl_field in &decl.fields {
+                if lit.fields.iter().any(|f| f.name == decl_field.name) {
+                    continue;
+                }
+                let (offset, field_ty) = layout::struct_field_layout(&decl, &decl_field.name)
+                    .ok_or_else(|| TextError::Unsupported {
+                        feature: format!("struct field layout `{}`", decl_field.name),
+                        zig_ref: "lowering_rules.zig (structFieldLayout)",
+                    })?;
+                let loaded = self.new_tmp();
+                self.ins(&format!(
+                    "{loaded} = load {update_reg}+{offset} as {}",
+                    type_string(&field_ty)
+                ));
+                let pointer_backed = !matches!(
+                    field_ty,
+                    Type::Infer
+                        | Type::Primitive(_)
+                        | Type::Pointer(_)
+                        | Type::Borrow(_)
+                        | Type::FnPtr(_)
+                );
+                if !pointer_backed {
+                    self.ins(&format!(
+                        "store {target}+{offset}, {loaded} as {}",
+                        type_string(&field_ty)
+                    ));
+                    if call_arg_needs_release(update_expr) {
+                        self.emit_release(&loaded)?;
+                    }
+                } else if self.check.type_is_copy_struct(&field_ty) {
+                    let copied = self.new_tmp();
+                    self.gen_copy_value_into(&copied, &loaded, &field_ty)?;
+                    self.ins(&format!(
+                        "store {target}+{offset}, ^{copied} as {}",
+                        type_string(&field_ty)
+                    ));
+                    if call_arg_needs_release(update_expr) {
+                        self.emit_release(&loaded)?;
+                    }
+                } else {
+                    self.ins(&format!(
+                        "store {target}+{offset}, ^{loaded} as {}",
+                        type_string(&field_ty)
+                    ));
+                }
+            }
+            if call_arg_needs_release(update_expr) {
+                self.emit_release(&update_reg)?;
+            }
+        }
         for decl_field in &decl.fields {
             let value = lit
                 .fields
                 .iter()
                 .find(|f| f.name == decl_field.name)
-                .map(|f| &*f.value)
-                .ok_or_else(|| TextError::Unsupported {
-                    feature: format!(
-                        "struct literal missing field value `{}`",
-                        decl_field.name
-                    ),
-                    zig_ref: "codegen.zig:16051 (genStructLiteralInto)",
-                })?;
+                .map(|f| &*f.value);
+            let value = match value {
+                Some(v) => v,
+                None if lit.update_expr.is_some() => continue,
+                None => {
+                    return Err(TextError::Unsupported {
+                        feature: format!(
+                            "struct literal missing field value `{}`",
+                            decl_field.name
+                        ),
+                        zig_ref: "codegen.zig:16051 (genStructLiteralInto)",
+                    })
+                }
+            };
             let (offset, field_ty) =
                 layout::struct_field_layout(&decl, &decl_field.name).ok_or_else(|| {
                     TextError::Unsupported {
@@ -161,10 +219,20 @@ impl<'c> Codegen<'c> {
                     }
                 })?;
             if self.check.type_is_copy_struct(&field_ty) {
-                return unsupported(
-                    "struct literal Copy-struct field (deep copy)",
-                    "codegen.zig:16051 (genStructLiteralInto deep-copy arm)",
-                );
+                // Deep-copy arm: the field value is copied into
+                // a fresh record and the copy's pointer is stored;
+                // the source value keeps its own ownership.
+                let val_reg = self.gen_expr(value)?;
+                let copied = self.new_tmp();
+                self.gen_copy_value_into(&copied, &val_reg, &field_ty)?;
+                self.ins(&format!(
+                    "store {target}+{offset}, {copied} as {}",
+                    type_string(&field_ty)
+                ));
+                if call_arg_needs_release(value) {
+                    self.emit_release(&val_reg)?;
+                }
+                continue;
             }
             let val_reg = self.gen_expr(value)?;
             let ty_str = type_string(&field_ty);
@@ -493,7 +561,8 @@ impl<'c> Codegen<'c> {
     /// and deref shapes: an assigned-value slot loads its pointer
     /// back out, an addressable binding materialises its address
     /// with `ptr_add +0`, any other binding borrows as `&name`;
-    /// `&*p` is `p` itself. Field/index projections stay loud.
+    /// `&*p` is `p` itself. Field/index projections go through
+    /// the place-address machinery (place.rs).
     pub(crate) fn gen_borrow_expr(&mut self, expr: &Node) -> Result<String> {
         let borrow = match expr {
             Node::BorrowExpr(b) => b,
@@ -517,6 +586,108 @@ impl<'c> Codegen<'c> {
                 Ok(format!("&{resolved}"))
             }
             Node::DerefExpr(d) => self.gen_expr(&d.expr),
+            Node::FieldExpr(f) => {
+                // codegen.zig:18463 borrow arm, `.field` shape: a
+                // smart-pointer field's borrow is the field value
+                // itself; a pointer-backed field (lowering_rules
+                // structFieldIsPointerBacked: user-defined, tuple
+                // and array types — the field word IS the value's
+                // pointer, Vec/GrowVec handles included) borrows
+                // the loaded word; every other field borrows its
+                // slot address.
+                let field_ty = self.require_expr_type(&borrow.expr, "borrow field type")?;
+                if matches!(
+                    sla_lowering::peel_borrow_pointer_type(&field_ty),
+                    Type::UserDefined(u) if matches!(u.name.as_str(), "Box" | "Rc" | "Arc")
+                ) {
+                    return self.gen_expr(&borrow.expr);
+                }
+                let projection = self.gen_field_address(f)?;
+                // structFieldIsPointerBacked: false only for
+                // Infer/Primitive/Pointer/Borrow/FnPtr.
+                if !matches!(
+                    field_ty,
+                    Type::Infer
+                        | Type::Primitive(_)
+                        | Type::Pointer(_)
+                        | Type::Borrow(_)
+                        | Type::FnPtr(_)
+                ) {
+                    let loaded = self.new_tmp();
+                    self.ins(&format!("{loaded} = load {}+0 as ptr", projection.ptr));
+                    self.emit_release(&projection.ptr)?;
+                    if let Some(source_temp) = &projection.source_temp {
+                        self.borrow_source_temps
+                            .insert(loaded.clone(), source_temp.clone());
+                    }
+                    return Ok(loaded);
+                }
+                self.remember_address_projection_source(&projection);
+                Ok(projection.ptr)
+            }
+            Node::IndexExpr(idx) => {
+                // codegen.zig:18463 borrow arm, `.index` shape
+                // (CLASSB-DEF2): an element's borrow is its slot
+                // address through genIndexAddress, for Vec/GrowVec,
+                // slice and array targets alike — a heap-handle
+                // element borrows the slot holding the handle word
+                // (the consumer loads the word itself; returning
+                // the loaded handle instead breaks the call-site
+                // capability shape, CapabilityMismatch on
+                // test_unit_index_borrow_handle_elem). The slot
+                // base is NOT released here: the address escapes
+                // with the source container's lifetime, and
+                // releasing the base first makes the verifier
+                // reject the result as UseAfterMove (the
+                // DEF-SLAREDIS-BUILD-MAIN ordering hazard;
+                // test_unit_diag_trio_param_borrows). Instead the
+                // slot base is chained into the borrow-source
+                // table under the address register (and the
+                // container source under the slot base), so
+                // releasing the borrow result settles the whole
+                // chain in finishIndexAddress order — which is
+                // also what keeps loop back-edges in agreement
+                // (PhiStateConflict on the unreleased base).
+                let address = self.gen_index_address(idx)?;
+                if let Some(slot_base) = &address.slot_base_reg {
+                    self.borrow_source_temps
+                        .insert(address.ptr.clone(), slot_base.clone());
+                    let container_source = address.base_tmp.clone().or_else(|| {
+                        if address.release_base_reg {
+                            Some(address.base_reg.clone())
+                        } else {
+                            None
+                        }
+                    });
+                    if let Some(source) = container_source {
+                        self.borrow_source_temps.insert(slot_base.clone(), source);
+                    }
+                } else {
+                    self.remember_index_address_source(&address);
+                }
+                // A heap-handle element's borrow is the handle
+                // word stored in the slot (the DEF-SLAREDIS shape):
+                // a &Vec parameter reads the handle's fields
+                // directly, so the borrow must be the loaded
+                // handle, not the slot address. The loaded
+                // register chains to the slot address in the
+                // borrow-source table, so releasing it settles
+                // the chain. An inline-POD element lives in the
+                // slot and keeps the slot address.
+                let target_ty = self.require_expr_type(&idx.target, "borrow index target type")?;
+                if let Some((_, elem_ty)) = crate::place::vec_like_element_type(&target_ty) {
+                    if is_heap_handle_type(&elem_ty)
+                        && !crate::place::inline_pod_element(self.check, &elem_ty)
+                    {
+                        let rec = self.new_tmp();
+                        self.ins(&format!("{rec} = load {}+0 as ptr", address.ptr));
+                        self.borrow_source_temps
+                            .insert(rec.clone(), address.ptr.clone());
+                        return Ok(rec);
+                    }
+                }
+                Ok(address.ptr)
+            }
             _ => unsupported(
                 "borrow of field/index projection",
                 "codegen.zig:18676 (genExpr borrow_expr projections)",

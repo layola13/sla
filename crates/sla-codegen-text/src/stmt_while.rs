@@ -1,12 +1,15 @@
 //! While statement emission, mirrored from codegen.zig's
 //! `genWhileStmt` plain path (11431-11545). The while-let / pattern
 //! arms route through the pattern-matching family and are deferred:
-//! they fail loudly here.
+//! they fail loudly here. Range `for` statements lower onto the
+//! same loop skeleton with the hoisted counter slot
+//! (`{var}_slot`, emitted at function entry by
+//! emit_hoisted_and_counter_slots) as the loop variable's home.
 
-use sla_ast::Node;
+use sla_ast::{Node, Type};
 use sla_lowering::block_terminates;
 
-use crate::codegen::Codegen;
+use crate::codegen::{type_string, Codegen};
 use crate::{unsupported, Result};
 
 impl<'c> Codegen<'c> {
@@ -68,6 +71,118 @@ impl<'c> Codegen<'c> {
         self.w(&format!("    !{cond_reg}\n"));
         self.w(&format!("    jmp {exit_label}\n\n"));
         self.wl(&format!("{exit_label}:"));
+        Ok(())
+    }
+
+    /// Range `for var in start..end` over the hoisted counter
+    /// slot. The collection form (no end) stays loud. The slot
+    /// is memory, so the loop has no register-phi surface; the
+    /// body runs under the same loop-local scope discipline as
+    /// `while`, with `continue` landing on the increment.
+    pub(crate) fn gen_for_stmt(&mut self, stmt: &Node) -> Result<()> {
+        let for_stmt = match stmt {
+            Node::ForStmt(f) => f,
+            _ => unreachable!(),
+        };
+        let Some(end_expr) = &for_stmt.end else {
+            return unsupported(
+                "for statement over a collection (range form only)",
+                "codegen.zig:11300 (for_stmt emission)",
+            );
+        };
+        let slot = format!("{}_slot", for_stmt.var_name);
+        let counter_ty = self
+            .expr_type(&for_stmt.start)
+            .unwrap_or(Type::Primitive(sla_ast::Primitive::I64));
+        let ty_str = type_string(&counter_ty);
+
+        let start_reg = self.gen_expr(&for_stmt.start)?;
+        self.ins(&format!("store {slot}+0, {start_reg} as {ty_str}"));
+        if self.expr_result_reg_needs_release(&for_stmt.start) {
+            self.emit_release(&start_reg)?;
+        }
+        let end_reg = self.gen_expr(end_expr)?;
+        let end_is_temp = self.expr_result_reg_needs_release(end_expr);
+
+        let head_label = self.new_label("L_FOR_HEAD");
+        let body_label = self.new_label("L_FOR_BODY");
+        let incr_label = self.new_label("L_FOR_INCR");
+        let cond_false_label = self.new_label("L_FOR_COND_FALSE");
+        let exit_label = self.new_label("L_FOR_EXIT");
+
+        self.w(&format!("    jmp {head_label}\n\n"));
+        self.wl(&format!("{head_label}:"));
+        let cur_reg = self.new_tmp();
+        self.ins(&format!("{cur_reg} = load {slot}+0 as {ty_str}"));
+        let cond_reg = self.new_tmp();
+        let cmp = if matches!(
+            counter_ty,
+            Type::Primitive(
+                sla_ast::Primitive::U8
+                    | sla_ast::Primitive::U16
+                    | sla_ast::Primitive::U32
+                    | sla_ast::Primitive::U64
+                    | sla_ast::Primitive::Usize
+            )
+        ) {
+            "ult"
+        } else {
+            "slt"
+        };
+        self.ins(&format!("{cond_reg} = {cmp} {cur_reg}, {end_reg}"));
+        self.emit_release(&cur_reg)?;
+        self.w(&format!(
+            "    br {cond_reg} -> {body_label}, {cond_false_label}\n\n"
+        ));
+        self.wl(&format!("{body_label}:"));
+        self.w(&format!("    !{cond_reg}\n"));
+
+        self.loop_continue_labels.push(incr_label.clone());
+        self.loop_break_labels.push(exit_label.clone());
+        self.push_loop_body_local_scope();
+        self.push_binding_alias_to(&for_stmt.var_name, &slot);
+        let was_absent = self.addressable_bindings.insert(for_stmt.var_name.clone());
+        let mut flow = self.gen_block(&for_stmt.body);
+        self.pop_binding_alias(&for_stmt.var_name);
+        if was_absent {
+            self.addressable_bindings.remove(&for_stmt.var_name);
+        }
+        self.loop_continue_labels.pop();
+        self.loop_break_labels.pop();
+
+        if flow.is_ok() && !block_terminates(&for_stmt.body) {
+            flow = self.emit_active_loop_body_local_cleanups(None, false);
+            if flow.is_ok() {
+                flow = self.emit_loop_body_top_level_local_cleanups(&for_stmt.body);
+            }
+        }
+        if flow.is_ok() {
+            // The increment block is the `continue` target: it
+            // must exist (and jump back to the head) even when
+            // the body always terminates, since a `continue`
+            // inside still lands here.
+            self.wl(&format!("{incr_label}:"));
+            let cur2 = self.new_tmp();
+            self.ins(&format!("{cur2} = load {slot}+0 as {ty_str}"));
+            let one = self.new_tmp();
+            self.ins(&format!("{one} = 1"));
+            let next = self.new_tmp();
+            self.ins(&format!("{next} = add {cur2}, {one}"));
+            self.ins(&format!("store {slot}+0, {next} as {ty_str}"));
+            self.emit_release(&cur2)?;
+            self.emit_release(&one)?;
+            self.emit_release(&next)?;
+            self.w(&format!("    jmp {head_label}\n\n"));
+        }
+        self.pop_loop_body_local_scope();
+        flow?;
+        self.wl(&format!("{cond_false_label}:"));
+        self.w(&format!("    !{cond_reg}\n"));
+        self.w(&format!("    jmp {exit_label}\n\n"));
+        self.wl(&format!("{exit_label}:"));
+        if end_is_temp {
+            self.emit_release(&end_reg)?;
+        }
         Ok(())
     }
 }

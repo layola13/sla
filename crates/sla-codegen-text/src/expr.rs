@@ -33,6 +33,20 @@ impl<'c> Codegen<'c> {
                     }
                 })?;
                 let peeled = sla_lowering::peel_borrow_pointer_type(&target_ty).clone();
+                if let Type::UserDefined(u) = &peeled {
+                    if (u.name == "HashMap" || u.name == "BTreeMap")
+                        && u.generics.len() >= 2
+                    {
+                        let key_ty = u.generics[0].clone();
+                        let value_ty = u.generics[1].clone();
+                        return self.gen_map_index_read(
+                            idx,
+                            &key_ty,
+                            &value_ty,
+                            u.name == "BTreeMap",
+                        );
+                    }
+                }
                 if let Type::Array(arr) = &peeled {
                     let elem = (*arr.elem).clone();
                     return self.gen_array_index_read(expr, idx, &elem);
@@ -44,7 +58,7 @@ impl<'c> Codegen<'c> {
                         }
                     }
                 }
-                let (tname, elem) = match &target_ty {
+                let (tname, elem) = match &peeled {
                     Type::UserDefined(u) if u.name == "Vec" || u.name == "GrowVec" => {
                         (u.name.clone(), u.generics.first().cloned())
                     }
@@ -58,12 +72,13 @@ impl<'c> Codegen<'c> {
                 let elem = elem.ok_or_else(|| TextError::MissingType {
                     context: "vec element type".to_string(),
                 })?;
-                if !matches!(elem, Type::Primitive(_)) {
-                    return unsupported(
-                        "index read of non-scalar Vec element",
-                        "codegen.zig:16020 (genVecIndexRead load variants)",
-                    );
-                }
+                // Load variants (Zig genLoadSlotValue): scalar
+                // elements load as their type; pointer-backed
+                // elements (structs, nested collections, arrays)
+                // load the stored word; an inline-POD element
+                // lives in the slot itself, whose address is the
+                // value. The load happens below at the slot
+                // pointer, keyed on `elem`.
                 let (len_def, ptr_def) = if tname == "GrowVec" {
                     ("GrowVec_len", "GrowVec_ptr")
                 } else {
@@ -94,16 +109,27 @@ impl<'c> Codegen<'c> {
                     crate::codegen::type_size(&elem).max(8)
                 ));
                 self.ins(&format!("{ptr_reg} = ptr_add {data_reg}, {offset_reg}"));
-                let reg = self.new_tmp();
-                self.ins(&format!(
-                    "{reg} = load {ptr_reg}+0 as {}",
-                    crate::codegen::type_string(&elem)
-                ));
+                // Vec slots hold the element word: scalars load
+                // as their type, aggregates load their record
+                // pointer. (Inline storage is the ARRAY
+                // convention; a Vec slot never holds a struct
+                // inline — VEC_PUSH stores the record pointer,
+                // the CLASSB defect shape.)
+                let reg = {
+                    let reg = self.new_tmp();
+                    let load_ty = if matches!(elem, Type::Primitive(_)) {
+                        crate::codegen::type_string(&elem)
+                    } else {
+                        "ptr"
+                    };
+                    self.ins(&format!("{reg} = load {ptr_reg}+0 as {load_ty}"));
+                    reg
+                };
                 self.emit_release(&ptr_reg)?;
                 self.emit_release(&offset_reg)?;
                 self.emit_release(&data_reg)?;
                 self.emit_release(&len_reg)?;
-                if sla_lowering::call_arg_needs_release(&idx.index) {
+                if self.expr_result_reg_needs_release(&idx.index) {
                     self.emit_release(&index_reg)?;
                 }
                 if vec_needs_release {
@@ -264,6 +290,92 @@ impl<'c> Codegen<'c> {
         }
     }
 
+    /// Map index read (codegen.zig genExpr `.index_expr` map
+    /// arms): HashMap probes by content for String keys
+    /// (MAP_GET_STR) and by identity otherwise (MAP_GET); a miss
+    /// is panic(404). BTreeMap uses BTREE_MAP_TRY_GET with its
+    /// (found, value) output pair. The value cell's word loads
+    /// as the value type.
+    fn gen_map_index_read(
+        &mut self,
+        idx: &sla_ast::IndexExpr,
+        key_ty: &Type,
+        value_ty: &Type,
+        is_btree: bool,
+    ) -> Result<String> {
+        let map_reg = self.gen_expr(&idx.target)?;
+        let key_reg = self.gen_expr(&idx.index)?;
+        let string_key = matches!(
+            sla_lowering::peel_borrow_pointer_type(key_ty),
+            Type::UserDefined(u) if u.name == "String"
+        );
+        let hit_label = self.new_label(if is_btree {
+            "L_BTREE_MAP_INDEX_HIT"
+        } else {
+            "L_HASHMAP_INDEX_HIT"
+        });
+        let miss_label = self.new_label(if is_btree {
+            "L_BTREE_MAP_INDEX_MISS"
+        } else {
+            "L_HASHMAP_INDEX_MISS"
+        });
+        let reg = if is_btree {
+            let found = self.new_tmp();
+            let raw_value = self.new_tmp();
+            self.ins(&format!(
+                "EXPAND BTREE_MAP_TRY_GET {found}, {raw_value}, {map_reg}, {key_reg}"
+            ));
+            self.ins(&format!("br {found} -> {hit_label}, {miss_label}"));
+            self.ins(&format!("{miss_label}:"));
+            self.ins(&format!("!{found}"));
+            self.ins("panic(404)");
+            self.ins(&format!("{hit_label}:"));
+            self.ins(&format!("!{found}"));
+            let reg = self.new_tmp();
+            self.ins(&format!(
+                "{reg} = {raw_value} as {}",
+                crate::codegen::type_string(value_ty)
+            ));
+            self.emit_release(&raw_value)?;
+            reg
+        } else {
+            let value_ptr = self.new_tmp();
+            let found = self.new_tmp();
+            let macro_name = if string_key { "MAP_GET_STR" } else { "MAP_GET" };
+            self.ins(&format!(
+                "EXPAND {macro_name} {value_ptr}, {map_reg}, {key_reg}"
+            ));
+            self.ins(&format!("{found} = ne {value_ptr}, 0"));
+            self.ins(&format!("br {found} -> {hit_label}, {miss_label}"));
+            self.ins(&format!("{miss_label}:"));
+            self.ins(&format!("!{found}"));
+            self.ins("panic(404)");
+            self.ins(&format!("{hit_label}:"));
+            self.ins(&format!("!{found}"));
+            let reg = self.new_tmp();
+            self.ins(&format!(
+                "{reg} = load {value_ptr}+0 as {}",
+                crate::codegen::type_string(value_ty)
+            ));
+            self.emit_release(&value_ptr)?;
+            reg
+        };
+        if self.expr_result_reg_needs_release(&idx.index) {
+            self.emit_release(&key_reg)?;
+        }
+        // An owned literal String key is released after the
+        // probe (Zig keyRegIsOwnedLiteralString).
+        if string_key {
+            if let Node::Literal(sla_ast::Literal::StringVal(_)) = &*idx.index {
+                self.emit_release(&key_reg)?;
+            }
+        }
+        if self.expr_result_reg_needs_release(&idx.target) {
+            self.emit_release(&map_reg)?;
+        }
+        Ok(reg)
+    }
+
     /// codegen.zig:16815 `genIndexAddress` array fallthrough +
     /// `genLoadSlotValue` + `finishIndexAddress`: element address
     /// is base + index * typeSize(elem); scalar elements load,
@@ -286,14 +398,20 @@ impl<'c> Codegen<'c> {
         let ptr_reg = self.new_tmp();
         self.ins(&format!("{ptr_reg} = ptr_add {base_reg}, {offset_reg}"));
         self.emit_release(&offset_reg)?;
-        if sla_lowering::call_arg_needs_release(&idx.index) {
+        if self.expr_result_reg_needs_release(&idx.index) {
             self.emit_release(&index_reg)?;
         }
         let value_ty = self.expr_type(expr).unwrap_or_else(|| elem.clone());
+        // Pointer-backed elements (records, arrays, tuples,
+        // handles) store their pointer AS the slot word: the
+        // element value is the loaded word. Only an inline-POD
+        // element lives in the slot itself, so its value is the
+        // slot address.
         let reg = if matches!(
             value_ty,
             Type::Primitive(_) | Type::Pointer(_) | Type::Borrow(_)
-        ) {
+        ) || !crate::place::inline_pod_element(self.check, &value_ty)
+        {
             let reg = self.new_tmp();
             self.ins(&format!(
                 "{reg} = load {ptr_reg}+0 as {}",
@@ -330,13 +448,14 @@ impl<'c> Codegen<'c> {
         let ptr_reg = self.new_tmp();
         self.ins(&format!("{ptr_reg} = ptr_add {base_reg}, {offset_reg}"));
         self.emit_release(&offset_reg)?;
-        if sla_lowering::call_arg_needs_release(&idx.index) {
+        if self.expr_result_reg_needs_release(&idx.index) {
             self.emit_release(&index_reg)?;
         }
         let reg = if matches!(
             elem,
             Type::Primitive(_) | Type::Pointer(_) | Type::Borrow(_)
-        ) {
+        ) || !crate::place::inline_pod_element(self.check, elem)
+        {
             let reg = self.new_tmp();
             self.ins(&format!(
                 "{reg} = load {ptr_reg}+0 as {}",

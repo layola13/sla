@@ -237,6 +237,7 @@ fn main() -> ExitCode {
                                     pp.ty.clone(),
                                     pp.is_borrow,
                                     pp.is_move,
+                                    pp.is_raw,
                                 )
                             })
                             .collect::<Vec<_>>(),

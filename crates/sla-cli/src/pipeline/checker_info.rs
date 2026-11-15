@@ -88,6 +88,7 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
                     abi_ty: p.ty.clone(),
                     is_borrow: p.is_borrow,
                     is_move: p.is_move,
+                    is_raw: p.is_raw,
                 })
                 .collect(),
             ret_abi: sig.ret_abi.clone(),

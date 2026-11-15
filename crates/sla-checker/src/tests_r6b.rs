@@ -97,7 +97,7 @@ fn i32_ty() -> Type {
 
 fn extern_sig(spelling: &str, ret: &str) -> ExternSig {
     extern_sig_from_parts(
-        &[("x".to_string(), spelling.to_string(), false, false)],
+        &[("x".to_string(), spelling.to_string(), false, false, false)],
         ret,
         false,
         false,

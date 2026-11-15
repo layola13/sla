@@ -41,10 +41,15 @@ impl<'c> Codegen<'c> {
                         }
                         self.let_binding_aliases
                             .insert(sla_lowering::node_key(stmt), alias.clone());
-                        // Generate the let under its alias name.
-                        let mut aliased = let_stmt.clone();
-                        aliased.name = alias.clone();
-                        self.gen_stmt(&Node::LetStmt(aliased))?;
+                        // Generate the let under its alias name —
+                        // gen_let_stmt resolves the name through
+                        // let_binding_aliases. The ORIGINAL node
+                        // must be generated, never a clone: checker
+                        // facts (expr types, cleanups) are keyed by
+                        // node address, so a cloned let's value
+                        // misses every lookup (MissingType on the
+                        // second same-name let in sibling blocks).
+                        self.gen_stmt(stmt)?;
                         self.remember_loop_body_top_level_local(&alias);
                     } else {
                         self.gen_stmt(stmt)?;

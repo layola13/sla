@@ -1,0 +1,20 @@
+// RUST-TEXT-EMITTER-2 regression: an addressable binding (its
+// address was taken earlier) moved as a call argument. The
+// checker's MoveExpr identifier fast path never recorded the
+// inner identifier's type, so the text codegen's slot load for
+// the moved binding missed its type (MissingType "identifier
+// load"). The checker now records it.
+
+fn mv_touch(&p: u64) -> i32 {
+    return 0;
+}
+
+fn mv_free(^h: u64) -> i32 {
+    return 0;
+}
+
+@test "text move of addressable binding as call arg"() {
+    let parser: u64 = 0;
+    if mv_touch(&parser) != 0 { panic(95201); };
+    if mv_free(^parser) != 0 { panic(95202); };
+}

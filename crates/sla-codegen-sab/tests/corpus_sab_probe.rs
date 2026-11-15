@@ -294,7 +294,7 @@ fn probe_file(path: &Path, sa_exe: &str) -> String {
             &func
                 .params
                 .iter()
-                .map(|pp| (pp.name.clone(), pp.ty.clone(), pp.is_borrow, pp.is_move))
+                .map(|pp| (pp.name.clone(), pp.ty.clone(), pp.is_borrow, pp.is_move, pp.is_raw))
                 .collect::<Vec<_>>(),
             &func.ret_ty,
             func.return_fallible,

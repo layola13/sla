@@ -1,0 +1,26 @@
+// RUST-TEXT-EMITTER-2 regression: an extern contract parameter
+// spelled `*value` (raw capability) must carry the `*` prefix
+// at the SA-text call site (Zig abiCallArgPrefix .raw). The
+// raw flag used to be dropped by the contract parser, the
+// checker projection and the text emitter in turn, so the
+// wrapper's forward to sa_chan_send failed the host with
+// CapabilityMismatch.
+
+@import "sla_std/wrap/task.sla"
+@import "sa_std/ptr.sa"
+
+@test "text extern raw param chan roundtrip"() {
+    let h: u64 = 0;
+    if sla_chan_make(4, &h) != 0 { panic(95401); };
+    if h == 0 { panic(95406); };
+    let cell = [0u64; 4];
+    cell[0] = 4242;
+    let bp: ptr = PTR_BYTE_ADD(&cell, 0);
+    if sla_chan_send(h, bp) != 0 { panic(95402); };
+    let val = [0u64; 4];
+    let closed = [0u64; 4];
+    if sla_chan_recv(h, &val[0], &closed[0]) != 0 { panic(95403); };
+    if val[0] != 4242 { panic(95404); };
+    if closed[0] != 0 { panic(95405); };
+    sla_chan_destroy(h);
+}

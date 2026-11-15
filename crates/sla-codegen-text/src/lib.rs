@@ -20,10 +20,13 @@
 //! - `call`     — call expressions and call statements
 //! - `println`  — the println emitter
 //! - `release`  — release/cleanup emission and branch-state restore
+//! - `place`    — place-address emission (index/field addresses)
 
 mod block;
 mod call;
+mod call_plan;
 mod codegen;
+mod copy;
 mod family_macros;
 mod surface;
 mod collect;
@@ -34,6 +37,7 @@ mod format;
 mod func;
 mod into;
 mod layout;
+mod place;
 mod println;
 mod program;
 mod release;

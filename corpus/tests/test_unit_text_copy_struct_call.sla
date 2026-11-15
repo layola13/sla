@@ -1,0 +1,29 @@
+// RUST-TEXT-EMITTER-2 regression: a Copy-struct argument is
+// deep-copied for the callee's by-value parameter; the copy is
+// forgotten after the call, never released AND forgotten (the
+// lowering plan's release_after_call for CopyStructValue is
+// false — releasing freed the record a returned value aliases,
+// and the double settle trapped UseAfterMove).
+
+@derive(copy)
+struct Seg2 {
+    lo: u64,
+    hi: u64,
+}
+
+fn seg2_first(s: Seg2) -> u64 {
+    return s.lo;
+}
+
+fn seg2_bump(s: Seg2) -> Seg2 {
+    return Seg2 { lo: s.lo + 1, hi: s.hi };
+}
+
+@test "text copy struct call argument"() {
+    let s = Seg2 { lo: 41, hi: 9 };
+    if seg2_first(s) != 41 { panic(95701); };
+    let t = seg2_bump(s);
+    if t.lo != 42 { panic(95702); };
+    if s.lo != 41 { panic(95703); };
+    if seg2_first(t) != 42 { panic(95704); };
+}

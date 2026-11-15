@@ -7,11 +7,11 @@ use crate::Checker;
 
 /// Build the checker registration of one `.sai` contract
 /// declaration from its parameter parts: each part is
-/// (name, spelling, is_borrow, is_move). Front ends convert their
-/// parser-level contract records into these parts because
-/// sla-checker does not depend on sla-parser.
+/// (name, spelling, is_borrow, is_move, is_raw). Front ends
+/// convert their parser-level contract records into these parts
+/// because sla-checker does not depend on sla-parser.
 pub fn extern_sig_from_parts(
-    params: &[(String, String, bool, bool)],
+    params: &[(String, String, bool, bool, bool)],
     ret_abi: &str,
     fallible: bool,
     is_variadic: bool,
@@ -25,7 +25,7 @@ pub fn extern_sig_from_parts(
                 ty: p.1.clone(),
                 is_borrow: p.2,
                 is_move: p.3,
-                is_raw: false,
+                is_raw: p.4,
             })
             .collect(),
         is_variadic,

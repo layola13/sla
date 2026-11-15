@@ -1,0 +1,27 @@
+// RUST-TEXT-EMITTER-2 regression: index reads through a
+// struct field's Vec with a CAST index (`d.xs[i as u64]`) as
+// call arguments. The cast result is a materialised temp; the
+// index sites must release it via the cast-aware
+// expr_result_reg_needs_release, not the plain lowering fact
+// (which calls casts release-free) — the temp leaked at
+// function exit (MemoryLeak).
+
+struct Doc2 {
+    xs: Vec<u64>,
+}
+
+fn doc2_sum2(a: u64, b: u64) -> u64 {
+    return a * 10 + b;
+}
+
+fn doc2_read(d: &Doc2, i: i64) -> u64 {
+    return doc2_sum2(d.xs[i as u64], d.xs[(i + 1) as u64]);
+}
+
+@test "text field vec cast index reads"() {
+    let xs: Vec<u64> = Vec::new();
+    xs.push(3);
+    xs.push(4);
+    let d = Doc2 { xs: xs };
+    if doc2_read(&d, 0) != 34 { panic(95901); };
+}

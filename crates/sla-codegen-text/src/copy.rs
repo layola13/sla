@@ -1,0 +1,231 @@
+//! Record-copy materialisation: Zig `genCopyValueInto`
+//! (codegen.zig:3913), `genShallowCopyCallArgValue` (:5705) and
+//! the CLASSB-DEF1 push copy (`pushArgCopyMaterialization`,
+//! :5043). Plain-field subset: a copy is emitted only when every
+//! field (recursively) is a plain word (primitive / pointer /
+//! borrow / fn-ptr / enum) or a nested plain struct; a field
+//! owning a heap handle (Vec / String / map / Box / ...) makes
+//! the copy bail to the caller's previous behaviour — the deep
+//! clone dispatcher for handle fields is a separate family.
+
+use sla_ast::{CallExpr, Node, StructDecl, Type};
+use sla_lowering::is_borrow_like_type;
+
+use crate::codegen::{type_string, Codegen};
+use crate::{layout, Result};
+
+/// Zig `isStdCollectionType` approximation over the names this
+/// emitter's surface layer special-cases.
+fn is_std_collection_type(ty: &Type) -> bool {
+    match ty {
+        Type::UserDefined(u) => matches!(
+            u.name.as_str(),
+            "Vec"
+                | "GrowVec"
+                | "String"
+                | "Slice"
+                | "HashMap"
+                | "HashSet"
+                | "BTreeMap"
+                | "BTreeSet"
+                | "VecDeque"
+        ),
+        _ => false,
+    }
+}
+
+fn is_smart_pointer_type(ty: &Type) -> bool {
+    match ty {
+        Type::UserDefined(u) => matches!(u.name.as_str(), "Box" | "Rc" | "Arc"),
+        _ => false,
+    }
+}
+
+impl<'c> Codegen<'c> {
+    /// Zig `typeIsShallowCopyCallArgValue` (:4998) over
+    /// lowering_rules' base facts: collections and std owners
+    /// are shallow-copyable only when nested (depth > 0); plain
+    /// words always; tuples / arrays recurse; pure enums are
+    /// POD-like; structs need the non-opaque / non-union gate
+    /// plus all-shallow fields.
+    pub(crate) fn shallow_copy_call_arg_value(&self, ty: &Type, depth: usize) -> bool {
+        if depth > 8 {
+            return false;
+        }
+        if is_std_collection_type(ty) {
+            return depth > 0;
+        }
+        match ty {
+            Type::Primitive(_) | Type::Pointer(_) | Type::Borrow(_) | Type::FnPtr(_) => true,
+            Type::Tuple(t) => t
+                .elems
+                .iter()
+                .all(|e| self.shallow_copy_call_arg_value(e, depth + 1)),
+            Type::Array(a) => self.shallow_copy_call_arg_value(&a.elem, depth + 1),
+            Type::UserDefined(u) => {
+                if is_smart_pointer_type(ty) {
+                    return depth > 0;
+                }
+                if self.enum_decl(&u.name).is_some()
+                    || self.enum_decl(crate::place::local_name(&u.name)).is_some()
+                {
+                    return true;
+                }
+                let Some(decl) = crate::place::struct_decl_lookup(self.check, &u.name) else {
+                    return false;
+                };
+                if decl.is_opaque || decl.is_union {
+                    return false;
+                }
+                decl.fields
+                    .iter()
+                    .all(|f| self.shallow_copy_call_arg_value(&f.ty, depth + 1))
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether a record copy of `ty` stays inside the plain-word
+    /// subset (no heap-handle field anywhere, recursively).
+    pub(crate) fn record_copy_plain(&self, ty: &Type, depth: usize) -> bool {
+        if depth > 8 {
+            return false;
+        }
+        match ty {
+            Type::Primitive(_) | Type::Pointer(_) | Type::Borrow(_) | Type::FnPtr(_) => true,
+            Type::UserDefined(u) => {
+                if self.enum_decl(&u.name).is_some()
+                    || self.enum_decl(crate::place::local_name(&u.name)).is_some()
+                {
+                    return true;
+                }
+                let Some(decl) = crate::place::struct_decl_lookup(self.check, &u.name) else {
+                    return false;
+                };
+                if decl.is_opaque || decl.is_union {
+                    return false;
+                }
+                decl.fields
+                    .iter()
+                    .all(|f| self.record_copy_plain(&f.ty, depth + 1))
+            }
+            _ => false,
+        }
+    }
+
+    /// Emit the field-by-field record copy into `target` (which
+    /// the caller allocated-named; this emits the `alloc`).
+    /// Returns false without emitting when the type is outside
+    /// the plain subset.
+    pub(crate) fn gen_copy_value_into_inner(
+        &mut self,
+        target: &str,
+        source_reg: &str,
+        ty: &Type,
+    ) -> Result<bool> {
+        let Type::UserDefined(u) = ty else {
+            return Ok(false);
+        };
+        let Some(decl) = crate::place::struct_decl_lookup(self.check, &u.name) else {
+            return Ok(false);
+        };
+        if decl.is_opaque || decl.is_union || !self.record_copy_plain(ty, 0) {
+            return Ok(false);
+        }
+        let decl: StructDecl = decl.clone();
+        self.ins(&format!("{target} = alloc {}", layout::struct_size(&decl)));
+        for field in &decl.fields {
+            let Some((offset, field_ty)) = layout::struct_field_layout(&decl, &field.name)
+            else {
+                return Ok(false);
+            };
+            let field_reg = self.new_tmp();
+            self.ins(&format!(
+                "{field_reg} = load {source_reg}+{offset} as {}",
+                type_string(&field_ty)
+            ));
+            if matches!(field_ty, Type::UserDefined(_))
+                && self.enum_decl(field_name_of(&field_ty)).is_none()
+                && crate::place::struct_decl_lookup(self.check, field_name_of(&field_ty))
+                    .is_some()
+            {
+                let cloned = self.new_tmp();
+                let ok = self.gen_copy_value_into_inner(&cloned, &field_reg, &field_ty)?;
+                if !ok {
+                    return Ok(false);
+                }
+                self.ins(&format!(
+                    "store {target}+{offset}, ^{cloned} as {}",
+                    type_string(&field_ty)
+                ));
+            } else {
+                self.ins(&format!(
+                    "store {target}+{offset}, {field_reg} as {}",
+                    type_string(&field_ty)
+                ));
+            }
+            self.emit_release(&field_reg)?;
+        }
+        Ok(true)
+    }
+
+    /// A fresh record copy of the value in `source_reg`, or None
+    /// when the type is outside the plain subset.
+    pub(crate) fn gen_record_copy(
+        &mut self,
+        source_reg: &str,
+        ty: &Type,
+    ) -> Result<Option<String>> {
+        let target = self.new_tmp();
+        if self.gen_copy_value_into_inner(&target, source_reg, ty)? {
+            Ok(Some(target))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// CLASSB-DEF1 (Zig `pushArgCopyMaterialization`): a push of
+    /// a live identifier binding whose element type is copy-like
+    /// (Copy value or shallow-copyable) must store an independent
+    /// copy and leave the source binding live. Returns the copy
+    /// register to push, or None when no copy is owed / the copy
+    /// is outside the plain subset (the caller keeps its
+    /// ownership-transfer treatment).
+    pub(crate) fn push_arg_copy_materialization(
+        &mut self,
+        call: &CallExpr,
+        elem: &Type,
+    ) -> Result<Option<String>> {
+        let arg = &call.args[1];
+        if !matches!(arg, Node::Identifier(_)) {
+            return Ok(None);
+        }
+        let copy_like =
+            self.check.type_is_copy_value(elem) || self.shallow_copy_call_arg_value(elem, 0);
+        let consumes = !copy_like && !is_borrow_like_type(elem);
+        if consumes {
+            return Ok(None);
+        }
+        let Type::UserDefined(u) = elem else {
+            return Ok(None);
+        };
+        if crate::place::struct_decl_lookup(self.check, &u.name).is_none() {
+            return Ok(None);
+        }
+        if !self.check.type_is_copy_struct(elem) && !self.shallow_copy_call_arg_value(elem, 0) {
+            return Ok(None);
+        }
+        if !self.record_copy_plain(elem, 0) {
+            return Ok(None);
+        }
+        let raw = self.gen_expr(arg)?;
+        self.gen_record_copy(&raw, elem)
+    }
+}
+
+fn field_name_of(ty: &Type) -> &str {
+    match ty {
+        Type::UserDefined(u) => &u.name,
+        _ => "",
+    }
+}
