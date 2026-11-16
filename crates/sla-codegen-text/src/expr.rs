@@ -195,23 +195,37 @@ impl<'c> Codegen<'c> {
                 )
             }
             Node::DerefExpr(d) => {
-                // codegen.zig:13068 deref_expr, plain load path
-                // (verified verbatim): a move inner sheds its `^`;
-                // Rc/Arc EXPAND paths are deferred.
-                if let Some(Type::UserDefined(ud)) = self.expr_type(&d.expr) {
-                    if ud.name == "Rc" || ud.name == "Arc" {
-                        return unsupported(
-                            "deref of Rc/Arc (RC_GET/ARC_GET family)",
-                            "codegen.zig:13075 (rc/arc deref paths)",
-                        );
-                    }
-                }
+                // codegen.zig:13068 deref_expr (verified verbatim):
+                // generate the inner expression first (a move inner
+                // sheds its `^`), then the Rc/Arc EXPAND paths
+                // (codegen.zig:13075-13086, keyed on
+                // lowering_rules rcInnerType/arcInnerType — the
+                // borrow/pointer peel, then `Name<T>` with exactly
+                // one generic), then the plain load path below.
                 let generated = self.gen_expr(&d.expr)?;
                 let inner: String = if matches!(&*d.expr, Node::MoveExpr(_)) {
                     generated.strip_prefix('^').unwrap_or(&generated).to_string()
                 } else {
                     generated
                 };
+                if let Some(inner_ty) = self.expr_type(&d.expr) {
+                    let smart_macro = match sla_lowering::peel_borrow_pointer_type(&inner_ty) {
+                        Type::UserDefined(u) if u.generics.len() == 1 => match u.name.as_str() {
+                            "Rc" => Some("RC_GET"),
+                            "Arc" => Some("ARC_GET"),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    if let Some(macro_name) = smart_macro {
+                        let reg = self.new_tmp();
+                        self.ins(&format!("EXPAND {macro_name} {reg}, {inner}"));
+                        if sla_lowering::expr_result_needs_release(&d.expr) {
+                            self.emit_release(&inner)?;
+                        }
+                        return Ok(reg);
+                    }
+                }
                 let deref_ty = self.require_expr_type(expr, "deref result type")?;
                 let reg = self.new_tmp();
                 self.ins(&format!(
