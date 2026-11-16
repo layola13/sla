@@ -180,7 +180,12 @@ impl<'c> Codegen<'c> {
         // The two future objects are adopted by the join state
         // (the macro stores their pointers); releasing them would
         // free live objects on the pinned SA host (see
-        // adopt_store). Mark them consumed without emitting `!`.
+        // adopt_store), so they are retired with the FORGET form
+        // (`^reg`: consumed, not freed — the retire form the
+        // loop-defer-ready minim's header prescribes for
+        // FUTURE_NEW operands).
+        self.emit_forget_moved_value(&left_future.clone())?;
+        self.emit_forget_moved_value(&right_future.clone())?;
         self.consumed_bindings.insert(left_future);
         self.consumed_bindings.insert(right_future);
         Ok(join_state)
@@ -200,7 +205,10 @@ impl<'c> Codegen<'c> {
             self.future_readiness_for_state(right_state),
         );
         self.record_future_readiness(&select_state, readiness);
-        // Adopted by the select state, as in gen_join2_future.
+        // Adopted by the select state, as in gen_join2_future:
+        // forget form, not a freeing release.
+        self.emit_forget_moved_value(&left_future.clone())?;
+        self.emit_forget_moved_value(&right_future.clone())?;
         self.consumed_bindings.insert(left_future);
         self.consumed_bindings.insert(right_future);
         Ok(select_state)
@@ -686,32 +694,7 @@ impl<'c> Codegen<'c> {
                 self.func_decl(name).map(|f| f.is_async).unwrap_or(false)
             });
             if is_custom {
-                let future_obj = self.gen_future_object_for_state(&future_reg)?;
-                let ctx = self.new_tmp();
-                let poll_reg = self.new_tmp();
-                let ready_reg = self.new_tmp();
-                let out_reg = self.new_tmp();
-                let loop_label = self.new_label("L_AWAIT_BUSYPOLL");
-                let again_label = self.new_label("L_AWAIT_BUSYPOLL_AGAIN");
-                let done_label = self.new_label("L_AWAIT_BUSYPOLL_DONE");
-                self.ins(&format!("{ctx} = 0"));
-                self.wl(&format!("{loop_label}:"));
-                self.ins(&format!(
-                    "EXPAND FUTURE_POLL {poll_reg}, {future_obj}, {ctx}"
-                ));
-                self.ins(&format!("EXPAND POLL_IS_READY {ready_reg}, {poll_reg}"));
-                self.w(&format!("    br {ready_reg} -> {done_label}, {again_label}\n\n"));
-                self.wl(&format!("{again_label}:"));
-                self.ins(&format!("!{poll_reg}"));
-                self.ins(&format!("!{ready_reg}"));
-                self.w(&format!("    jmp {loop_label}\n\n"));
-                self.wl(&format!("{done_label}:"));
-                self.ins(&format!("!{ready_reg}"));
-                self.ins(&format!("EXPAND POLL_VALUE {out_reg}, {poll_reg}"));
-                self.ins(&format!("!{poll_reg}"));
-                self.ins(&format!("!{ctx}"));
-                self.ins(&format!("!{future_obj}"));
-                return Ok(out_reg);
+                return self.gen_await_busypoll(&future_reg);
             }
             let state_reg = self.new_tmp();
             let pending_reg = self.new_tmp();
@@ -737,6 +720,24 @@ impl<'c> Codegen<'c> {
             self.emit_release(&future_reg)?;
             return Ok(out_reg);
         }
+        if !self.current_async {
+            // AWAIT-EXTRACT (corpus regression
+            // test_unit_async_await_extract_sync_regression): in a
+            // SYNC fn, awaiting a custom future (async-fn call,
+            // join2/select2/defer_ready construction) must poll it
+            // to Ready — the ready-state fast path below would read
+            // the state machine's first word as a ready-state
+            // value. The vendored Zig text codegen gates its
+            // busypoll on the async context; the corpus file's
+            // header documents that gating as the defect this
+            // regression pins, so the sync context busypolls here.
+            let is_custom = await_expr_future_is_custom(&aw.expr, &|name| {
+                self.func_decl(name).map(|f| f.is_async).unwrap_or(false)
+            });
+            if is_custom {
+                return self.gen_await_busypoll(&future_reg);
+            }
+        }
         if !plan.ready_state_inner {
             return unsupported("await of non-ready-state future", "codegen.zig:13253");
         }
@@ -745,6 +746,39 @@ impl<'c> Codegen<'c> {
             "EXPAND FUTURE_READY_STATE_INTO_INNER {out_reg}, {future_reg}"
         ));
         self.emit_release(&future_reg)?;
+        Ok(out_reg)
+    }
+
+    /// The busypoll await form (codegen.zig:13280, the custom
+    /// branch of the ready/pending state-return path): wrap the
+    /// state in a future object and FUTURE_POLL until Ready, then
+    /// take the poll value.
+    fn gen_await_busypoll(&mut self, future_reg: &str) -> Result<String> {
+        let future_obj = self.gen_future_object_for_state(future_reg)?;
+        let ctx = self.new_tmp();
+        let poll_reg = self.new_tmp();
+        let ready_reg = self.new_tmp();
+        let out_reg = self.new_tmp();
+        let loop_label = self.new_label("L_AWAIT_BUSYPOLL");
+        let again_label = self.new_label("L_AWAIT_BUSYPOLL_AGAIN");
+        let done_label = self.new_label("L_AWAIT_BUSYPOLL_DONE");
+        self.ins(&format!("{ctx} = 0"));
+        self.wl(&format!("{loop_label}:"));
+        self.ins(&format!(
+            "EXPAND FUTURE_POLL {poll_reg}, {future_obj}, {ctx}"
+        ));
+        self.ins(&format!("EXPAND POLL_IS_READY {ready_reg}, {poll_reg}"));
+        self.w(&format!("    br {ready_reg} -> {done_label}, {again_label}\n\n"));
+        self.wl(&format!("{again_label}:"));
+        self.ins(&format!("!{poll_reg}"));
+        self.ins(&format!("!{ready_reg}"));
+        self.w(&format!("    jmp {loop_label}\n\n"));
+        self.wl(&format!("{done_label}:"));
+        self.ins(&format!("!{ready_reg}"));
+        self.ins(&format!("EXPAND POLL_VALUE {out_reg}, {poll_reg}"));
+        self.ins(&format!("!{poll_reg}"));
+        self.ins(&format!("!{ctx}"));
+        self.ins(&format!("!{future_obj}"));
         Ok(out_reg)
     }
 
