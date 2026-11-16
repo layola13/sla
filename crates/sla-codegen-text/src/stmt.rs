@@ -217,6 +217,9 @@ impl<'c> Codegen<'c> {
                 Some(owned) => owned,
                 None => self.gen_expr(&let_stmt.value)?,
             };
+            if self.async_pending_return_emitted {
+                return Ok(());
+            }
             self.stack_alloc_bindings.insert(resolved_name.clone());
             self.ins(&format!(
                 "{resolved_name} = stack_alloc {}",
@@ -239,6 +242,9 @@ impl<'c> Codegen<'c> {
                 Some(owned) => owned,
                 None => self.gen_expr(&let_stmt.value)?,
             };
+            if self.async_pending_return_emitted {
+                return Ok(());
+            }
             self.stack_alloc_bindings.insert(resolved_name.clone());
             self.assigned_value_slots.insert(resolved_name.clone());
             self.ins(&format!(
@@ -363,6 +369,12 @@ impl<'c> Codegen<'c> {
 
         // Generic path.
         let val = self.gen_expr(&let_stmt.value)?;
+        // codegen.zig:7988: a pending await inside the value
+        // already returned from this async function — the binding
+        // is never materialized.
+        if self.async_pending_return_emitted {
+            return Ok(());
+        }
         // The binding takes over the value register; a recorded
         // borrow source moves with it (codegen.zig:14942).
         self.transfer_borrow_source_to_binding(&val, &resolved_name);
@@ -870,6 +882,9 @@ impl<'c> Codegen<'c> {
                     Ok(())
                 } else {
                     let reg = self.gen_expr(expr)?;
+                    if self.async_pending_return_emitted {
+                        return Ok(());
+                    }
                     self.emit_release(&reg)
                 }
             }

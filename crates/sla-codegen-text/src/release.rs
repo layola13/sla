@@ -90,7 +90,18 @@ impl<'c> Codegen<'c> {
         // (Zig: mpsc sender/receiver, string-buffer and collection
         // binding families emit EXPAND *_FREE — unpopulated here.)
         self.ins(&format!("!{resolved}"));
-        self.consumed_bindings.insert(resolved);
+        self.consumed_bindings.insert(resolved.clone());
+        // codegen.zig:1000-1009 (stage 6 async cluster): the
+        // async state maps are dropped with the register, and a
+        // task's wrapped future object is released with the task.
+        self.future_state_vtables.remove(&resolved);
+        self.future_readiness.remove(&resolved);
+        if let Some(future_obj) = self.task_future_objects.remove(&resolved) {
+            if !self.consumed_bindings.contains(&future_obj) {
+                self.ins(&format!("!{future_obj}"));
+                self.consumed_bindings.insert(future_obj);
+            }
+        }
         Ok(())
     }
 
