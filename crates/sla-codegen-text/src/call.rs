@@ -541,6 +541,11 @@ impl<'c> Codegen<'c> {
         if let Some(reg) = self.gen_runtime_call(call)? {
             return Ok(reg);
         }
+        // thread::spawn (codegen.zig `isThreadSpawnCall` arm;
+        // thread_spawn.rs): the slot block is the JoinHandle.
+        if crate::thread_spawn::is_thread_spawn_call(call) {
+            return self.gen_thread_spawn_call(expr, call);
+        }
         if call.associated_target.is_some() {
             if let Some(reg) = self.gen_associated_call(expr, call)? {
                 return Ok(reg);
@@ -766,6 +771,16 @@ impl<'c> Codegen<'c> {
         // cluster): evaluate for effect and release the result
         // when the expression result needs it.
         if let Some(reg) = self.gen_runtime_call(call)? {
+            if self.expr_result_reg_needs_release(expr) {
+                self.emit_release(&reg)?;
+            }
+            return Ok(());
+        }
+        // Statement-position thread::spawn (thread_spawn.rs):
+        // build the slot and release it when the statement's
+        // result needs it, as the runtime-call branch above.
+        if crate::thread_spawn::is_thread_spawn_call(call) {
+            let reg = self.gen_thread_spawn_call(expr, call)?;
             if self.expr_result_reg_needs_release(expr) {
                 self.emit_release(&reg)?;
             }

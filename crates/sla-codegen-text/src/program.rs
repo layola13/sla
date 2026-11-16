@@ -87,6 +87,18 @@ impl<'c> Codegen<'c> {
             }
         }
 
+        // thread::spawn helper collection (codegen.zig:9368,
+        // before any emission; thread_spawn.rs). The capture
+        // gate consults the global-const table, so seed it from
+        // the top-level consts first (step 3a re-inserts them
+        // below; the insert is idempotent).
+        for decl in decls {
+            if let Node::ConstStmt(c) = decl {
+                self.global_const_bindings.insert(c.name.clone());
+            }
+        }
+        self.collect_thread_spawn_helpers(program)?;
+
         // 1. Imports in declaration order (`using` emits nothing).
         for decl in decls {
             match decl {
@@ -105,6 +117,12 @@ impl<'c> Codegen<'c> {
         self.wl("@import \"sa_std/core/panic.sa\"");
 
         self.emit_array_fill_macros();
+
+        // codegen.zig conditional import: any registered spawn
+        // helper pulls in sa_std/thread.sa (THREAD_SPAWN's home).
+        if !self.thread_spawn_helpers.is_empty() {
+            self.wl("@import \"sa_std/thread.sa\"");
+        }
 
         // Conditional family imports / macro bodies: loud tripwire.
         let async_needed = self.emit_macro_family_imports(program)?;
@@ -244,6 +262,10 @@ impl<'c> Codegen<'c> {
                 self.gen_test_decl(t)?;
             }
         }
+
+        // thread::spawn helpers come after every program
+        // function (codegen.zig `emitThreadSpawnHelpers`).
+        self.emit_thread_spawn_helpers()?;
 
         Ok(std::mem::take(&mut self.out))
     }

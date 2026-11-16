@@ -35,6 +35,8 @@ mod copy;
 mod family_macros;
 mod liveness;
 mod surface;
+mod thread_spawn;
+mod thread_spawn_emit;
 mod collect;
 mod expr;
 mod expr_if;

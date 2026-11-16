@@ -70,6 +70,20 @@ pub struct Codegen<'c> {
     /// index; the checker's own enum table keeps only variant
     /// names, not fields/discriminants).
     pub(crate) enum_index: Vec<(String, sla_ast::EnumDecl)>,
+    /// thread::spawn helper table (thread_spawn.rs), keyed by
+    /// the spawn call node's key; filled by the collection
+    /// pre-pass in `generate_program` and never cleared per
+    /// function (codegen.zig `thread_spawn_helpers`).
+    pub(crate) thread_spawn_helpers: Vec<(usize, crate::thread_spawn::ThreadSpawnHelper)>,
+    pub(crate) thread_helper_idx: usize,
+    /// Slots of inline-joined spawns (codegen.zig
+    /// `inline_thread_handles`): a join on one reads the
+    /// already-computed slot value instead of waiting.
+    pub(crate) inline_thread_handles: HashSet<String>,
+    /// Worker-body capture bindings (codegen.zig
+    /// `thread_capture_regs`): identifier reads inside a
+    /// generated worker resolve to the slot loads.
+    pub(crate) thread_capture_regs: HashMap<String, String>,
 
     // Loop state.
     pub(crate) loop_break_labels: Vec<String>,
@@ -133,6 +147,10 @@ impl<'c> Codegen<'c> {
             func_index: Vec::new(),
             assoc_index: Vec::new(),
             enum_index: Vec::new(),
+            thread_spawn_helpers: Vec::new(),
+            thread_helper_idx: 0,
+            inline_thread_handles: HashSet::new(),
+            thread_capture_regs: HashMap::new(),
             loop_break_labels: Vec::new(),
             loop_continue_labels: Vec::new(),
             loop_body_local_scopes: Vec::new(),

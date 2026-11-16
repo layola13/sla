@@ -509,6 +509,12 @@ impl<'c> Codegen<'c> {
     /// codegen.zig:12830 identifier expression: alias loads, global
     /// scalar constants, fn-ptr vtable addresses, plain names.
     fn gen_identifier_expr(&mut self, expr: &Node, name: &str) -> Result<String> {
+        // Worker-body capture reads (codegen.zig
+        // `thread_capture_regs`): inside a generated spawn
+        // worker, a captured name reads as the slot load.
+        if let Some(reg) = self.thread_capture_regs.get(name) {
+            return Ok(reg.clone());
+        }
         if is_option_none_name(name) {
             let result = self.new_tmp();
             self.ins(&format!("EXPAND OPTION_NEW_NONE {result}"));
