@@ -50,10 +50,11 @@ pub(crate) struct FieldDropPlan {
     pub plan: DropPlan,
 }
 
-/// type_checker.zig `drop_excluded_type_names` (the names whose
-/// `drop_excluded` flag the checker sets; the checker's own
-/// `drop_excluded` query is consulted first, this list is the
-/// belt-and-braces mirror for names the Rust checker does not flag).
+/// type_checker.zig `drop_excluded_type_names`: the names the
+/// checker flags drop-excluded (their values are settled by
+/// family-specific machinery, never by the plan dispatch). The
+/// Rust CheckInfo trait has no drop_excluded query, so this list
+/// is the classification's only source for the excluded set.
 const DROP_EXCLUDED_TYPE_NAMES: [&str; 15] = [
     "HashMap",
     "BTreeMap",
@@ -193,11 +194,11 @@ impl<'c> Codegen<'c> {
         DropPlan::None
     }
 
-    /// type_checker.zig `dropPlanExcludedType`.
+    /// type_checker.zig `dropPlanExcludedType`: the Rust
+    /// CheckInfo trait carries no drop_excluded query, so the
+    /// classification rests on the name list alone (in Zig the
+    /// list is likewise the checker's data source here).
     fn drop_plan_excluded_type(&self, ty: &Type) -> bool {
-        if self.check.drop_excluded(ty) {
-            return true;
-        }
         match ty {
             Type::UserDefined(u) => DROP_EXCLUDED_TYPE_NAMES.contains(&u.name.as_str()),
             _ => false,
