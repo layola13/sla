@@ -110,7 +110,7 @@ fn vec_element_slot_size(elem: &Type) -> usize {
     type_size(elem).max(8)
 }
 
-impl Codegen {
+impl<'c> Codegen<'c> {
     /// type_checker.zig `planValueDrop` (with the smart-pointer
     /// interception inlined before the excluded check, exactly as
     /// `planValueDrop` wraps `computeDropPlan`).
@@ -164,7 +164,7 @@ impl Codegen {
             // Recursive re-entry through a type already being
             // planned is not deep-dropped (computeDropPlan's
             // drop_plan_active cut).
-            let key = type_string(ty);
+            let key = type_string(ty).to_string();
             if active.contains(&key) {
                 return DropPlan::None;
             }
