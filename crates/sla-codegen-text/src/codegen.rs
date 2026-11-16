@@ -63,6 +63,14 @@ pub struct Codegen<'c> {
     /// raw-moved or explicitly compensated field by field, so the
     /// plan dispatch in emit_release must stay out of the way.
     pub(crate) plan_drop_suppressed: bool,
+    /// Emitter-side drop taint for struct updates (the Rust
+    /// checker exposes no taint surface): `(root binding, field)`
+    /// pairs whose ownership a struct update moved out of the
+    /// source place. The source binding's later plan release must
+    /// not drop those fields a second time. Arc/Rc fields are
+    /// never tainted: their update read-out clone-bumps instead,
+    /// and the source drop is the compensation.
+    pub(crate) update_moved_fields: HashSet<(String, String)>,
 
     // Program-wide state.
     pub(crate) global_const_bindings: HashSet<String>,
@@ -165,6 +173,7 @@ impl<'c> Codegen<'c> {
             hoisted_allocs: Vec::new(),
             borrow_param_bindings: HashSet::new(),
             plan_drop_suppressed: false,
+            update_moved_fields: HashSet::new(),
             global_const_bindings: HashSet::new(),
             global_scalar_consts: Vec::new(),
             func_index: Vec::new(),
@@ -293,6 +302,7 @@ impl<'c> Codegen<'c> {
         self.local_binding_types.clear();
         self.borrow_param_bindings.clear();
         self.plan_drop_suppressed = false;
+        self.update_moved_fields.clear();
         self.clear_binding_aliases();
         self.let_binding_aliases.clear();
         self.hoisted_allocs.clear();

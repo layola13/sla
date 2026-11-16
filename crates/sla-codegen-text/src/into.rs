@@ -156,6 +156,13 @@ impl<'c> Codegen<'c> {
         // fields by move out of the base record.
         if let Some(update_expr) = &lit.update_expr {
             let update_reg = self.gen_expr(update_expr)?;
+            // The update source's root binding, for drop taint:
+            // fields this update moves out of the source place
+            // must not be dropped again by the source binding's
+            // own plan release (the emitter-side mirror of the
+            // checker's drop taint, which the Rust checker does
+            // not surface).
+            let update_root = root_identifier(update_expr).map(str::to_string);
             for decl_field in &decl.fields {
                 if lit.fields.iter().any(|f| f.name == decl_field.name) {
                     continue;
@@ -193,14 +200,59 @@ impl<'c> Codegen<'c> {
                         "store {target}+{offset}, ^{copied} as {}",
                         type_string(&field_ty)
                     ));
+                    // The copy is word-wise (no new ownership of
+                    // the field's payload): taint the field so the
+                    // source's plan release does not drop the
+                    // value the target now shares.
+                    if self.plan_value_drop(&field_ty) != crate::drop::DropPlan::None {
+                        if let Some(root) = &update_root {
+                            self.update_moved_fields
+                                .insert((root.clone(), decl_field.name.clone()));
+                        }
+                    }
                     if call_arg_needs_release(update_expr) {
                         self.emit_release(&loaded)?;
                     }
                 } else {
-                    self.ins(&format!(
-                        "store {target}+{offset}, ^{loaded} as {}",
-                        type_string(&field_ty)
-                    ));
+                    let field_plan = self.plan_value_drop(&field_ty);
+                    match field_plan {
+                        // Arc/Rc read-out is compensated: the
+                        // read-out clone-bumps, and the source
+                        // binding's plan drop of the field retires
+                        // the bump (Zig's compensated read-out).
+                        crate::drop::DropPlan::ArcPtr(_)
+                        | crate::drop::DropPlan::RcPtr(_) => {
+                            let is_arc = matches!(
+                                field_plan,
+                                crate::drop::DropPlan::ArcPtr(_)
+                            );
+                            let bumped = self.new_tmp();
+                            self.ins(&format!("{bumped} = add {loaded}, 0"));
+                            self.ins(&format!(
+                                "EXPAND {} {bumped}",
+                                if is_arc { "ARC_CLONE" } else { "RC_CLONE" }
+                            ));
+                            self.ins(&format!(
+                                "store {target}+{offset}, ^{bumped} as {}",
+                                type_string(&field_ty)
+                            ));
+                        }
+                        plan => {
+                            // Raw move: ownership of the field
+                            // transfers to the target; taint it so
+                            // the source's plan release skips it.
+                            if plan != crate::drop::DropPlan::None {
+                                if let Some(root) = &update_root {
+                                    self.update_moved_fields
+                                        .insert((root.clone(), decl_field.name.clone()));
+                                }
+                            }
+                            self.ins(&format!(
+                                "store {target}+{offset}, ^{loaded} as {}",
+                                type_string(&field_ty)
+                            ));
+                        }
+                    }
                 }
             }
             if call_arg_needs_release(update_expr) {

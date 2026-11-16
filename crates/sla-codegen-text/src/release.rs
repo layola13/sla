@@ -199,7 +199,12 @@ impl<'c> Codegen<'c> {
             if let Some(binding_ty) = binding_ty {
                 match self.plan_value_drop(&binding_ty) {
                     crate::drop::DropPlan::DeepStruct(fields) => {
-                        self.emit_struct_field_drops(&resolved, &binding_ty, &fields)?;
+                        self.emit_struct_field_drops(
+                            &resolved,
+                            &binding_ty,
+                            &fields,
+                            Some(name),
+                        )?;
                     }
                     crate::drop::DropPlan::DeepVec(elem_plan) => {
                         self.emit_container_element_drops(

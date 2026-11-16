@@ -264,7 +264,7 @@ impl<'c> Codegen<'c> {
                 }
             }
             DropPlan::DeepStruct(fields) => {
-                self.emit_struct_field_drops(value_reg, ty, fields)?;
+                self.emit_struct_field_drops(value_reg, ty, fields, None)?;
                 self.emit_release(value_reg)
             }
             DropPlan::ArcPtr(_) | DropPlan::RcPtr(_) | DropPlan::BoxPtr(_) => {
@@ -273,12 +273,17 @@ impl<'c> Codegen<'c> {
         }
     }
 
-    /// codegen.zig `emitStructFieldDropsText`.
+    /// codegen.zig `emitStructFieldDropsText`. `taint_root` is
+    /// the source binding name when the dropped value is a named
+    /// binding's register: fields a struct update moved out of
+    /// that binding (recorded in `update_moved_fields`) are
+    /// skipped — their ownership already transferred.
     pub(crate) fn emit_struct_field_drops(
         &mut self,
         struct_reg: &str,
         struct_ty: &Type,
         fields: &[FieldDropPlan],
+        taint_root: Option<&str>,
     ) -> Result<()> {
         let Type::UserDefined(u) = struct_ty else {
             return Ok(());
@@ -287,6 +292,14 @@ impl<'c> Codegen<'c> {
             return Ok(());
         };
         for field in fields {
+            if let Some(root) = taint_root {
+                if self
+                    .update_moved_fields
+                    .contains(&(root.to_string(), field.name.clone()))
+                {
+                    continue;
+                }
+            }
             let Some((offset, _)) = layout::struct_field_layout(&decl, &field.name) else {
                 continue;
             };
