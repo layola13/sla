@@ -85,7 +85,20 @@ impl<'c> Codegen<'c> {
     /// user calls flow through the same dispatch and may carry
     /// no receiver facts at all (the fixture CheckInfo stubs).
     fn classify_receiver(&self, call: &CallExpr) -> Option<(String, Vec<Type>)> {
-        let recv_ty = self.expr_type(&call.args[0])?;
+        let recv_ty = self.expr_type(&call.args[0]).or_else(|| {
+            // Worker bodies are generated from the spawn helper's
+            // CLONED closure AST (thread_spawn.rs stores
+            // `closure.clone()`), so node-address-keyed checker
+            // facts miss for every node inside the body. Captures
+            // are seeded as local bindings with their types
+            // (thread_spawn_emit.rs), so an identifier receiver
+            // falls back to the binding's registered type.
+            if let Node::Identifier(name) = &call.args[0] {
+                self.local_binding_type_for_name(name)
+            } else {
+                None
+            }
+        })?;
         let (name, generics) = peel_name(&recv_ty)?;
         Some((name.to_string(), generics.to_vec()))
     }
