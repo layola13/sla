@@ -65,6 +65,14 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
             .get(&sla_lowering::node_key(stmt))
             .map(Vec::as_slice)
     }
+    fn await_cleanups(&self, expr: &Node) -> Option<&[String]> {
+        // Stage 6 async cluster: `tc.await_cleanups`, keyed by the
+        // await node's address like every other node-keyed table.
+        self.checker
+            .await_cleanups
+            .get(&sla_lowering::node_key(expr))
+            .map(Vec::as_slice)
+    }
     fn match_arm_exit_cleanups(&self, expr: &Node, arm: usize) -> Option<&[String]> {
         // Stage 5b checker-plans: the checker keys the table by the
         // match node's own address, which is the same tree the

@@ -22,6 +22,10 @@
 //! - `release`  — release/cleanup emission and branch-state restore
 //! - `place`    — place-address emission (index/field addresses)
 
+mod async_plans_codegen;
+mod async_plans_codegen2;
+mod async_runtime_codegen;
+mod async_scalar;
 mod block;
 mod call;
 mod clone;

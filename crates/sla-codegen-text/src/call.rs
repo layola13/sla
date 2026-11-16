@@ -534,6 +534,13 @@ impl<'c> Codegen<'c> {
                 crate::surface::SurfaceCall::Void => Ok(self.new_tmp()),
             };
         }
+        // Future/task/executor/poll runtime calls (codegen.zig
+        // genExpr call arm: genPollRuntimeCall / genExecutor-
+        // RuntimeCall / genFutureRuntimeCall / genTaskRuntimeCall;
+        // stage 6 async cluster).
+        if let Some(reg) = self.gen_runtime_call(call)? {
+            return Ok(reg);
+        }
         if call.associated_target.is_some() {
             if let Some(reg) = self.gen_associated_call(expr, call)? {
                 return Ok(reg);
@@ -748,6 +755,15 @@ impl<'c> Codegen<'c> {
                     }
                 }
                 crate::surface::SurfaceCall::Void => {}
+            }
+            return Ok(());
+        }
+        // Statement-position runtime calls (stage 6 async
+        // cluster): evaluate for effect and release the result
+        // when the expression result needs it.
+        if let Some(reg) = self.gen_runtime_call(call)? {
+            if self.expr_result_reg_needs_release(expr) {
+                self.emit_release(&reg)?;
             }
             return Ok(());
         }

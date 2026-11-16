@@ -20,16 +20,6 @@ pub struct DeferredFamily {
 /// repeats this list as the "uncovered rules"清单.
 pub const DEFERRED_FAMILIES: &[DeferredFamily] = &[
     DeferredFamily {
-        name: "async continuation plans",
-        zig_ref: "lowering_rules.zig (planAsync*Continuation family)",
-        note: "Join2/two/linear/general/loop/single await continuation plans and the async function-return plan; drives separate genAsync* emitters in codegen.",
-    },
-    DeferredFamily {
-        name: "future/task/executor/poll runtime-call plans",
-        zig_ref: "lowering_rules.zig (planFutureRuntimeCall, planTaskRuntimeCall, planExecutorRuntimeCall)",
-        note: "Runtime EXPAND shapes for Future/Task/Executor/Poll surfaces.",
-    },
-    DeferredFamily {
         name: "imported-macro call plans",
         zig_ref: "lowering_rules.zig (planImportedMacroCall, ImportedMacroArg plans)",
         note: "Needs the checker's imported-macro tables; codegen fails loudly when a macro call is not println.",

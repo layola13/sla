@@ -97,6 +97,14 @@ pub trait CheckInfo {
     /// block whose last statement is the key.
     fn phi_cleanups(&self, stmt: &Node) -> Option<&[String]>;
 
+    /// `tc.await_cleanups` (stage 6 async cluster): bindings to
+    /// release before an async function returns its pending future
+    /// at an await point, keyed by the await expression node. The
+    /// default keeps lanes without the recording compiling.
+    fn await_cleanups(&self, _expr: &Node) -> Option<&[String]> {
+        None
+    }
+
     /// `tc.match_arm_exit_cleanups` (stage 5b checker-plans):
     /// the checker's per-arm pattern-binding exit cleanups for
     /// `expr` (a `MatchExpr` node), arm `arm` in arm order. `None`
@@ -178,6 +186,9 @@ pub struct MapCheckInfo {
     pub expr_types: HashMap<usize, Type>,
     pub cleanups: HashMap<usize, Vec<String>>,
     pub phi_cleanups: HashMap<usize, Vec<String>>,
+    /// Stage 6 async cluster: await node key -> pending-return
+    /// cleanup names (`tc.await_cleanups`).
+    pub await_cleanups: HashMap<usize, Vec<String>>,
     /// Stage 5b checker-plans: match node key -> one exit-cleanup
     /// list per arm, in arm order.
     pub match_arm_exit_cleanups: HashMap<usize, Vec<Vec<String>>>,
@@ -211,6 +222,11 @@ impl MapCheckInfo {
 
     pub fn add_phi_cleanups(&mut self, stmt: &Node, names: Vec<String>) -> &mut Self {
         self.phi_cleanups.insert(node_key(stmt), names);
+        self
+    }
+
+    pub fn add_await_cleanups(&mut self, expr: &Node, names: Vec<String>) -> &mut Self {
+        self.await_cleanups.insert(node_key(expr), names);
         self
     }
 
@@ -300,6 +316,10 @@ impl CheckInfo for MapCheckInfo {
 
     fn phi_cleanups(&self, stmt: &Node) -> Option<&[String]> {
         self.phi_cleanups.get(&node_key(stmt)).map(|v| v.as_slice())
+    }
+
+    fn await_cleanups(&self, expr: &Node) -> Option<&[String]> {
+        self.await_cleanups.get(&node_key(expr)).map(|v| v.as_slice())
     }
 
     fn match_arm_exit_cleanups(&self, expr: &Node, arm: usize) -> Option<&[String]> {

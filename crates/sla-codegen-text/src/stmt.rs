@@ -781,6 +781,24 @@ impl<'c> Codegen<'c> {
             // from the function's declared return type.
             let ret_ty = self.current_ret_ty.clone();
             value_reg = Some(self.gen_expr_in_context(value, ret_ty.as_ref())?);
+            // codegen.zig:11250: a pending await inside the value
+            // already returned from this async function.
+            if self.async_pending_return_emitted {
+                return Ok(());
+            }
+        }
+        // codegen.zig:11252: inside an async function, a return
+        // value wraps in a ready future (a bare `return` wraps 0).
+        if self.current_async {
+            let base = match value_reg {
+                Some(reg) => reg,
+                None => {
+                    let zero = self.new_tmp();
+                    self.ins(&format!("{zero} = 0"));
+                    zero
+                }
+            };
+            value_reg = Some(self.gen_ready_future_i64(&base)?);
         }
         if let Some(list) = self.check.cleanups(stmt) {
             let names: Vec<String> = list.to_vec();

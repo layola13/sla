@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 use sla_ast::{FuncDecl, Literal, Node, Primitive, Type};
 use sla_lowering::{
     abi_return_type_string, abi_type_size, abi_type_string, expr_result_needs_release,
-    is_main_name, CheckInfo,
+    is_main_name, CheckInfo, FutureReadiness,
 };
 
 use crate::{unsupported, Result, TextError};
@@ -92,6 +92,19 @@ pub struct Codegen<'c> {
     /// `gen_func_decl_named`; cleared on every reset (test decls
     /// and nested emission see None).
     pub(crate) current_ret_ty: Option<Type>,
+
+    // Async family state (stage 6, codegen.zig: task_future_objects,
+    // future_state_vtables, future_readiness, executor_task_counts,
+    // current_async, current_async_return_ty,
+    // async_pending_return_emitted). Cleared per function like the
+    // Zig clear list in genFuncDeclNamed.
+    pub(crate) future_state_vtables: HashMap<String, String>,
+    pub(crate) future_readiness: HashMap<String, FutureReadiness>,
+    pub(crate) task_future_objects: HashMap<String, String>,
+    pub(crate) executor_task_counts: HashMap<String, usize>,
+    pub(crate) current_async: bool,
+    pub(crate) current_async_return_ty: Option<Type>,
+    pub(crate) async_pending_return_emitted: bool,
 }
 
 impl<'c> Codegen<'c> {
@@ -129,6 +142,13 @@ impl<'c> Codegen<'c> {
             move_out_stmt: None,
             move_out_name: None,
             current_ret_ty: None,
+            future_state_vtables: HashMap::new(),
+            future_readiness: HashMap::new(),
+            task_future_objects: HashMap::new(),
+            executor_task_counts: HashMap::new(),
+            current_async: false,
+            current_async_return_ty: None,
+            async_pending_return_emitted: false,
         }
     }
 
@@ -236,6 +256,11 @@ impl<'c> Codegen<'c> {
         self.move_out_stmt = None;
         self.move_out_name = None;
         self.current_ret_ty = None;
+        self.future_state_vtables.clear();
+        self.future_readiness.clear();
+        self.task_future_objects.clear();
+        self.executor_task_counts.clear();
+        self.async_pending_return_emitted = false;
     }
 
     // -- lookups --------------------------------------------------------

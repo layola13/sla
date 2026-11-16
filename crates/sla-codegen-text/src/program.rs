@@ -107,7 +107,12 @@ impl<'c> Codegen<'c> {
         self.emit_array_fill_macros();
 
         // Conditional family imports / macro bodies: loud tripwire.
-        self.emit_macro_family_imports(program)?;
+        let async_needed = self.emit_macro_family_imports(program)?;
+        // codegen.zig:7126: the future/task helper bodies follow
+        // the family imports when the program needs async macros.
+        if async_needed {
+            self.emit_future_task_helpers();
+        }
 
         // 3a-3c. Register top-level consts; fold scalar aliases and
         // scalar binary consts into the scalar-const table.
@@ -331,7 +336,9 @@ impl<'c> Codegen<'c> {
     /// `thread::spawn`, future/task types) stays loud: its
     /// emission also writes helper bodies this lane has not
     /// ported.
-    fn emit_macro_family_imports(&mut self, program: &Node) -> Result<()> {
+    /// Returns whether the async macro family was needed (the
+    /// caller then emits the future/task helper bodies).
+    fn emit_macro_family_imports(&mut self, program: &Node) -> Result<bool> {
         fn type_families(ty: &sla_ast::Type, out: &mut std::collections::HashSet<&'static str>) {
             match ty {
                 sla_ast::Type::UserDefined(u) => {
@@ -627,6 +634,11 @@ impl<'c> Codegen<'c> {
         for (name, import) in MACRO_FAMILIES {
             if families.contains(name) {
                 self.wl(&format!("@import \"{import}\""));
+                // codegen.zig:7118: the async family also pulls
+                // the task runtime import.
+                if *name == "async" {
+                    self.wl("@import \"sa_std/core/task.sa\"");
+                }
             }
         }
         if families.contains("hashmap") {
@@ -635,6 +647,6 @@ impl<'c> Codegen<'c> {
         if families.contains("btreemap") {
             self.w(crate::family_macros::BTREEMAP_HELPER_MACROS);
         }
-        Ok(())
+        Ok(families.contains("async"))
     }
 }

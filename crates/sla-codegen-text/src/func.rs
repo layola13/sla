@@ -1,13 +1,18 @@
 //! Function and test declaration emission, mirrored from
 //! codegen.zig's `genFuncDeclNamed` (7429-7606) and `genTestDecl`
 //! (7610-7700). The async continuation entry points checked at the
-//! top of `genFuncDeclNamed` are deferred (lowering async family), so
-//! an async function fails loudly here.
+//! top of `genFuncDeclNamed` dispatch to the plan emitters in
+//! async_plans_codegen*.rs (stage 6 async cluster); an async
+//! function no plan claims falls through to the eager path, whose
+//! returns wrap in a ready future (planAsyncFunctionReturn).
 
 use sla_ast::{FuncDecl, Node, TestDecl, Type};
 use sla_lowering::{
     abi_param_type_string, block_terminates, by_value_raw_pointer_param, is_borrow_like_type,
-    is_void_type, shared_abi_param_prefix,
+    is_void_type, plan_async_function_return, plan_async_general_await_continuation,
+    plan_async_join2_await_continuation, plan_async_linear_await_continuation,
+    plan_async_loop_await_continuation, plan_async_single_await_continuation,
+    plan_async_two_await_continuation, shared_abi_param_prefix,
 };
 
 use crate::codegen::{sanitize_test_name, type_size, type_string, Codegen};
@@ -20,15 +25,50 @@ impl<'c> Codegen<'c> {
         self.gen_func_decl_named(&name, f)
     }
 
-    /// codegen.zig:7429 `genFuncDeclNamed`.
+    /// codegen.zig:7429 `genFuncDeclNamed` (async context
+    /// save/restore at 7430-7438).
     pub(crate) fn gen_func_decl_named(&mut self, name: &str, f: &FuncDecl) -> Result<()> {
-        if f.is_async {
-            return unsupported(
-                "async function (continuation plans deferred)",
-                "lowering_rules.zig planAsync*Continuation family",
-            );
-        }
+        let prev_async = self.current_async;
+        let prev_async_return_ty = self.current_async_return_ty.clone();
+        let prev_pending = self.async_pending_return_emitted;
+        self.current_async = f.is_async;
+        self.current_async_return_ty = if f.is_async {
+            Some((*f.ret_ty).clone())
+        } else {
+            None
+        };
+        self.async_pending_return_emitted = false;
+        let result = self.gen_func_decl_named_inner(name, f);
+        self.current_async = prev_async;
+        self.current_async_return_ty = prev_async_return_ty;
+        self.async_pending_return_emitted = prev_pending;
+        result
+    }
+
+    fn gen_func_decl_named_inner(&mut self, name: &str, f: &FuncDecl) -> Result<()> {
         self.reset_function_state();
+        // Async continuation plan dispatch (codegen.zig:7478-7495),
+        // in Zig order: join2, two, linear, general, loop, single.
+        if f.is_async {
+            if let Some(plan) = plan_async_join2_await_continuation(f) {
+                return self.gen_async_join2_await_func_decl_named(name, f, &plan);
+            }
+            if let Some(plan) = plan_async_two_await_continuation(f) {
+                return self.gen_async_two_await_func_decl_named(name, f, &plan);
+            }
+            if let Some(plan) = plan_async_linear_await_continuation(f) {
+                return self.gen_async_linear_await_func_decl_named(name, f, &plan);
+            }
+            if let Some(plan) = plan_async_general_await_continuation(f) {
+                return self.gen_async_general_await_func_decl_named(name, f, &plan);
+            }
+            if let Some(plan) = plan_async_loop_await_continuation(f) {
+                return self.gen_async_loop_await_func_decl_named(name, f, &plan);
+            }
+            if let Some(plan) = plan_async_single_await_continuation(f) {
+                return self.gen_async_single_await_func_decl_named(name, f, &plan);
+            }
+        }
         self.current_ret_ty = Some((*f.ret_ty).clone());
         self.repeated_let_bindings = sla_lowering::collect_repeated_let_bindings(&f.body);
         self.collect_assigned_bindings(&f.body);
@@ -55,8 +95,13 @@ impl<'c> Codegen<'c> {
                 abi_param_type_string(p.is_borrow, p.is_move, &p.ty)
             ));
         }
-        if is_void_type(&f.ret_ty) {
+        // codegen.zig:7506: planAsyncFunctionReturn — an async
+        // function's ABI return is a raw pointer (the future state).
+        let async_return_plan = plan_async_function_return(f);
+        if is_void_type(&f.ret_ty) && !f.is_async {
             sig.push_str("):");
+        } else if async_return_plan.abi_ret_is_ptr {
+            sig.push_str(") -> ptr:");
         } else {
             sig.push_str(&format!(
                 ") -> {}:",
@@ -117,7 +162,9 @@ impl<'c> Codegen<'c> {
             }
         }
 
-        // Body: tail-expression return path or plain block.
+        // Body: tail-expression return path or plain block
+        // (codegen.zig:7569-7605, with the async pending-return
+        // breaks and the ready-future wrap).
         let tail_expr_return = !is_void_type(&f.ret_ty)
             && !f.body.is_empty()
             && matches!(f.body.last(), Some(Node::ExprStmt(_)))
@@ -126,22 +173,43 @@ impl<'c> Codegen<'c> {
             let split = f.body.len() - 1;
             for stmt in &f.body[..split] {
                 self.gen_stmt(stmt)?;
+                if self.async_pending_return_emitted {
+                    break;
+                }
             }
-            let last = &f.body[split];
-            let tail_expr = match last {
-                Node::ExprStmt(expr) => expr,
-                _ => unreachable!(),
-            };
-            // R2b (stage 6): a tail literal takes its layout from
-            // the declared return type, not its own recorded type.
-            let tail_reg = self.gen_expr_in_context(tail_expr, Some(&*f.ret_ty))?;
-            self.emit_function_tail_cleanups(last, tail_expr)?;
-            self.ins(&format!("return {tail_reg}"));
+            if !self.async_pending_return_emitted {
+                let last = &f.body[split];
+                let tail_expr = match last {
+                    Node::ExprStmt(expr) => expr,
+                    _ => unreachable!(),
+                };
+                // R2b (stage 6): a tail literal takes its layout from
+                // the declared return type, not its own recorded type.
+                let mut tail_reg = self.gen_expr_in_context(tail_expr, Some(&*f.ret_ty))?;
+                if !self.async_pending_return_emitted {
+                    if async_return_plan.wrap_ready_future {
+                        tail_reg = self.gen_ready_future_i64(&tail_reg)?;
+                    }
+                    self.emit_function_tail_cleanups(last, tail_expr)?;
+                    self.ins(&format!("return {tail_reg}"));
+                }
+            }
         } else {
             self.gen_block(&f.body)?;
         }
 
-        if is_void_type(&f.ret_ty) && !last_stmt_is_return(&f.body) {
+        if self.async_pending_return_emitted {
+            // The generated pending await returned from this async
+            // function (codegen.zig:7589).
+        } else if async_return_plan.wrap_ready_future
+            && !tail_expr_return
+            && !block_terminates(&f.body)
+        {
+            let zero = self.new_tmp();
+            self.ins(&format!("{zero} = 0"));
+            let future = self.gen_ready_future_i64(&zero)?;
+            self.ins(&format!("return {future}"));
+        } else if is_void_type(&f.ret_ty) && !last_stmt_is_return(&f.body) {
             self.ins("return");
         }
         self.w("\n");

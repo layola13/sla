@@ -58,10 +58,18 @@ impl<'c> Codegen<'c> {
                         self.gen_stmt(stmt)?;
                         self.remember_loop_body_top_level_local(&source_name);
                     }
+                    if self.async_pending_return_emitted {
+                        break;
+                    }
                     continue;
                 }
             }
             self.gen_stmt(stmt)?;
+            // codegen.zig:468: a pending-await return ends the
+            // block (stage 6 async cluster).
+            if self.async_pending_return_emitted {
+                break;
+            }
         }
         for name in scoped_aliases.iter().rev() {
             self.pop_binding_alias(name);

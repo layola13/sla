@@ -15,6 +15,9 @@
 //! [`reachability`] and is not part of the lowering_rules.zig mirror.
 
 pub mod abi;
+pub mod async_plans;
+pub mod async_plans_loop;
+pub mod async_runtime;
 pub mod call_args;
 pub mod check_info;
 pub mod collect;
@@ -26,6 +29,9 @@ pub mod release_facts;
 pub mod scalar_ops;
 
 pub use abi::*;
+pub use async_plans::*;
+pub use async_plans_loop::*;
+pub use async_runtime::*;
 pub use call_args::*;
 pub use check_info::{CheckInfo, ExternParamView, ExternSigView, ImportedMacroView, MapCheckInfo};
 pub use collect::collect_repeated_let_bindings;

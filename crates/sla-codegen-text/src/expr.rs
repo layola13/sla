@@ -172,6 +172,11 @@ impl<'c> Codegen<'c> {
                 let inner_reg = self.gen_expr(&inner.expr)?;
                 Ok(format!("^{inner_reg}"))
             }
+            Node::AwaitExpr(_) => {
+                // codegen.zig:13253 await_expr (stage 6 async
+                // cluster; async_runtime_codegen.rs).
+                self.gen_await_expr(expr)
+            }
             Node::GenericFuncRef(g) => {
                 // A bare generic function reference lowers to its
                 // vtable address when the checker typed it as fn_ptr;
