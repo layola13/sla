@@ -624,6 +624,10 @@ impl<'c> Codegen<'c> {
                 display.join(", ")
             ));
             self.emit_lowered_call_arg_cleanups(&planned_args, Some(&callee_name))?;
+            // codegen.zig:15392: a call to an async fn with a
+            // continuation plan registers the plan's vtable +
+            // unknown readiness on the result register.
+            self.register_async_call_result(&result, &decl);
             return Ok(result);
         }
 

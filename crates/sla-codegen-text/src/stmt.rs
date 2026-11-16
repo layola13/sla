@@ -366,6 +366,9 @@ impl<'c> Codegen<'c> {
         // The binding takes over the value register; a recorded
         // borrow source moves with it (codegen.zig:14942).
         self.transfer_borrow_source_to_binding(&val, &resolved_name);
+        // Async state maps move with the value too
+        // (codegen.zig:11232 transferResultSlotValueState).
+        self.transfer_future_state(&val, &resolved_name);
         if let Some(moved) = stored_value_moves_identifier(
             &let_stmt.value,
             &ty_or_err,

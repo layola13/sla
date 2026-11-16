@@ -87,6 +87,59 @@ impl<'c> Codegen<'c> {
         self.future_readiness.remove(dst);
     }
 
+    /// codegen.zig:1116 `transferResultSlotValueState` (the async
+    /// maps): move the vtable / readiness / task-object /
+    /// executor-count entries from a value register to the binding
+    /// that takes it over.
+    pub(crate) fn transfer_future_state(&mut self, src: &str, dst: &str) {
+        if src == dst {
+            return;
+        }
+        if let Some(v) = self.task_future_objects.remove(src) {
+            self.task_future_objects.insert(dst.to_string(), v);
+        }
+        if let Some(v) = self.future_state_vtables.remove(src) {
+            self.future_state_vtables.insert(dst.to_string(), v);
+        }
+        if let Some(v) = self.future_readiness.remove(src) {
+            self.future_readiness.insert(dst.to_string(), v);
+        }
+        if let Some(v) = self.executor_task_counts.remove(src) {
+            self.executor_task_counts.insert(dst.to_string(), v);
+        }
+    }
+
+    /// codegen.zig:15392: after a plain call to an async function
+    /// whose declaration matches a continuation plan, register the
+    /// plan vtable + unknown readiness on the result register.
+    pub(crate) fn register_async_call_result(&mut self, reg: &str, decl: &sla_ast::FuncDecl) {
+        use sla_lowering::{
+            plan_async_general_await_continuation, plan_async_join2_await_continuation,
+            plan_async_linear_await_continuation, plan_async_loop_await_continuation,
+            plan_async_single_await_continuation, plan_async_two_await_continuation,
+        };
+        let name = decl.name.as_str();
+        let vt = if plan_async_join2_await_continuation(decl).is_some() {
+            Some(crate::async_scalar::async_join2_await_vtable_name(name))
+        } else if plan_async_two_await_continuation(decl).is_some() {
+            Some(crate::async_scalar::async_two_await_vtable_name(name))
+        } else if plan_async_linear_await_continuation(decl).is_some() {
+            Some(crate::async_scalar::async_linear_await_vtable_name(name))
+        } else if plan_async_general_await_continuation(decl).is_some() {
+            Some(crate::async_scalar::async_general_await_vtable_name(name))
+        } else if plan_async_loop_await_continuation(decl).is_some() {
+            Some(crate::async_scalar::async_loop_await_vtable_name(name))
+        } else if plan_async_single_await_continuation(decl).is_some() {
+            Some(crate::async_scalar::async_single_await_vtable_name(name))
+        } else {
+            None
+        };
+        if let Some(vt) = vt {
+            self.future_state_vtables.insert(reg.to_string(), vt);
+            self.record_future_readiness(reg, FutureReadiness::Unknown);
+        }
+    }
+
     pub(crate) fn future_vtable_for_state(&self, state_reg: &str) -> String {
         let resolved = self.resolve_binding_name(state_reg);
         if let Some(vt) = self.future_state_vtables.get(&resolved) {
