@@ -73,6 +73,21 @@ impl<'c> Codegen<'c> {
         self.hoisted_allocs = hoisted;
     }
 
+    /// Adopt a heap register into an async state slot: a MOVE
+    /// store (`^reg`) transfers ownership to the state. A plain
+    /// store + `!reg` release (the literal Zig text) frees the
+    /// block on the pinned SA host and the next alloc reuses it —
+    /// proven by SA probes (probe9/probe10/probe11, stage-6
+    /// evidence): the stored sub-state must be moved, not copied
+    /// and released. The register is marked consumed so later
+    /// cleanup passes skip it.
+    pub(crate) fn adopt_store(&mut self, state: &str, offset: usize, reg: &str) {
+        let bare = reg.strip_prefix('^').unwrap_or(reg);
+        self.ins(&format!("store {state}+{offset}, ^{bare} as ptr"));
+        let resolved = self.resolve_binding_name(bare);
+        self.consumed_bindings.insert(resolved);
+    }
+
     pub(crate) fn finish_async_state(&mut self, async_state: &str, vt_name: &str, f: &FuncDecl) -> Result<()> {
         for p in &f.params {
             self.emit_release(&p.name)?;
@@ -350,25 +365,25 @@ impl<'c> Codegen<'c> {
         let async_state = self.new_tmp();
         self.ins(&format!("{async_state} = alloc {}", plan.async_state_size()));
         self.ins(&format!("store {async_state}+0, 0 as u64"));
-        self.ins(&format!("store {async_state}+8, {inner_state} as ptr"));
+        self.adopt_store(&async_state.clone(), 8, &inner_state);
         for capture_idx in 0..plan.capture_count {
             let capture = plan.captures[capture_idx]
                 .as_ref()
                 .expect("plan capture present");
             let addend_reg = captured_addends[capture_idx].as_deref().unwrap();
-            let store_ty = match capture.storage {
-                AsyncContinuationCaptureStorage::Scalar => "u64",
-                AsyncContinuationCaptureStorage::CopyStruct => "ptr",
-            };
-            self.ins(&format!(
-                "store {async_state}+{}, {addend_reg} as {store_ty}",
-                capture.offset
-            ));
-            if capture.storage == AsyncContinuationCaptureStorage::Scalar {
-                self.emit_release(addend_reg)?;
+            match capture.storage {
+                AsyncContinuationCaptureStorage::Scalar => {
+                    self.ins(&format!(
+                        "store {async_state}+{}, {addend_reg} as u64",
+                        capture.offset
+                    ));
+                    self.emit_release(addend_reg)?;
+                }
+                AsyncContinuationCaptureStorage::CopyStruct => {
+                    self.adopt_store(&async_state.clone(), capture.offset, addend_reg);
+                }
             }
         }
-        self.emit_release(&inner_state)?;
         self.finish_async_state(&async_state, &async_single_vt(name), f)
     }
 
@@ -502,11 +517,9 @@ impl<'c> Codegen<'c> {
         let async_state = self.new_tmp();
         self.ins(&format!("{async_state} = alloc {}", plan.async_state_size()));
         self.ins(&format!("store {async_state}+0, 0 as u64"));
-        self.ins(&format!("store {async_state}+8, {first_state} as ptr"));
-        self.ins(&format!("store {async_state}+16, {second_state} as ptr"));
+        self.adopt_store(&async_state.clone(), 8, &first_state);
+        self.adopt_store(&async_state.clone(), 16, &second_state);
         self.ins(&format!("store {async_state}+24, 0 as u64"));
-        self.emit_release(&second_state)?;
-        self.emit_release(&first_state)?;
         self.finish_async_state(&async_state, &async_two_vt(name), f)
     }
 
@@ -603,8 +616,7 @@ impl<'c> Codegen<'c> {
         let async_state = self.new_tmp();
         self.ins(&format!("{async_state} = alloc {}", plan.async_state_size()));
         self.ins(&format!("store {async_state}+0, 0 as u64"));
-        self.ins(&format!("store {async_state}+8, {join_state} as ptr"));
-        self.emit_release(&join_state)?;
+        self.adopt_store(&async_state.clone(), 8, &join_state);
         self.finish_async_state(&async_state, &async_join2_vt(name), f)
     }
 }

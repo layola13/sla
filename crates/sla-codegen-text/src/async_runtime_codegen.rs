@@ -177,8 +177,12 @@ impl<'c> Codegen<'c> {
             self.future_readiness_for_state(right_state),
         );
         self.record_future_readiness(&join_state, readiness);
-        self.emit_release(&left_future)?;
-        self.emit_release(&right_future)?;
+        // The two future objects are adopted by the join state
+        // (the macro stores their pointers); releasing them would
+        // free live objects on the pinned SA host (see
+        // adopt_store). Mark them consumed without emitting `!`.
+        self.consumed_bindings.insert(left_future);
+        self.consumed_bindings.insert(right_future);
         Ok(join_state)
     }
 
@@ -196,8 +200,9 @@ impl<'c> Codegen<'c> {
             self.future_readiness_for_state(right_state),
         );
         self.record_future_readiness(&select_state, readiness);
-        self.emit_release(&left_future)?;
-        self.emit_release(&right_future)?;
+        // Adopted by the select state, as in gen_join2_future.
+        self.consumed_bindings.insert(left_future);
+        self.consumed_bindings.insert(right_future);
         Ok(select_state)
     }
 

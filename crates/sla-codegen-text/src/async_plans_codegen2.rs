@@ -135,17 +135,11 @@ impl<'c> Codegen<'c> {
         self.ins(&format!("{async_state} = alloc {}", plan.async_state_size()));
         self.ins(&format!("store {async_state}+0, 0 as u64"));
         for (i, sub_state) in sub_states.iter().enumerate() {
-            self.ins(&format!(
-                "store {async_state}+{}, {sub_state} as ptr",
-                plan.sub_state_offset(i)
-            ));
+            self.adopt_store(&async_state.clone(), plan.sub_state_offset(i), sub_state);
             self.ins(&format!(
                 "store {async_state}+{}, 0 as u64",
                 plan.value_offset(i)
             ));
-        }
-        for sub_state in sub_states.iter().rev() {
-            self.emit_release(sub_state)?;
         }
         self.finish_async_state(&async_state, &async_linear_vt(name), f)
     }
@@ -217,12 +211,8 @@ impl<'c> Codegen<'c> {
             if s + 1 < plan.count {
                 let next_state = self.gen_expr(plan.await_exprs[s + 1])?;
                 let next_obj = self.gen_future_object_for_state(&next_state)?;
-                self.ins(&format!(
-                    "store data_slot+{}, {next_obj} as ptr",
-                    plan.object_offset(s + 1)
-                ));
+                self.adopt_store("data_slot", plan.object_offset(s + 1), &next_obj);
                 self.ins(&format!("store data_slot+0, {} as u64", s + 1));
-                self.ins(&format!("!{next_obj}"));
                 self.ins(&format!("!{bind_name}"));
                 self.ins(&format!("!async_general_ready_{s}"));
                 self.ins(&format!("!async_general_poll_{s}"));
@@ -268,17 +258,13 @@ impl<'c> Codegen<'c> {
         let async_state = self.new_tmp();
         self.ins(&format!("{async_state} = alloc {}", plan.async_state_size()));
         self.ins(&format!("store {async_state}+0, 0 as u64"));
-        self.ins(&format!(
-            "store {async_state}+{}, {first_obj} as ptr",
-            plan.object_offset(0)
-        ));
+        self.adopt_store(&async_state.clone(), plan.object_offset(0), &first_obj);
         for zi in 0..plan.count {
             self.ins(&format!(
                 "store {async_state}+{}, 0 as u64",
                 plan.value_offset(zi)
             ));
         }
-        self.ins(&format!("!{first_obj}"));
         self.finish_async_state(&async_state, &async_general_vt(name), f)
     }
 
@@ -317,6 +303,36 @@ impl<'c> Codegen<'c> {
                 local.name,
                 if local.is_ptr { "ptr" } else { "u64" }
             ));
+        }
+    }
+
+    /// Build-site variant of store+free locals: pointer locals
+    /// are adopted by the state via move store (a plain store +
+    /// release frees a fresh owning value on the pinned host —
+    /// see adopt_store); scalar locals keep the plain store +
+    /// release pair.
+    fn emit_loop_await_store_locals_adopt(
+        &mut self,
+        plan: &AsyncLoopAwaitContinuationPlan,
+        from: usize,
+        to: usize,
+    ) {
+        for i in from..to {
+            let local = &plan.locals[i];
+            if local.is_ptr {
+                self.adopt_store(
+                    "data_slot",
+                    AsyncLoopAwaitContinuationPlan::local_offset(i),
+                    &local.name.clone(),
+                );
+            } else {
+                self.ins(&format!(
+                    "store data_slot+{}, {} as u64",
+                    AsyncLoopAwaitContinuationPlan::local_offset(i),
+                    local.name
+                ));
+                self.ins(&format!("!{}", local.name));
+            }
         }
     }
 
@@ -378,11 +394,9 @@ impl<'c> Codegen<'c> {
         }
         let sub_state = self.gen_expr(plan.await_expr)?;
         let sub_obj = self.gen_future_object_for_state(&sub_state)?;
-        self.ins(&format!("store data_slot+8, {sub_obj} as ptr"));
+        self.adopt_store("data_slot", 8, &sub_obj);
         self.ins("store data_slot+0, 1 as u64");
-        self.emit_loop_await_store_locals(plan, 0, plan.binding_index());
-        self.emit_loop_await_free_locals(plan, 0, plan.binding_index(), None);
-        self.ins(&format!("!{sub_obj}"));
+        self.emit_loop_await_store_locals_adopt(plan, 0, plan.binding_index());
         self.w("    jmp L_ASYNC_LOOP_AWAIT\n");
         self.w(
             "L_ASYNC_LOOP_AWAIT:\n\
@@ -464,12 +478,21 @@ impl<'c> Codegen<'c> {
         for i in 0..plan.locals.len() {
             let local = &plan.locals[i];
             if i < plan.head_local_count {
-                self.ins(&format!(
-                    "store {async_state}+{}, {} as {}",
-                    AsyncLoopAwaitContinuationPlan::local_offset(i),
-                    local.name,
-                    if local.is_ptr { "ptr" } else { "u64" }
-                ));
+                if local.is_ptr {
+                    // Pointer head locals are adopted by the state
+                    // (move store; see adopt_store).
+                    self.adopt_store(
+                        &async_state.clone(),
+                        AsyncLoopAwaitContinuationPlan::local_offset(i),
+                        &local.name.clone(),
+                    );
+                } else {
+                    self.ins(&format!(
+                        "store {async_state}+{}, {} as u64",
+                        AsyncLoopAwaitContinuationPlan::local_offset(i),
+                        local.name
+                    ));
+                }
             } else {
                 self.ins(&format!(
                     "store {async_state}+{}, 0 as u64",
