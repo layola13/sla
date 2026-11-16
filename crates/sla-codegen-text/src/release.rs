@@ -237,9 +237,15 @@ impl<'c> Codegen<'c> {
                         // empirically against the pinned host:
                         // keeping the tail corrupts the strong
                         // count of every surviving handle). The
-                        // box's lifetime is governed by the count
-                        // alone; the register is settled by marking
-                        // it consumed.
+                        // value was consumed by the drop sequence
+                        // (through its private copy), so the
+                        // register is retired with the forget
+                        // marker `^name` — the same consume the
+                        // emitter uses for moved-out values — which
+                        // also keeps a following rebinding of the
+                        // name (assignment overwrite) from tripping
+                        // RegisterRedefinition.
+                        self.ins(&format!("^{resolved}"));
                         self.consumed_bindings.insert(resolved.clone());
                         return Ok(());
                     }
