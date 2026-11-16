@@ -390,7 +390,19 @@ impl<'c> Codegen<'c> {
         }
         if matches!(ty_or_err, Type::Primitive(_)) {
             self.emit_primitive_copy(&resolved_name, &val, &ty_or_err)?;
-            if call_arg_needs_release(&let_stmt.value) {
+            // An imported-macro call's out register owns the heap
+            // handle it produced (e.g. a Poll struct); the binding
+            // takes over that handle, so the source register must
+            // not be released here — on the pinned SA host the
+            // release frees the handle's block while the binding
+            // still points into it (block_on_direct, stage 6).
+            let macro_handle = match &*let_stmt.value {
+                Node::CallExpr(call) => {
+                    self.check.imported_macro(&call.func_name).is_some()
+                }
+                _ => false,
+            };
+            if !macro_handle && call_arg_needs_release(&let_stmt.value) {
                 self.emit_release(&val)?;
             }
         } else {
