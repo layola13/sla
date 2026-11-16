@@ -160,6 +160,14 @@ impl<'c> Codegen<'c> {
             "EXPAND FUTURE_NEW {future_obj}, {state_reg}, {vt_reg}"
         ));
         self.emit_release(&vt_reg)?;
+        // The state operand is adopted by the future object: it
+        // is retired with the FORGET form at wrap time (the
+        // loop-defer-ready minim's header: a release-form retire
+        // drops the state block before the first poll, and no
+        // retire leaks the register at function exit).
+        if !state_reg.starts_with('&') {
+            self.emit_forget_moved_value(state_reg)?;
+        }
         Ok(future_obj)
     }
 
