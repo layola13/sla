@@ -181,6 +181,59 @@ impl<'c> Codegen<'c> {
         }
         // (Zig: mpsc sender/receiver, string-buffer and collection
         // binding families emit EXPAND *_FREE — unpopulated here.)
+        // DEF-ARC-DROP (F1) plan dispatch (codegen.zig emitRelease's
+        // plan switch; drop.rs): a named binding with a registered
+        // type drops by plan before the generic `!` tail — struct
+        // fields deep-drop, Vec/GrowVec elements deep-drop and the
+        // container frees, Arc/Rc/Box run the smart-pointer drop on
+        // the binding register (release_value=false; the generic
+        // tail below still settles the register itself). Borrow
+        // parameters never own their value; the struct-update site
+        // suppresses the dispatch while settling its source
+        // register (its fields were raw-moved or compensated
+        // field-by-field at the site).
+        if !self.plan_drop_suppressed && !self.borrow_param_bindings.contains(&resolved) {
+            let binding_ty = self
+                .local_binding_type_for_name(name)
+                .or_else(|| self.local_binding_type_for_name(&resolved));
+            if let Some(binding_ty) = binding_ty {
+                match self.plan_value_drop(&binding_ty) {
+                    crate::drop::DropPlan::DeepStruct(fields) => {
+                        self.emit_struct_field_drops(&resolved, &binding_ty, &fields)?;
+                    }
+                    crate::drop::DropPlan::DeepVec(elem_plan) => {
+                        self.emit_container_element_drops(
+                            &resolved,
+                            &binding_ty,
+                            &elem_plan,
+                            "Vec_ptr",
+                            "Vec_len",
+                        )?;
+                        self.ins(&format!("EXPAND VEC_FREE {resolved}"));
+                        self.consumed_bindings.insert(resolved.clone());
+                        return Ok(());
+                    }
+                    crate::drop::DropPlan::DeepGrowVec(elem_plan) => {
+                        self.emit_container_element_drops(
+                            &resolved,
+                            &binding_ty,
+                            &elem_plan,
+                            "GrowVec_ptr",
+                            "GrowVec_len",
+                        )?;
+                        self.ins(&format!("EXPAND GROWVEC_FREE {resolved}"));
+                        self.consumed_bindings.insert(resolved.clone());
+                        return Ok(());
+                    }
+                    plan @ (crate::drop::DropPlan::ArcPtr(_)
+                    | crate::drop::DropPlan::RcPtr(_)
+                    | crate::drop::DropPlan::BoxPtr(_)) => {
+                        self.emit_smart_pointer_drop_text(&resolved, &binding_ty, &plan, false)?;
+                    }
+                    _ => {}
+                }
+            }
+        }
         self.ins(&format!("!{resolved}"));
         self.consumed_bindings.insert(resolved.clone());
         // codegen.zig:1000-1009 (stage 6 async cluster): the

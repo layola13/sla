@@ -117,6 +117,9 @@ impl<'c> Codegen<'c> {
         // Parameter prologues.
         for p in &f.params {
             self.remember_local_binding_type(&p.name, &p.ty);
+            if p.is_borrow {
+                self.borrow_param_bindings.insert(p.name.clone());
+            }
             if let Type::Borrow(inner) = &*p.ty {
                 if matches!(&**inner, Type::Array(_)) {
                     return unsupported(

@@ -32,6 +32,7 @@ mod clone;
 mod call_plan;
 mod codegen;
 mod copy;
+mod drop;
 mod family_macros;
 mod liveness;
 mod surface;

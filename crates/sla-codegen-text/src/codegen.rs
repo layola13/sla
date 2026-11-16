@@ -53,6 +53,16 @@ pub struct Codegen<'c> {
     pub(crate) let_binding_aliases: HashMap<usize, String>,
     pub(crate) local_binding_types: Vec<(String, Type)>,
     pub(crate) hoisted_allocs: Vec<String>,
+    /// Names of the current function's borrow parameters
+    /// (codegen.zig `borrow_param_bindings`): a borrowed binding
+    /// never owns its value, so emit_release's drop-plan dispatch
+    /// must not fire for it.
+    pub(crate) borrow_param_bindings: HashSet<String>,
+    /// Set by the struct-update site (into.rs) while it settles
+    /// the update source register: that register's fields were
+    /// raw-moved or explicitly compensated field by field, so the
+    /// plan dispatch in emit_release must stay out of the way.
+    pub(crate) plan_drop_suppressed: bool,
 
     // Program-wide state.
     pub(crate) global_const_bindings: HashSet<String>,
@@ -153,6 +163,8 @@ impl<'c> Codegen<'c> {
             let_binding_aliases: HashMap::new(),
             local_binding_types: Vec::new(),
             hoisted_allocs: Vec::new(),
+            borrow_param_bindings: HashSet::new(),
+            plan_drop_suppressed: false,
             global_const_bindings: HashSet::new(),
             global_scalar_consts: Vec::new(),
             func_index: Vec::new(),
@@ -279,6 +291,8 @@ impl<'c> Codegen<'c> {
         self.borrow_source_temps.clear();
         self.hashmap_key_slots.clear();
         self.local_binding_types.clear();
+        self.borrow_param_bindings.clear();
+        self.plan_drop_suppressed = false;
         self.clear_binding_aliases();
         self.let_binding_aliases.clear();
         self.hoisted_allocs.clear();
