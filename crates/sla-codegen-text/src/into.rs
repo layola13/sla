@@ -214,45 +214,35 @@ impl<'c> Codegen<'c> {
                         self.emit_release(&loaded)?;
                     }
                 } else {
+                    // Raw move: ownership of the field transfers
+                    // to the target, so the source's plan release
+                    // must skip the field (taint) — with one
+                    // exception: an Arc/Rc field of a PARAM source
+                    // was clone-bumped by the call-argument copy
+                    // that materialised the param, and the
+                    // source's plan drop of the field is exactly
+                    // that bump's compensation, so it stays
+                    // untainted and fires.
                     let field_plan = self.plan_value_drop(&field_ty);
-                    match field_plan {
-                        // Arc/Rc read-out is compensated: the
-                        // read-out clone-bumps, and the source
-                        // binding's plan drop of the field retires
-                        // the bump (Zig's compensated read-out).
-                        crate::drop::DropPlan::ArcPtr(_)
-                        | crate::drop::DropPlan::RcPtr(_) => {
-                            let is_arc = matches!(
-                                field_plan,
-                                crate::drop::DropPlan::ArcPtr(_)
-                            );
-                            let bumped = self.new_tmp();
-                            self.ins(&format!("{bumped} = add {loaded}, 0"));
-                            self.ins(&format!(
-                                "EXPAND {} {bumped}",
-                                if is_arc { "ARC_CLONE" } else { "RC_CLONE" }
-                            ));
-                            self.ins(&format!(
-                                "store {target}+{offset}, ^{bumped} as {}",
-                                type_string(&field_ty)
-                            ));
-                        }
-                        plan => {
-                            // Raw move: ownership of the field
-                            // transfers to the target; taint it so
-                            // the source's plan release skips it.
-                            if plan != crate::drop::DropPlan::None {
-                                if let Some(root) = &update_root {
-                                    self.update_moved_fields
-                                        .insert((root.clone(), decl_field.name.clone()));
-                                }
-                            }
-                            self.ins(&format!(
-                                "store {target}+{offset}, ^{loaded} as {}",
-                                type_string(&field_ty)
-                            ));
+                    let smart = matches!(
+                        field_plan,
+                        crate::drop::DropPlan::ArcPtr(_) | crate::drop::DropPlan::RcPtr(_)
+                    );
+                    let taint = field_plan != crate::drop::DropPlan::None
+                        && !(smart
+                            && update_root
+                                .as_ref()
+                                .is_some_and(|r| self.param_bindings.contains(r)));
+                    if taint {
+                        if let Some(root) = &update_root {
+                            self.update_moved_fields
+                                .insert((root.clone(), decl_field.name.clone()));
                         }
                     }
+                    self.ins(&format!(
+                        "store {target}+{offset}, ^{loaded} as {}",
+                        type_string(&field_ty)
+                    ));
                 }
             }
             if call_arg_needs_release(update_expr) {

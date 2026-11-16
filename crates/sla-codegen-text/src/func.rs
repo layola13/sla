@@ -117,6 +117,7 @@ impl<'c> Codegen<'c> {
         // Parameter prologues.
         for p in &f.params {
             self.remember_local_binding_type(&p.name, &p.ty);
+            self.param_bindings.insert(p.name.clone());
             if p.is_borrow {
                 self.borrow_param_bindings.insert(p.name.clone());
             }

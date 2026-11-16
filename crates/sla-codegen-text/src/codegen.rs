@@ -67,10 +67,15 @@ pub struct Codegen<'c> {
     /// checker exposes no taint surface): `(root binding, field)`
     /// pairs whose ownership a struct update moved out of the
     /// source place. The source binding's later plan release must
-    /// not drop those fields a second time. Arc/Rc fields are
-    /// never tainted: their update read-out clone-bumps instead,
-    /// and the source drop is the compensation.
+    /// not drop those fields a second time. Arc/Rc fields of a
+    /// PARAM source are never tainted: the call-argument copy
+    /// clone-bumped them, and the source's plan drop is exactly
+    /// the compensation for that bump.
     pub(crate) update_moved_fields: HashSet<(String, String)>,
+    /// Names of the current function's parameters (all kinds);
+    /// the struct-update taint rules distinguish a param source
+    /// (arrived through the call-argument copy) from a local one.
+    pub(crate) param_bindings: HashSet<String>,
 
     // Program-wide state.
     pub(crate) global_const_bindings: HashSet<String>,
@@ -174,6 +179,7 @@ impl<'c> Codegen<'c> {
             borrow_param_bindings: HashSet::new(),
             plan_drop_suppressed: false,
             update_moved_fields: HashSet::new(),
+            param_bindings: HashSet::new(),
             global_const_bindings: HashSet::new(),
             global_scalar_consts: Vec::new(),
             func_index: Vec::new(),
@@ -303,6 +309,7 @@ impl<'c> Codegen<'c> {
         self.borrow_param_bindings.clear();
         self.plan_drop_suppressed = false;
         self.update_moved_fields.clear();
+        self.param_bindings.clear();
         self.clear_binding_aliases();
         self.let_binding_aliases.clear();
         self.hoisted_allocs.clear();
