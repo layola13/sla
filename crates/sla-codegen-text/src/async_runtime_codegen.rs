@@ -120,17 +120,17 @@ impl<'c> Codegen<'c> {
         };
         let name = decl.name.as_str();
         let vt = if plan_async_join2_await_continuation(decl).is_some() {
-            Some(crate::async_scalar::async_join2_await_vtable_name(name))
+            Some(crate::async_scalar::async_join2_vt(name))
         } else if plan_async_two_await_continuation(decl).is_some() {
-            Some(crate::async_scalar::async_two_await_vtable_name(name))
+            Some(crate::async_scalar::async_two_vt(name))
         } else if plan_async_linear_await_continuation(decl).is_some() {
-            Some(crate::async_scalar::async_linear_await_vtable_name(name))
+            Some(crate::async_scalar::async_linear_vt(name))
         } else if plan_async_general_await_continuation(decl).is_some() {
-            Some(crate::async_scalar::async_general_await_vtable_name(name))
+            Some(crate::async_scalar::async_general_vt(name))
         } else if plan_async_loop_await_continuation(decl).is_some() {
-            Some(crate::async_scalar::async_loop_await_vtable_name(name))
+            Some(crate::async_scalar::async_loop_vt(name))
         } else if plan_async_single_await_continuation(decl).is_some() {
-            Some(crate::async_scalar::async_single_await_vtable_name(name))
+            Some(crate::async_scalar::async_single_vt(name))
         } else {
             None
         };
