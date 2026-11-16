@@ -896,7 +896,26 @@ impl<'c> Codegen<'c> {
         if self.check.is_macro(&call.func_name) {
             return false;
         }
-        if call.associated_target.is_some() || call.callee.is_some() {
+        if call.callee.is_some() {
+            return false;
+        }
+        if call.associated_target.is_some() {
+            // An associated call to a known void function is a
+            // void call too (thread::sleep in an async fn body,
+            // stage 6): resolve the callee declaration the same
+            // ways gen_expr_call does.
+            if let Some((_, decl)) = self.resolve_associated_decl(call) {
+                return is_void_type(&decl.ret_ty);
+            }
+            if let Some((_, decl)) = self.resolve_receiver_method_decl(call) {
+                return is_void_type(&decl.ret_ty);
+            }
+            if let Some(decl) = self.func_decl(&call.func_name) {
+                return is_void_type(&decl.ret_ty);
+            }
+            if let Some((_, decl)) = self.func_decl_tail_match(&call.func_name) {
+                return is_void_type(&decl.ret_ty);
+            }
             return false;
         }
         match self.func_decl(&call.func_name) {

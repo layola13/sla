@@ -771,6 +771,21 @@ impl<'c> Codegen<'c> {
             }
             return Ok(());
         }
+        // Statement-position associated call to a known void
+        // function (thread::sleep, stage 6): emit the bare call
+        // form, as the plain known-function arm below does.
+        if call.associated_target.is_some() {
+            let resolved = self
+                .resolve_associated_decl(call)
+                .or_else(|| self.resolve_receiver_method_decl(call));
+            if let Some((key, decl)) = resolved {
+                let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;
+                let lowered = self.lowered_func_symbol(&key);
+                self.ins(&format!("call @{lowered}({})", display.join(", ")));
+                self.emit_lowered_call_arg_cleanups(&planned_args, Some(&key))?;
+                return Ok(());
+            }
+        }
         if call.callee.is_some() || call.associated_target.is_some() {
             return unsupported(
                 "statement call with callee/associated target",
