@@ -473,6 +473,13 @@ impl<'c> Codegen<'c> {
                             "thread" => {
                                 out.insert("async");
                             }
+                            // codegen.zig:6595 programNeedsAsyncMacros
+                            // / blockNeedsAsyncMacros: future/task/
+                            // executor/poll runtime calls need the
+                            // async macro family too (stage 6).
+                            "future" | "task" | "executor" | "poll" => {
+                                out.insert("async");
+                            }
                             "mpsc" => {
                                 out.insert("mpsc");
                             }
