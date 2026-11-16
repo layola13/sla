@@ -55,12 +55,78 @@ impl<'c> Codegen<'c> {
         }
     }
 
+    /// codegen.zig:1136 `flushMutexGuardsForReceiver`.
+    pub(crate) fn flush_mutex_guards_for_receiver(&mut self, mutex_reg: &str) -> Result<()> {
+        if !self.consumed_bindings.contains(mutex_reg) {
+            return Ok(());
+        }
+        let mut guard_names: Vec<String> = Vec::new();
+        for (name, reg) in &self.mutex_guard_handles {
+            if reg == mutex_reg {
+                guard_names.push(name.clone());
+            }
+        }
+        for (name, reg) in &self.mutex_lock_results {
+            if reg == mutex_reg {
+                guard_names.push(name.clone());
+            }
+        }
+        for name in guard_names {
+            self.emit_release(&name)?;
+        }
+        Ok(())
+    }
+
+    /// codegen.zig:2253 `releaseTemporaryHandleRegister`: a
+    /// temporary handle register (a `tmp_N` name) is retired with
+    /// a plain `!`; a live binding is left for its own release.
+    pub(crate) fn release_temporary_handle_register(&mut self, handle_reg: &str) -> Result<()> {
+        if !handle_reg.starts_with("tmp_") {
+            return Ok(());
+        }
+        if self.consumed_bindings.contains(handle_reg) {
+            return Ok(());
+        }
+        self.ins(&format!("!{handle_reg}"));
+        self.consumed_bindings.insert(handle_reg.to_string());
+        Ok(())
+    }
+
+    /// codegen.zig:2222 `restoreMutexReceiverAfterGuardRelease`:
+    /// once no guard or lock Result references the mutex any
+    /// more, the receiver is consumable again, so its
+    /// scope-exit release is not suppressed.
+    pub(crate) fn restore_mutex_receiver_after_guard_release(&mut self, mutex_reg: &str) {
+        if self
+            .mutex_guard_handles
+            .values()
+            .any(|reg| reg == mutex_reg)
+        {
+            return;
+        }
+        if self
+            .mutex_lock_results
+            .values()
+            .any(|reg| reg == mutex_reg)
+        {
+            return;
+        }
+        self.consumed_bindings.remove(mutex_reg);
+    }
+
     /// codegen.zig:841 `emitRelease`.
     pub(crate) fn emit_release(&mut self, name: &str) -> Result<()> {
         let resolved = self.resolve_binding_name(name);
         if is_internal_symbol(&resolved) {
             return Ok(());
         }
+        // codegen.zig:1136 `flushMutexGuardsForReceiver`: a
+        // statement cleanup list may visit the mutex receiver
+        // before the guards that keep it marked consumed; when
+        // the receiver's release is requested in that poisoned
+        // state, release its live guards first so the
+        // receiver's own release is not suppressed.
+        self.flush_mutex_guards_for_receiver(&resolved)?;
         // codegen.zig:1143: the borrow-address-temp release plan
         // (lowering_rules.planBorrowAddressTempRelease): releasing
         // a recorded borrow address settles the borrow register
@@ -71,6 +137,32 @@ impl<'c> Codegen<'c> {
                 self.ins(&format!("!{resolved}"));
             }
             self.emit_release(&source_temp)?;
+            return Ok(());
+        }
+        // codegen.zig:1186 `mutex_guard_handles` probe: releasing
+        // a live guard unlocks its mutex, retires the guard
+        // register, and restores the receiver for its own
+        // scope-exit release. (Zig: mutex/rwlock/refcell/file/
+        // metadata handle families — only the mutex family is
+        // populated in this slice; RwLock/RefCell/file probes
+        // belong at their own Zig positions when those families
+        // land.)
+        if let Some(mutex_reg) = self.mutex_guard_handles.remove(&resolved) {
+            self.ins(&format!("EXPAND MUTEX_UNLOCK {mutex_reg}"));
+            self.release_temporary_handle_register(&mutex_reg)?;
+            self.consumed_bindings.insert(resolved.clone());
+            self.ins(&format!("!{resolved}"));
+            self.restore_mutex_receiver_after_guard_release(&mutex_reg);
+            return Ok(());
+        }
+        // codegen.zig:1196 `mutex_lock_results` probe: a lock
+        // Result dropped without `unwrap` unlocks the same way.
+        if let Some(mutex_reg) = self.mutex_lock_results.remove(&resolved) {
+            self.ins(&format!("EXPAND MUTEX_UNLOCK {mutex_reg}"));
+            self.release_temporary_handle_register(&mutex_reg)?;
+            self.consumed_bindings.insert(resolved.clone());
+            self.ins(&format!("!{resolved}"));
+            self.restore_mutex_receiver_after_guard_release(&mutex_reg);
             return Ok(());
         }
         // (Zig: mutex/rwlock/refcell/file/metadata handle families —

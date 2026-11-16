@@ -18,7 +18,7 @@
 //! `consume_value` rule forgets a consumed temp instead of
 //! releasing it (the value now lives inside the container).
 
-use sla_ast::{CallExpr, Node, Param, Type};
+use sla_ast::{CallExpr, Node, Param, Primitive, Type};
 
 use crate::call::LoweredCallArg;
 use crate::codegen::{type_size, Codegen};
@@ -50,6 +50,33 @@ fn slot_size(elem: &Type) -> usize {
     type_size(elem).max(8)
 }
 
+/// codegen.zig:6686 `atomicOrderingToken` over
+/// lowering_rules.zig:5012: the ordering operand of an atomic
+/// call is written in SLA as the identifier `Ordering::SeqCst`
+/// (etc.) and lowers to the macro's lowercase token. Any other
+/// shape is a loud error, never a literal passthrough (the
+/// pre-fix catch-all passed `Ordering::SeqCst` through as an
+/// operand verbatim).
+fn atomic_ordering_token(arg: &Node) -> Option<&'static str> {
+    let name = match arg {
+        Node::Identifier(name) => name.as_str(),
+        Node::CallExpr(call)
+            if call.associated_target.as_deref() == Some("Ordering") =>
+        {
+            call.func_name.as_str()
+        }
+        _ => return None,
+    };
+    match name {
+        "Ordering::SeqCst" | "SeqCst" => Some("seq_cst"),
+        "Ordering::Acquire" | "Acquire" => Some("acquire"),
+        "Ordering::Release" | "Release" => Some("release"),
+        "Ordering::Relaxed" | "Relaxed" => Some("relaxed"),
+        "Ordering::AcqRel" | "AcqRel" => Some("acq_rel"),
+        _ => None,
+    }
+}
+
 impl<'c> Codegen<'c> {
     /// Pure classification: the receiver's peeled surface type
     /// name + generics, or None when the checker recorded no
@@ -61,6 +88,25 @@ impl<'c> Codegen<'c> {
         let recv_ty = self.expr_type(&call.args[0])?;
         let (name, generics) = peel_name(&recv_ty)?;
         Some((name.to_string(), generics.to_vec()))
+    }
+
+    /// lowering_rules.zig:4287 `isNonOwningPointerCarrierCastArg`:
+    /// a cast of an identifier to a pointer-carrier type lowers
+    /// to the identifier's own register, so releasing the
+    /// "temp" would retire the live binding. Atomic arms skip
+    /// the receiver release for such an argument.
+    fn is_non_owning_pointer_carrier_cast_arg(&self, arg: &Node) -> bool {
+        if let Node::CastExpr(cast) = arg {
+            if matches!(&*cast.expr, Node::Identifier(_)) {
+                return matches!(
+                    &*cast.ty,
+                    Type::Pointer(_)
+                        | Type::Borrow(_)
+                        | Type::Primitive(Primitive::RawPtr)
+                );
+            }
+        }
+        false
     }
 
     fn surface_receiver(&mut self, call: &CallExpr) -> Result<(String, String, Vec<Type>)> {
@@ -339,7 +385,6 @@ impl<'c> Codegen<'c> {
             ("Option", "unwrap") => Some("OPTION_UNWRAP"),
             ("Result", "is_ok") => Some("RESULT_IS_OK"),
             ("Result", "is_err") => Some("RESULT_IS_ERR"),
-            ("Result", "unwrap") => Some("RESULT_UNWRAP"),
             ("Cell", "get") => Some("CELL_GET"),
             ("Box", "get") => Some("BOX_GET_U64"),
             ("Box", "as_ptr") => Some("BOX_AS_PTR"),
@@ -671,6 +716,321 @@ impl<'c> Codegen<'c> {
                     self.ins(&format!("{reg} = {raw_reg} as {elem_s}"));
                     Ok(Some(SurfaceCall::Value(reg)))
                 }
+            }
+            // ---- stage 9 macro family (RUST-S7-EXPAND-MACRO-FAMILY,
+            // R122 B_mirror_zig): the receiver methods below used to
+            // fall through to the bare-name EXPAND catch-all in
+            // call.rs, synthesising `EXPAND clone/strong_count/
+            // fetch_add/lock/join/RESULT_UNWRAP` for macros that
+            // exist in no std tree. Each arm mirrors the Zig TEXT
+            // emission verbatim (codegen.zig line refs inline).
+            ("Rc", "clone") | ("Arc", "clone") => {
+                // codegen.zig:21657-21686: copy the handle, then
+                // the in-place count bump (`RC_CLONE %rc_reg`,
+                // rc.sa:20 — single operand, no output register).
+                if call.args.len() != 1 {
+                    return Err(missing_fact());
+                }
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let reg = self.new_tmp();
+                self.ins(&format!("{reg} = add {recv}, 0"));
+                let macro_name = if tname == "Rc" { "RC_CLONE" } else { "ARC_CLONE" };
+                self.ins(&format!("EXPAND {macro_name} {reg}"));
+                // TEXT35-OWNERSHIP (DEF-TEXT-EXPAND-RECV-TEMP):
+                // retire a temp receiver; a live binding stays.
+                if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                    self.emit_release(&recv)?;
+                }
+                Ok(Some(SurfaceCall::Value(reg)))
+            }
+            ("Rc", "strong_count")
+            | ("Rc", "weak_count")
+            | ("Arc", "strong_count")
+            | ("Arc", "weak_count") => {
+                // codegen.zig:21687-21726 (DEF-ARC-DROP F1): copy
+                // the receiver to a fresh register first — the
+                // count macros key a temporary on the receiver
+                // name, and a fresh name keeps repeated queries
+                // on one receiver collision-free.
+                if call.args.len() != 1 {
+                    return Err(missing_fact());
+                }
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let src_reg = self.new_tmp();
+                let reg = self.new_tmp();
+                self.ins(&format!("{src_reg} = add {recv}, 0"));
+                let macro_name = match (tname.as_str(), name) {
+                    ("Rc", "strong_count") => "RC_STRONG_COUNT",
+                    ("Rc", "weak_count") => "RC_WEAK_COUNT",
+                    ("Arc", "strong_count") => "ARC_STRONG_COUNT",
+                    _ => "ARC_WEAK_COUNT",
+                };
+                self.ins(&format!("EXPAND {macro_name} {reg}, {src_reg}"));
+                self.emit_release(&src_reg)?;
+                if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                    self.emit_release(&recv)?;
+                }
+                Ok(Some(SurfaceCall::Value(reg)))
+            }
+            ("AtomicI32", "load") | ("AtomicUsize", "load") | ("AtomicPtr", "load") => {
+                // codegen.zig:21406-21417 / 21468-21479 / 21504-21515.
+                if call.args.len() != 2 {
+                    return Err(missing_fact());
+                }
+                let ordering = atomic_ordering_token(&call.args[1]).ok_or_else(|| {
+                    crate::TextError::Unsupported {
+                        feature: "atomic load ordering (non-Ordering::* variant)"
+                            .to_string(),
+                        zig_ref: "codegen.zig:6686 (atomicOrderingToken)",
+                    }
+                })?;
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let macro_name = match tname.as_str() {
+                    "AtomicI32" => "ATOMIC_I32_LOAD",
+                    "AtomicUsize" => "ATOMIC_USIZE_LOAD",
+                    _ => "ATOMIC_PTR_LOAD",
+                };
+                let reg = self.new_tmp();
+                self.ins(&format!("EXPAND {macro_name} {reg}, {recv}, {ordering}"));
+                if sla_lowering::call_arg_needs_release(&call.args[0])
+                    && !self.is_non_owning_pointer_carrier_cast_arg(&call.args[0])
+                {
+                    self.emit_release(&recv)?;
+                }
+                Ok(Some(SurfaceCall::Value(reg)))
+            }
+            ("AtomicI32", "fetch_add") | ("AtomicUsize", "fetch_add") => {
+                // codegen.zig:21426-21444 / 21488-21500.
+                if call.args.len() != 3 {
+                    return Err(missing_fact());
+                }
+                let ordering = atomic_ordering_token(&call.args[2]).ok_or_else(|| {
+                    crate::TextError::Unsupported {
+                        feature: "atomic fetch_add ordering (non-Ordering::* variant)"
+                            .to_string(),
+                        zig_ref: "codegen.zig:6686 (atomicOrderingToken)",
+                    }
+                })?;
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let value_reg = self.gen_expr(&call.args[1])?;
+                let macro_name = if tname == "AtomicI32" {
+                    "ATOMIC_I32_FETCH_ADD"
+                } else {
+                    "ATOMIC_USIZE_FETCH_ADD"
+                };
+                let reg = self.new_tmp();
+                self.ins(&format!(
+                    "EXPAND {macro_name} {reg}, {recv}, {value_reg}, {ordering}"
+                ));
+                if sla_lowering::call_arg_needs_release(&call.args[0])
+                    && !self.is_non_owning_pointer_carrier_cast_arg(&call.args[0])
+                {
+                    self.emit_release(&recv)?;
+                }
+                if sla_lowering::call_arg_needs_release(&call.args[1]) {
+                    self.emit_release(&value_reg)?;
+                }
+                Ok(Some(SurfaceCall::Value(reg)))
+            }
+            ("Mutex", "lock") => {
+                // codegen.zig:21569-21590: the lock itself is a
+                // statement (`MUTEX_LOCK %lock_ptr`, mutex.sa:56
+                // — a spin lock, no output); the guard is the
+                // `Mutex_data` pointer wrapped in a fresh Ok
+                // Result. The Result register is recorded in
+                // `mutex_lock_results` so `unwrap` can transfer
+                // it to the guard map and `emitRelease` can
+                // unlock it (codegen.zig:1186).
+                if call.args.len() != 1 {
+                    return Err(missing_fact());
+                }
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let guard_reg = self.new_tmp();
+                let result_reg = self.new_tmp();
+                self.ins(&format!("EXPAND MUTEX_LOCK {recv}"));
+                self.ins(&format!("{guard_reg} = ptr_add {recv}, Mutex_data"));
+                self.ins(&format!(
+                    "EXPAND RESULT_NEW_OK {result_reg}, {guard_reg}"
+                ));
+                self.mutex_lock_results
+                    .insert(result_reg.clone(), recv.clone());
+                self.emit_release(&guard_reg)?;
+                if let Node::Identifier(name) = &call.args[0] {
+                    let resolved = self.resolve_binding_name(name);
+                    self.consumed_bindings.insert(resolved);
+                }
+                Ok(Some(SurfaceCall::Value(result_reg)))
+            }
+            ("JoinHandle", "join") => {
+                // codegen.zig:21030-21180: inline handles read the
+                // slot directly; the general path branches on the
+                // handle word (-1 = inline, else pthread) and
+                // builds the 24-byte Result in both arms.
+                if call.args.len() != 1 {
+                    return Err(missing_fact());
+                }
+                let inner_ty = generics
+                    .first()
+                    .ok_or(missing_fact())?
+                    .clone();
+                let inner_s = crate::codegen::type_string(&inner_ty);
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let result_reg = self.new_tmp();
+                if self.inline_thread_handles.contains(&recv) {
+                    let value = self.new_tmp();
+                    let ok_tag = self.new_tmp();
+                    self.ins(&format!("{value} = load {recv}+8 as {inner_s}"));
+                    self.ins(&format!("{result_reg} = alloc 24"));
+                    self.ins(&format!("{ok_tag} = 0"));
+                    self.ins(&format!("store {result_reg}+0, {ok_tag} as u64"));
+                    self.ins(&format!(
+                        "store {result_reg}+8, {value} as {inner_s}"
+                    ));
+                    self.ins(&format!("store {result_reg}+16, {ok_tag} as u64"));
+                    self.ins(&format!("!{ok_tag}"));
+                    self.ins(&format!("!{value}"));
+                    self.inline_thread_handles.remove(&recv);
+                    self.emit_release(&recv)?;
+                    return Ok(Some(SurfaceCall::Value(result_reg)));
+                }
+                let handle = self.new_tmp();
+                let is_inline = self.new_tmp();
+                let status = self.new_tmp();
+                let is_ok = self.new_tmp();
+                let inline_label = self.new_label("L_THREAD_JOIN_INLINE");
+                let pthread_label = self.new_label("L_THREAD_JOIN_PTHREAD");
+                let ok_label = self.new_label("L_THREAD_JOIN_OK");
+                let err_label = self.new_label("L_THREAD_JOIN_ERR");
+                let end_label = self.new_label("L_THREAD_JOIN_END");
+                self.ins(&format!("{handle} = load {recv}+0 as i32"));
+                self.ins(&format!("{is_inline} = eq {handle}, -1"));
+                self.ins(&format!(
+                    "br {is_inline} -> {inline_label}, {pthread_label}"
+                ));
+                self.wl(&format!("{inline_label}:"));
+                self.ins(&format!("!{is_inline}"));
+                let inline_value = self.new_tmp();
+                self.ins(&format!(
+                    "{inline_value} = load {recv}+8 as {inner_s}"
+                ));
+                let inline_ok_tag = self.new_tmp();
+                self.ins(&format!("{result_reg} = alloc 24"));
+                self.ins(&format!("{inline_ok_tag} = 0"));
+                self.ins(&format!(
+                    "store {result_reg}+0, {inline_ok_tag} as u64"
+                ));
+                self.ins(&format!(
+                    "store {result_reg}+8, {inline_value} as {inner_s}"
+                ));
+                self.ins(&format!(
+                    "store {result_reg}+16, {inline_ok_tag} as u64"
+                ));
+                self.ins(&format!("!{inline_ok_tag}"));
+                self.ins(&format!("!{inline_value}"));
+                self.ins(&format!("jmp {end_label}"));
+                self.wl(&format!("{pthread_label}:"));
+                self.ins(&format!("!{is_inline}"));
+                self.ins(&format!(
+                    "EXPAND THREAD_JOIN_STATUS {status}, {handle}, *{recv}"
+                ));
+                self.ins(&format!("EXPAND THREAD_DROP {handle}"));
+                self.ins(&format!("{is_ok} = eq {status}, 0"));
+                self.ins(&format!("br {is_ok} -> {ok_label}, {err_label}"));
+                self.wl(&format!("{ok_label}:"));
+                self.ins(&format!("!{is_ok}"));
+                let value = self.new_tmp();
+                self.ins(&format!("{value} = load {recv}+8 as {inner_s}"));
+                let ok_tag = self.new_tmp();
+                self.ins(&format!("{result_reg} = alloc 24"));
+                self.ins(&format!("{ok_tag} = 0"));
+                self.ins(&format!("store {result_reg}+0, {ok_tag} as u64"));
+                self.ins(&format!(
+                    "store {result_reg}+8, {value} as {inner_s}"
+                ));
+                self.ins(&format!("store {result_reg}+16, {ok_tag} as u64"));
+                self.ins(&format!("!{ok_tag}"));
+                self.ins(&format!("!{value}"));
+                self.ins(&format!("!{status}"));
+                self.ins(&format!("jmp {end_label}"));
+                self.wl(&format!("{err_label}:"));
+                self.ins(&format!("!{is_ok}"));
+                let err_value = self.new_tmp();
+                self.ins(&format!("{err_value} = add {status}, 0"));
+                let err_tag = self.new_tmp();
+                let err_zero = self.new_tmp();
+                self.ins(&format!("{result_reg} = alloc 24"));
+                self.ins(&format!("{err_tag} = 1"));
+                self.ins(&format!("{err_zero} = 0"));
+                self.ins(&format!("store {result_reg}+0, {err_tag} as u64"));
+                self.ins(&format!(
+                    "store {result_reg}+8, {err_zero} as {inner_s}"
+                ));
+                self.ins(&format!(
+                    "store {result_reg}+16, {err_value} as i64"
+                ));
+                self.ins(&format!("!{err_zero}"));
+                self.ins(&format!("!{err_tag}"));
+                self.ins(&format!("!{err_value}"));
+                self.ins(&format!("!{status}"));
+                self.ins(&format!("jmp {end_label}"));
+                self.wl(&format!("{end_label}:"));
+                self.ins(&format!("!{handle}"));
+                // DEF-ARC-DROP: the receiver register itself must
+                // be released here (the inline branch above does);
+                // marking it consumed in bookkeeping alone leaves
+                // it Active in the emitted SA and traps
+                // MemoryLeak at function exit.
+                self.emit_release(&recv)?;
+                Ok(Some(SurfaceCall::Value(result_reg)))
+            }
+            ("Result", "unwrap") => {
+                // codegen.zig:21340-21380: inline branch code —
+                // `RESULT_UNWRAP` has no [MACRO] definition in
+                // any std tree (result.sa defines only
+                // RESULT_UNWRAP_OR*), so the old unary mapping
+                // was a bogus EXPAND. Ok loads the payload at
+                // +8; Err panics (17) after defining the result
+                // register on that path too.
+                if call.args.len() != 1 {
+                    return Err(missing_fact());
+                }
+                let ok_ty = generics
+                    .first()
+                    .ok_or(missing_fact())?
+                    .clone();
+                let ok_s = crate::codegen::type_string(&ok_ty);
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let reg = self.new_tmp();
+                let tag = self.new_tmp();
+                let is_ok = self.new_tmp();
+                let ok_label = self.new_label("L_RESULT_UNWRAP_OK");
+                let err_label = self.new_label("L_RESULT_UNWRAP_ERR");
+                let end_label = self.new_label("L_RESULT_UNWRAP_END");
+                self.ins(&format!("{tag} = load {recv}+0 as u64"));
+                self.ins(&format!("{is_ok} = eq {tag}, 0"));
+                self.ins(&format!("br {is_ok} -> {ok_label}, {err_label}"));
+                self.wl(&format!("{ok_label}:"));
+                self.ins(&format!("!{is_ok}"));
+                self.ins(&format!("{reg} = load {recv}+8 as {ok_s}"));
+                self.ins(&format!("!{tag}"));
+                self.ins(&format!("jmp {end_label}"));
+                self.wl(&format!("{err_label}:"));
+                self.ins(&format!("!{is_ok}"));
+                self.ins("panic(17)");
+                self.ins(&format!("{reg} = 0"));
+                self.ins(&format!("!{tag}"));
+                self.ins(&format!("jmp {end_label}"));
+                self.wl(&format!("{end_label}:"));
+                // A `Mutex::lock` Result unwrapped here hands its
+                // guard handle to the unwrapped value
+                // (codegen.zig:21373).
+                if let Some(mutex_reg) = self.mutex_lock_results.remove(&recv) {
+                    self.mutex_guard_handles.insert(reg.clone(), mutex_reg);
+                }
+                if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                    self.emit_release(&recv)?;
+                }
+                Ok(Some(SurfaceCall::Value(reg)))
             }
             _ => Ok(None),
         }

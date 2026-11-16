@@ -80,6 +80,17 @@ pub struct Codegen<'c> {
     /// `inline_thread_handles`): a join on one reads the
     /// already-computed slot value instead of waiting.
     pub(crate) inline_thread_handles: HashSet<String>,
+    /// codegen.zig `mutex_lock_results` (mutex.rs lock arm):
+    /// a `Mutex::lock` call's Result register -> the mutex
+    /// register it locked. `Result::unwrap` transfers the entry
+    /// to `mutex_guard_handles`; `emitRelease` unlocks from
+    /// either map. Stage 9 macro-family (B_mirror_zig).
+    pub(crate) mutex_lock_results: HashMap<String, String>,
+    /// codegen.zig `mutex_guard_handles`: a live `MutexGuard`
+    /// register -> the mutex register it guards. `emitRelease`
+    /// emits `EXPAND MUTEX_UNLOCK` for the mutex and retires
+    /// the guard register (codegen.zig:1186).
+    pub(crate) mutex_guard_handles: HashMap<String, String>,
     /// Worker-body capture bindings (codegen.zig
     /// `thread_capture_regs`): identifier reads inside a
     /// generated worker resolve to the slot loads.
@@ -150,6 +161,8 @@ impl<'c> Codegen<'c> {
             thread_spawn_helpers: Vec::new(),
             thread_helper_idx: 0,
             inline_thread_handles: HashSet::new(),
+            mutex_lock_results: HashMap::new(),
+            mutex_guard_handles: HashMap::new(),
             thread_capture_regs: HashMap::new(),
             loop_break_labels: Vec::new(),
             loop_continue_labels: Vec::new(),
@@ -278,6 +291,8 @@ impl<'c> Codegen<'c> {
         self.future_readiness.clear();
         self.task_future_objects.clear();
         self.executor_task_counts.clear();
+        self.mutex_lock_results.clear();
+        self.mutex_guard_handles.clear();
         self.async_pending_return_emitted = false;
     }
 
