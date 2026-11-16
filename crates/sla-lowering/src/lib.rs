@@ -17,6 +17,8 @@
 pub mod abi;
 pub mod async_plans;
 pub mod async_plans_loop;
+#[cfg(test)]
+mod async_tests;
 pub mod async_runtime;
 pub mod call_args;
 pub mod check_info;
