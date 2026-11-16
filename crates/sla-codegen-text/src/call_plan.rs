@@ -22,7 +22,26 @@ impl<'c> Codegen<'c> {
         param: Option<&Param>,
         receiver_style_auto_borrow: bool,
     ) -> Result<LoweredCallArg> {
-        let arg_ty = self.expr_type(arg);
+        // Worker bodies are generated from the spawn helper's
+        // CLONED closure AST (thread_spawn.rs stores
+        // `closure.clone()`), so node-address-keyed checker facts
+        // miss for every node inside the body — including the
+        // argument's type, which decides Copy-ness here. With no
+        // type the planner assumes an ownership transfer and
+        // emits `^reg` for a by-value parameter; the host rejects
+        // that prefix for a Copy scalar (CapabilityMismatch on
+        // the worker call). Captures are seeded as typed local
+        // bindings (thread_spawn_emit.rs), so an identifier
+        // argument falls back to its binding type — the same
+        // fallback shape as the surface receiver classification
+        // (surface.rs, RUST-S9-BARE-CLONE-CALL).
+        let arg_ty = self.expr_type(arg).or_else(|| {
+            if let Node::Identifier(name) = arg {
+                self.local_binding_type_for_name(name)
+            } else {
+                None
+            }
+        });
         let arg_is_copy = arg_ty
             .as_ref()
             .map(|t| self.type_is_copy_value(t))
