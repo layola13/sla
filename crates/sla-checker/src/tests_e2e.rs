@@ -189,3 +189,84 @@ fn match_arm_exit_cleanups_untouched_payload_listed() {
     assert_eq!(arms[0], vec!["v".to_string()]);
     assert_eq!(arms[1], vec!["e".to_string()]);
 }
+
+// -- stage 6 R2b: literal call arguments take the parameter's type --
+
+/// The first call argument node in function `f`'s first return.
+fn first_call_arg_key(root: &Node) -> usize {
+    let Node::Program(program) = root else {
+        panic!("root must be a Program node");
+    };
+    for decl in &program.decls {
+        if let Node::FuncDecl(f) = decl {
+            if f.name != "f" {
+                continue;
+            }
+            for stmt in &f.body {
+                if let Node::ReturnStmt(r) = stmt {
+                    if let Some(Node::CallExpr(c)) = r.value.as_deref() {
+                        return crate::types_util::node_key_of(&c.args[0]);
+                    }
+                }
+            }
+        }
+    }
+    panic!("no call return found in f");
+}
+
+/// R2b (stage 6): a bare-integer array literal passed to a
+/// `[u8; 3]` parameter is accepted and the literal node's
+/// recorded type becomes the parameter's array type (the
+/// annotation recorded for the whole node, which the emitter
+/// reads back). Pre-fix this was a TypeMismatch from the
+/// width-strict array arm, and no recording happened.
+#[test]
+fn array_literal_arg_takes_param_type() {
+    let source = "fn g(v: [u8; 3]) -> i32 { return 0; }\nfn f() -> i32 { return g([10, 20, 30]); }\n";
+    let (root, checker, result) = check_source_keep(source);
+    assert!(result.is_ok(), "{result:?}");
+    let key = first_call_arg_key(&root);
+    let recorded = checker
+        .expr_types
+        .get(&key)
+        .expect("the literal argument's type must be recorded");
+    let expected = sla_ast::types::Type::Array(sla_ast::types::ArrayType {
+        elem: Box::new(sla_ast::types::Type::Primitive(
+            sla_ast::types::Primitive::U8,
+        )),
+        len: 3,
+    });
+    assert_eq!(*recorded, expected);
+}
+
+/// Same discipline for a repeat literal argument.
+#[test]
+fn repeat_literal_arg_takes_param_type() {
+    let source = "fn g(v: [i32; 3]) -> i32 { return 0; }\nfn f() -> i32 { return g([5; 3]); }\n";
+    let (root, checker, result) = check_source_keep(source);
+    assert!(result.is_ok(), "{result:?}");
+    let key = first_call_arg_key(&root);
+    let recorded = checker
+        .expr_types
+        .get(&key)
+        .expect("the repeat argument's type must be recorded");
+    let expected = sla_ast::types::Type::Array(sla_ast::types::ArrayType {
+        elem: Box::new(sla_ast::types::Type::Primitive(
+            sla_ast::types::Primitive::I32,
+        )),
+        len: 3,
+    });
+    assert_eq!(*recorded, expected);
+}
+
+/// Control: the width-strict rule still governs real values —
+/// an `[i64; 3]` VARIABLE passed to a `[u8; 3]` parameter stays
+/// a TypeMismatch (only literals, which have no width of their
+/// own, take the parameter's element type).
+#[test]
+fn array_variable_arg_width_mismatch_still_rejected() {
+    let source = "fn g(v: [u8; 3]) -> i32 { return 0; }\nfn f(a: [i64; 3]) -> i32 { return g(a); }\n";
+    let result = check_source(source);
+    let err = result.expect_err("width-mismatched variable must fail");
+    assert_eq!(err.kind, ErrorKind::TypeMismatch, "{err:?}");
+}

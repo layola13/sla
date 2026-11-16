@@ -133,7 +133,9 @@ impl<'c> Codegen<'c> {
             _ => return unsupported("block tail is not an expr statement", "codegen.zig:8069"),
         };
         self.current_stmt_index = split;
-        let value_reg = self.gen_expr(value_expr)?;
+        // R2b (stage 6): a tail literal takes its layout from
+        // the slot's target type.
+        let value_reg = self.gen_expr_in_context(value_expr, Some(target_ty))?;
         let value_ty = self.require_expr_type(value_expr, "block tail value")?;
 
         if matches!(&**value_expr, Node::Identifier(_)) && matches!(value_ty, Type::Primitive(_)) {

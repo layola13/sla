@@ -180,7 +180,10 @@ impl<'c> Codegen<'c> {
                         }
                     }
                 }
-                let raw_reg = self.gen_expr(arg)?;
+                // R2b (stage 6): a literal argument takes its
+                // layout from the parameter's declared type.
+                let raw_reg =
+                    self.gen_expr_in_context(arg, param.map(|p| &*p.ty))?;
                 // codegen.zig Value arm head: `&ident` of an
                 // addressable binding is passed as `&` of its
                 // materialised address register, never as the
@@ -284,7 +287,8 @@ impl<'c> Codegen<'c> {
                 })
             }
             CallArgMaterializationKind::AutoBorrow => {
-                let raw_reg = self.gen_expr(arg)?;
+                let raw_reg =
+                    self.gen_expr_in_context(arg, param.map(|p| &*p.ty))?;
                 let release =
                     plan.release_after_call || self.call_arg_result_temp_needs_release(arg, &raw_reg);
                 Ok(LoweredCallArg {

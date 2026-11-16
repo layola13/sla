@@ -64,10 +64,56 @@ impl<'c> Codegen<'c> {
         let total_size = (elem_size * lit.elements.len()).max(1);
         self.ins(&format!("{target} = alloc {total_size}"));
         for (i, elem) in lit.elements.iter().enumerate() {
-            let val_reg = self.gen_expr(elem)?;
+            // R2b (stage 6): a nested literal element takes its
+            // layout from THIS literal's element type (the outer
+            // annotation), not from its own recorded type.
+            let val_reg = self.gen_expr_in_context(elem, Some(&elem_ty))?;
             self.store_aggregate_element(target, elem_size * i, elem, &val_reg, &elem_ty)?;
         }
         Ok(())
+    }
+
+    /// R2b (stage 6): emit `expr` where the consuming context
+    /// expects `ctx_ty`. An array / repeat literal directly in
+    /// this position takes its element layout from the context
+    /// (Zig takes the element type from the annotation recorded
+    /// for the whole node, codegen.zig:16365-16371); the literal's
+    /// own recorded type defaults bare integer elements to i64
+    /// and would lay a `[u8; N]` / `[i32; N]` consumer out at the
+    /// wrong stride. Every other shape falls through to
+    /// `gen_expr` unchanged. A borrow context peels to its inner
+    /// array type.
+    pub(crate) fn gen_expr_in_context(
+        &mut self,
+        expr: &Node,
+        ctx_ty: Option<&Type>,
+    ) -> Result<String> {
+        let arr = match ctx_ty {
+            Some(Type::Array(a)) => Some(a.clone()),
+            Some(Type::Borrow(inner)) => match &**inner {
+                Type::Array(a) => Some(a.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(arr) = arr {
+            match expr {
+                Node::ArrayLiteral(lit) => {
+                    let reg = self.new_tmp();
+                    self.gen_array_literal_into_typed(&reg, lit, &arr.elem)?;
+                    return Ok(reg);
+                }
+                Node::RepeatArrayLiteral(lit) => {
+                    let reg = self.new_tmp();
+                    self.gen_repeat_array_literal_into_typed(
+                        &reg, lit, &arr.elem, arr.len,
+                    )?;
+                    return Ok(reg);
+                }
+                _ => {}
+            }
+        }
+        self.gen_expr(expr)
     }
 
     /// codegen.zig:16314 `genRepeatArrayLiteralInto`. Scalar
@@ -90,6 +136,25 @@ impl<'c> Codegen<'c> {
         };
         let elem_ty = (*arr.elem).clone();
         let len = arr.len;
+        self.gen_repeat_array_literal_into_typed(target, lit, &elem_ty, len)
+    }
+
+    /// The repeat literal with its element type and length
+    /// supplied by the consuming context (R2b stage 6: an
+    /// annotated let's type, a function's return type, a struct
+    /// field's declared type). The literal's own recorded type
+    /// defaults a bare integer value to i64 — and in field
+    /// position may not be recorded at all — so context-free
+    /// emission lays the fill out at the wrong stride or fails
+    /// with MissingType.
+    pub(crate) fn gen_repeat_array_literal_into_typed(
+        &mut self,
+        target: &str,
+        lit: &RepeatArrayLiteral,
+        elem_ty: &Type,
+        len: usize,
+    ) -> Result<()> {
+        let elem_ty = elem_ty.clone();
         let elem_size = type_size(&elem_ty);
         let total_size = (elem_size * len).max(1);
         self.ins(&format!("{target} = alloc {total_size}"));
@@ -144,7 +209,9 @@ impl<'c> Codegen<'c> {
             return Ok(());
         }
         for i in 0..len {
-            let slot_reg = self.gen_expr(&lit.value)?;
+            // A nested literal value takes its layout from the
+            // element type, as in the plain literal's typed path.
+            let slot_reg = self.gen_expr_in_context(&lit.value, Some(&elem_ty))?;
             self.store_aggregate_element(target, elem_size * i, &lit.value, &slot_reg, &elem_ty)?;
         }
         Ok(())

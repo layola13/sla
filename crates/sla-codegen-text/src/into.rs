@@ -263,6 +263,24 @@ impl<'c> Codegen<'c> {
                 ));
                 continue;
             }
+            // R2b (stage 6): a repeat-literal field value takes
+            // its element type and length from the FIELD's
+            // declared type, like the plain literal above (the
+            // context-free path reads the literal's own recorded
+            // type — i64-wide for a bare integer value — or fails
+            // with MissingType when none was recorded).
+            if let (Node::RepeatArrayLiteral(rlit), Type::Array(arr)) = (value, &field_ty) {
+                let arr = arr.clone();
+                let temp = self.new_tmp();
+                self.gen_repeat_array_literal_into_typed(
+                    &temp, rlit, &arr.elem, arr.len,
+                )?;
+                self.ins(&format!(
+                    "store {target}+{offset}, ^{temp} as {}",
+                    type_string(&field_ty)
+                ));
+                continue;
+            }
             if let (Node::TupleLiteral(tlit), Type::Tuple(tt)) = (value, &field_ty) {
                 let tt = tt.clone();
                 let temp = self.new_tmp();
@@ -347,7 +365,9 @@ impl<'c> Codegen<'c> {
                         zig_ref: "lowering_rules.zig (enumFieldLayout)",
                     }
                 })?;
-            let val_reg = self.gen_expr(value)?;
+            // R2b (stage 6): a literal payload takes its layout
+            // from the variant field's declared type.
+            let val_reg = self.gen_expr_in_context(value, Some(&field_ty))?;
             self.ins(&format!(
                 "store {target}+{offset}, {val_reg} as {}",
                 type_string(&field_ty)

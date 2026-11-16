@@ -86,6 +86,12 @@ pub struct Codegen<'c> {
     pub(crate) current_stmt_index: usize,
     pub(crate) move_out_stmt: Option<usize>,
     pub(crate) move_out_name: Option<String>,
+    /// The enclosing function's declared return type (R2b stage
+    /// 6): the consuming context for a return statement's value,
+    /// consulted by `gen_expr_in_context`. Set by
+    /// `gen_func_decl_named`; cleared on every reset (test decls
+    /// and nested emission see None).
+    pub(crate) current_ret_ty: Option<Type>,
 }
 
 impl<'c> Codegen<'c> {
@@ -122,6 +128,7 @@ impl<'c> Codegen<'c> {
             current_stmt_index: 0,
             move_out_stmt: None,
             move_out_name: None,
+            current_ret_ty: None,
         }
     }
 
@@ -228,6 +235,7 @@ impl<'c> Codegen<'c> {
         self.current_stmt_index = 0;
         self.move_out_stmt = None;
         self.move_out_name = None;
+        self.current_ret_ty = None;
     }
 
     // -- lookups --------------------------------------------------------

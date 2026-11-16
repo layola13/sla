@@ -460,8 +460,17 @@ impl Checker {
                 ));
             }
             if let (Type::Array(pa), Type::Array(aa)) = (&param.ty, &arg_ty) {
+                // R2b (stage 6): a literal argument takes its
+                // element width from the parameter (recorded
+                // below); the width-strict rule governs real
+                // values, whose width is their own.
+                let literal_arg = matches!(
+                    arg,
+                    Node::ArrayLiteral(_) | Node::RepeatArrayLiteral(_)
+                );
                 if pa.len != aa.len
-                    || !types_structurally_equal(&pa.elem, &aa.elem)
+                    || (!literal_arg
+                        && !types_structurally_equal(&pa.elem, &aa.elem))
                 {
                     return Err(Diagnostic::new(
                         ErrorKind::TypeMismatch,
@@ -471,8 +480,12 @@ impl Checker {
                     ));
                 }
             }
-            if matches!(arg, Node::TupleLiteral(_) | Node::ArrayLiteral(_))
-                && types_equal(&arg_ty, &param.ty)
+            if matches!(
+                arg,
+                Node::TupleLiteral(_)
+                    | Node::ArrayLiteral(_)
+                    | Node::RepeatArrayLiteral(_)
+            ) && types_equal(&arg_ty, &param.ty)
             {
                 self.expr_types
                     .insert(node_key_of(arg), param.ty.clone());

@@ -7,8 +7,8 @@ use crate::checker::{Checker, FuncSig};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::rules::MacroParamConsumption;
 use crate::types_util::{
-    is_string_type, raw_ptr_ty, type_desc, types_equal, types_structurally_equal,
-    value_assignable_to, void_ty,
+    is_string_type, node_key_of, raw_ptr_ty, type_desc, types_equal,
+    types_structurally_equal, value_assignable_to, void_ty,
 };
 use sla_ast::exprs::{CallExpr, Literal};
 use sla_ast::node::Node;
@@ -156,6 +156,37 @@ impl Checker {
             // borrow strip would otherwise compare the stripped
             // argument against the un-stripped parameter type and
             // reject every `x: &T` call (R-3 arena borrow corpus).
+            // R2b (stage 6): an array / repeat literal argument
+            // takes its element type from the parameter — Zig
+            // records the annotation for the whole node and the
+            // emitter reads it back (codegen.zig:16365-16371).
+            // Re-record the node's expr type as the parameter's
+            // array type when the lengths agree and accept the
+            // argument; non-literal array arguments keep the
+            // width-strict rule below (a bare integer literal has
+            // no width of its own to mismatch).
+            let param_arr = match &param.ty {
+                Type::Array(pa) => Some(pa.clone()),
+                Type::Borrow(inner) => match &**inner {
+                    Type::Array(pa) => Some(pa.clone()),
+                    _ => None,
+                },
+                _ => None,
+            };
+            let literal_ctx_ty = match (arg, &param_arr) {
+                (Node::ArrayLiteral(a), Some(pa))
+                    if a.elements.len() == pa.len =>
+                {
+                    Some(Type::Array(pa.clone()))
+                }
+                (Node::RepeatArrayLiteral(r), Some(pa)) if r.len == pa.len => {
+                    Some(Type::Array(pa.clone()))
+                }
+                _ => None,
+            };
+            if let Some(ty) = &literal_ctx_ty {
+                self.expr_types.insert(node_key_of(arg), ty.clone());
+            }
             let matched = if let Type::Borrow(param_inner) = &param.ty {
                 match &arg_ty {
                     Type::Borrow(arg_inner) => {
@@ -191,6 +222,7 @@ impl Checker {
                     || (matches!(arg, Node::Literal(Literal::StringVal(_)))
                         && is_string_type(&param.ty))
             };
+            let matched = matched || literal_ctx_ty.is_some();
             if !matched {
                 return Err(Diagnostic::new(
                     ErrorKind::TypeMismatch,

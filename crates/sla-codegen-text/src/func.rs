@@ -29,6 +29,7 @@ impl<'c> Codegen<'c> {
             );
         }
         self.reset_function_state();
+        self.current_ret_ty = Some((*f.ret_ty).clone());
         self.repeated_let_bindings = sla_lowering::collect_repeated_let_bindings(&f.body);
         self.collect_assigned_bindings(&f.body);
         self.collect_addressable_bindings(&f.body);
@@ -131,7 +132,9 @@ impl<'c> Codegen<'c> {
                 Node::ExprStmt(expr) => expr,
                 _ => unreachable!(),
             };
-            let tail_reg = self.gen_expr(tail_expr)?;
+            // R2b (stage 6): a tail literal takes its layout from
+            // the declared return type, not its own recorded type.
+            let tail_reg = self.gen_expr_in_context(tail_expr, Some(&*f.ret_ty))?;
             self.emit_function_tail_cleanups(last, tail_expr)?;
             self.ins(&format!("return {tail_reg}"));
         } else {

@@ -308,7 +308,28 @@ impl<'c> Codegen<'c> {
                 return Ok(());
             }
             Node::RepeatArrayLiteral(lit) => {
-                self.gen_repeat_array_literal_into(&resolved_name, &let_stmt.value, lit)?;
+                // R2b (stage 6): the annotated-let discipline of
+                // the plain literal arm above applies to repeats
+                // too — the annotation supplies the element type
+                // and length; without one let_ty IS the literal's
+                // own type, so the un-annotated path is unchanged.
+                match &let_ty {
+                    Some(Type::Array(arr)) => {
+                        self.gen_repeat_array_literal_into_typed(
+                            &resolved_name,
+                            lit,
+                            &arr.elem,
+                            arr.len,
+                        )?;
+                    }
+                    _ => {
+                        self.gen_repeat_array_literal_into(
+                            &resolved_name,
+                            &let_stmt.value,
+                            lit,
+                        )?;
+                    }
+                }
                 return Ok(());
             }
             Node::ClosureLiteral(_) => {
@@ -611,7 +632,8 @@ impl<'c> Codegen<'c> {
                     &self.require_expr_type(&f.expr, "assign field base type")?,
                     &f.field_name,
                 )?;
-                let val_reg = self.gen_expr(&assign.value)?;
+                let val_reg =
+                    self.gen_expr_in_context(&assign.value, Some(&field_ty))?;
                 self.ins(&format!(
                     "store {}+0, {val_reg} as {}",
                     addr.ptr,
@@ -625,7 +647,8 @@ impl<'c> Codegen<'c> {
             Node::IndexExpr(idx) => {
                 let addr = self.gen_index_address(idx)?;
                 self.remember_index_address_source(&addr);
-                let val_reg = self.gen_expr(&assign.value)?;
+                let val_reg =
+                    self.gen_expr_in_context(&assign.value, Some(&addr.elem_ty))?;
                 self.ins(&format!(
                     "store {}+0, {val_reg} as {}",
                     addr.ptr,
@@ -668,7 +691,9 @@ impl<'c> Codegen<'c> {
             }
         }
 
-        let val = self.gen_expr(&assign.value)?;
+        // R2b (stage 6): an assigned literal takes its layout
+        // from the target binding's type.
+        let val = self.gen_expr_in_context(&assign.value, target_ty.as_ref())?;
         let stored_val: String = match val.strip_prefix('^') {
             Some(stripped) => stripped.to_string(),
             None => val.clone(),
@@ -752,7 +777,10 @@ impl<'c> Codegen<'c> {
         };
         let mut value_reg: Option<String> = None;
         if let Some(value) = &ret.value {
-            value_reg = Some(self.gen_expr(value)?);
+            // R2b (stage 6): a returned literal takes its layout
+            // from the function's declared return type.
+            let ret_ty = self.current_ret_ty.clone();
+            value_reg = Some(self.gen_expr_in_context(value, ret_ty.as_ref())?);
         }
         if let Some(list) = self.check.cleanups(stmt) {
             let names: Vec<String> = list.to_vec();
