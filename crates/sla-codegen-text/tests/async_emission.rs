@@ -218,15 +218,30 @@ fn task_new_future_new_state_operand_uses_forget_form() {
         .find("EXPAND FUTURE_NEW")
         .expect("the ready future must be wrapped in a future object");
     let after = &out[new_pos..];
-    let forget_line = after
-        .lines()
+    let new_line = after.lines().next().unwrap();
+    // "EXPAND FUTURE_NEW <obj>, <state>, <vt>": the state operand
+    // is the second operand.
+    let state_operand = new_line
+        .split(',')
         .nth(1)
-        .expect("a retire line must follow FUTURE_NEW");
+        .map(|s| s.trim().to_string())
+        .expect("FUTURE_NEW must name a state operand");
+    let forget_form = format!("^{state_operand}");
+    let retired_with_forget = after
+        .lines()
+        .take(4)
+        .any(|l| l.trim() == forget_form);
     assert!(
-        forget_line.trim_start().starts_with('^'),
-        "the FUTURE_NEW state operand must be retired with the forget \
-         form (release drops the state block on the pinned host), \
-         got line: {forget_line}\nfull output:\n{out}"
+        retired_with_forget,
+        "the FUTURE_NEW state operand {state_operand} must be retired \
+         with the forget form (release drops the state block on the \
+         pinned host), got:\n{after}\nfull output:\n{out}"
+    );
+    let released_form = format!("!{state_operand}");
+    assert!(
+        !after.lines().take(4).any(|l| l.trim() == released_form),
+        "the FUTURE_NEW state operand {state_operand} must not be \
+         retired with the release form, got:\n{after}"
     );
     assert!(
         out.contains("EXPAND TASK_NEW"),
