@@ -125,7 +125,7 @@ fn task_executor_poll_runtime_call_kinds() {
     let Node::CallExpr(c) = &pr else { panic!() };
     assert_eq!(
         plan_poll_runtime_call(c).expect("poll::ready").kind,
-        PollRuntimeCallKind::ReadyValue
+        PollRuntimeCallKind::Ready
     );
 }
 
