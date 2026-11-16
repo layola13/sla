@@ -45,7 +45,9 @@ fn param(name: &str, ty: Type) -> Param {
 
 /// A one-parameter function whose tail cleanup list releases the
 /// parameter: `fn f(p: <ty>) -> i64 { return 0; }` with the
-/// checker cleanup list `[p]` on the return statement.
+/// checker cleanup list `[p]` on the return statement. Check-info
+/// keys are node-identity based, so the cleanups are attached
+/// through the statement node inside the built program.
 fn release_param_program(ty: Type, extra_decls: Vec<Node>) -> (Node, MapCheckInfo) {
     let ret = Node::ReturnStmt(ReturnStmt {
         value: Some(Box::new(Node::Literal(Literal::IntVal(0)))),
@@ -61,7 +63,7 @@ fn release_param_program(ty: Type, extra_decls: Vec<Node>) -> (Node, MapCheckInf
         generics: Vec::new(),
         params: vec![param("p", ty)],
         ret_ty: Box::new(i64_ty()),
-        body: vec![ret.clone()],
+        body: vec![ret],
         is_inline: false,
         is_async: false,
         operator: None,
@@ -71,9 +73,16 @@ fn release_param_program(ty: Type, extra_decls: Vec<Node>) -> (Node, MapCheckInf
         is_variadic: false,
     }));
     let program = Node::Program(Program { decls });
+    let Node::Program(prog) = &program else {
+        unreachable!()
+    };
+    let Node::FuncDecl(f) = prog.decls.last().expect("func decl") else {
+        unreachable!()
+    };
+    let ret_node = f.body.last().expect("return stmt");
     let mut check = MapCheckInfo::new();
-    check.add_cleanups(&ret, vec!["p".to_string()]);
-    if let Node::ReturnStmt(r) = &ret {
+    check.add_cleanups(ret_node, vec!["p".to_string()]);
+    if let Node::ReturnStmt(r) = ret_node {
         check.add_expr_type(r.value.as_ref().expect("return value"), i64_ty());
     }
     (program, check)
