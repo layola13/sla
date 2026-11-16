@@ -402,7 +402,7 @@ impl<'c> Codegen<'c> {
     /// module functions under the module key (`target__func` or
     /// `target::func`); a unique tail match rooted at the target
     /// is the last resort (mirrors the SAB driver's tail rule).
-    fn resolve_associated_decl(
+    pub(crate) fn resolve_associated_decl(
         &self,
         call: &sla_ast::CallExpr,
     ) -> Option<(String, sla_ast::FuncDecl)> {
@@ -437,7 +437,7 @@ impl<'c> Codegen<'c> {
     /// as args[0]): the receiver's peeled type name keys the
     /// assoc index. Consulted only after the bare-name lookup
     /// misses, before the tail match.
-    fn resolve_receiver_method_decl(
+    pub(crate) fn resolve_receiver_method_decl(
         &self,
         call: &sla_ast::CallExpr,
     ) -> Option<(String, sla_ast::FuncDecl)> {
