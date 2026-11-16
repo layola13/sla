@@ -188,7 +188,6 @@ fn deref_of_rc_field_temp_emits_rc_get_and_releases_temp() {
                 fields: vec![Field {
                     name: "rc".to_string(),
                     ty: Box::new(rc_i64_ty()),
-                    is_pub: false,
                 }],
                 is_union: false,
                 is_opaque: false,
@@ -207,6 +206,17 @@ fn deref_of_rc_field_temp_emits_rc_get_and_releases_temp() {
         ],
     });
     let mut check = MapCheckInfo::new();
+    check.add_struct(StructDecl {
+        name: "Holder".to_string(),
+        derives: Vec::new(),
+        generics: Vec::new(),
+        fields: vec![Field {
+            name: "rc".to_string(),
+            ty: Box::new(rc_i64_ty()),
+        }],
+        is_union: false,
+        is_opaque: false,
+    });
     let value = return_value_of(&program, 1);
     let Node::DerefExpr(d) = value else {
         panic!("return value must be a deref");
