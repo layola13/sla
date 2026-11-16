@@ -110,6 +110,24 @@ pub struct Codegen<'c> {
     /// function (codegen.zig `thread_spawn_helpers`).
     pub(crate) thread_spawn_helpers: Vec<(usize, crate::thread_spawn::ThreadSpawnHelper)>,
     pub(crate) thread_helper_idx: usize,
+    /// RUST-STAGE10-CLONE-EXTRACT: per-type `@sla_clone_<key>`
+    /// helpers queued by `gen_recursive_clone_call` (clone.rs) and
+    /// emitted at the end of `generate_program` (Zig
+    /// `clone_helper_types` / `clone_helper_keys`,
+    /// codegen.zig:12354-12408). Program-wide: never cleared by
+    /// `reset_function_state`, so a helper queued while generating
+    /// one function is emitted after all of them.
+    pub(crate) clone_helpers: Vec<(String, Type)>,
+    /// RUST-STAGE10-CLONE-EXTRACT (M2 refinement): names of
+    /// functions whose return value is produced by a cloning
+    /// extraction (a SLICE_GET writeback that deep-cloned,
+    /// extern_macro.rs). Such a callee returns a fresh-owned
+    /// value, so the caller-side M2-call taint (drop.rs) must not
+    /// suppress the result's field drops — the clone replaces the
+    /// taint for this shape. Program-wide; populated during the
+    /// callee's compilation, consulted when the caller is compiled
+    /// (sa_std functions precede tests in `generate_program`).
+    pub(crate) clone_extract_funcs: HashSet<String>,
     /// Slots of inline-joined spawns (codegen.zig
     /// `inline_thread_handles`): a join on one reads the
     /// already-computed slot value instead of waiting.
@@ -151,6 +169,16 @@ pub struct Codegen<'c> {
     /// `gen_func_decl_named`; cleared on every reset (test decls
     /// and nested emission see None).
     pub(crate) current_ret_ty: Option<Type>,
+    /// RUST-STAGE10-CLONE-EXTRACT: the enclosing function's
+    /// declared name (`FuncDecl.name`, not the lowered/mangled
+    /// emission name), for the M2 refinement set
+    /// (`clone_extract_funcs`): the SLICE_GET writeback records
+    /// the function it is generating. Set by
+    /// `gen_func_decl_named` / `gen_test_decl`; NOT cleared by
+    /// `reset_function_state` (it is assigned per function, and
+    /// the clone helpers generated after the program's functions
+    /// contain no writebacks).
+    pub(crate) current_func_name: Option<String>,
 
     // Async family state (stage 6, codegen.zig: task_future_objects,
     // future_state_vtables, future_readiness, executor_task_counts,
@@ -199,6 +227,8 @@ impl<'c> Codegen<'c> {
             enum_index: Vec::new(),
             thread_spawn_helpers: Vec::new(),
             thread_helper_idx: 0,
+            clone_helpers: Vec::new(),
+            clone_extract_funcs: HashSet::new(),
             inline_thread_handles: HashSet::new(),
             mutex_lock_results: HashMap::new(),
             mutex_guard_handles: HashMap::new(),
@@ -212,6 +242,7 @@ impl<'c> Codegen<'c> {
             move_out_stmt: None,
             move_out_name: None,
             current_ret_ty: None,
+            current_func_name: None,
             future_state_vtables: HashMap::new(),
             future_readiness: HashMap::new(),
             task_future_objects: HashMap::new(),

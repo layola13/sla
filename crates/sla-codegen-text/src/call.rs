@@ -17,8 +17,9 @@ use sla_lowering::{
     abi_call_arg_cap_kind, abi_param_needs_borrow_arg, call_arg_is_copy_struct_value,
     call_arg_needs_release, is_panic_builtin_name, is_println_call,
     is_temporary_register_name, plan_call_arg_materialization, plan_refcell_call_arg_lifecycle,
-    plan_stack_slot_identifier_call_arg_temp, value_arg_transfers_ownership_from_param,
-    AbiCapKind, CallArgMaterializationInput, CallArgMaterializationKind, CallArgTarget,
+    plan_stack_slot_identifier_call_arg_temp, root_identifier,
+    value_arg_transfers_ownership_from_param, AbiCapKind, CallArgMaterializationInput,
+    CallArgMaterializationKind, CallArgTarget,
 };
 
 use crate::codegen::Codegen;
@@ -234,6 +235,48 @@ impl<'c> Codegen<'c> {
                                     } else {
                                         self.gen_vec_clone_value(&raw_reg, &elem)
                                     };
+                                    let mv = format!("^{cloned}");
+                                    return Ok(LoweredCallArg {
+                                        reg: mv.clone(),
+                                        release_after_call: false,
+                                        release_reg: None,
+                                        consume_reg: Some(mv),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    // RUST-STAGE10-CLONE-EXTRACT (shape C): a
+                    // projection argument (field/index read out of
+                    // a live parent) passed by value aliases the
+                    // parent's buffers — the callee frees them and
+                    // the parent's exit cleanup frees them again
+                    // (Zig genPlannedCallArg SCATTER-3 / DEF-PARALLEL:
+                    // clone a non-identifier projection with a root
+                    // identifier). Clone the extracted value so the
+                    // callee owns a fresh copy; the source binding
+                    // stays live and owning. Bare identifiers are
+                    // moves (never cloned); a projection with no
+                    // identifier root (call-result temp) is already
+                    // freshly owned, so it moves as-is; map/set
+                    // types keep the historical raw pass.
+                    if !raw_reg.starts_with('&') && !raw_reg.starts_with('^') {
+                        if let Some(arg_ty) = self.expr_type(arg) {
+                            if root_identifier(arg).is_some()
+                                && matches!(arg, Node::FieldExpr(_) | Node::IndexExpr(_))
+                                && self.deep_clone_needed(&arg_ty, 0)
+                                && self.uncloneable_type_name(&arg_ty, 0).is_none()
+                            {
+                                if let Some(cloned) =
+                                    self.gen_deep_clone_value(&raw_reg, &arg_ty)?
+                                {
+                                    // The source temp holds the
+                                    // aliased word: retire it (a
+                                    // temp has no binding type, so
+                                    // this is a plain `!reg`, never
+                                    // a field drop — the REG3-DEF-2
+                                    // shape in extern_macro.rs).
+                                    self.emit_release(&raw_reg)?;
                                     let mv = format!("^{cloned}");
                                     return Ok(LoweredCallArg {
                                         reg: mv.clone(),

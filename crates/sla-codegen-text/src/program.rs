@@ -267,6 +267,11 @@ impl<'c> Codegen<'c> {
         // function (codegen.zig `emitThreadSpawnHelpers`).
         self.emit_thread_spawn_helpers()?;
 
+        // RUST-STAGE10-CLONE-EXTRACT: per-type `@sla_clone_<key>`
+        // helpers queued while generating the program's functions
+        // (codegen.zig `emitCloneHelpers` :12408).
+        self.emit_clone_helpers()?;
+
         Ok(std::mem::take(&mut self.out))
     }
 

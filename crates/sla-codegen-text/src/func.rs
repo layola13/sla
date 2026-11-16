@@ -28,6 +28,12 @@ impl<'c> Codegen<'c> {
     /// codegen.zig:7429 `genFuncDeclNamed` (async context
     /// save/restore at 7430-7438).
     pub(crate) fn gen_func_decl_named(&mut self, name: &str, f: &FuncDecl) -> Result<()> {
+        // RUST-STAGE10-CLONE-EXTRACT: the declared name, for the
+        // M2 refinement set (`clone_extract_funcs`) — the SLICE_GET
+        // writeback records the function it is generating. The
+        // declared name (not the lowered/mangled emission name) is
+        // what call sites spell.
+        self.current_func_name = Some(f.name.clone());
         let prev_async = self.current_async;
         let prev_async_return_ty = self.current_async_return_ty.clone();
         let prev_pending = self.async_pending_return_emitted;
@@ -226,6 +232,10 @@ impl<'c> Codegen<'c> {
     /// bodies), so a pruned program emits the stub shape seen in the
     /// goldens from this same code path.
     pub(crate) fn gen_test_decl(&mut self, t: &TestDecl) -> Result<()> {
+        // RUST-STAGE10-CLONE-EXTRACT: tests are never callees, so
+        // recording the test name in `clone_extract_funcs` (if a
+        // test body cloned an extraction) is harmless.
+        self.current_func_name = Some(t.name.clone());
         self.reset_function_state();
         self.repeated_let_bindings = sla_lowering::collect_repeated_let_bindings(&t.body);
         self.collect_assigned_bindings(&t.body);

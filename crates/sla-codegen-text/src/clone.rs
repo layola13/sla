@@ -15,8 +15,13 @@
 //! diagnostic, as in the Zig original. Recursive struct types
 //! (whose clone graph reaches itself, e.g. RedisValue) route
 //! through per-type `@sla_clone_<key>` helpers in Zig; that
-//! helper-emission port is NOT in this module — the dispatcher
-//! stays loud for them (see copy.rs's record-copyable gate).
+//! helper-emission port is implemented here
+//! (RUST-STAGE10-CLONE-EXTRACT: `gen_recursive_clone_call` +
+//! `emit_clone_helpers`, with the record arm's
+//! `allow_recursive` variant for helper bodies). The record-copy
+//! gate in copy.rs still excludes recursive types from the
+//! identifier-argument shallow-copy plan (those take the move
+//! plan, unchanged).
 
 use std::collections::HashSet;
 
@@ -369,17 +374,17 @@ impl<'c> Codegen<'c> {
                     && !matches!(peeled_name(ty), Some("Vec" | "GrowVec" | "String"))
                     && generic_inner(ty, "Box").is_none()
                 {
-                    // REG3-DEF-2: a recursive struct cannot be
-                    // clone-generated inline; Zig routes it
-                    // through a per-type helper (@sla_clone_<key>,
-                    // genRecursiveCloneCall :12354). That helper
-                    // port is a named fork: DECLINE here (Ok(None))
-                    // so copy call sites fall back to the route
-                    // they used before the dispatcher existed —
-                    // erroring would regress files that passed
-                    // through that route (reg3_redis_*).
+                    // RUST-STAGE10-CLONE-EXTRACT: a recursive struct
+                    // cannot be clone-generated inline; Zig routes
+                    // it through a per-type helper (@sla_clone_<key>,
+                    // genRecursiveCloneCall :12354). The helper port
+                    // is now implemented (gen_recursive_clone_call
+                    // + emit_clone_helpers below); the old decline
+                    // (Ok(None), REG3-DEF-2) is gone, so the SLICE_GET
+                    // writeback and the record-copy paths clone
+                    // recursive structs instead of aliasing them.
                     if self.type_has_recursive_clone(ty) {
-                        return Ok(None);
+                        return Ok(Some(self.gen_recursive_clone_call(source_reg, ty)?));
                     }
                     return self.gen_shallow_record_clone(source_reg, ty);
                 }
@@ -594,6 +599,65 @@ impl<'c> Codegen<'c> {
         Ok(out)
     }
 
+    /// Zig `genRecursiveCloneCall` (codegen.zig:12388): queue the
+    /// per-type `@sla_clone_<key>` helper (dedup by key) and emit a
+    /// call to it. The helper itself is emitted at the end of
+    /// `generate_program` by `emit_clone_helpers`; a recursive
+    /// field inside a helper body routes back here, and the key is
+    /// already queued, so the body's own recursive call does not
+    /// re-queue it (Zig marks the key done before generating the
+    /// body). The queued type is the peeled struct type.
+    pub(crate) fn gen_recursive_clone_call(
+        &mut self,
+        source_reg: &str,
+        ty: &Type,
+    ) -> Result<String> {
+        let peeled = peel_borrow_pointer_type(ty).clone();
+        let key = self.clone_type_key(&peeled);
+        if !self.clone_helpers.iter().any(|(k, _)| k == &key) {
+            self.clone_helpers.push((key.clone(), peeled));
+        }
+        let out = self.new_tmp();
+        self.ins(&format!("{out} = call @sla_clone_{key}(&{source_reg})"));
+        Ok(out)
+    }
+
+    /// Zig `emitCloneHelpers` (codegen.zig:12408): emit every queued
+    /// `@sla_clone_<key>` helper after the program's functions
+    /// (called from `generate_program` after
+    /// `emit_thread_spawn_helpers`). The queue is drained with an
+    /// index loop so helpers queued while generating a body (a
+    /// recursive field routes through `gen_recursive_clone_call`)
+    /// are emitted too. Each helper takes the source as a borrow
+    /// param (`&sla_src: ptr`), shallow-clones the record (recursive
+    /// fields route through the helper call), releases the borrow
+    /// param, and returns the fresh record.
+    pub(crate) fn emit_clone_helpers(&mut self) -> Result<()> {
+        let mut i = 0;
+        while i < self.clone_helpers.len() {
+            let (key, ty) = self.clone_helpers[i].clone();
+            i += 1;
+            self.reset_function_state();
+            self.param_bindings.insert("sla_src".to_string());
+            self.borrow_param_bindings.insert("sla_src".to_string());
+            self.wl(&format!("@sla_clone_{key}(&sla_src: ptr) -> ptr:"));
+            self.wl("L_ENTRY:");
+            let cloned = self
+                .gen_shallow_record_clone_inner("sla_src", &ty, true)?
+                .ok_or_else(|| TextError::Unsupported {
+                    feature: format!(
+                        "clone helper for `{}` declined the record",
+                        type_string(&ty)
+                    ),
+                    zig_ref: "codegen.zig:12408 (emitCloneHelpers)",
+                })?;
+            self.emit_release("sla_src")?;
+            self.ins(&format!("return {cloned}"));
+            self.w("\n");
+        }
+        Ok(())
+    }
+
     /// Zig `genShallowCopyCallArgValue` (:5705): a record copy
     /// whose fields dispatch through the deep clone dispatcher —
     /// handle fields clone, plain fields copy their word, nested
@@ -605,6 +669,22 @@ impl<'c> Codegen<'c> {
         source_reg: &str,
         ty: &Type,
     ) -> Result<Option<String>> {
+        self.gen_shallow_record_clone_inner(source_reg, ty, false)
+    }
+
+    /// Inner record clone. `allow_recursive` is true only for a
+    /// clone-helper body (`emit_clone_helpers`): a recursive field
+    /// then routes through `gen_deep_clone_value` into
+    /// `gen_recursive_clone_call` (a call to the helper itself),
+    /// instead of declining. Every other caller declines recursive
+    /// types here (the dispatcher routes them to the helper call
+    /// before reaching this function).
+    pub(crate) fn gen_shallow_record_clone_inner(
+        &mut self,
+        source_reg: &str,
+        ty: &Type,
+        allow_recursive: bool,
+    ) -> Result<Option<String>> {
         let Type::UserDefined(u) = peel_borrow_pointer_type(ty) else {
             return Ok(None);
         };
@@ -614,10 +694,10 @@ impl<'c> Codegen<'c> {
         if decl.is_opaque || decl.is_union || !self.shallow_copy_call_arg_value(ty, 0) {
             return Ok(None);
         }
-        if self.type_has_recursive_clone(ty) {
-            // Decline, as in gen_deep_clone_value's struct arm:
-            // the @sla_clone_<key> helper port is a named fork,
-            // and declining keeps the pre-dispatcher route.
+        if self.type_has_recursive_clone(ty) && !allow_recursive {
+            // Decline: the dispatcher routes recursive structs to
+            // the @sla_clone_<key> helper call before reaching
+            // this function.
             return Ok(None);
         }
         let decl = decl.clone();

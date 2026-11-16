@@ -536,6 +536,23 @@ fn is_clone_callee(call: &CallExpr) -> bool {
         || call.func_name.ends_with("::clone")
 }
 
+impl<'c> Codegen<'c> {
+    /// RUST-STAGE10-CLONE-EXTRACT (M2 refinement): a callee recorded
+    /// in `clone_extract_funcs` (its return value is produced by a
+    /// cloning extraction, extern_macro.rs) returns a fresh-owned
+    /// value; its result never aliases the borrow arg, so M2-call
+    /// must not taint it — tainting would suppress the fresh clone's
+    /// field drops and leak. Name match mirrors `is_clone_callee`
+    /// (exact, `__`-qualified, `::`-qualified).
+    fn is_clone_extract_callee(&self, call: &CallExpr) -> bool {
+        self.clone_extract_funcs.iter().any(|name| {
+            call.func_name == *name
+                || call.func_name.ends_with(&format!("__{name}"))
+                || call.func_name.ends_with(&format!("::{name}"))
+        })
+    }
+}
+
 /// The field of the root place in a place expression
 /// (`p.a.b` -> `a`; `p.items[0]` -> `items`).
 fn place_first_field(mut expr: &Node) -> Option<String> {
@@ -629,7 +646,11 @@ impl<'c> Codegen<'c> {
                 TaintDecision::None
             }
             Node::CallExpr(call) => {
-                if is_smart || is_clone_callee(call) {
+                // RUST-STAGE10-CLONE-EXTRACT (M2 refinement): a
+                // clone-extract callee returns a fresh-owned value,
+                // so its result never aliases the borrow arg — the
+                // clone replaces the taint for this shape.
+                if is_smart || is_clone_callee(call) || self.is_clone_extract_callee(call) {
                     return TaintDecision::None;
                 }
                 if self.call_result_aliases_borrow(call, value_ty) {

@@ -359,6 +359,36 @@ impl<'c> Codegen<'c> {
                     "store {target}+{offset}, {val_reg} as {ty_str}"
                 ));
             } else {
+                // RUST-STAGE10-CLONE-EXTRACT (shape D): a place-read
+                // field value (field/index out of a live parent)
+                // aliases the parent's buffers; moving the loaded
+                // word into the literal hands the literal a buffer
+                // the parent's exit cleanup will also free (the
+                // callee-tail double free in reg3_redis_clear_multi).
+                // Clone the extracted value — a transfer-point clone
+                // in Zig's sense, so the literal owns a fresh copy
+                // and the source binding keeps its field. Bare
+                // identifiers are moves (never cloned); a place
+                // read with no identifier root (call-result temp)
+                // is already freshly owned, so it moves as-is;
+                // map/set types keep the historical raw pass.
+                if root_identifier(value).is_some()
+                    && matches!(value, Node::FieldExpr(_) | Node::IndexExpr(_))
+                    && self.deep_clone_needed(&field_ty, 0)
+                    && self.uncloneable_type_name(&field_ty, 0).is_none()
+                {
+                    if let Some(cloned) = self.gen_deep_clone_value(&val_reg, &field_ty)? {
+                        // The source temp holds the aliased word:
+                        // retire it (a temp has no binding type, so
+                        // this is a plain `!reg`, never a field
+                        // drop — the REG3-DEF-2 shape).
+                        self.emit_release(&val_reg)?;
+                        self.ins(&format!(
+                            "store {target}+{offset}, ^{cloned} as {ty_str}"
+                        ));
+                        continue;
+                    }
+                }
                 // Identifier bindings and fresh owned temps alike
                 // move into the aggregate.
                 self.ins(&format!(

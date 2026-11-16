@@ -548,6 +548,29 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
                 Some(cloned) => cloned,
                 None => temp.clone(),
             };
+            // RUST-STAGE10-CLONE-EXTRACT (M2 refinement): a cloning
+            // SLICE_GET writeback makes the assigned binding
+            // fresh-owned (its buffers are clones, not aliases of
+            // the parent's). Record the enclosing function as
+            // clone-returning, so the caller-side M2-call taint
+            // (drop.rs) does not suppress the result's field drops
+            // when this function is called — the clone replaces the
+            // taint for this shape. Restricted to SLICE_GET (the
+            // accessor shape M2 was built for); other cloning
+            // writebacks do not record. (Approximation, documented
+            // in the line RESULT: a function that clones on one
+            // return path and aliases on another would be
+            // misrecorded; the gate verifies every set member's
+            // returns are fresh.)
+            if value != *temp
+                && (call.func_name == "SLICE_GET"
+                    || call.func_name.ends_with("__SLICE_GET")
+                    || call.func_name.ends_with("::SLICE_GET"))
+            {
+                if let Some(func) = self.current_func_name.clone() {
+                    self.clone_extract_funcs.insert(func);
+                }
+            }
             match writeback {
                 AggregateOutputWriteback::Rebind(name) => {
                     self.emit_release(name)?;
