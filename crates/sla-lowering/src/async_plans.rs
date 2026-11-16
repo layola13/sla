@@ -697,22 +697,9 @@ fn async_continuation_result(
             return None;
         }
         let mut current_name = await_binding_name.to_string();
-        let mut current_scalar = AsyncContinuationScalarPlan {
-            awaited_coeff: 0,
-            ..Default::default()
-        };
-        // Zig: current_scalar starts as the zero scalar plan
-        // (awaited_coeff field default is 1 in the struct, but the
-        // continuation accumulator is explicitly `.{}` over a
-        // zeroed plan in asyncContinuationResult — see note below).
-        current_scalar = AsyncContinuationScalarPlan {
-            awaited_coeff: 1,
-            captured_coeff: 0,
-            captured2_coeff: 0,
-            captured_field_name: None,
-            captured2_field_name: None,
-            immediate: 0,
-        };
+        // Zig: `var current_scalar = AsyncContinuationScalarPlan{}`
+        // — the struct defaults (awaited_coeff 1, rest zero).
+        let mut current_scalar = AsyncContinuationScalarPlan::default();
         let mut current_capture_name: Option<String> = None;
         let mut current_capture2_name: Option<String> = None;
         let mut current_capture_field_name: Option<String> = None;

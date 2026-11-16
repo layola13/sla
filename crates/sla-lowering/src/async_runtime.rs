@@ -539,7 +539,7 @@ pub fn executor_task_buffer_plan(ty: &Type) -> Option<ExecutorTaskBufferPlan> {
         return Some(ExecutorTaskBufferPlan {
             kind: ExecutorTaskBufferKind::FixedArray,
             inner: inner.clone(),
-            fixed_len: arr.len,
+            fixed_len: Some(arr.len),
         });
     }
     let elem = vec_element_type(curr)?;
