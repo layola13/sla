@@ -184,10 +184,10 @@ impl<'c> Codegen<'c> {
         // DEF-ARC-DROP (F1) plan dispatch (codegen.zig emitRelease's
         // plan switch; drop.rs): a named binding with a registered
         // type drops by plan before the generic `!` tail — struct
-        // fields deep-drop, Vec/GrowVec elements deep-drop and the
-        // container frees, Arc/Rc/Box run the smart-pointer drop on
-        // the binding register (release_value=false; the generic
-        // tail below still settles the register itself). Borrow
+        // fields deep-drop (the tail then frees the husk),
+        // Vec/GrowVec elements deep-drop and the container frees,
+        // Arc/Rc/Box run the smart-pointer drop on a private copy
+        // and settle WITHOUT the tail (see the arm below). Borrow
         // parameters never own their value; the struct-update site
         // suppresses the dispatch while settling its source
         // register (its fields were raw-moved or compensated
@@ -229,6 +229,19 @@ impl<'c> Codegen<'c> {
                     | crate::drop::DropPlan::RcPtr(_)
                     | crate::drop::DropPlan::BoxPtr(_)) => {
                         self.emit_smart_pointer_drop_text(&resolved, &binding_ty, &plan, false)?;
+                        // No generic `!` tail for a smart pointer:
+                        // the register owns the shared box, and a
+                        // bare `!` on the owning register frees the
+                        // block outright, bypassing the count the
+                        // drop sequence just maintained (verified
+                        // empirically against the pinned host:
+                        // keeping the tail corrupts the strong
+                        // count of every surviving handle). The
+                        // box's lifetime is governed by the count
+                        // alone; the register is settled by marking
+                        // it consumed.
+                        self.consumed_bindings.insert(resolved.clone());
+                        return Ok(());
                     }
                     _ => {}
                 }

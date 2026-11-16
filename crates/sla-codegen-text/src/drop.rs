@@ -19,8 +19,11 @@
 //! one shape taint decides in the failing corpus — struct-update
 //! fields raw-moved out of the source place — is handled at the
 //! update site in into.rs, which settles the source register with
-//! the plan dispatch suppressed and compensates only the fields
-//! its copy arm actually bumped.
+//! the plan dispatch suppressed (its copy arm is a word-wise
+//! record copy that creates no new ownership, so no field
+//! compensation is owed there; the clone bumps of the call-argument
+//! deep-clone copy are compensated by the source binding's own
+//! plan-dispatch cleanup, which is this dispatch).
 
 use sla_ast::{Type, UserDefined};
 

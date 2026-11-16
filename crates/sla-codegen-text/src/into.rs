@@ -156,15 +156,6 @@ impl<'c> Codegen<'c> {
         // fields by move out of the base record.
         if let Some(update_expr) = &lit.update_expr {
             let update_reg = self.gen_expr(update_expr)?;
-            // Fields the deep-copy arm fills from the base: the
-            // copy bumps (Rc/Arc clone) or duplicates (Box, copy
-            // structs) the source field, so the source field must
-            // be dropped once to compensate — the mirror of the
-            // call-argument struct copy, whose bump the source
-            // binding's plan-dispatch cleanup pays for. Raw-moved
-            // fields are NOT compensated: ownership transferred.
-            let mut copy_arm_compensations: Vec<(usize, Type, crate::drop::DropPlan)> =
-                Vec::new();
             for decl_field in &decl.fields {
                 if lit.fields.iter().any(|f| f.name == decl_field.name) {
                     continue;
@@ -202,10 +193,6 @@ impl<'c> Codegen<'c> {
                         "store {target}+{offset}, ^{copied} as {}",
                         type_string(&field_ty)
                     ));
-                    let field_plan = self.plan_value_drop(&field_ty);
-                    if field_plan != crate::drop::DropPlan::None {
-                        copy_arm_compensations.push((offset, field_ty.clone(), field_plan));
-                    }
                     if call_arg_needs_release(update_expr) {
                         self.emit_release(&loaded)?;
                     }
@@ -217,20 +204,14 @@ impl<'c> Codegen<'c> {
                 }
             }
             if call_arg_needs_release(update_expr) {
-                // Compensate the copy-arm bumps from the source
-                // record, then settle the source register with the
-                // plan dispatch suppressed: its remaining fields
-                // were raw-moved into the target, so a plan-driven
-                // field drop here would free values the target now
-                // owns (the struct-update half of
+                // Settle the source register with the plan
+                // dispatch suppressed: its fields were raw-moved
+                // into the target (or word-copied by
+                // gen_copy_value_into, which creates no new
+                // ownership), so a plan-driven field drop here
+                // would free values the target now owns (the
+                // struct-update half of
                 // RUST-S9-RUNTIME-DOUBLE-FREE).
-                for (offset, field_ty, field_plan) in &copy_arm_compensations {
-                    let val_reg = self.new_tmp();
-                    self.ins(&format!(
-                        "{val_reg} = load {update_reg}+{offset} as ptr"
-                    ));
-                    self.emit_deep_value_drop(&val_reg, field_ty, field_plan, true)?;
-                }
                 let prev_suppressed = self.plan_drop_suppressed;
                 self.plan_drop_suppressed = true;
                 let settle = self.emit_release(&update_reg);
