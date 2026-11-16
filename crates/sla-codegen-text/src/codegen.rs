@@ -72,6 +72,17 @@ pub struct Codegen<'c> {
     /// clone-bumped them, and the source's plan drop is exactly
     /// the compensation for that bump.
     pub(crate) update_moved_fields: HashSet<(String, String)>,
+    /// RUST-STAGE10-DROP-TAINT (B1): emitter-side borrow/taint
+    /// (the Rust checker exposes no taint surface, and the
+    /// emitter has no clone-on-extract, so a shallow copy of a
+    /// borrowed/moved-out deep value aliases the source's
+    /// buffers). Binding name -> the form of its taint: a
+    /// FreshHusk binding owns a fresh block whose FIELDS alias
+    /// (a call result the callee constructed); an AliasedHusk
+    /// binding's own block aliases the source's storage (a place
+    /// read, whose register holds a pointer into the source).
+    /// Cleared per function with `update_moved_fields`.
+    pub(crate) tainted_bindings: HashMap<String, crate::drop::TaintForm>,
     /// Names of the current function's parameters (all kinds);
     /// the struct-update taint rules distinguish a param source
     /// (arrived through the call-argument copy) from a local one.
@@ -179,6 +190,7 @@ impl<'c> Codegen<'c> {
             borrow_param_bindings: HashSet::new(),
             plan_drop_suppressed: false,
             update_moved_fields: HashSet::new(),
+            tainted_bindings: HashMap::new(),
             param_bindings: HashSet::new(),
             global_const_bindings: HashSet::new(),
             global_scalar_consts: Vec::new(),
@@ -309,6 +321,7 @@ impl<'c> Codegen<'c> {
         self.borrow_param_bindings.clear();
         self.plan_drop_suppressed = false;
         self.update_moved_fields.clear();
+        self.tainted_bindings.clear();
         self.param_bindings.clear();
         self.clear_binding_aliases();
         self.let_binding_aliases.clear();

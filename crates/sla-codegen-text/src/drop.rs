@@ -25,7 +25,8 @@
 //! deep-clone copy are compensated by the source binding's own
 //! plan-dispatch cleanup, which is this dispatch).
 
-use sla_ast::{Type, UserDefined};
+use sla_ast::{CallExpr, Node, Type, UserDefined};
+use sla_lowering::{is_borrow_like_type, peel_borrow_pointer_type, root_identifier};
 
 use crate::codegen::{type_size, type_string, Codegen};
 use crate::layout;
@@ -488,5 +489,276 @@ impl<'c> Codegen<'c> {
             self.emit_release(value_reg)?;
         }
         Ok(())
+    }
+}
+
+/// RUST-STAGE10-DROP-TAINT (B1): the form of a tainted binding.
+///
+/// A binding is tainted when its value aliases storage owned by
+/// someone else. The Rust emitter has no clone-on-extract, so a
+/// shallow copy of a borrowed/moved-out deep value aliases the
+/// source's buffers, and the stage-10 plan dispatch would free
+/// them (UAF / double free). The form records whether the
+/// binding's own block (husk) is fresh or aliased, which decides
+/// its release: a FreshHusk DeepStruct frees its husk with `!`
+/// after skipping field drops; an AliasedHusk value is forgotten
+/// with `^`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TaintForm {
+    /// Husk is a fresh owned block; only its fields alias (a call
+    /// result the callee constructed).
+    FreshHusk,
+    /// Husk itself aliases the source's storage (a place read,
+    /// whose register holds a pointer into the source).
+    AliasedHusk,
+}
+
+/// The outcome of classifying one let/assign value for B1 taint,
+/// decided purely (no mutation) so a self-referential assignment
+/// (`x = x.field`) still judges against the OLD taint state.
+enum TaintDecision {
+    /// No taint for the binding itself. (An M1 move-out is
+    /// reported separately.)
+    None,
+    /// The binding itself is tainted (M2 / M2-call /
+    /// M2-propagation).
+    Tainted(TaintForm),
+    /// M1 move-out: the field moved out of the (owned) root;
+    /// record (root, field) in `update_moved_fields`.
+    MovedOut(String, String),
+}
+
+/// `clone` (and qualified `__clone` / `::clone`) returns a fresh
+/// deep copy; its result never aliases the borrow arg.
+fn is_clone_callee(call: &CallExpr) -> bool {
+    call.func_name == "clone"
+        || call.func_name.ends_with("__clone")
+        || call.func_name.ends_with("::clone")
+}
+
+/// The field of the root place in a place expression
+/// (`p.a.b` -> `a`; `p.items[0]` -> `items`).
+fn place_first_field(mut expr: &Node) -> Option<String> {
+    let mut first: Option<String> = None;
+    loop {
+        match expr {
+            Node::FieldExpr(f) => {
+                first = Some(f.field_name.clone());
+                expr = &f.expr;
+            }
+            Node::IndexExpr(idx) => expr = &idx.target,
+            Node::DerefExpr(d) => expr = &d.expr,
+            Node::BorrowExpr(b) => expr = &b.expr,
+            Node::MoveExpr(m) => expr = &m.expr,
+            _ => break,
+        }
+    }
+    first
+}
+
+impl<'c> Codegen<'c> {
+    /// Clear every B1 taint record for a binding (rebind hygiene).
+    pub(crate) fn clear_binding_taint(&mut self, name: &str) {
+        self.tainted_bindings.remove(name);
+        self.update_moved_fields.retain(|(root, _)| root != name);
+    }
+
+    /// Apply a B1 taint decision for a binding (after
+    /// `clear_binding_taint`): record the taint form, and for a
+    /// tainted DeepStruct suppress every deep field drop through
+    /// the existing `update_moved_fields` machinery
+    /// (`emit_struct_field_drops` consults it with the binding as
+    /// taint root), so the release frees only the fresh husk.
+    fn apply_taint_decision(&mut self, name: &str, decision: TaintDecision, plan: &DropPlan) {
+        match decision {
+            TaintDecision::None => {}
+            TaintDecision::Tainted(form) => {
+                if let DropPlan::DeepStruct(fields) = plan {
+                    for field in fields {
+                        self.update_moved_fields
+                            .insert((name.to_string(), field.name.clone()));
+                    }
+                }
+                self.tainted_bindings.insert(name.to_string(), form);
+            }
+            TaintDecision::MovedOut(root, field) => {
+                self.update_moved_fields.insert((root, field));
+            }
+        }
+    }
+
+    /// Classify one let/assign value for B1 taint and record it
+    /// (decide-then-apply: the decision reads the pre-rebind
+    /// taint state, so `x = x.field` judges the OLD x).
+    /// No-op for plan-None values. Arc/Rc/Box RESULTS are never
+    /// tainted (bump-compensated; tainting them would leak
+    /// counts) — an M1 move-out of an Arc/Rc field is still
+    /// recorded, with the PARAM-source exception below.
+    pub(crate) fn record_value_taint(&mut self, name: &str, value: &Node, value_ty: &Type) {
+        let plan = self.plan_value_drop(value_ty);
+        if plan == DropPlan::None {
+            self.clear_binding_taint(name);
+            return;
+        }
+        let decision = self.decide_value_taint(value, value_ty, &plan);
+        self.clear_binding_taint(name);
+        self.apply_taint_decision(name, decision, &plan);
+    }
+
+    /// Pure classification half of `record_value_taint`.
+    fn decide_value_taint(&self, value: &Node, value_ty: &Type, plan: &DropPlan) -> TaintDecision {
+        let is_smart = matches!(
+            plan,
+            DropPlan::ArcPtr(_) | DropPlan::RcPtr(_) | DropPlan::BoxPtr(_)
+        );
+        match value {
+            Node::MoveExpr(m) => self.decide_value_taint(&m.expr, value_ty, plan),
+            Node::Identifier(id) => {
+                if is_smart {
+                    return TaintDecision::None;
+                }
+                let resolved = self.resolve_binding_name(id);
+                if let Some(form) = self
+                    .tainted_bindings
+                    .get(&resolved)
+                    .copied()
+                    .or_else(|| self.tainted_bindings.get(id).copied())
+                {
+                    return TaintDecision::Tainted(form);
+                }
+                TaintDecision::None
+            }
+            Node::CallExpr(call) => {
+                if is_smart || is_clone_callee(call) {
+                    return TaintDecision::None;
+                }
+                if self.call_result_aliases_borrow(call, value_ty) {
+                    return TaintDecision::Tainted(TaintForm::FreshHusk);
+                }
+                TaintDecision::None
+            }
+            Node::FieldExpr(_) | Node::IndexExpr(_) | Node::DerefExpr(_) => {
+                let Some(root) = root_identifier(value) else {
+                    return TaintDecision::None;
+                };
+                let resolved_root = self.resolve_binding_name(root);
+                let root_ty = self
+                    .local_binding_type_for_name(&resolved_root)
+                    .or_else(|| self.local_binding_type_for_name(root));
+                let root_tainted = self.tainted_bindings.contains_key(&resolved_root)
+                    || self.tainted_bindings.contains_key(root);
+                let root_borrow = root_ty
+                    .as_ref()
+                    .map(is_borrow_like_type)
+                    .unwrap_or(false)
+                    || self.borrow_param_bindings.contains(&resolved_root)
+                    || self.borrow_param_bindings.contains(root);
+                if root_tainted || root_borrow {
+                    if is_smart {
+                        return TaintDecision::None;
+                    }
+                    return TaintDecision::Tainted(TaintForm::AliasedHusk);
+                }
+                // Owned root.
+                if let Node::FieldExpr(_) = value {
+                    if let Some(first_field) = place_first_field(value) {
+                        // Arc/Rc field of a PARAM root: the
+                        // call-argument copy clone-bumped it, and
+                        // the source's plan drop is the bump's
+                        // compensation (into.rs struct-update
+                        // rule) — never taint it. (Box is NOT
+                        // excepted: a moved-out Box field still
+                        // needs the source drop suppressed.)
+                        let arc_rc = matches!(
+                            plan,
+                            DropPlan::ArcPtr(_) | DropPlan::RcPtr(_)
+                        );
+                        let is_param = self.param_bindings.contains(&resolved_root)
+                            || self.param_bindings.contains(root);
+                        if !(arc_rc && is_param) {
+                            return TaintDecision::MovedOut(resolved_root, first_field);
+                        }
+                    }
+                    return TaintDecision::None;
+                }
+                if matches!(value, Node::IndexExpr(_)) {
+                    // No field to record; the element still lives
+                    // in the parent's buffer.
+                    if is_smart {
+                        return TaintDecision::None;
+                    }
+                    return TaintDecision::Tainted(TaintForm::AliasedHusk);
+                }
+                // DerefExpr with an owned root: no evidence in the
+                // 10 names; leave untainted (gate will tell).
+                TaintDecision::None
+            }
+            _ => TaintDecision::None,
+        }
+    }
+
+    /// Whether an expression's value derives from a borrow: a
+    /// `&e` expression, a borrow-typed or tainted binding, or a
+    /// place read / call whose root / argument is borrow-derived.
+    fn expr_is_borrow_derived(&self, expr: &Node) -> bool {
+        match expr {
+            Node::BorrowExpr(_) => true,
+            Node::Identifier(name) => {
+                let resolved = self.resolve_binding_name(name);
+                let ty = self
+                    .local_binding_type_for_name(&resolved)
+                    .or_else(|| self.local_binding_type_for_name(name));
+                ty.as_ref().map(is_borrow_like_type).unwrap_or(false)
+                    || self.borrow_param_bindings.contains(&resolved)
+                    || self.borrow_param_bindings.contains(name)
+                    || self.tainted_bindings.contains_key(&resolved)
+                    || self.tainted_bindings.contains_key(name)
+            }
+            Node::FieldExpr(f) => self.expr_is_borrow_derived(&f.expr),
+            Node::IndexExpr(idx) => self.expr_is_borrow_derived(&idx.target),
+            Node::DerefExpr(d) => self.expr_is_borrow_derived(&d.expr),
+            Node::MoveExpr(m) => self.expr_is_borrow_derived(&m.expr),
+            Node::CallExpr(call) => call.args.iter().any(|a| self.expr_is_borrow_derived(a)),
+            _ => false,
+        }
+    }
+
+    /// M2-call: the call takes a borrow-derived argument whose
+    /// inner type is the result type, or a struct holding a field
+    /// of the result type — so the result may alias the borrowed
+    /// storage. (Exact-type rule per the B1 design; widen only if
+    /// the gate shows a miss.)
+    fn call_result_aliases_borrow(&self, call: &CallExpr, result_ty: &Type) -> bool {
+        for arg in &call.args {
+            if !self.expr_is_borrow_derived(arg) {
+                continue;
+            }
+            let Some(arg_ty) = self.expr_type(arg) else {
+                continue;
+            };
+            let inner = peel_borrow_pointer_type(&arg_ty);
+            if inner == result_ty {
+                return true;
+            }
+            if self.struct_has_field_of_type(inner, result_ty) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Whether a struct type has a field of exactly the target
+    /// type (generic parameters substituted).
+    fn struct_has_field_of_type(&self, ty: &Type, target: &Type) -> bool {
+        let Type::UserDefined(u) = ty else {
+            return false;
+        };
+        let Some(decl) = place::struct_decl_lookup(self.check, &u.name) else {
+            return false;
+        };
+        decl.fields.iter().any(|f| {
+            let field_ty = drop_plan_substitute(&f.ty, &decl.generics, &u.generics);
+            field_ty == *target
+        })
     }
 }

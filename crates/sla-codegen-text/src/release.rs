@@ -197,6 +197,35 @@ impl<'c> Codegen<'c> {
                 .local_binding_type_for_name(name)
                 .or_else(|| self.local_binding_type_for_name(&resolved));
             if let Some(binding_ty) = binding_ty {
+                // RUST-STAGE10-DROP-TAINT (B1): a tainted binding
+                // aliases storage owned by someone else. A tainted
+                // DeepStruct with a FRESH husk (call result) falls
+                // through to the normal arm — its field drops are
+                // already suppressed through update_moved_fields,
+                // and the `!` tail frees the fresh husk. Every
+                // other tainted deep value is forgotten: a tainted
+                // DeepStruct with an ALIASED husk (place read)
+                // must not free the source's block, and a tainted
+                // DeepVec/Buffer container IS the aliased storage.
+                if let Some(form) = self.tainted_bindings.get(&resolved).copied() {
+                    let plan = self.plan_value_drop(&binding_ty);
+                    let forget = match (&plan, form) {
+                        (
+                            crate::drop::DropPlan::DeepStruct(_),
+                            crate::drop::TaintForm::AliasedHusk,
+                        ) => true,
+                        (crate::drop::DropPlan::DeepVec(_), _) => true,
+                        (crate::drop::DropPlan::DeepGrowVec(_), _) => true,
+                        (crate::drop::DropPlan::Buffer, _) => true,
+                        (crate::drop::DropPlan::BufferGrowVec, _) => true,
+                        _ => false,
+                    };
+                    if forget {
+                        self.ins(&format!("^{resolved}"));
+                        self.consumed_bindings.insert(resolved.clone());
+                        return Ok(());
+                    }
+                }
                 match self.plan_value_drop(&binding_ty) {
                     crate::drop::DropPlan::DeepStruct(fields) => {
                         self.emit_struct_field_drops(

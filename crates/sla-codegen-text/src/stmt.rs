@@ -410,6 +410,10 @@ impl<'c> Codegen<'c> {
         } else {
             self.ins(&format!("{resolved_name} = {val}"));
         }
+        // RUST-STAGE10-DROP-TAINT (B1): record borrow/taint for
+        // the fresh binding (M1 move-out / M2 borrow-alias /
+        // M2-call). No-op for plan-None values.
+        self.record_value_taint(&resolved_name, &let_stmt.value, &ty_or_err);
         Ok(())
     }
 
@@ -793,6 +797,14 @@ impl<'c> Codegen<'c> {
                 let src_resolved = self.resolve_binding_name(src);
                 self.mark_consumed_binding(&src_resolved);
             }
+        }
+        // RUST-STAGE10-DROP-TAINT (B1): rebind — the old value
+        // was released above (seeing OLD taint); record the new
+        // value's taint (the decision reads the pre-rebind state,
+        // so `x = x.field` judges the OLD x).
+        let assign_value_ty = self.expr_type(&assign.value).or(target_ty);
+        if let Some(value_ty) = assign_value_ty {
+            self.record_value_taint(&resolved_name, &assign.value, &value_ty);
         }
         self.consumed_bindings.remove(&resolved_name);
         Ok(())
