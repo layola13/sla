@@ -34,8 +34,7 @@ use sla_ast::types::Type;
 use crate::checker::{Checker, FuncSig, ParamSig};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::rules::ValueState;
-use crate::check_leaves::user_ty;
-use crate::types_util::void_ty;
+use crate::types_util::u64_ty;
 
 fn err(kind: ErrorKind, msg: String) -> Diagnostic {
     Diagnostic::new(kind, msg)
@@ -239,7 +238,15 @@ impl Checker {
                 ));
             }
         }
-        Ok(user_ty("JoinHandle", vec![void_ty()]))
+        // F-G7: Zig `checkGoExpr` types a `go` expression as
+        // u64 (the raw task handle loaded from the spawn slot),
+        // not JoinHandle<void> -- JoinHandle<T> belongs to the
+        // thread::spawn surface only. Typing it JoinHandle made
+        // the handle non-Copy, so call-arg planning emitted a
+        // `^h` move into sa_task_join(handle: u64) and every
+        // u64 consumer (struct fields, (u64, i32) tuples,
+        // monitor(handle)) mismatched at check time.
+        Ok(u64_ty())
     }
 
     pub fn check_defer_stmt(&mut self, stmt: &DeferStmt) -> CheckResult<()> {
