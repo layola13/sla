@@ -13,22 +13,35 @@ use crate::types_util::{
     types_equal,
 };
 
-/// Deref peeling: pointers and borrows, plus the smart-pointer /
-/// guard user types Zig peels by name (Rc / Arc / Box / guards).
+/// Deref peeling, mirroring the Zig `deref_expr` arm
+/// (type_checker.zig): the smart-pointer / guard inner types are
+/// tried FIRST — `userDefinedGenericInner` peels any borrow/pointer
+/// wrappers before matching the name, so `*item` with
+/// `item: &Box<T>` yields `T`, not `Box<T>` — and only when no
+/// smart pointer matches does a single pointer/borrow peel apply
+/// (`pointerOrBorrowPointee`). The previous single-layer form
+/// stopped at `Box<T>` for a borrowed Box, so `&*item` typed as
+/// `&Box<T>` and borrow-typed bindings rejected it
+/// (test_unit_borrow_temp_release_order).
 pub fn peel_pointer(ty: &Type) -> Option<Type> {
+    let mut cur = ty;
+    loop {
+        match cur {
+            Type::Pointer(inner) | Type::Borrow(inner) => cur = inner,
+            _ => break,
+        }
+    }
+    if let Type::UserDefined(u) = cur {
+        if matches!(
+            u.name.as_str(),
+            "Rc" | "Arc" | "Box" | "MutexGuard" | "RwLockReadGuard" | "RwLockWriteGuard"
+        ) && u.generics.len() == 1
+        {
+            return Some(u.generics[0].clone());
+        }
+    }
     match ty {
         Type::Pointer(inner) | Type::Borrow(inner) => Some((**inner).clone()),
-        Type::UserDefined(u) => {
-            if matches!(
-                u.name.as_str(),
-                "Rc" | "Arc" | "Box" | "MutexGuard" | "RwLockReadGuard" | "RwLockWriteGuard"
-            ) && !u.generics.is_empty()
-            {
-                Some(u.generics[0].clone())
-            } else {
-                None
-            }
-        }
         _ => None,
     }
 }

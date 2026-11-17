@@ -254,6 +254,19 @@ impl Checker {
                 match &arg_ty {
                     Type::Borrow(arg_inner) => {
                         types_equal(param_inner, arg_inner)
+                            // A borrow EXPRESSION of an already-borrow
+                            // binding (`&view` where `view: &[u8]`)
+                            // reborrows the same view: Zig's shared
+                            // plainCallArgMatches accepts it via
+                            // unwrapBorrowForCallArg (typesEqual of
+                            // the parameter against the unwrapped
+                            // argument). The pointee comparison above
+                            // alone compares slice vs borrow and
+                            // rejects the corpus shape
+                            // (test_unit_borrow_return_views).
+                            || crate::check_method::plain_call_arg_matches_pub(
+                                self, &param.ty, arg, &arg_ty,
+                            )
                     }
                     _ => crate::check_method::plain_call_arg_matches_pub(
                         self, &param.ty, arg, &arg_ty,

@@ -402,6 +402,13 @@ impl Checker {
                 let matched = match &arg_ty {
                     Type::Borrow(arg_inner) => {
                         types_equal(param_inner, arg_inner)
+                            // Same reborrow acceptance as the
+                            // plain-call path (check_call_sig.rs):
+                            // Zig's one shared plainCallArgMatches
+                            // unwraps a borrow expression argument.
+                            || self.plain_call_arg_matches(
+                                &param.ty, arg, &arg_ty,
+                            )
                     }
                     _ => false,
                 };
