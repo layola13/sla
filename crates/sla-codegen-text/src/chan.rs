@@ -294,7 +294,7 @@ impl<'c> Codegen<'c> {
     /// runtime status word is nonzero. The rc register itself
     /// is the caller's to settle (send returns it as its
     /// value).
-    fn emit_chan_rc_check(&mut self, rc: &str, code: i64) -> Result<()> {
+    pub(crate) fn emit_chan_rc_check(&mut self, rc: &str, code: i64) -> Result<()> {
         let cond = self.new_tmp();
         self.ins(&format!("{cond} = ne {rc}, 0"));
         let fail_label = self.new_label("L_CHAN_RC_FAIL");
@@ -309,7 +309,7 @@ impl<'c> Codegen<'c> {
 
     /// type_checker.zig `payloadStorageSize`: the byte count
     /// the runtime's fixed slot carries for this payload.
-    fn chan_payload_storage_size(&self, ty: &Type) -> Option<usize> {
+    pub(crate) fn chan_payload_storage_size(&self, ty: &Type) -> Option<usize> {
         match ty {
             Type::Primitive(p) => match p {
                 Primitive::Boolean | Primitive::U8 | Primitive::I8 => Some(1),
@@ -348,7 +348,7 @@ impl<'c> Codegen<'c> {
     /// syntax_lowering.zig `payloadIsWord`: primitives, raw
     /// pointers, and user-defined types with no struct/enum
     /// declaration (decl-less handles).
-    fn chan_payload_is_word(&self, ty: &Type) -> bool {
+    pub(crate) fn chan_payload_is_word(&self, ty: &Type) -> bool {
         match ty {
             Type::Primitive(_) | Type::Pointer(_) | Type::FnPtr(_) => true,
             Type::UserDefined(u) => {

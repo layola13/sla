@@ -392,6 +392,10 @@ impl<'a> Collector<'a> {
                     }
                     self.collect_block(&arm.body, caller);
                 }
+                if let Some(timeout) = &select.timeout {
+                    self.collect_expr(&timeout.expr, caller);
+                    self.collect_block(&timeout.body, caller);
+                }
             }
             Node::BinaryExpr(bin) => {
                 self.collect_expr(&bin.left, caller);

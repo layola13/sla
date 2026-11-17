@@ -8,12 +8,13 @@
 //! (DeferNonCall / GoClosureCallee / GoMethodCallee).
 //!
 //! `select` arms: `case let (v, closed) = ch.recv() { ... }`,
-//! `case ch.recv() { ... }` and `default { ... }`. `case` and
-//! `default` are contextual identifiers (not lexer keywords):
-//! they only carry arm meaning directly inside a select block.
+//! `case ch.recv() { ... }`, `default { ... }` and
+//! `timeout(expr) { ... }`. `case`, `default` and `timeout`
+//! are contextual identifiers (not lexer keywords): they only
+//! carry arm meaning directly inside a select block.
 
 use sla_ast::node::Node;
-use sla_ast::stmts::{DeferStmt, GoStmt, SelectArm, SelectStmt};
+use sla_ast::stmts::{DeferStmt, GoStmt, SelectArm, SelectStmt, SelectTimeout};
 use sla_lexer::Tag;
 
 use crate::error::{ParseError, ParseErrorKind};
@@ -61,6 +62,7 @@ impl<'a> Parser<'a> {
         self.expect(Tag::KeywordSelect)?;
         self.expect(Tag::LBrace)?;
         let mut arms = Vec::new();
+        let mut timeout = None;
         while self.peek() != Tag::RBrace && self.peek() != Tag::Eof {
             if self.peek() == Tag::Identifier && self.cur_text() == "default" {
                 self.advance();
@@ -73,10 +75,30 @@ impl<'a> Parser<'a> {
                 });
                 continue;
             }
+            if self.peek() == Tag::Identifier && self.cur_text() == "timeout" {
+                // Zig parseSelectStmt: at most one timeout arm,
+                // `timeout` `(` expr `)` block.
+                if timeout.is_some() {
+                    return Err(self.err_expected(
+                        ParseErrorKind::SyntaxError,
+                        "duplicate select timeout arm".to_string(),
+                    ));
+                }
+                self.advance();
+                self.expect(Tag::LParen)?;
+                let expr = self.parse_expr(0)?;
+                self.expect(Tag::RParen)?;
+                let body = self.parse_block()?;
+                timeout = Some(SelectTimeout {
+                    expr: Box::new(expr),
+                    body,
+                });
+                continue;
+            }
             if !(self.peek() == Tag::Identifier && self.cur_text() == "case") {
                 return Err(self.err_expected(
                     ParseErrorKind::SyntaxError,
-                    "select arm must start with `case` or `default`".to_string(),
+                    "select arm must start with `case`, `default` or `timeout`".to_string(),
                 ));
             }
             self.advance(); // `case`
@@ -107,6 +129,6 @@ impl<'a> Parser<'a> {
         // A trailing `;` after a select statement is tolerated in
         // the corpus (`select { ... };` inside if branches is not,
         // per house rules — the plain statement form eats one).
-        Ok(Node::SelectStmt(SelectStmt { arms }))
+        Ok(Node::SelectStmt(SelectStmt { arms, timeout }))
     }
 }

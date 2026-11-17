@@ -50,13 +50,16 @@ impl<'c> Codegen<'c> {
             // fixtures keep compiling (full lowering is R-4
             // jurisdiction). F-G2 exception: a supervised spawn
             // lowers for real (go_spawn.rs); plain `go` keeps the
-            // pass-through byte-identically.
+            // pass-through byte-identically. F-G4 exception: a
+            // select lowers for real (select.rs); `defer` keeps
+            // the pass-through (F-G5 jurisdiction).
             Node::GoStmt(go) => {
                 if go.supervised {
                     self.gen_supervised_go_stmt(go)?;
                 }
             }
-            Node::DeferStmt(_) | Node::SelectStmt(_) => {},
+            Node::DeferStmt(_) => {},
+            Node::SelectStmt(sel) => self.gen_select_stmt(sel)?,
             // A `using` declaration inside a function body only
             // scopes the checker's extension resolution (already
             // done); it emits nothing, exactly as the SAB

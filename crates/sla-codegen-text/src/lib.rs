@@ -29,6 +29,7 @@ mod async_scalar;
 mod block;
 mod call;
 mod chan;
+mod select;
 mod clone;
 mod call_plan;
 mod codegen;

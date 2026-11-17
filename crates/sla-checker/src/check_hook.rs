@@ -235,6 +235,10 @@ fn node_children(node: &Node) -> Vec<&Node> {
                 }
                 out.extend(arm.body.iter());
             }
+            if let Some(t) = &s.timeout {
+                out.push(&t.expr);
+                out.extend(t.body.iter());
+            }
         }
         _ => {}
     }

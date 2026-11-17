@@ -136,8 +136,20 @@ pub struct SelectArm {
     pub is_default: bool,
 }
 
+/// The `timeout(expr) { ... }` arm of a `select` statement
+/// (the Zig AST's `timeout_expr` / `timeout_body` pair on
+/// `select_stmt`, kept as one optional unit here).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelectTimeout {
+    pub expr: Box<Node>,
+    pub body: Vec<Node>,
+}
+
 /// R-3 goroutine batch: `select { case ... default ... }`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectStmt {
     pub arms: Vec<SelectArm>,
+    /// The single `timeout(expr) { ... }` arm, if present
+    /// (`default` stays an arm; Zig keeps both separate too).
+    pub timeout: Option<SelectTimeout>,
 }

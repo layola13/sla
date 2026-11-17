@@ -319,6 +319,13 @@ impl Checker {
             self.scopes.pop_frame();
             arm_result?;
         }
+        if let Some(timeout) = &stmt.timeout {
+            self.check_expr(&timeout.expr)?;
+            self.scopes.push_frame();
+            let body_result = self.check_block(&timeout.body);
+            self.scopes.pop_frame();
+            body_result?;
+        }
         Ok(())
     }
 }
