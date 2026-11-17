@@ -661,6 +661,13 @@ impl<'c> Codegen<'c> {
         if let Some((kind, payload_ty)) = self.chan_method(call) {
             return self.gen_chan_method_call(call, kind, &payload_ty);
         }
+        // monitor(handle) (monitor.rs): the supervisor
+        // builtin the checker claims in its pre-associated
+        // block; emits the sa_task_monitor extern sequence
+        // directly (the lowering's emitMonitorCall form).
+        if self.is_monitor_call(call) {
+            return self.gen_monitor_call(call);
+        }
         if call.associated_target.is_some() {
             if let Some(reg) = self.gen_associated_call(expr, call)? {
                 return Ok(reg);
