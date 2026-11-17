@@ -8,10 +8,12 @@
 //! emitted here directly, in the lowering's order (the F-G1
 //! Chan::new arm in call.rs is the same pattern).
 //!
-//! Plain (unsupervised) `go` is NOT emitted here: statement
-//! position keeps its scope-only pass-through and expression
-//! position keeps the F-3 catch-all error, byte-identical to
-//! before this line.
+//! Plain (unsupervised) `go` in expression position is
+//! emitted here too (F-3): the same sequence with
+//! `sa_task_spawn(entry, arg, &slot)` and no sink pair,
+//! mirroring Zig syntax_lowering.zig `emitSpawn`
+//! (detached=false). Statement position keeps its scope-only
+//! pass-through, byte-identical to before this line.
 //!
 //! Register discipline (F-G1/CHANNEW experience, applied to the
 //! spawn site): an identifier argument whose register IS the
@@ -35,7 +37,7 @@ impl<'c> Codegen<'c> {
     /// detaches; the detach rc is an ordinary value binding,
     /// released at once here).
     pub(crate) fn gen_supervised_go_stmt(&mut self, go: &GoStmt) -> Result<()> {
-        let handle = self.emit_supervised_spawn(go)?;
+        let handle = self.emit_spawn(go, true)?;
         let rc = self.new_tmp();
         self.ins(&format!("{rc} = call @sa_task_detach({handle})"));
         self.emit_release(&rc)?;
@@ -46,30 +48,37 @@ impl<'c> Codegen<'c> {
     /// Expression position: the spawn's value is the join
     /// handle loaded out of the slot.
     pub(crate) fn gen_supervised_go_expr(&mut self, go: &GoStmt) -> Result<String> {
-        self.emit_supervised_spawn(go)
+        self.emit_spawn(go, true)
     }
 
-    fn emit_supervised_spawn(&mut self, go: &GoStmt) -> Result<String> {
+    /// Expression position, plain `go` (F-3): the spawn's
+    /// value is the join handle loaded out of the slot.
+    pub(crate) fn gen_plain_go_expr(&mut self, go: &GoStmt) -> Result<String> {
+        self.emit_spawn(go, false)
+    }
+
+    fn emit_spawn(&mut self, go: &GoStmt, supervised: bool) -> Result<String> {
+        let kind = if supervised { "go supervised" } else { "go" };
         // The checker has already gated the operand's shape
         // (named void callee, arity 0 or 1); these arms are
         // defence in depth so an ungated tree fails loudly here
         // instead of emitting a malformed spawn.
         let Node::CallExpr(call) = &*go.call else {
             return Err(TextError::Unsupported {
-                feature: "go supervised operand is not a call expression".to_string(),
+                feature: format!("{kind} operand is not a call expression"),
                 zig_ref: "syntax_lowering.zig:500 (emitSpawn)",
             });
         };
         if call.callee.is_some() || call.associated_target.is_some() {
             return Err(TextError::Unsupported {
-                feature: "go supervised callee is not a plain named function".to_string(),
+                feature: format!("{kind} callee is not a plain named function"),
                 zig_ref: "syntax_lowering.zig:500 (emitSpawn)",
             });
         }
         if call.args.len() > 1 {
             return Err(TextError::Unsupported {
                 feature: format!(
-                    "go supervised arity {} (expected 0 or 1)",
+                    "{kind} arity {} (expected 0 or 1)",
                     call.args.len()
                 ),
                 zig_ref: "syntax_lowering.zig:500 (emitSpawn)",
@@ -130,25 +139,44 @@ impl<'c> Codegen<'c> {
             format!("&{dummy}")
         };
 
-        // Zeroed handle slot + null trap sink / sink context
-        // (corpus form: PTR_NULL()).
+        // Zeroed handle slot; supervised spawns also pass a
+        // null trap sink / sink context pair (corpus form:
+        // PTR_NULL()).
         let slot = self.new_tmp();
         self.ins(&format!("{slot} = stack_alloc 8"));
         self.ins(&format!("store {slot}+0, 0 as u64"));
-        let sink = self.new_tmp();
-        self.ins(&format!("EXPAND PTR_NULL {sink}"));
-        let sink_ctx = self.new_tmp();
-        self.ins(&format!("EXPAND PTR_NULL {sink_ctx}"));
+        let mut sink: Option<String> = None;
+        let mut sink_ctx: Option<String> = None;
+        if supervised {
+            let sk = self.new_tmp();
+            self.ins(&format!("EXPAND PTR_NULL {sk}"));
+            let sc = self.new_tmp();
+            self.ins(&format!("EXPAND PTR_NULL {sc}"));
+            sink = Some(sk);
+            sink_ctx = Some(sc);
+        }
 
         let rc = self.new_tmp();
-        self.ins(&format!(
-            "{rc} = call @sa_task_spawn_supervised(*{entry}, {arg_display}, *{sink}, *{sink_ctx}, &{slot})"
-        ));
+        if supervised {
+            let sk = sink.as_ref().expect("supervised sink");
+            let sc = sink_ctx.as_ref().expect("supervised sink ctx");
+            self.ins(&format!(
+                "{rc} = call @sa_task_spawn_supervised(*{entry}, {arg_display}, *{sk}, *{sc}, &{slot})"
+            ));
+        } else {
+            self.ins(&format!(
+                "{rc} = call @sa_task_spawn(*{entry}, {arg_display}, &{slot})"
+            ));
+        }
         for reg in &release_after {
             self.emit_release(reg)?;
         }
-        self.emit_release(&sink)?;
-        self.emit_release(&sink_ctx)?;
+        if let Some(sk) = &sink {
+            self.emit_release(sk)?;
+        }
+        if let Some(sc) = &sink_ctx {
+            self.emit_release(sc)?;
+        }
         self.emit_forget_moved_value(&entry)?;
 
         // Spawn rc gate (SPAWN_PANIC_CODE 60901).
