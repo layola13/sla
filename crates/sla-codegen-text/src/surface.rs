@@ -374,6 +374,15 @@ impl<'c> Codegen<'c> {
                     "BTreeSet" => "BTREE_SET_LEN",
                     "String" => "STRING_BUF_LEN",
                     "GrowVec" => "GROWVEC_LEN",
+                    // F-B6 (`len` on a slice borrow, LINE-LEN
+                    // follow-up): `view.len()` on `&[u8]` classifies
+                    // to ("Slice", [u8]) but fell to the EXPAND
+                    // catch-all, synthesising `EXPAND len tmp, view`
+                    // — `len` is not a sa_std macro (UndefinedMacro
+                    // in test_unit_borrow_return_views @sla__view_eq).
+                    // Zig emits `EXPAND SLICE_GET_LEN len, slice`
+                    // (sa_std/core/slice.sa; demos/c/*/main.sa).
+                    "Slice" => "SLICE_GET_LEN",
                     _ => return Ok(None),
                 },
                 None => return Ok(None),
