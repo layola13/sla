@@ -12,11 +12,12 @@
 //! the catch-all that treats an unknown callee name as a macro
 //! EXPAND rather than an error.
 
-use sla_ast::{Literal, Node, Param, Primitive, Type, UserDefined};
+use sla_ast::{FnPtrType, Literal, Node, Param, Primitive, Type, UserDefined};
 use sla_lowering::{
-    abi_call_arg_cap_kind, abi_param_needs_borrow_arg, call_arg_is_copy_struct_value,
-    call_arg_needs_release, is_panic_builtin_name, is_println_call,
-    is_temporary_register_name, plan_call_arg_materialization, plan_refcell_call_arg_lifecycle,
+    abi_call_arg_cap_kind, abi_param_needs_borrow_arg, by_value_raw_pointer_param,
+    call_arg_is_copy_struct_value, call_arg_needs_release, is_borrow_like_type,
+    is_panic_builtin_name, is_println_call, is_temporary_register_name,
+    plan_call_arg_materialization, plan_refcell_call_arg_lifecycle,
     plan_stack_slot_identifier_call_arg_temp, root_identifier,
     value_arg_transfers_ownership_from_param, AbiCapKind, CallArgMaterializationInput,
     CallArgMaterializationKind, CallArgTarget,
@@ -650,6 +651,150 @@ impl<'c> Codegen<'c> {
         Ok(None)
     }
 
+    /// Indirect call through a fn-pointer-typed binding
+    /// (RUST-FNPTR-DIRECT-CALL-FORM1). Zig codegen.zig `fn_ptr_calls`
+    /// arm (sa_plugin_sla 87950412): the callee register holds the
+    /// vtable address, so `load +0` reads the vtable's `call` slot
+    /// and the call carries the fn-pointer type's signature when
+    /// every component renders to an SA primitive. The 114 demo's
+    /// `load cb+8` shape is the 16-byte object form (imported-macro
+    /// args, genImportedMacroFnObjectArg), not the value form — a
+    /// param/let/capture register never goes through `+8`.
+    /// Returns the fn-pointer type and the register holding the
+    /// value when `func_name` resolves to a FnPtr-typed local
+    /// binding; None otherwise (caller falls through to the
+    /// existing arms, so genuinely unknown names still EXPAND).
+    fn fn_ptr_indirect_target(
+        &self,
+        func_name: &str,
+    ) -> Option<(FnPtrType, String)> {
+        // Zig checks thread_capture_regs first: a captured binding's
+        // register is the worker slot-load temp, not the bare name;
+        // its type stays registered under the bare name.
+        if let Some(reg) = self.thread_capture_regs.get(func_name) {
+            let fp = match self.local_binding_type_for_name(func_name)? {
+                Type::FnPtr(fp) => fp,
+                _ => return None,
+            };
+            return Some((fp, reg.clone()));
+        }
+        // Repeated-let aliasing renames a binding (e.g. `let run`
+        // in two loops becomes tmp_9 / tmp_26) and the let
+        // registers its type under the ALIASED name, so look the
+        // type up by the raw name first, then by the resolved one.
+        let reg = self.resolve_binding_name(func_name);
+        let ty = self
+            .local_binding_type_for_name(func_name)
+            .or_else(|| self.local_binding_type_for_name(&reg))?;
+        let fp = match ty {
+            Type::FnPtr(fp) => fp,
+            _ => return None,
+        };
+        Some((fp, reg))
+    }
+
+    /// Synthetic `Param`s for a fn-pointer type's parameters,
+    /// mirroring Zig's inline construction in the `fn_ptr_calls`
+    /// arm: borrow when the parameter type is a borrow; move when
+    /// it is neither a by-value raw pointer nor Copy nor
+    /// borrow-like — so a by-value owned argument is consumed by
+    /// the callee exactly once, as in a direct call.
+    fn fn_ptr_call_params(&self, fp: &FnPtrType) -> Vec<Param> {
+        fp.params
+            .iter()
+            .map(|ty| {
+                let mut param = Param {
+                    name: String::new(),
+                    ty: Box::new(ty.clone()),
+                    is_borrow: matches!(ty, Type::Borrow(_)),
+                    is_move: false,
+                    fallible_sugar: false,
+                    is_var: false,
+                };
+                param.is_move = !by_value_raw_pointer_param(&param)
+                    && !self.type_is_copy_value(ty)
+                    && !is_borrow_like_type(ty);
+                param
+            })
+            .collect()
+    }
+
+    /// C2 sab_carried_indirect_sig: SA primitive name for one
+    /// component of a carried fn-pointer signature. Mirrors Zig
+    /// `fnPtrSigParamName` (bool params ride i1; a boolean return
+    /// rides i32); a type with no SA primitive rendering yields
+    /// None and the call carries no record (Zig's `catch null`).
+    fn fn_ptr_sig_param_name(ty: &Type) -> Option<&'static str> {
+        match ty {
+            Type::Primitive(p) => Some(match p {
+                Primitive::I8 => "i8",
+                Primitive::I16 => "i16",
+                Primitive::I32 => "i32",
+                Primitive::I64 | Primitive::Integer | Primitive::Isize => "i64",
+                Primitive::U8 => "u8",
+                Primitive::U16 => "u16",
+                Primitive::U32 => "u32",
+                Primitive::U64 | Primitive::Usize => "u64",
+                Primitive::F32 => "f32",
+                Primitive::F64 | Primitive::Float => "f64",
+                Primitive::Boolean => "i1",
+                Primitive::RawPtr => "ptr",
+                Primitive::VoidType => "void",
+                _ => return None,
+            }),
+            Type::Pointer(_) | Type::Borrow(_) => Some("ptr"),
+            _ => None,
+        }
+    }
+
+    fn fn_ptr_carried_sig(fp: &FnPtrType) -> Option<String> {
+        let mut params = Vec::new();
+        for ty in &fp.params {
+            params.push(Self::fn_ptr_sig_param_name(ty)?);
+        }
+        let ret = if matches!(*fp.ret, Type::Primitive(Primitive::Boolean)) {
+            "i32"
+        } else {
+            Self::fn_ptr_sig_param_name(&fp.ret)?
+        };
+        Some(format!("({}) -> {}", params.join(", "), ret))
+    }
+
+    /// Emit the indirect call itself: load the vtable's `call`
+    /// slot, `call_indirect` (with the carried signature when
+    /// renderable), release the loaded function pointer, then the
+    /// planned argument cleanups — Zig's order (call-register
+    /// release before cleanups). Returns the result register for
+    /// non-void returns, None for void.
+    fn emit_fn_ptr_indirect_call(
+        &mut self,
+        call: &sla_ast::CallExpr,
+        fp: &FnPtrType,
+        callee_reg: &str,
+    ) -> Result<Option<String>> {
+        let params = self.fn_ptr_call_params(fp);
+        let (display, planned_args) = self.plan_known_call_args(call, &params)?;
+        let fn_reg = self.new_tmp();
+        self.ins(&format!("{fn_reg} = load {callee_reg}+0 as ptr"));
+        let sig = Self::fn_ptr_carried_sig(fp)
+            .map(|s| format!(" : {s}"))
+            .unwrap_or_default();
+        let args = display.join(", ");
+        let result = if matches!(*fp.ret, Type::Primitive(Primitive::VoidType)) {
+            self.ins(&format!("call_indirect {fn_reg}({args}){sig}"));
+            None
+        } else {
+            let result = self.new_tmp();
+            self.ins(&format!(
+                "{result} = call_indirect {fn_reg}({args}){sig}"
+            ));
+            Some(result)
+        };
+        self.emit_release(&fn_reg)?;
+        self.emit_lowered_call_arg_cleanups(&planned_args, None)?;
+        Ok(result)
+    }
+
     /// codegen.zig `genExpr` call path (plain known-function arm,
     /// panic arm, constructors, EXPAND fallback).
     pub(crate) fn gen_expr_call(&mut self, expr: &Node) -> Result<String> {
@@ -764,6 +909,21 @@ impl<'c> Codegen<'c> {
         }
         if let Some(sig) = self.check.extern_sig(&func_name) {
             return self.gen_extern_call(call, &sig);
+        }
+
+        // Fn-pointer value call: a callee name that resolves to a
+        // FnPtr-typed local binding (param, let-local, closure
+        // capture) calls through the vtable's `call` slot — never
+        // the EXPAND catch-all. Placed before the known-function
+        // lookup so a shadowing binding wins over a same-named
+        // declared function, as the checker resolves the call to
+        // the binding.
+        if let Some((fp, callee_reg)) = self.fn_ptr_indirect_target(&func_name) {
+            let result = self.emit_fn_ptr_indirect_call(call, &fp, &callee_reg)?;
+            // A void fn-pointer in expression position has no
+            // value; return a fresh placeholder, as gen_panic_call
+            // does after a bare `panic(...)`.
+            return Ok(result.unwrap_or_else(|| self.new_tmp()));
         }
 
         // Plain known-function call; a `using` extension call
@@ -998,6 +1158,19 @@ impl<'c> Codegen<'c> {
         }
         if let Some(sig) = self.check.extern_sig(&func_name) {
             return self.gen_extern_call_stmt(expr, call, &sig);
+        }
+        // Fn-pointer value call in statement position (void form):
+        // same arm as gen_expr_call; a non-void result is created
+        // and released when the statement's result needs it, as the
+        // runtime-call branch above does.
+        if let Some((fp, callee_reg)) = self.fn_ptr_indirect_target(&func_name) {
+            let result = self.emit_fn_ptr_indirect_call(call, &fp, &callee_reg)?;
+            if let Some(reg) = result {
+                if self.expr_result_reg_needs_release(expr) {
+                    self.emit_release(&reg)?;
+                }
+            }
+            return Ok(());
         }
         if let Some(decl) = self.func_decl(&func_name) {
             let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;

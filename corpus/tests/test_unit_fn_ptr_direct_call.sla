@@ -1,0 +1,11 @@
+fn tri_f1_inc(x: u64) -> u64 { return x + 1; }
+fn tri_f1_apply(f: fn(u64) -> u64, v: u64) -> u64 { return f(v); }
+fn tri_f1_apply_twice(f: fn(u64) -> u64, v: u64) -> u64 { return f(v) + f(v); }
+fn tri_f1_sink(run: fn(u64) -> void) -> i32 { run(5); return 9; }
+fn tri_f1_void_target(value: u64) -> void { if value != 5 { panic(51111); }; }
+
+@test "fn-ptr param direct call"() {
+    if tri_f1_apply(tri_f1_inc, 10) != 11 { panic(51112); };
+    if tri_f1_apply_twice(tri_f1_inc, 10) != 22 { panic(51113); };
+    if tri_f1_sink(tri_f1_void_target) != 9 { panic(51114); };
+}
