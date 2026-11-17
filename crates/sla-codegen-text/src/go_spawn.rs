@@ -88,9 +88,29 @@ impl<'c> Codegen<'c> {
         // Entry: the callee's fn-ptr vtable address, passed to
         // the raw `*entry` parameter in deref form — the exact
         // shape a hand-written direct call takes.
-        let entry = self.new_tmp();
-        let vt = self.fn_ptr_vtable_name(&call.func_name);
-        self.ins(&format!("{entry} = &{vt}"));
+        //
+        // F-G8: a named function has no runtime register, so its
+        // vtable address is materialized into a fresh temp. A
+        // local fn-ptr binding (e.g. supervise's `entry: fn(u64)`
+        // parameter in sa_std/supervisor.sla) already HOLDS the
+        // vtable address as its register value — Zig
+        // syntax_lowering emitSpawn passes the bare identifier
+        // through the ordinary extern-argument plan, and Zig
+        // codegen's identifier arm returns the binding register
+        // itself for non-function names. Minting
+        // `SLA_FNPTR_VT_<binding>` here produced an undeclared
+        // register (UnknownRegister), because program.rs only
+        // emits vtable decls for FuncDecl names.
+        let named_fn = self.func_decl(&call.func_name).is_some()
+            || self.check.is_extern_func(&call.func_name);
+        let (entry, entry_is_temp) = if named_fn {
+            let entry = self.new_tmp();
+            let vt = self.fn_ptr_vtable_name(&call.func_name);
+            self.ins(&format!("{entry} = &{vt}"));
+            (entry, true)
+        } else {
+            (self.resolve_binding_name(&call.func_name), false)
+        };
 
         // The single argument word (Zig: the arg node itself, or
         // a dummy zeroed slot's address for a zero-arg callee).
@@ -177,7 +197,12 @@ impl<'c> Codegen<'c> {
         if let Some(sc) = &sink_ctx {
             self.emit_release(sc)?;
         }
-        self.emit_forget_moved_value(&entry)?;
+        // Only the materialized vtable temp is forgotten; a
+        // local fn-ptr binding stays live (supervise spawns it
+        // once per loop iteration).
+        if entry_is_temp {
+            self.emit_forget_moved_value(&entry)?;
+        }
 
         // Spawn rc gate (SPAWN_PANIC_CODE 60901).
         let cond = self.new_tmp();
