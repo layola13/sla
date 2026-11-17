@@ -403,7 +403,7 @@ impl<'c> Codegen<'c> {
                 self.ins(&format!("{resolved_name} = {val}"));
             } else {
                 self.emit_primitive_copy(&resolved_name, &val, &ty_or_err)?;
-                if call_arg_needs_release(&let_stmt.value) {
+                if self.stored_value_needs_release(&let_stmt.value) {
                     self.emit_release(&val)?;
                 }
             }
@@ -475,7 +475,7 @@ impl<'c> Codegen<'c> {
             self.emit_forget_moved_value(val_reg)?;
             return Ok(());
         }
-        if sla_lowering::call_arg_needs_release(value) {
+        if self.stored_value_needs_release(value) {
             let val_ty = self.expr_type(value);
             let is_ptr = val_ty
                 .as_ref()

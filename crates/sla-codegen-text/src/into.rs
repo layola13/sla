@@ -351,7 +351,7 @@ impl<'c> Codegen<'c> {
                 self.ins(&format!(
                     "store {target}+{offset}, {val_reg} as {ty_str}"
                 ));
-                if call_arg_needs_release(value) {
+                if self.stored_value_needs_release(value) {
                     self.emit_release(&val_reg)?;
                 }
             } else if val_reg.starts_with('&') || val_reg.starts_with('^') {

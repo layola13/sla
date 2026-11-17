@@ -14,8 +14,8 @@ use std::collections::{HashMap, HashSet};
 
 use sla_ast::{FuncDecl, Literal, Node, Primitive, Type};
 use sla_lowering::{
-    abi_return_type_string, abi_type_size, abi_type_string, expr_result_needs_release,
-    is_main_name, CheckInfo, FutureReadiness,
+    abi_return_type_string, abi_type_size, abi_type_string, call_arg_needs_release,
+    expr_result_needs_release, is_main_name, CheckInfo, FutureReadiness,
 };
 
 use crate::{unsupported, Result, TextError};
@@ -620,6 +620,17 @@ impl<'c> Codegen<'c> {
             };
         }
         expr_result_needs_release(expr)
+    }
+
+    /// The stored-value retire gate (Zig `finishStoredValueAfterSlotStore`,
+    /// SHARD-S5): `callArgNeedsRelease` is false for every cast_expr,
+    /// but a materialising cast (e.g. u64 -> i64) produces a fresh
+    /// result temp that nothing else retires after the store/copy.
+    /// Let materialising casts through to the caller's retire logic;
+    /// non-materialising casts keep the plain fact.
+    pub(crate) fn stored_value_needs_release(&self, value: &Node) -> bool {
+        call_arg_needs_release(value)
+            || (matches!(value, Node::CastExpr(_)) && self.expr_result_reg_needs_release(value))
     }
 
     /// Deep-copy emission for Copy structs (codegen.zig:3913
