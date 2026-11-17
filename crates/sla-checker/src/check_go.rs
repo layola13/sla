@@ -31,7 +31,7 @@ use sla_ast::node::Node;
 use sla_ast::stmts::{DeferStmt, GoStmt, SelectStmt};
 use sla_ast::types::Type;
 
-use crate::checker::Checker;
+use crate::checker::{Checker, FuncSig, ParamSig};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::rules::ValueState;
 use crate::check_leaves::user_ty;
@@ -136,7 +136,41 @@ impl Checker {
             }
         }
         let name = call.func_name.clone();
-        if self.lookup_ty(&name).is_some() && !self.funcs.contains_key(&name) {
+        // F-G8: a scope binding of fn-pointer type is a legal
+        // spawn entry — Zig `checkGoExpr` accepts `.fn_ptr`
+        // symbols (this is how sa_std/supervisor.sla's
+        // `go supervised entry(arg)` checks: `entry: fn(u64)`
+        // is a parameter). Only closure values and
+        // non-function bindings keep the GoClosureCallee
+        // rejection below.
+        let fn_ptr_sig = match self.lookup_ty(&name) {
+            Some(Type::FnPtr(fp)) if !self.funcs.contains_key(&name) => {
+                Some(FuncSig {
+                    params: fp
+                        .params
+                        .iter()
+                        .map(|ty| ParamSig {
+                            name: String::new(),
+                            ty: ty.clone(),
+                            is_borrow: false,
+                            is_move: false,
+                            is_var: false,
+                        })
+                        .collect(),
+                    ret_ty: (*fp.ret).clone(),
+                    is_pub: true,
+                    ret_fallible_sugar: false,
+                    ret_borrow_origin: None,
+                    is_async: false,
+                    is_variadic: false,
+                })
+            }
+            _ => None,
+        };
+        if fn_ptr_sig.is_none()
+            && self.lookup_ty(&name).is_some()
+            && !self.funcs.contains_key(&name)
+        {
             return Err(err(
                 ErrorKind::GoClosureCallee,
                 format!(
@@ -148,7 +182,8 @@ impl Checker {
             .funcs
             .get(&name)
             .cloned()
-            .or_else(|| self.imported_funcs.get(&name).cloned());
+            .or_else(|| self.imported_funcs.get(&name).cloned())
+            .or(fn_ptr_sig);
         let Some(sig) = sig else {
             // Unknown name: let the ordinary call check name the
             // fault (UndefinedCall etc.).

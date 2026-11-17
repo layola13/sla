@@ -119,6 +119,16 @@ impl Checker {
                     })
                 }),
                 "destroy" => arity(call, 1).map(|_| void_ty()),
+                // F-G3/F-4: the rest of the Zig checker's
+                // ChanCallInfo table — `len`/`cap` read the
+                // runtime counters (u64 in the lowering's
+                // out-param form) and `close` is the
+                // destroy-shaped void op. This leaf predates
+                // them, so the calls fell through to
+                // `Undefined call: len/cap/close`.
+                "len" => arity(call, 1).map(|_| crate::types_util::u64_ty()),
+                "cap" => arity(call, 1).map(|_| crate::types_util::u64_ty()),
+                "close" => arity(call, 1).map(|_| void_ty()),
                 _ => return None,
             });
         }

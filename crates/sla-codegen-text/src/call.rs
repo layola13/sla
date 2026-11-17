@@ -654,6 +654,13 @@ impl<'c> Codegen<'c> {
         if crate::thread_spawn::is_thread_spawn_call(call) {
             return self.gen_thread_spawn_call(expr, call);
         }
+        // Chan<T> method surface (chan.rs): send / recv /
+        // destroy / close / len / cap emit the sa_chan_*
+        // extern sequences directly (the lowering's
+        // emitChanCall forms).
+        if let Some((kind, payload_ty)) = self.chan_method(call) {
+            return self.gen_chan_method_call(call, kind, &payload_ty);
+        }
         if call.associated_target.is_some() {
             if let Some(reg) = self.gen_associated_call(expr, call)? {
                 return Ok(reg);
@@ -890,6 +897,23 @@ impl<'c> Codegen<'c> {
         if crate::thread_spawn::is_thread_spawn_call(call) {
             let reg = self.gen_thread_spawn_call(expr, call)?;
             if self.expr_result_reg_needs_release(expr) {
+                self.emit_release(&reg)?;
+            }
+            return Ok(());
+        }
+        // Statement-position Chan<T> method call (chan.rs):
+        // emit for effect and release the result when the
+        // expression result needs it, as the runtime-call
+        // branch above. destroy/close are void: their result
+        // register is an undefined placeholder (the surface
+        // Void precedent) and is never released.
+        if let Some((kind, payload_ty)) = self.chan_method(call) {
+            let reg = self.gen_chan_method_call(call, kind, &payload_ty)?;
+            if !matches!(
+                kind,
+                crate::chan::ChanMethod::Destroy | crate::chan::ChanMethod::Close
+            ) && self.expr_result_reg_needs_release(expr)
+            {
                 self.emit_release(&reg)?;
             }
             return Ok(());

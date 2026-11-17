@@ -28,6 +28,7 @@ mod async_runtime_codegen;
 mod async_scalar;
 mod block;
 mod call;
+mod chan;
 mod clone;
 mod call_plan;
 mod codegen;

@@ -1,0 +1,139 @@
+// F-G3 regression: the Chan<T> method surface in the text
+// backend (send / recv / destroy / close / len / cap). In the
+// Zig pipeline syntax_lowering's emitChanCall rewrites these
+// into sa_chan_* extern sequences over a 16-byte staging slot;
+// the text lane originally had no arm at all — sends and lens
+// fell into the EXPAND catch-all (host UndefinedMacro),
+// destroy was an unknown statement call, and the checker had
+// no len/cap/close leaves (Undefined call). Shapes: word
+// payloads (u64, subwords), String, struct, tuple, raw-pointer
+// borrow-send, Vec and Chan handles, close-drain semantics.
+
+@import "sa_std/task.sai"
+@import "sa_std/ptr.sa"
+@import "sa_std/core/box.sa"
+@import "sa_std/vec.sa"
+
+struct ChanPairMsg {
+    a: u64,
+    b: u64,
+}
+
+@test "chan methods word payloads len cap"() {
+    let ch: Chan<u64> = Chan::new(2);
+    if ch.cap() != 2 { panic(61001); };
+    if ch.len() != 0 { panic(61002); };
+    ch.send(40);
+    let v: u64 = 2;
+    ch.send(v);
+    if ch.len() != 2 { panic(61003); };
+    let (a, ca) = ch.recv();
+    if ca { panic(61004); };
+    if a != 40 { panic(61005); };
+    let pair = ch.recv();
+    if pair.1 { panic(61006); };
+    if pair.0 != 2 { panic(61007); };
+    ch.destroy();
+}
+
+@test "chan methods subword payloads"() {
+    let c8: Chan<u8> = Chan::new(1);
+    c8.send(200);
+    let (v8, cl8) = c8.recv();
+    if cl8 { panic(61010); };
+    if v8 != 200 { panic(61011); };
+    c8.destroy();
+    let ci: Chan<i32> = Chan::new(1);
+    ci.send(-123456);
+    let (vi, cli) = ci.recv();
+    if cli { panic(61012); };
+    if vi != -123456 { panic(61013); };
+    ci.destroy();
+    let cb: Chan<bool> = Chan::new(1);
+    cb.send(true);
+    let (vb, clb) = cb.recv();
+    if clb { panic(61014); };
+    if !vb { panic(61015); };
+    cb.destroy();
+}
+
+@test "chan methods string payload"() {
+    let ch: Chan<String> = Chan::new(1);
+    let s: String = format("hello");
+    ch.send(s);
+    let (got, closed) = ch.recv();
+    if closed { panic(61020); };
+    if got.len() != 5 { panic(61021); };
+    ch.destroy();
+}
+
+@test "chan methods struct and tuple payloads"() {
+    let ch: Chan<ChanPairMsg> = Chan::new(1);
+    ch.send(ChanPairMsg { a: 30, b: 12 });
+    let (m, cm) = ch.recv();
+    if cm { panic(61030); };
+    if m.a != 30 { panic(61031); };
+    if m.b != 12 { panic(61032); };
+    ch.destroy();
+    let tc: Chan<(u64, bool)> = Chan::new(1);
+    tc.send((7, true));
+    let (t, ct) = tc.recv();
+    if ct { panic(61033); };
+    if t.0 != 7 { panic(61034); };
+    if !t.1 { panic(61035); };
+    tc.destroy();
+}
+
+@test "chan methods ptr borrow send"() {
+    let ch: Chan<*ChanPairMsg> = Chan::new(1);
+    let m0 = Box::into_raw(Box::new(ChanPairMsg { a: 77, b: 5 }));
+    ch.send(m0);
+    if (*m0).a != 77 { panic(61040); };
+    let (m, cm) = ch.recv();
+    if cm { panic(61041); };
+    if (*m).a != 77 { panic(61042); };
+    if (*m).b != 5 { panic(61043); };
+    ch.destroy();
+}
+
+@test "chan methods vec and chan payloads"() {
+    let ch: Chan<Vec<u8>> = Chan::new(1);
+    let v: Vec<u8> = Vec::new();
+    v.push(10);
+    v.push(30);
+    ch.send(v);
+    let (got, cg) = ch.recv();
+    if cg { panic(61050); };
+    if len(got) != 2 { panic(61051); };
+    if got[0] != 10 { panic(61052); };
+    if got[1] != 30 { panic(61053); };
+    ch.destroy();
+    let inner: Chan<u64> = Chan::new(1);
+    inner.send(99);
+    let outer: Chan<Chan<u64>> = Chan::new(1);
+    outer.send(inner);
+    let (got_ch, co) = outer.recv();
+    if co { panic(61054); };
+    let (x, cx) = got_ch.recv();
+    if cx { panic(61055); };
+    if x != 99 { panic(61056); };
+    got_ch.destroy();
+    outer.destroy();
+}
+
+@test "chan methods close drains then reports closed"() {
+    let ch: Chan<u64> = Chan::new(3);
+    ch.send(1);
+    ch.send(2);
+    ch.close();
+    let (a, ca) = ch.recv();
+    if ca { panic(61060); };
+    if a != 1 { panic(61061); };
+    let (b, cb) = ch.recv();
+    if cb { panic(61062); };
+    if b != 2 { panic(61063); };
+    let (d, cd) = ch.recv();
+    if !cd { panic(61064); };
+    if d != 0 { panic(61065); };
+    ch.destroy();
+}
