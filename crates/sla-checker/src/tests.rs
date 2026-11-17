@@ -202,7 +202,7 @@ fn loop_conditional_consume_rejected() {
         })],
     )]);
     let err = result.expect_err("loop consume must fail");
-    assert_eq!(err.kind, ErrorKind::CompileError);
+    assert_eq!(err.kind, ErrorKind::LoopConditionalConsume);
     assert_eq!(err.marker, Some("LoopConditionalConsume"));
 }
 

@@ -523,7 +523,7 @@ impl Checker {
         if let Some(loop_ctx) = self.loop_ctx.last() {
             if !loop_ctx.body_terminates && !loop_ctx.in_return_value && frame < loop_ctx.frame_index {
                 return Err(Diagnostic::marked(
-                    ErrorKind::CompileError,
+                    ErrorKind::LoopConditionalConsume,
                     "LoopConditionalConsume",
                     format!(
                         "LoopConditionalConsume: binding `{name}` cannot be consumed by {context} inside the loop body"

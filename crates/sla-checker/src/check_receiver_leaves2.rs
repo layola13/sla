@@ -164,7 +164,7 @@ impl Checker {
                                 self.uncloneable_type_name(&elem, 0)
                             {
                                 return Err(Diagnostic::marked(
-                                    ErrorKind::CompileError,
+                                    ErrorKind::UncloneableClone,
                                     "UncloneableClone",
                                     format!(
                                         "UncloneableClone: {container} elements of type `{}` cannot be cloned: their closure contains {bad}, which has no clone",
@@ -184,7 +184,7 @@ impl Checker {
                                 self.uncloneable_type_name(field_ty, 0)
                             {
                                 return Err(Diagnostic::marked(
-                                    ErrorKind::CompileError,
+                                    ErrorKind::UncloneableClone,
                                     "UncloneableClone",
                                     format!(
                                         "UncloneableClone: struct `{}` cannot be cloned: field `{field_name}` reaches {bad}, which has no clone",

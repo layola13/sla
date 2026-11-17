@@ -241,7 +241,7 @@ impl Checker {
         if copy_like {
             if let Some(bad) = self.uncloneable_type_name(arg_ty, 0) {
                 return Err(Diagnostic::marked(
-                    ErrorKind::CompileError,
+                    ErrorKind::UncloneableCopy,
                     "UncloneableCopy",
                     format!(
                         "UncloneableCopy: element of type `{}` pushed here must be copied because the source stays live, but its closure contains {bad}, which has no clone - move an owned value into the container instead, or keep the {bad} outside the copied value",

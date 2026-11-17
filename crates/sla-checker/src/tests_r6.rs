@@ -305,7 +305,7 @@ fn r6_f3_local_same_field_borrow_conflict() {
         ),
     ]);
     let err = result.expect_err("second borrow of the same field must fail");
-    assert_eq!(err.kind, ErrorKind::InvalidBorrow);
+    assert_eq!(err.kind, ErrorKind::BorrowConflict);
     assert_eq!(err.marker, Some("BorrowConflict"));
 }
 
@@ -328,7 +328,7 @@ fn r6_f3_root_reassign_while_borrowed() {
         ),
     ]);
     let err = result.expect_err("root reassign under a live borrow must fail");
-    assert_eq!(err.kind, ErrorKind::InvalidBorrow);
+    assert_eq!(err.kind, ErrorKind::BorrowConflict);
     assert_eq!(err.marker, Some("BorrowConflict"));
 }
 
@@ -557,7 +557,7 @@ fn r6_f7_uncloneable_preserved_argument() {
     );
     let result = check(vec![map_deep, idm, bad]);
     let err = result.expect_err("preserved HashMap-closure argument must fail");
-    assert_eq!(err.kind, ErrorKind::CompileError);
+    assert_eq!(err.kind, ErrorKind::UncloneableCopy);
     assert_eq!(err.marker, Some("UncloneableCopy"));
 }
 
@@ -632,7 +632,7 @@ fn r6_loop_consume_fill_rejected() {
     );
     let result = check(vec![holder_struct(), bad]);
     let err = result.expect_err("loop-carried literal fill must fail");
-    assert_eq!(err.kind, ErrorKind::CompileError);
+    assert_eq!(err.kind, ErrorKind::LoopConditionalConsume);
     assert_eq!(err.marker, Some("LoopConditionalConsume"));
 }
 

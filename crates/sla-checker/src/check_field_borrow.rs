@@ -195,7 +195,7 @@ impl Checker {
     // -- statement/expression gates (Zig call sites) ----------------
 
     fn borrow_conflict(message: String) -> Diagnostic {
-        Diagnostic::marked(ErrorKind::InvalidBorrow, "BorrowConflict", message)
+        Diagnostic::marked(ErrorKind::BorrowConflict, "BorrowConflict", message)
     }
 
     /// borrow_expr arm (staging :7587): a fresh borrow of a place

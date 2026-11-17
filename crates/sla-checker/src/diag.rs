@@ -79,6 +79,14 @@ pub enum ErrorKind {
     ShaderDimensionMismatch,
     ShaderStageViolation,
     Overflow,
+    // LINE-ERRTAG: named sub-diagnostics promoted to kinds of their
+    // own, so the machine-readable tag matches the `Name:` the
+    // message already carries (error-census sub-cluster A: these
+    // four were bucketed into InvalidBorrow / CompileError).
+    BorrowConflict,
+    LoopConditionalConsume,
+    UncloneableClone,
+    UncloneableCopy,
 }
 
 impl ErrorKind {
@@ -132,6 +140,10 @@ impl ErrorKind {
             ErrorKind::ShaderDimensionMismatch => "ShaderDimensionMismatch",
             ErrorKind::ShaderStageViolation => "ShaderStageViolation",
             ErrorKind::Overflow => "Overflow",
+            ErrorKind::BorrowConflict => "BorrowConflict",
+            ErrorKind::LoopConditionalConsume => "LoopConditionalConsume",
+            ErrorKind::UncloneableClone => "UncloneableClone",
+            ErrorKind::UncloneableCopy => "UncloneableCopy",
         }
     }
 }

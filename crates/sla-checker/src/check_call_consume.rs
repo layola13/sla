@@ -109,7 +109,7 @@ impl Checker {
         if preserved {
             if let Some(bad) = self.uncloneable_type_name(arg_ty, 0) {
                 return Err(Diagnostic::marked(
-                    ErrorKind::CompileError,
+                    ErrorKind::UncloneableCopy,
                     "UncloneableCopy",
                     format!(
                         "UncloneableCopy: argument of type `{}` passed to `{call_name}` must be copied because the source stays live, but its closure contains {bad}, which has no clone - pass it by borrow, or keep the {bad} outside the copied value",
