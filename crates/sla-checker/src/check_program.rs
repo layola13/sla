@@ -472,6 +472,9 @@ impl Checker {
         if result.is_ok() {
             result = self.check_tail_type(func, &ret_ty);
         }
+        if result.is_ok() {
+            self.append_fn_exit_param_cleanups(func, &ret_ty);
+        }
 
         self.scopes.pop_frame();
         self.fn_root_depth = saved_root;
@@ -490,6 +493,71 @@ impl Checker {
             self.define_symbol(&param.name, ty, false)?;
         }
         self.check_block(&func.body)
+    }
+
+    /// M2(a) (Zig checkFunc, type_checker.zig ~7300-7363): the tail
+    /// and fall-off exits consume only the body block's exit list,
+    /// which is collected over the body frame — parameters live in
+    /// the function root frame and were never retired there, so the
+    /// SA verifier reported MemoryLeak at function exit naming the
+    /// parameter. Append still-active root-frame bindings to the
+    /// last statement's cleanup list for the two exits that consume
+    /// that list: a tail-expression return (escape-filtered like
+    /// the return path) and a void function falling off the end of
+    /// its body (Zig's `fn_exit_cleanups`). Explicit returns are
+    /// already covered by check_return's sweep, which includes the
+    /// root frame.
+    fn append_fn_exit_param_cleanups(&mut self, func: &FuncDecl, ret_ty: &Type) {
+        let Some(last) = func.body.last() else {
+            return;
+        };
+        if stmt_terminates(last) {
+            return;
+        }
+        let is_void = matches!(ret_ty, Type::Primitive(sla_ast::types::Primitive::VoidType));
+        let tail_expr = match last {
+            Node::ExprStmt(e) if !is_void => Some(e),
+            _ => None,
+        };
+        if !is_void && tail_expr.is_none() {
+            return;
+        }
+        let root_idx = self.fn_root_depth;
+        let mut extra: Vec<String> = Vec::new();
+        for b in &self.scopes.frames[root_idx].bindings {
+            if b.state != ValueState::Active || is_internal_symbol(&b.name) {
+                continue;
+            }
+            if let Some(e) = tail_expr {
+                if crate::rules::plan_function_exit_cleanup(&b.name, Some(e))
+                    == crate::rules::FunctionExitCleanupAction::TransferResult
+                {
+                    continue;
+                }
+            }
+            // issue013 guard (block_exit_cleanups shape): a
+            // borrow-like binding that is the borrow source of
+            // another still-active root binding is left for that
+            // binding's own release.
+            if crate::types_util::is_borrow_like_type(&b.ty)
+                && self.scopes.frames[root_idx].bindings.iter().any(|other| {
+                    other.state == ValueState::Active
+                        && other.borrow_source.as_deref() == Some(b.name.as_str())
+                })
+            {
+                continue;
+            }
+            extra.push(b.name.clone());
+        }
+        if extra.is_empty() {
+            return;
+        }
+        let entry = self.cleanups.entry(node_key_of(last)).or_default();
+        for name in extra {
+            if !entry.contains(&name) {
+                entry.push(name);
+            }
+        }
     }
 
     /// Tail-expression typing, mirroring the tail check at the end

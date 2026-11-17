@@ -553,7 +553,29 @@ impl Checker {
             if !names.is_empty() {
                 self.cleanups.insert(node_key_of(node), names);
             }
-        } else if !matches!(ret_ty, Type::Primitive(Primitive::VoidType)) {
+        } else if matches!(ret_ty, Type::Primitive(Primitive::VoidType)) {
+            // M2(a): a bare `return;` is a function exit too — record
+            // the same exit sweep as the valued path (innermost frame
+            // down to the function root, parameters included; there
+            // is no result expression, so nothing escapes). Without
+            // it gen_return_stmt emits no cleanups at this exit and
+            // still-live parameters leak (Zig's return path collects
+            // them the same way).
+            let mut names = Vec::new();
+            let mut idx = self.scopes.frames.len();
+            while idx > self.fn_root_depth {
+                idx -= 1;
+                for b in &self.scopes.frames[idx].bindings {
+                    if b.state != ValueState::Active || is_internal_symbol(&b.name) {
+                        continue;
+                    }
+                    names.push(b.name.clone());
+                }
+            }
+            if !names.is_empty() {
+                self.cleanups.insert(node_key_of(node), names);
+            }
+        } else {
             return Err(Diagnostic::new(
                 ErrorKind::TypeMismatch,
                 "TypeMismatch in return: expected a value",
