@@ -170,6 +170,87 @@ impl<'c> Codegen<'c> {
         Ok(true)
     }
 
+    /// Whether a materializing copy of a tuple with these
+    /// element types stays inside the plain subset: every
+    /// element plain (`record_copy_plain`), nested tuples
+    /// recursively.
+    fn tuple_copy_plain(&self, elems: &[Type], depth: usize) -> bool {
+        if depth > 8 {
+            return false;
+        }
+        elems.iter().all(|e| match e {
+            Type::Tuple(t) => self.tuple_copy_plain(&t.elems, depth + 1),
+            _ => self.record_copy_plain(e, depth),
+        })
+    }
+
+    /// DEF-TUPLE-COPY-EMIT (Zig `genTupleCopyValueInto`):
+    /// element-wise materializing copy of a tuple value into a
+    /// fresh allocation, the tuple analog of the record copy
+    /// above. Nested tuples recurse; nested struct elements go
+    /// through the record copy, exactly like struct fields of
+    /// struct copies. A nested copy settles with the `^` consume
+    /// marker in the store itself and the loaded element
+    /// register with a plain release (the REG2-D3 pairing);
+    /// plain elements store directly. Returns false without
+    /// emitting when the type is outside the plain subset.
+    pub(crate) fn gen_tuple_copy_value_into_inner(
+        &mut self,
+        target: &str,
+        source_reg: &str,
+        ty: &Type,
+    ) -> Result<bool> {
+        let Type::Tuple(tuple) = ty else {
+            return Ok(false);
+        };
+        if !self.tuple_copy_plain(&tuple.elems, 0) {
+            return Ok(false);
+        }
+        let elems = tuple.elems.clone();
+        self.ins(&format!(
+            "{target} = alloc {}",
+            sla_lowering::tuple_abi_size(&sla_ast::TupleType {
+                elems: elems.clone()
+            })
+        ));
+        for (i, elem_ty) in elems.iter().enumerate() {
+            let Some((offset, elem_ty)) = layout::tuple_field_layout(&elems, i) else {
+                return Ok(false);
+            };
+            let elem_reg = self.new_tmp();
+            self.ins(&format!(
+                "{elem_reg} = load {source_reg}+{offset} as {}",
+                type_string(&elem_ty)
+            ));
+            let nested_struct = matches!(elem_ty, Type::UserDefined(_))
+                && self.enum_decl(field_name_of(&elem_ty)).is_none()
+                && crate::place::struct_decl_lookup(self.check, field_name_of(&elem_ty))
+                    .is_some();
+            if matches!(elem_ty, Type::Tuple(_)) || nested_struct {
+                let copied = self.new_tmp();
+                let ok = if matches!(elem_ty, Type::Tuple(_)) {
+                    self.gen_tuple_copy_value_into_inner(&copied, &elem_reg, &elem_ty)?
+                } else {
+                    self.gen_copy_value_into_inner(&copied, &elem_reg, &elem_ty)?
+                };
+                if !ok {
+                    return Ok(false);
+                }
+                self.ins(&format!(
+                    "store {target}+{offset}, ^{copied} as {}",
+                    type_string(&elem_ty)
+                ));
+                self.emit_release(&elem_reg)?;
+            } else {
+                self.ins(&format!(
+                    "store {target}+{offset}, {elem_reg} as {}",
+                    type_string(&elem_ty)
+                ));
+            }
+        }
+        Ok(true)
+    }
+
     /// Whether a record copy of `ty` is emittable at all: the
     /// plain-field subset, or the deep clone dispatcher
     /// (clone.rs) for a shallow-copyable record with no

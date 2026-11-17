@@ -654,6 +654,25 @@ impl<'c> Codegen<'c> {
             )
         }
     }
+
+    /// DEF-TUPLE-COPY-EMIT (Zig `genTupleCopyValueInto`,
+    /// codegen.zig:6177): the tuple analog of
+    /// [`Self::gen_copy_value_into`], element-wise in copy.rs.
+    pub(crate) fn gen_tuple_copy_value_into(
+        &mut self,
+        target: &str,
+        source: &str,
+        ty: &Type,
+    ) -> Result<()> {
+        if self.gen_tuple_copy_value_into_inner(target, source, ty)? {
+            Ok(())
+        } else {
+            unsupported(
+                "genTupleCopyValueInto (Copy-tuple copy with a non-plain nested element)",
+                "codegen.zig:6177",
+            )
+        }
+    }
 }
 
 /// codegen.zig:2420 `sanitizeTestName`.

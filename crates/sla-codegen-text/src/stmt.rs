@@ -360,6 +360,26 @@ impl<'c> Codegen<'c> {
             return self.gen_copy_value_into(&resolved_name, &val, value_ty.as_ref().unwrap());
         }
 
+        // DEF-TUPLE-COPY-EMIT: Identifier of all-Copy tuple type:
+        // element-wise materializing copy into the binding (Zig
+        // genLetStmt tuple arm). The generic path below would
+        // alias the source register — an SA-level move — while
+        // the checker (FB-010 caliber) keeps the source binding
+        // live, so any later read of the source traps UseAfterMove.
+        if matches!(&*let_stmt.value, Node::Identifier(_))
+            && value_ty
+                .as_ref()
+                .map(|t| matches!(t, Type::Tuple(_)) && self.check.type_is_copy_value(t))
+                .unwrap_or(false)
+        {
+            let val = self.gen_expr(&let_stmt.value)?;
+            return self.gen_tuple_copy_value_into(
+                &resolved_name,
+                &val,
+                value_ty.as_ref().unwrap(),
+            );
+        }
+
         // String-typed let of a string literal (Zig genLetStmt
         // :15009/:15054): the literal denotes an owned String
         // handle, not the Slice view the generic path would rename
