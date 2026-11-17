@@ -538,6 +538,71 @@ impl<'c> Codegen<'c> {
                 _ => {}
             }
         }
+        // Chan::new (F-G1): the goroutine-batch constructor. In
+        // the Zig this shape never reaches codegen as an
+        // associated call — syntax_lowering.zig `emitChanCall`
+        // (.new arm) rewrites it to a `sa_chan_make` extern call
+        // over a zeroed handle slot, an rc check (panic 60911)
+        // and a value copy of the handle out of the slot. The
+        // text lane has no syntax-lowering stage, so the same
+        // instruction sequence is emitted here directly, in the
+        // lowering's order.
+        if target == "Chan" && call.func_name == "new" {
+            if call.args.len() != 1 {
+                return Err(crate::TextError::Unsupported {
+                    feature: format!(
+                        "Chan::new arity {} (expected 1)",
+                        call.args.len()
+                    ),
+                    zig_ref: "syntax_lowering.zig emitChanCall (.new arm)",
+                });
+            }
+            let cap_reg = self.gen_expr(&call.args[0])?;
+            // The `as` cast below consumes its source register.
+            // When the argument is an identifier whose register
+            // IS the caller's binding, copy it first — the same
+            // guard the cast_expr arm applies (codegen.zig:17018).
+            // Every other argument shape already yields a
+            // disposable temp, which the cast itself retires, so
+            // no separate release of the source is emitted.
+            let mut src_reg = cap_reg.clone();
+            if let Node::Identifier(name) = &call.args[0] {
+                if let Some(src_ty) = self.expr_type(&call.args[0]) {
+                    if matches!(src_ty, Type::Primitive(_)) {
+                        let resolved = self.resolve_binding_name(name);
+                        if cap_reg == resolved || cap_reg == *name {
+                            let copied = self.new_tmp();
+                            self.emit_primitive_copy(&copied, &cap_reg, &src_ty)?;
+                            src_reg = copied;
+                        }
+                    }
+                }
+            }
+            let cap_u32 = self.new_tmp();
+            self.ins(&format!("{cap_u32} = {src_reg} as u32"));
+            let slot = self.new_tmp();
+            self.ins(&format!("{slot} = stack_alloc 8"));
+            self.ins(&format!("store {slot}+0, 0 as u64"));
+            let rc = self.new_tmp();
+            self.ins(&format!("{rc} = call @sa_chan_make({cap_u32}, &{slot})"));
+            self.emit_release(&cap_u32)?;
+            let cond = self.new_tmp();
+            self.ins(&format!("{cond} = ne {rc}, 0"));
+            self.emit_release(&rc)?;
+            let fail_label = self.new_label("L_CHAN_MAKE_FAIL");
+            let ok_label = self.new_label("L_CHAN_MAKE_OK");
+            self.ins(&format!("br {cond} -> {fail_label}, {ok_label}"));
+            self.wl(&format!("{fail_label}:"));
+            self.ins("panic(60911)");
+            self.wl(&format!("{ok_label}:"));
+            self.emit_release(&cond)?;
+            let val = self.new_tmp();
+            self.ins(&format!("{val} = load {slot}+0 as u64"));
+            // The stack_alloc slot itself is released implicitly
+            // at scope exit — an explicit `!` on it is a host
+            // StackEscape error.
+            return Ok(Some(val));
+        }
         if let Some((key, decl)) = self.resolve_associated_decl(call) {
             let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;
             let result = self.new_tmp();

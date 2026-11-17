@@ -1,0 +1,39 @@
+// F-G1 regression: Chan::new associated-target codegen arm.
+// Pre-fix, the text backend rejected every Chan::new call with
+// `associated-target call target=Some("Chan") func=new` — the
+// codegen.zig:14600 associated-call dispatch had no Rust
+// counterpart for this target. The Zig compiler never emits the
+// call as-is: syntax_lowering.zig emitChanCall (.new arm)
+// rewrites it to a sa_chan_make extern call over a zeroed handle
+// slot, an rc check (panic 60911) and a value copy of the
+// handle; the text lane emits that sequence directly from
+// gen_associated_call. Shapes covered: literal capacity in let
+// position, variable capacity through a returning helper (an
+// identifier source needs the cast copy guard — the `as u32`
+// cast consumes its source register), and unbuffered cap 0.
+// The Chan method surface (send/recv/destroy) is NOT covered
+// here; it is a separate unported batch.
+
+@import "sa_std/task.sai"
+
+fn chan_new_helper(cap: u64) -> Chan<u64> {
+    return Chan::new(cap);
+}
+
+@test "go chan new literal cap"() {
+    let ch: Chan<u64> = Chan::new(1);
+    let probe: u64 = 0;
+    if probe != 0 { panic(9711); };
+}
+
+@test "go chan new variable cap via helper"() {
+    let ch: Chan<u64> = chan_new_helper(2);
+    let probe: u64 = 0;
+    if probe != 0 { panic(9712); };
+}
+
+@test "go chan new unbuffered"() {
+    let ch: Chan<u64> = Chan::new(0);
+    let probe: u64 = 0;
+    if probe != 0 { panic(9713); };
+}
