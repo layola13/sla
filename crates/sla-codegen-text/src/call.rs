@@ -951,6 +951,18 @@ impl<'c> Codegen<'c> {
             return Ok(result);
         }
 
+        // F-B1 (`__slice_view` intrinsic, LINE-BORROW follow-up):
+        // the generated sla_std wrappers (gen_wrap.py E_res form)
+        // build a `&[u8]` view from a raw data pointer + length
+        // with `__slice_view(ptr, len)`; the checker types it as
+        // Borrow(Slice<u8>) (check_call.rs:159). Without this arm
+        // the call falls into the EXPAND catch-all below and the
+        // host rejects it with UndefinedMacro (`__slice_view` is
+        // not a sa_std macro). Must precede the catch-all.
+        if func_name == "__slice_view" {
+            return self.gen_slice_view_call(call);
+        }
+
         if sla_lowering::is_stack_alloc_node(expr) {
             let size = self.stack_alloc_size_of(expr);
             let result = self.new_tmp();
@@ -1060,6 +1072,39 @@ impl<'c> Codegen<'c> {
             }
         }
         self.gen_expr(arg)
+    }
+
+    /// F-B1 (`__slice_view` intrinsic, LINE-BORROW follow-up):
+    /// materialize the view the way Zig builds a slice from
+    /// (ptr, len) — stack-allocate a {ptr, len} slot and fill it
+    /// with SLICE_NEW (codegen.zig `genArrayBorrowToSliceInto`
+    /// / string-literal arms; sa_std/core/slice.sa). This is the
+    /// same form the string-literal path (codegen.rs
+    /// `gen_literal_value`) already emits, so no extra macro
+    /// import is needed: SLICE_NEW resolves in the census env
+    /// wherever a string literal does. The two arguments are
+    /// planned as plain value args (Option/Result constructor
+    /// precedent: no declared params exist for an intrinsic)
+    /// and cleaned up by the shared call-arg machinery.
+    fn gen_slice_view_call(&mut self, call: &sla_ast::CallExpr) -> Result<String> {
+        if call.args.len() != 2 {
+            return unsupported(
+                "__slice_view arity",
+                "check_call.rs:159 (__slice_view intrinsic takes ptr, len)",
+            );
+        }
+        let ptr = self.gen_planned_call_arg(&call.args[0], None, false)?;
+        let len = self.gen_planned_call_arg(&call.args[1], None, false)?;
+        let result = self.new_tmp();
+        self.stack_alloc_bindings.insert(result.clone());
+        self.ins(&format!("{result} = stack_alloc Slice_SIZE"));
+        self.ins(&format!(
+            "EXPAND SLICE_NEW {result}, {}, {}",
+            ptr.reg, len.reg
+        ));
+        let planned_args = vec![ptr, len];
+        self.emit_lowered_call_arg_cleanups(&planned_args, None)?;
+        Ok(result)
     }
 
     /// codegen.zig:1868 `genCallStmt`.
