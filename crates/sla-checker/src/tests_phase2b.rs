@@ -167,11 +167,13 @@ fn destructure_tuple_binds_and_consumes_root() {
 }
 
 #[test]
-fn destructure_copy_tuple_still_consumes_root() {
-    // Pins the Zig behavior registered as FB-010: the destructure
-    // consumption site (type_checker.zig:2913) has NO Copy
-    // exemption, so even a (i32, i32) tuple variable is consumed
-    // (venue probe p_destr_copy: rc=1 UseAfterMove).
+fn destructure_copy_tuple_keeps_root_usable() {
+    // FB-010 (fixed): the destructure consumption site mirrors the
+    // plain-let implicit-move exemption, so a Copy tuple root is NOT
+    // consumed and stays usable after destructuring. Pre-fix this
+    // test pinned the opposite Zig behavior of the time (venue probe
+    // p_destr_copy: rc=1 UseAfterMove); the Zig arm has since gained
+    // the same exemption and this expectation flips with it.
     let destr = Node::LetDestructureStmt(LetDestructureStmt {
         names: vec!["x".to_string(), "y".to_string()],
         value: Box::new(ident("t")),
@@ -196,8 +198,7 @@ fn destructure_copy_tuple_still_consumes_root() {
             })),
         ],
     )]);
-    let err = result.expect_err("Copy tuple root must still be consumed");
-    assert_eq!(err.kind, ErrorKind::UseAfterMove);
+    result.expect("Copy tuple root must stay usable after destructure");
 }
 
 #[test]

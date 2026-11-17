@@ -420,7 +420,19 @@ impl Checker {
                 }
                 _ => {}
             }
-            self.consume_binding(&root, "destructuring move")?;
+            // FB-010: mirror the plain-let implicit-move exemption
+            // (Zig type_checker.zig let_destructure_stmt arm). A Copy
+            // or borrow-like root binding is not consumed by
+            // destructuring out of it; the codegen destructure arm
+            // already skips the root release on the same caliber
+            // (copy_root), so the two sides now agree.
+            let root_exempt = self
+                .lookup_ty(&root)
+                .map(|t| self.type_is_copy(&t) || is_borrow_like_type(&t))
+                .unwrap_or(false);
+            if !root_exempt {
+                self.consume_binding(&root, "destructuring move")?;
+            }
         }
         Ok(())
     }

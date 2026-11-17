@@ -46,3 +46,15 @@ fn f() -> int {
 `destructure_copy_tuple_still_consumes_root`（crates/sla-checker，
 tests_phase2b）钉住当前 Zig 行为；Zig 侧若按建议修复，此测试的期望
 应随差分复核翻转。
+
+## 解决（2026-11-17，LINE-FB010）
+
+Zig 现头（sa_plugin_sla 1f7c2f2c）的 `let_destructure_stmt` 臂已按本文件
+建议形态补上同一豁免（臂内注 FB-010：`!typeIsCopy(sym.ty) and
+!isBorrowLikeType(sym.ty)` 才消费）。Rust 侧随之镜像：checker
+`check_let_destructure` 在消费根绑定前按根绑定自身类型判
+`type_is_copy || is_borrow_like_type`，与 codegen 既有的 copy_root
+跳释放口径对齐；单测锚点 `destructure_copy_tuple_still_consumes_root`
+已翻转并更名为 `destructure_copy_tuple_keeps_root_usable`。语料
+`test_unit_fb010_destructure_copy` 整名翻绿，负例
+`test_error_fb010_destructure_noncopy` 仍按 UseAfterMove 拒绝。
