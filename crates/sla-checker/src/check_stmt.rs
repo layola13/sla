@@ -225,11 +225,17 @@ impl Checker {
             if let Node::Identifier(src) = value {
                 if !self.type_is_copy(&val_ty) && !is_borrow_like_type(&val_ty)
                 {
-                    // R-6 (F3): BorrowConflict gate.
-                    self.check_let_move_root_free(src, name)?;
-                    // R-3: moving an owner invalidates its views.
-                    self.origin_on_move(src);
-                    self.consume_binding(src, "implicit let move")?;
+                    // Zig let-arm guard (Scope.lookup, type_checker.zig ~7596):
+                    // only consume when the source is a scope binding. Fn items
+                    // live in `funcs`, not in scope -- consuming one is a bogus
+                    // UndefinedVariable (R255-TRIAGE-FORM2).
+                    if self.scopes.lookup(src).is_some() {
+                        // R-6 (F3): BorrowConflict gate.
+                        self.check_let_move_root_free(src, name)?;
+                        // R-3: moving an owner invalidates its views.
+                        self.origin_on_move(src);
+                        self.consume_binding(src, "implicit let move")?;
+                    }
                 }
             }
         }
