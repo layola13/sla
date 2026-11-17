@@ -78,6 +78,38 @@ fn r3_borrow_typed_param_mismatch_still_rejected() {
 }
 
 #[test]
+fn r3_borrow_typed_param_reborrow_accepted() {
+    // `&s` where `s: &[u8]` reborrows the same view for a `&[u8]`
+    // parameter: Zig's shared plainCallArgMatches unwraps a borrow
+    // expression argument before comparing. Corpus twin:
+    // test_unit_borrow_return_views (view_eq(&view, ...)).
+    let src = "fn eq(view: &[u8], n: u64) -> bool { return view.len() == n; }\nfn f(s: &[u8]) -> bool { return eq(&s, 0); }\n";
+    assert_eq!(check_src(src), Ok(()));
+}
+
+#[test]
+fn r3_borrow_typed_param_reborrow_wrong_inner_still_rejected() {
+    // Control: a reborrow of the WRONG pointee type still
+    // mismatches on both the pointee comparison and the unwrapped
+    // comparison. (The pointee must differ in primitive CLASS:
+    // integer widths are interchangeable under typesEqual by
+    // design, so u16 would not discriminate.)
+    let src = "fn eq(view: &[u8], n: u64) -> bool { return view.len() == n; }\nfn f(s: &[bool]) -> bool { return eq(&s, 0); }\n";
+    let (kind, _) = check_src(src).expect_err("must reject");
+    assert_eq!(kind, ErrorKind::TypeMismatch);
+}
+
+#[test]
+fn r3_deref_borrowed_box_peels_to_pointee() {
+    // `*item` for `item: &Box<P>` types as P (Zig deref arm: the
+    // smart-pointer inner types look through borrow/pointer
+    // wrappers), so `&*item` is `&P` and binds to a `&P` slot.
+    // Corpus twin: test_unit_borrow_temp_release_order.
+    let src = "struct P { value: i32 }\nstruct Box<T> { inner: T }\nfn rd(item: &Box<P>) -> i32 { let payload: &P = &*item; return payload.value; }\n";
+    assert_eq!(check_src(src), Ok(()));
+}
+
+#[test]
 fn r3_borrow_typed_param_bare_value_still_rejected() {
     // Control: a by-value argument to a borrow-typed parameter is
     // not an implicit borrow on the plain path (Zig's arm requires
