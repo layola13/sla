@@ -38,17 +38,13 @@ impl Checker {
                 ),
             ));
         }
-        // R-3 (var Phase-2): the `fill(var x)` argument shape is
-        // an OUT-parameter use of a `var` parameter: after the call
-        // the caller's binding is initialized (the callee writes
-        // through it). Marked before the generic argument loop,
-        // which would read the uninitialized binding as a value.
-        if sig.params.len() == 1 && args.len() == 1 && sig.params[0].is_var {
-            if let Node::VarStmt(v) = &args[0] {
-                self.set_state(&v.name, crate::rules::ValueState::Active);
-                return Ok(sig.ret_ty.clone());
-            }
-        }
+        // Var Phase-2 argument forms (`fill(var x)`) are handled
+        // per-position inside the generic argument loop below: a
+        // var arg is a USE of the caller's slot (the callee reads
+        // and writes through it), so the binding must already be
+        // initialized — the out-parameter reading that used to sit
+        // here contradicted the corpus negatives the shape comes
+        // from (see LINE_VARPARAM_INTERIM fork adjudication).
         // R-3: an explicitly generic call (`id<Pos>(...)`) checked
         // against a generic function's signature must substitute
         // the signature's types by the call's generic arguments
@@ -101,6 +97,73 @@ impl Checker {
             &sig.ret_ty
         };
         for (param, arg) in sig_params.iter().zip(args.iter()) {
+            // Var Phase-2: a `var` argument (`fill(var x)`) passes
+            // the caller's slot itself. It is only well-formed
+            // against a `var` parameter, and it counts as a use of
+            // the slot: the binding must already be initialized
+            // (corpus test_error_var_param_phase2 — an uninitialized
+            // var passed as a var argument is UseBeforeInit, exactly
+            // like the plain-argument sibling
+            // test_error_var_call_arg_before_init). After the call
+            // the binding stays Active. Against a plain parameter
+            // the form itself is the error (corpus
+            // test_error_var_call_var_arg_phase2), reported as a
+            // TypeMismatch like the capability-form mismatch below
+            // instead of falling through to the slice trap.
+            if let Node::VarStmt(v) = arg {
+                if !param.is_var {
+                    return Err(Diagnostic::new(
+                        ErrorKind::TypeMismatch,
+                        format!(
+                            "Call to {name} passes var argument to plain parameter {}",
+                            param.name
+                        ),
+                    ));
+                }
+                match self.lookup_state(&v.name) {
+                    Some(crate::rules::ValueState::Uninitialized) => {
+                        return Err(Diagnostic::new(
+                            ErrorKind::UseBeforeInit,
+                            format!("UseBeforeInit: `{}` is not initialized", v.name),
+                        ));
+                    }
+                    Some(crate::rules::ValueState::Consumed) => {
+                        return Err(Diagnostic::new(
+                            ErrorKind::UseAfterMove,
+                            format!(
+                                "UseAfterMove: identifier `{}` was already consumed",
+                                v.name
+                            ),
+                        ));
+                    }
+                    Some(crate::rules::ValueState::Active) => {}
+                    None => {
+                        return Err(Diagnostic::new(
+                            ErrorKind::UndefinedVariable,
+                            format!("UndefinedVariable: `{}`", v.name),
+                        ));
+                    }
+                }
+                if let Some(slot_ty) = self.lookup_ty(&v.name) {
+                    if !types_equal(&slot_ty, &param.ty) {
+                        return Err(Diagnostic::new(
+                            ErrorKind::TypeMismatch,
+                            format!(
+                                "TypeMismatch: var argument `{}` of type {} does not match parameter `{}` of `{name}` of type {}",
+                                v.name,
+                                type_desc(&slot_ty),
+                                param.name,
+                                type_desc(&param.ty)
+                            ),
+                        ));
+                    }
+                }
+                // The parser stamps the argument's VarStmt with a
+                // placeholder type; record the parameter type so
+                // codegen sees the slot's real type.
+                self.expr_types.insert(node_key_of(arg), param.ty.clone());
+                continue;
+            }
             let is_capability_arg =
                 matches!(arg, Node::MoveExpr(_) | Node::BorrowExpr(_));
             if param.is_move && !matches!(arg, Node::MoveExpr(_)) {

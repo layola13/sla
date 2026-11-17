@@ -446,14 +446,37 @@ fn r3_generic_call_substitutes_params_and_return() {
 }
 
 #[test]
-fn r3_var_param_out_shape_checks() {
-    // Corpus test_error_var_param_phase2: a `var` parameter is an
-    // out-parameter; `fill(var x)` initializes the caller's `var`
-    // binding, so reading it afterwards is not UseBeforeInit. (The
-    // file is named test_error but carries no expect line; the
-    // plain-parameter control below keeps the UseBeforeInit gate.)
+fn r3_var_param_uninitialized_var_arg_is_use_before_init() {
+    // Corpus test_error_var_param_phase2: a `var` argument is a
+    // USE of the caller's slot (the callee reads and writes
+    // through it), so passing an uninitialized `var` is
+    // UseBeforeInit — the same gate as the plain-argument sibling
+    // test_error_var_call_arg_before_init. (This reverses the
+    // earlier out-parameter reading of this shape; see
+    // LINE_VARPARAM_INTERIM for the corpus-provenance evidence:
+    // the file was authored as a negative in the founding var
+    // commits and Zig has no var-param surface at all.)
     let src = "fn fill(var x: i32) -> void { x = 1; }\nfn main() -> i32 { var x: i32; fill(var x); return x; }";
-    check_src(src).expect("var out-parameter shape must check");
+    let err = check_src(src).expect_err("uninitialized var arg must fail");
+    assert_eq!(err.0, ErrorKind::UseBeforeInit);
+}
+
+#[test]
+fn r3_var_param_initialized_var_arg_checks() {
+    // Control: an initialized `var` passed as a `var` argument is
+    // well-formed and stays readable after the call.
+    let src = "fn fill(var x: i32) -> void { x = 1; }\nfn main() -> i32 { var x: i32; x = 0; fill(var x); return x; }";
+    check_src(src).expect("initialized var arg must check");
+}
+
+#[test]
+fn r3_var_arg_to_plain_param_is_form_mismatch() {
+    // Corpus test_error_var_call_var_arg_phase2: a `var` argument
+    // against a PLAIN parameter is a form mismatch (semantic
+    // TypeMismatch), not the checker-slice trap.
+    let src = "fn accepts_i32(value: i32) -> i32 { return value; }\nfn main() -> i32 { var x: i32; x = 1; return accepts_i32(var x); }";
+    let err = check_src(src).expect_err("var arg to plain param must fail");
+    assert_eq!(err.0, ErrorKind::TypeMismatch);
 }
 
 #[test]
