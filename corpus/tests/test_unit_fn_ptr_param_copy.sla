@@ -1,0 +1,59 @@
+// RUST-TEXT-FNPTR-PARAM-EXIT-RELEASE regression: a fn-ptr is a
+// copy value (the checker leaf predicate `is_copy_value`, mirroring
+// Zig lowering_rules `typeIsCopyValueLeaf`, has the dedicated arm
+// `Type::FnPtr(_) => true`), but the text backend planned
+// signatures and call arguments from the CheckInfo fact, which
+// answers with the checker `type_is_copy` -- under which fn_ptr
+// stays deliberately non-Copy. Fn-ptr parameters were therefore
+// planned with the move capability (`^entry: ptr` in the emitted
+// signature, `^arg` at call sites), so the callee exit cleanup
+// `!entry` freed the register value: a caller-supplied `@const`
+// vtable address, not a heap allocation. A function that merely
+// received a `fn(u64)` parameter and returned aborted with
+// signal 6 (`free(): invalid pointer`), and passing the same
+// fn-ptr binding to a callee twice trapped UseAfterMove in the
+// host. Shapes: explicit-return exit, void fall-off exit, a
+// parameter forwarded to two calls, and a parameter copied into
+// a local binding that is passed to a callee twice.
+
+@import "sa_std/task.sai"
+
+fn fp_worker(arg: u64) { }
+
+fn fp_take(entry: fn(u64)) -> u64 { return 42; }
+
+fn fp_sink(entry: fn(u64)) { }
+
+fn fp_probe(entry: fn(u64)) -> u64 { return 7; }
+
+fn fp_relay(entry: fn(u64)) -> u64 {
+    let a = fp_probe(entry);
+    let b = fp_probe(entry);
+    return a + b;
+}
+
+fn fp_relay_local(entry: fn(u64)) -> u64 {
+    let g = entry;
+    let a = fp_probe(g);
+    let b = fp_probe(g);
+    return a + b;
+}
+
+@test "fn-ptr param received and returned from"() {
+    let v = fp_take(fp_worker);
+    if v != 42 { panic(9861); };
+}
+
+@test "fn-ptr param sink falls off the end"() {
+    fp_sink(fp_worker);
+}
+
+@test "fn-ptr param forwarded to two calls"() {
+    let v = fp_relay(fp_worker);
+    if v != 14 { panic(9862); };
+}
+
+@test "fn-ptr param via local binding passed twice"() {
+    let v = fp_relay_local(fp_worker);
+    if v != 14 { panic(9863); };
+}

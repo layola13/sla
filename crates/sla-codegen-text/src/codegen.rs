@@ -445,6 +445,27 @@ impl<'c> Codegen<'c> {
         if matches!(ty, Type::UserDefined(u) if u.name == "Chan") {
             return true;
         }
+        // RUST-TEXT-FNPTR-PARAM-EXIT-RELEASE: fn-ptrs are copy
+        // values too -- the same leaf predicate carries the
+        // dedicated arm `Type::FnPtr(_) => true` (mirroring Zig
+        // lowering_rules `typeIsCopyValueLeaf`), while the
+        // CheckInfo fact answers with the checker `type_is_copy`,
+        // under which fn_ptr stays deliberately non-Copy.
+        // Planning with the non-Copy answer marked fn-ptr
+        // parameters with the move capability (`^entry: ptr` in
+        // the signature, `^arg` at call sites), so the exit
+        // cleanup `!entry` freed the register value -- a
+        // caller-supplied `@const` vtable address, not a heap
+        // allocation -- and the host aborted with signal 6
+        // (`free(): invalid pointer`) on a function that merely
+        // received a `fn(u64)` parameter and returned. Answer
+        // the leaf arm here, as for Chan above, so signature,
+        // call-argument, capture and payload planning all agree
+        // with the checker; the checker `type_is_copy`
+        // adjudication itself is untouched.
+        if matches!(ty, Type::FnPtr(_)) {
+            return true;
+        }
         self.check.type_is_copy_value(ty)
     }
 
