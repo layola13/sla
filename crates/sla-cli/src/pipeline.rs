@@ -364,6 +364,16 @@ pub fn run_frontend(
         stage_done(stderr, profile, "sla import expansion", start);
     }
 
+    // F-G5: defer desugar (defer_desugar.zig) — after import
+    // expansion, before the prunes and the checker, so no
+    // downstream stage ever sees a DeferStmt.
+    if let Err(err) = sla_ast::defer_desugar::desugar_program(&mut root) {
+        let _ = writeln!(
+            stderr,
+            "Error: failed to desugar defer statements: {err}"
+        );
+        return None;
+    }
     // Test-codegen pre-check pruning (plugin_compile.zig
     // runSlaFrontend): pruneTestsByFilter, then the syntactic
     // reachability prune — both BEFORE contract load and

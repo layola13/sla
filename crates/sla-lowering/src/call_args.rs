@@ -7,7 +7,7 @@
 
 use sla_ast::{Node, Param, Type};
 
-use crate::abi::{by_value_raw_pointer_param, is_borrow_like_type};
+use crate::abi::{by_value_raw_pointer_param, is_borrow_like_type, raw_pointer_value_type};
 use crate::release_facts::call_arg_needs_release;
 
 // ---------------------------------------------------------------------
@@ -145,7 +145,20 @@ pub fn call_arg_uses_raw_pointer_string_literal_value(arg: &Node, param: &Param)
     if !matches!(arg, Node::Literal(sla_ast::Literal::StringVal(_))) {
         return false;
     }
-    by_value_raw_pointer_param(param)
+    // F-G5/E1 (current Zig lowering_rules.zig form): a string
+    // literal has no storage whose address could be borrowed;
+    // against a raw-pointer parameter it always denotes the
+    // literal's data address — for by-value params and for the
+    // extern `&name: ptr` borrow form alike. The previous
+    // by-value-only gate sent borrow-form extern args through
+    // generic value materialization, which built a Slice cell
+    // and passed its address, so byte-keyed lookups (the
+    // sa_global_u64_* family) never matched. Move params stay
+    // excluded: a literal cannot hand over an owned buffer.
+    if param.is_move {
+        return false;
+    }
+    raw_pointer_value_type(&param.ty)
 }
 
 /// lowering_rules.zig:6252 `callArgIsCopyStructValue`.

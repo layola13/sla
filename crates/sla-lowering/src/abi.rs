@@ -261,7 +261,7 @@ pub fn peel_borrow_pointer_type(ty: &Type) -> &Type {
 }
 
 /// lowering_rules.zig:6237 `rawPointerValueType` (private there).
-fn raw_pointer_value_type(ty: &Type) -> bool {
+pub fn raw_pointer_value_type(ty: &Type) -> bool {
     match ty {
         Type::Primitive(p) => *p == Primitive::RawPtr,
         Type::Pointer(_) => true,

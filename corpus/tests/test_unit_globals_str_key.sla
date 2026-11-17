@@ -1,0 +1,30 @@
+// F-G5/E1 regression: a string literal passed to an extern
+// &ptr parameter must decay to the literal data address, so
+// byte-keyed globals written through one call site are visible
+// at every other call site. Before the fix the emitter passed
+// the address of a stack Slice cell, whose header bytes differ
+// per call site, and set/get keys never met.
+
+@import "sa_std/globals.sai"
+
+fn key_set(v: u64) {
+    let rc = sa_global_u64_set("fg5key", 6, v);
+    if rc != 0 { panic(9801); };
+}
+
+fn key_add(d: i64) -> u64 {
+    let out: u64 = 0;
+    let rc = sa_global_u64_add("fg5key", 6, d, &out);
+    if rc != 0 { panic(9802); };
+    return out;
+}
+
+@test "globals string key crosses call sites"() {
+    key_set(40);
+    let cur: u64 = 0;
+    let rc = sa_global_u64_get("fg5key", 6, &cur);
+    if rc != 0 { panic(9803); };
+    if cur != 40 { panic(9804); };
+    let nv = key_add(2);
+    if nv != 42 { panic(9805); };
+}

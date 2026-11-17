@@ -4,6 +4,7 @@
 //! owned by the lexer/ast lane. See docs/COORDINATION.md.
 
 pub mod decls;
+pub mod defer_desugar;
 pub mod exprs;
 pub mod node;
 pub mod stmts;

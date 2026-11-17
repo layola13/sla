@@ -58,7 +58,12 @@ impl<'c> Codegen<'c> {
                     self.gen_supervised_go_stmt(go)?;
                 }
             }
-            Node::DeferStmt(_) => {},
+            Node::DeferStmt(_) => {
+                return unsupported(
+                    "defer statement survived the desugar pass",
+                    "syntax_lowering.zig (internal: defer statement survived the desugar pass)",
+                )
+            }
             Node::SelectStmt(sel) => self.gen_select_stmt(sel)?,
             // A `using` declaration inside a function body only
             // scopes the checker's extension resolution (already
