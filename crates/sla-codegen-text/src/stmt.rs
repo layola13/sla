@@ -72,12 +72,7 @@ impl<'c> Codegen<'c> {
                     "codegen.zig:10700 (let_else_stmt emission)",
                 )
             }
-            Node::LetDestructureStmt(_) => {
-                return unsupported(
-                    "let-destructure statement (pattern family deferred)",
-                    "codegen.zig:11000 (let_destructure_stmt emission)",
-                )
-            }
+            Node::LetDestructureStmt(_) => self.gen_let_destructure_stmt(stmt)?,
             other => {
                 return Err(TextError::Unsupported {
                     feature: format!("statement kind {:?}", std::mem::discriminant(other)),

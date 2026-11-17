@@ -39,6 +39,7 @@ mod surface;
 mod thread_spawn;
 mod thread_spawn_emit;
 mod collect;
+mod destructure;
 mod expr;
 mod expr_if;
 mod expr_match;

@@ -1,0 +1,80 @@
+// F-1 regression: let-destructure statement codegen arm.
+// Pre-fix, the text backend rejected every `let (a, b) = value;`
+// and `let [a, ..rest] = value;` statement with
+// `let-destructure statement (pattern family deferred)` — the
+// codegen.zig genStmt let_destructure_stmt arm (registration
+// reference codegen.zig:11000) had no Rust counterpart. The arm
+// evaluates the value once, loads each component out of the
+// tuple storage at its tupleFieldLayout offset into the pattern
+// binding (through a stack cell when the storage plan marks the
+// binding addressable), and retires the value register; the
+// slice form loads elements off the array/slice base and
+// materialises the rest binding as a fresh Slice cell. Shapes
+// covered: scalar tuple from a call, aggregate (Vec) tuple from
+// a call, destructure rebind inside a loop, identifier-root
+// Copy tuple (root not reused — the checker-side FB-010 Copy
+// exemption for root REUSE is a separate registration), array
+// destructure with a rest binding, and a discard component.
+// The `let (v, closed) = ch.recv()` shape is NOT covered here:
+// in the Zig pipeline syntax_lowering emitRecvBinding binds it
+// before codegen, and the text lane's Chan method surface is a
+// separate unported batch.
+
+@import "sa_std/vec.sa"
+
+fn ld_pair() -> (u64, u64) {
+    return (40, 2);
+}
+
+fn ld_grow(v: Vec<u8>, tag: u64) -> (Vec<u8>, u64) {
+    let o: Vec<u8> = v;
+    o.push(7);
+    return (o, tag + 1);
+}
+
+@test "let destructure scalar tuple from call"() {
+    let (a, b) = ld_pair();
+    if a + b != 42 { panic(9811); };
+}
+
+@test "let destructure aggregate tuple from call"() {
+    let x: Vec<u8> = Vec::new();
+    let (y, n) = ld_grow(x, 1);
+    if len(y) != 1 { panic(9812); };
+    if n != 2 { panic(9813); };
+}
+
+@test "let destructure rebind in loop"() {
+    let x: Vec<u8> = Vec::new();
+    let n: u64 = 0;
+    let i: u64 = 0;
+    while i < 10 {
+        let (x2, n2) = ld_grow(x, i);
+        x = x2;
+        n = n2;
+        i = i + 1;
+    }
+    if len(x) != 10 { panic(9814); };
+    if n != 10 { panic(9815); };
+}
+
+@test "let destructure copy tuple root not reused"() {
+    let t = (2, 5);
+    let (x, y) = t;
+    if x + y != 7 { panic(9816); };
+}
+
+@test "let destructure array with rest"() {
+    let a: [u64; 4] = [10, 20, 30, 40];
+    let [x, y, ..rest] = a;
+    if x != 10 { panic(9817); };
+    if y != 20 { panic(9818); };
+    if rest[0] != 30 { panic(9819); };
+    if rest[1] != 40 { panic(9820); };
+}
+
+@test "let destructure discard component"() {
+    let (w, _) = (7, 8);
+    let [_, second, ..rest] = [10, 20, 30, 40];
+    if w + second + rest[0] != 57 { panic(9821); };
+}
