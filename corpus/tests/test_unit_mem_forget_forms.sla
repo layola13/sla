@@ -1,0 +1,50 @@
+// mem::forget argument forms beyond the plain String binding
+// covered by test_unit_go_forget_retire: a format temp, a Box
+// temp, an aggregate binding with an owned field, a borrow, and
+// the block-tail (expression) position. Pre-fix every form failed
+// in text codegen with `unsupported emission 'associated-target
+// call target=Some("mem") func=forget'`; the Zig form evaluates
+// the value, emits EXPAND MEM_FORGET_U64 + a plain retire, and
+// marks the root binding consumed (no drop runs).
+
+@import "sa_std/task.sai"
+
+struct ForgetAgg {
+    n: u64,
+    s: String,
+}
+
+fn forget_temp() -> u64 {
+    mem::forget(format("temp"));
+    return 3;
+}
+
+fn forget_box_temp() -> u64 {
+    mem::forget(Box::new(9));
+    return 4;
+}
+
+fn forget_agg() -> u64 {
+    let p = ForgetAgg { n: 5, s: format("agg") };
+    mem::forget(p);
+    return 5;
+}
+
+fn forget_borrow() -> u64 {
+    let s: String = format("borrowed");
+    mem::forget(&s);
+    return 6;
+}
+
+fn forget_tail() {
+    let s: String = format("tail");
+    mem::forget(s)
+}
+
+@test "mem forget argument forms"() {
+    if forget_temp() != 3 { panic(9611); };
+    if forget_box_temp() != 4 { panic(9612); };
+    if forget_agg() != 5 { panic(9613); };
+    if forget_borrow() != 6 { panic(9614); };
+    forget_tail();
+}

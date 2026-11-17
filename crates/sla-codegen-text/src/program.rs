@@ -510,6 +510,14 @@ impl<'c> Codegen<'c> {
                             "mpsc" => {
                                 out.insert("mpsc");
                             }
+                            // codegen.zig `exprNeedsMemMacros`:
+                            // mem::forget emits EXPAND
+                            // MEM_FORGET_U64, whose definition
+                            // lives in sa_std/mem.sa; without the
+                            // import the flattener traps.
+                            "mem" if call.func_name == "forget" => {
+                                out.insert("mem");
+                            }
                             "cmp" => {
                                 out.insert("cmp");
                             }

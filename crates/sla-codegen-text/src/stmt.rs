@@ -1279,6 +1279,10 @@ impl<'c> Codegen<'c> {
             return false;
         }
         if call.associated_target.is_some() {
+            // codegen.zig isVoidCall: mem::forget is void.
+            if crate::call::is_mem_forget_call(call) {
+                return true;
+            }
             // An associated call to a known void function is a
             // void call too (thread::sleep in an async fn body,
             // stage 6): resolve the callee declaration the same

@@ -503,6 +503,36 @@ impl<'c> Codegen<'c> {
         None
     }
 
+    /// codegen.zig `isMemForgetCall` arms (genCallStmt and the
+    /// genExpr associated dispatch): `mem::forget(value)`
+    /// evaluates the value, emits `EXPAND MEM_FORGET_U64 <reg>`
+    /// plus a plain `!<reg>` retire — never the emitRelease drop
+    /// cascade, the value is intentionally leaked, not dropped —
+    /// and marks the argument's root binding consumed. The
+    /// expression form returns a dummy register (the Zig returns
+    /// its return_ty_sentinel; the surface Void precedent here).
+    pub(crate) fn gen_mem_forget_call(
+        &mut self,
+        call: &sla_ast::CallExpr,
+    ) -> Result<String> {
+        if call.args.len() != 1 {
+            return Err(crate::TextError::Unsupported {
+                feature: format!(
+                    "mem::forget arity {} (expected 1)",
+                    call.args.len()
+                ),
+                zig_ref: "codegen.zig isMemForgetCall arm (genCallStmt/genExpr)",
+            });
+        }
+        let value_reg = self.gen_expr(&call.args[0])?;
+        self.ins(&format!("EXPAND MEM_FORGET_U64 {value_reg}"));
+        self.ins(&format!("!{value_reg}"));
+        if let Some(name) = root_identifier(&call.args[0]) {
+            self.mark_consumed_binding(name);
+        }
+        Ok(self.new_tmp())
+    }
+
     /// codegen.zig:14600 associated-call dispatch for the shapes
     /// the std surface does not claim: targeted Option/Result
     /// constructors (same EXPAND forms as the bare-name arms) and
@@ -515,6 +545,9 @@ impl<'c> Codegen<'c> {
         call: &sla_ast::CallExpr,
     ) -> Result<Option<String>> {
         let target = call.associated_target.as_deref().unwrap_or("");
+        if is_mem_forget_call(call) {
+            return Ok(Some(self.gen_mem_forget_call(call)?));
+        }
         if matches!(target, "Option" | "Result") {
             match call.func_name.as_str() {
                 "Some" | "Ok" | "Err" if call.args.len() == 1 => {
@@ -925,6 +958,13 @@ impl<'c> Codegen<'c> {
             }
             return Ok(());
         }
+        // Statement-position mem::forget (gen_mem_forget_call):
+        // void by Zig isVoidCall, dispatched before the method
+        // resolution below, as in the Zig genCallStmt.
+        if is_mem_forget_call(call) {
+            self.gen_mem_forget_call(call)?;
+            return Ok(());
+        }
         // Statement-position associated call to a known void
         // function (thread::sleep, stage 6): emit the bare call
         // form, as the plain known-function arm below does.
@@ -984,6 +1024,12 @@ impl<'c> Codegen<'c> {
 /// anything unrecognised becomes a plain user-defined name, which
 /// the planner treats as an opaque value — the same treatment the
 /// SAB side's `abi_prim_type` gives unknown spellings.
+/// lowering_rules.zig `isMemForgetCall`: the `mem::forget`
+/// associated call shape (target `mem`, func `forget`).
+pub(crate) fn is_mem_forget_call(call: &sla_ast::CallExpr) -> bool {
+    call.associated_target.as_deref() == Some("mem") && call.func_name == "forget"
+}
+
 pub(crate) fn abi_type_from_spelling(spelling: &str) -> Type {
     let s = spelling.trim().trim_end_matches('!').trim();
     if let Some(inner) = s.strip_prefix('*') {
