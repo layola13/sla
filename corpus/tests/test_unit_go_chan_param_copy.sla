@@ -1,0 +1,45 @@
+// F-G10 regression: a Chan<T> function parameter is a copy value
+// (the checker's leaf predicate, mirroring Zig typeIsCopyValue),
+// but the text backend's signature/call planning answered with
+// typeIsCopy, under which a Chan has no struct declaration and
+// read as non-Copy. Chan parameters were therefore planned with
+// the move capability (`^ch` in the emitted signature and at call
+// sites), so passing the same channel to a function twice -- or
+// using it after one pass -- trapped UseAfterMove 1009 in the
+// host verifier. Shapes: the same channel passed to a plain fn
+// twice with a send in between, and one channel shared by two
+// different callees before destroy.
+
+@import "sa_std/task.sai"
+
+fn poll_param(ch: Chan<u64>) -> bool { return true; }
+
+fn send_param(ch: Chan<u64>, v: u64) { ch.send(v); }
+
+@test "chan param passed twice with send between"() {
+    let ch: Chan<u64> = Chan::new(1);
+    let a = poll_param(ch);
+    if a != true { panic(9751); };
+    ch.send(5);
+    let b = poll_param(ch);
+    if b != true { panic(9752); };
+    let (v, closed) = ch.recv();
+    if v != 5 { panic(9753); };
+    if closed { panic(9754); };
+    ch.destroy();
+}
+
+@test "chan param shared by two callees"() {
+    let ch: Chan<u64> = Chan::new(2);
+    send_param(ch, 7);
+    let ok = poll_param(ch);
+    if ok != true { panic(9755); };
+    send_param(ch, 8);
+    let (x, c1) = ch.recv();
+    if x != 7 { panic(9756); };
+    if c1 { panic(9757); };
+    let (y, c2) = ch.recv();
+    if y != 8 { panic(9758); };
+    if c2 { panic(9759); };
+    ch.destroy();
+}

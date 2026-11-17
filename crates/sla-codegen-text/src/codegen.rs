@@ -430,6 +430,21 @@ impl<'c> Codegen<'c> {
     }
 
     pub(crate) fn type_is_copy_value(&self, ty: &Type) -> bool {
+        // F-G10: `Chan` handles are copy values -- the checker's
+        // leaf predicate (check_leaves.rs `is_copy_value`, mirroring
+        // Zig `typeIsCopyValue` on this arm) says so, but the
+        // CheckInfo fact answers with the checker's `typeIsCopy`,
+        // under which a Chan has no struct declaration and reads as
+        // non-Copy. Planning with the non-Copy answer marked Chan
+        // parameters with the move capability (`^ch` in the
+        // signature and at call sites), so a second use of the same
+        // channel trapped UseAfterMove 1009 in the host. Answer the
+        // leaf arm here so every planning consumer in this crate
+        // agrees with the checker; all other shapes defer to the
+        // CheckInfo fact.
+        if matches!(ty, Type::UserDefined(u) if u.name == "Chan") {
+            return true;
+        }
         self.check.type_is_copy_value(ty)
     }
 
