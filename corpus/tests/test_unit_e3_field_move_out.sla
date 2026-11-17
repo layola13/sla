@@ -1,0 +1,60 @@
+// RUST-STAGE10-SHAPE-E (E3): field-assign move-out without source
+// compensation double-frees the moved buffer (the source binding's tail
+// frees the field the destination now owns). The fix stores a fresh empty
+// value back into the source field after the move (Zig-style source
+// compensation). The vec / string / box tests FAIL on the pre-fix emitter
+// (signal 11 / signal 6) and PASS after the fix; the struct test passes
+// on both — DeepStruct fields are never freed at a binding's exit in these
+// shapes, so there is no double-free to fix and E3 deliberately does not
+// fire for them.
+@import sa_std/redis.sla
+
+fn probe_wire(a: ptr, an: u64) -> Vec<u8> {
+    let w: Vec<u8> = Vec::new();
+    w = redis_push_lit(w, a, an);
+    return w;
+}
+
+struct ProbeVecSrc { v: Vec<u8> }
+struct ProbeVecDst { v: Vec<u8> }
+
+@test "e3 vec field move-out"() {
+    let src = ProbeVecSrc { v: Vec::new() };
+    src.v = probe_wire(STR_PTR("ab"), STR_LEN("ab"));
+    let dst = ProbeVecDst { v: Vec::new() };
+    dst.v = src.v;
+    if (len(dst.v) as u64) != 2 { panic(9001); };
+}
+
+struct ProbeStrSrc { s: String }
+struct ProbeStrDst { s: String }
+
+@test "e3 string field move-out"() {
+    let s1: String = "ab";
+    let src = ProbeStrSrc { s: s1 };
+    let s0: String = "";
+    let dst = ProbeStrDst { s: s0 };
+    dst.s = src.s;
+    if (len(dst.s) as u64) != 2 { panic(9004); };
+}
+
+struct ProbeBoxSrc { b: Box<RedisValue> }
+struct ProbeBoxDst { b: Box<RedisValue> }
+
+@test "e3 box field move-out"() {
+    let src = ProbeBoxSrc { b: Box::new(redis_empty_value()) };
+    let dst = ProbeBoxDst { b: Box::new(redis_empty_value()) };
+    dst.b = src.b;
+}
+
+struct ProbeValSrc { v: RedisValue }
+struct ProbeValDst { v: RedisValue }
+
+@test "e3 struct field move-out no compensation"() {
+    let src = ProbeValSrc { v: redis_empty_value() };
+    src.v.bulk = probe_wire(STR_PTR("ab"), STR_LEN("ab"));
+    let dst = ProbeValDst { v: redis_empty_value() };
+    dst.v = src.v;
+    if (len(dst.v.bulk) as u64) != 2 { panic(9002); };
+    if redis_value_kind(&dst.v) != SA_REDIS_KIND_INVALID { panic(9003); };
+}

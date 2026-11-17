@@ -511,6 +511,304 @@ impl<'c> Codegen<'c> {
         }
     }
 
+    /// RUST-STAGE10-SHAPE-E (E3, Zig-style source compensation).
+    ///
+    /// After a field-assign move-out (`dst.f = src.g`), the source field's
+    /// storage is now owned by the destination, but nothing records the
+    /// move — the source binding's tail still frees the field, so the same
+    /// buffer is freed twice (signal 11 / double free). Store a fresh
+    /// empty value back into the source field so the tail frees the fresh
+    /// value instead.
+    ///
+    /// Fires only when all three hold: (1) the value is a FieldExpr chain
+    /// over an identifier root (the source address re-derivation is pure
+    /// address arithmetic there; a call-result root would re-emit side
+    /// effects); (2) the moved value's drop plan is one whose storage the
+    /// source tail actually frees (Buffer / BufferGrowVec / DeepVec /
+    /// DeepGrowVec / ArcPtr / RcPtr / BoxPtr — DeepStruct is deliberately
+    /// excluded: probes show the tail never frees struct fields in these
+    /// shapes, so there is no double-free to fix); (3) the target place
+    /// provably differs from the source place, and neither is a prefix of
+    /// the other (a prefix target would clobber the source address
+    /// derivation — the store overwrites an intermediate pointer the
+    /// derivation loads).
+    ///
+    /// A fresh-empty value that cannot be synthesized (recursive struct,
+    /// direct `Box<Self>` field, tuple / array / enum payload) is a loud
+    /// `TextError::Unsupported`, never a silent skip — a skipped
+    /// compensation is a live double-free.
+    pub(crate) fn emit_field_assign_move_out_compensation(
+        &mut self,
+        target: &Node,
+        value: &Node,
+        fallback_ty: &Type,
+    ) -> Result<()> {
+        let Some(value_place) = Self::field_place_path(value) else {
+            return Ok(());
+        };
+        let value_ty = self
+            .expr_type(value)
+            .unwrap_or_else(|| fallback_ty.clone());
+        if !matches!(
+            self.plan_value_drop(&value_ty),
+            crate::drop::DropPlan::Buffer
+                | crate::drop::DropPlan::BufferGrowVec
+                | crate::drop::DropPlan::DeepVec(_)
+                | crate::drop::DropPlan::DeepGrowVec(_)
+                | crate::drop::DropPlan::ArcPtr(_)
+                | crate::drop::DropPlan::RcPtr(_)
+                | crate::drop::DropPlan::BoxPtr(_)
+        ) {
+            return Ok(());
+        }
+        let distinct = match target {
+            Node::FieldExpr(_) => {
+                let Some(target_place) = Self::field_place_path(target) else {
+                    return Ok(());
+                };
+                Self::place_paths_diverge(&value_place, &target_place)
+            }
+            Node::IndexExpr(_) => {
+                // Index equality is not provable cheaply: fire only when
+                // the roots differ outright. DerefExpr targets may alias
+                // the source, so they never fire.
+                match root_identifier(target) {
+                    Some(t) => t != value_place.0,
+                    None => false,
+                }
+            }
+            _ => false,
+        };
+        if !distinct {
+            return Ok(());
+        }
+        let field = match value {
+            Node::FieldExpr(f) => f,
+            _ => return Ok(()),
+        };
+        let src_addr = self.gen_field_address(field)?;
+        let mut active: Vec<Type> = Vec::new();
+        let fresh = self.gen_fresh_empty_value(&value_ty, &mut active)?;
+        self.ins(&format!(
+            "store {}+0, {fresh} as {}",
+            src_addr.ptr,
+            type_string(&value_ty)
+        ));
+        self.emit_forget_moved_value(&fresh)?;
+        self.remember_address_projection_source(&src_addr);
+        self.emit_release(&src_addr.ptr)?;
+        Ok(())
+    }
+
+    /// RUST-STAGE10-SHAPE-E (E3): synthesize a fresh empty value of type
+    /// `ty` — a value the source binding's tail may free exactly once.
+    /// `active` is the stack of in-progress types, compared by `Type`
+    /// identity (NOT by `type_string`: that is the ABI spelling and it
+    /// collapses every composite type to "ptr" — abi.rs `abi_type_string`
+    /// — so it false-positives on e.g. `Box<RedisValue>` → `RedisValue`,
+    /// a perfectly constructible payload whose recursion runs through
+    /// `Vec`, which needs no element construction). Re-entry of the SAME
+    /// type means a recursive shape (direct `Box<Self>` field, recursive
+    /// struct) and fails loudly. Types with no fresh-empty form (tuple /
+    /// array / enum / fn-ptr / borrow / opaque struct) fail loudly as
+    /// well — never silently skipped.
+    fn gen_fresh_empty_value(
+        &mut self,
+        ty: &Type,
+        active: &mut Vec<Type>,
+    ) -> Result<String> {
+        use sla_ast::Primitive;
+        match ty {
+            Type::Primitive(p) => {
+                let reg = self.new_tmp();
+                match p {
+                    Primitive::F32 | Primitive::F64 | Primitive::Float => {
+                        self.emit_float_const(&reg, 0.0);
+                    }
+                    Primitive::VoidType => {
+                        return unsupported(
+                            "fresh-empty value for void",
+                            "RUST-STAGE10-SHAPE-E (E3)",
+                        );
+                    }
+                    _ => {
+                        self.emit_int_const(&reg, 0);
+                    }
+                }
+                Ok(reg)
+            }
+            Type::Pointer(_) => {
+                let reg = self.new_tmp();
+                self.emit_int_const(&reg, 0);
+                Ok(reg)
+            }
+            Type::UserDefined(u) => match u.name.as_str() {
+                "String" => self.gen_owned_string_literal(""),
+                "Vec" => {
+                    let reg = self.new_tmp();
+                    self.ins(&format!("EXPAND VEC_NEW {reg}"));
+                    Ok(reg)
+                }
+                "GrowVec" => {
+                    let elem = u.generics.first().cloned().ok_or_else(|| {
+                        TextError::Unsupported {
+                            feature: "fresh-empty GrowVec without element type".to_string(),
+                            zig_ref: "RUST-STAGE10-SHAPE-E (E3)",
+                        }
+                    })?;
+                    let reg = self.new_tmp();
+                    self.ins(&format!(
+                        "EXPAND GROWVEC_NEW {reg}, {}, 0",
+                        type_size(&elem).max(8)
+                    ));
+                    Ok(reg)
+                }
+                "Box" | "Rc" | "Arc" => {
+                    let inner = u.generics.first().cloned().ok_or_else(|| {
+                        TextError::Unsupported {
+                            feature: format!("fresh-empty {} without payload type", u.name),
+                            zig_ref: "RUST-STAGE10-SHAPE-E (E3)",
+                        }
+                    })?;
+                    if active.contains(ty) {
+                        return Err(TextError::Unsupported {
+                            feature: format!("fresh-empty: recursive {} payload", u.name),
+                            zig_ref: "RUST-STAGE10-SHAPE-E (E3)",
+                        });
+                    }
+                    active.push(ty.clone());
+                    let inner_res = self.gen_fresh_empty_value(&inner, active);
+                    active.pop();
+                    let inner_reg = inner_res?;
+                    let reg = self.new_tmp();
+                    let macro_name = match u.name.as_str() {
+                        "Box" => "BOX_NEW",
+                        "Rc" => "RC_NEW",
+                        _ => "ARC_NEW",
+                    };
+                    self.ins(&format!("EXPAND {macro_name} {reg}, {inner_reg}"));
+                    self.emit_forget_moved_value(&inner_reg)?;
+                    Ok(reg)
+                }
+                _ => {
+                    // Struct payload (DeepStruct constructor — E3 never
+                    // FIRES for a struct-typed value, but Box/Rc/Arc
+                    // payloads need one). Generic structs are out of
+                    // scope: field types would need substitution.
+                    if !u.generics.is_empty() {
+                        return Err(TextError::Unsupported {
+                            feature: format!(
+                                "fresh-empty: generic struct payload {}",
+                                u.name
+                            ),
+                            zig_ref: "RUST-STAGE10-SHAPE-E (E3)",
+                        });
+                    }
+                    if active.contains(ty) {
+                        return Err(TextError::Unsupported {
+                            feature: format!("fresh-empty: recursive struct {}", u.name),
+                            zig_ref: "RUST-STAGE10-SHAPE-E (E3)",
+                        });
+                    }
+                    let decl = crate::place::struct_decl_lookup(self.check, &u.name)
+                        .ok_or_else(|| TextError::Unsupported {
+                            feature: format!("fresh-empty: no struct decl for {}", u.name),
+                            zig_ref: "RUST-STAGE10-SHAPE-E (E3)",
+                        })?;
+                    if decl.is_opaque || decl.is_union {
+                        return Err(TextError::Unsupported {
+                            feature: format!("fresh-empty: opaque/union struct {}", u.name),
+                            zig_ref: "RUST-STAGE10-SHAPE-E (E3)",
+                        });
+                    }
+                    active.push(ty.clone());
+                    let reg = self.new_tmp();
+                    self.ins(&format!(
+                        "{reg} = alloc {}",
+                        crate::layout::struct_size(&decl)
+                    ));
+                    let mut result = Ok(());
+                    for field in &decl.fields {
+                        let Some((offset, field_ty)) =
+                            crate::layout::struct_field_layout(&decl, &field.name)
+                        else {
+                            result = Err(TextError::Unsupported {
+                                feature: format!(
+                                    "fresh-empty: no layout for {}",
+                                    field.name
+                                ),
+                                zig_ref: "RUST-STAGE10-SHAPE-E (E3)",
+                            });
+                            break;
+                        };
+                        match self.gen_fresh_empty_value(&field_ty, active) {
+                            Ok(fresh) => {
+                                self.ins(&format!(
+                                    "store {reg}+{offset}, {fresh} as {}",
+                                    type_string(&field_ty)
+                                ));
+                                if let Err(e) = self.emit_forget_moved_value(&fresh) {
+                                    result = Err(e);
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                result = Err(e);
+                                break;
+                            }
+                        }
+                    }
+                    active.pop();
+                    result?;
+                    Ok(reg)
+                }
+            },
+            _ => Err(TextError::Unsupported {
+                feature: format!("fresh-empty value for {}", type_string(ty)),
+                zig_ref: "RUST-STAGE10-SHAPE-E (E3)",
+            }),
+        }
+    }
+
+    /// A FieldExpr chain over an identifier root, as (root, fields
+    /// root-to-leaf). Anything else (call / index / deref root, non-field
+    /// chain) is None.
+    fn field_place_path(expr: &Node) -> Option<(String, Vec<String>)> {
+        let mut path: Vec<String> = Vec::new();
+        let mut cur = expr;
+        loop {
+            match cur {
+                Node::FieldExpr(f) => {
+                    path.push(f.field_name.clone());
+                    cur = &f.expr;
+                }
+                Node::Identifier(name) => {
+                    path.reverse();
+                    return Some((name.clone(), path));
+                }
+                _ => return None,
+            }
+        }
+    }
+
+    /// Two field places diverge when neither is a prefix of the other:
+    /// different roots, or a first differing field before either path
+    /// ends. Equal paths (self-assign) and prefix paths (the store would
+    /// clobber the source address derivation) do not diverge.
+    fn place_paths_diverge(a: &(String, Vec<String>), b: &(String, Vec<String>)) -> bool {
+        if a.0 != b.0 {
+            return true;
+        }
+        let mut i = 0;
+        while i < a.1.len() && i < b.1.len() {
+            if a.1[i] != b.1[i] {
+                return true;
+            }
+            i += 1;
+        }
+        false
+    }
+
     /// codegen.zig `genIndexAssign` vec arm for owned (non-scalar)
     /// elements: same bounds/ptr/store shape as the scalar arm,
     /// but the element word is stored as u64 (a handle/record
@@ -674,6 +972,11 @@ impl<'c> Codegen<'c> {
                 ));
                 self.finish_stored_value_after_slot_store(&val_reg, &assign.value)?;
                 self.mark_assignment_moved_source(&assign.target, &assign.value);
+                self.emit_field_assign_move_out_compensation(
+                    &assign.target,
+                    &assign.value,
+                    &field_ty,
+                )?;
                 self.emit_release(&addr.ptr)?;
                 return Ok(());
             }
@@ -689,6 +992,11 @@ impl<'c> Codegen<'c> {
                 ));
                 self.finish_stored_value_after_slot_store(&val_reg, &assign.value)?;
                 self.mark_assignment_moved_source(&assign.target, &assign.value);
+                self.emit_field_assign_move_out_compensation(
+                    &assign.target,
+                    &assign.value,
+                    &addr.elem_ty,
+                )?;
                 self.finish_index_address(&addr)?;
                 return Ok(());
             }
