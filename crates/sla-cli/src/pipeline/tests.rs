@@ -201,3 +201,256 @@
             String::from_utf8_lossy(&sink)
         );
     }
+
+    // -- LINE-AUTOMATCH-IMPL ------------------------------------------------
+    //
+    // Auto-match std imports: a name nothing defines is resolved
+    // against sla_std/automatch_index.tsv; a unique provider is
+    // imported through the ordinary machinery, an ambiguous one
+    // is a loud error, and local definitions / explicit imports
+    // always win. The mini std trees below keep the tests
+    // independent of the real std surface.
+
+    /// A one-module std tree: the index maps `mini_answer` to
+    /// sla_std/wrap/mini.sla, which declares it.
+    fn write_mini_std(tree: &TempTree) {
+        tree.write(
+            "sla_std/automatch_index.tsv",
+            "# mini index\nmini_answer\tfn\tsla_std/wrap/mini.sla\n",
+        );
+        tree.write(
+            "sla_std/wrap/mini.sla",
+            "fn mini_answer() -> i32 { return 42; }\n",
+        );
+    }
+
+    #[test]
+    fn automatch_unique_provider_imports_without_explicit_import() {
+        // Pass-after: with the index present, the call checks
+        // with no @import anywhere, the note names the matched
+        // name and its module, and the index file joins the
+        // freshness closure.
+        let tree = TempTree::new("automatch_ok");
+        write_mini_std(&tree);
+        let main = tree.write(
+            "main.sla",
+            "fn main() -> i32 { return mini_answer(); }\n",
+        );
+        let mut sink: Vec<u8> = Vec::new();
+        let frontend = run_frontend(&main, FrontendKind::Check, None, &mut sink);
+        let frontend = frontend.unwrap_or_else(|| {
+            panic!(
+                "auto-matched check must succeed; output: {}",
+                String::from_utf8_lossy(&sink)
+            )
+        });
+        let out = String::from_utf8_lossy(&sink).into_owned();
+        assert!(
+            out.contains("auto-matched 'mini_answer'"),
+            "note must name the matched name; output: {out}"
+        );
+        assert!(
+            out.contains("sla_std/wrap/mini.sla"),
+            "note must name the providing module; output: {out}"
+        );
+        assert!(
+            frontend
+                .closure
+                .iter()
+                .any(|p| p.ends_with("automatch_index.tsv")),
+            "index must join the freshness closure: {:?}",
+            frontend.closure
+        );
+
+        // Fail-before: the identical tree WITHOUT the index
+        // keeps the ordinary undefined-call failure.
+        let tree2 = TempTree::new("automatch_off");
+        tree2.write(
+            "sla_std/wrap/mini.sla",
+            "fn mini_answer() -> i32 { return 42; }\n",
+        );
+        let main2 = tree2.write(
+            "main.sla",
+            "fn main() -> i32 { return mini_answer(); }\n",
+        );
+        let mut sink2: Vec<u8> = Vec::new();
+        let frontend2 = run_frontend(&main2, FrontendKind::Check, None, &mut sink2);
+        assert!(
+            frontend2.is_none(),
+            "without the index the call must stay undefined"
+        );
+        assert!(
+            String::from_utf8_lossy(&sink2).contains("Undefined call: mini_answer"),
+            "baseline error must be the ordinary undefined call; output: {}",
+            String::from_utf8_lossy(&sink2)
+        );
+    }
+
+    #[test]
+    fn automatch_test_codegen_path() {
+        let tree = TempTree::new("automatch_test");
+        write_mini_std(&tree);
+        let main = tree.write(
+            "main.sla",
+            "@test \"t\"() {\n    if mini_answer() != 42 { panic(1); };\n}\n",
+        );
+        let mut sink: Vec<u8> = Vec::new();
+        let frontend = run_frontend(&main, FrontendKind::TestCodegen, None, &mut sink);
+        assert!(
+            frontend.is_some(),
+            "auto-match must fire on the test-codegen path too; output: {}",
+            String::from_utf8_lossy(&sink)
+        );
+    }
+
+    #[test]
+    fn automatch_compile_kind_emits_matched_module() {
+        let tree = TempTree::new("automatch_compile");
+        write_mini_std(&tree);
+        let main = tree.write(
+            "main.sla",
+            "fn main() -> i32 { return mini_answer(); }\n",
+        );
+        let out_path = tree.0.join("main.sa").to_string_lossy().into_owned();
+        let mut sink: Vec<u8> = Vec::new();
+        let text = compile_to_sa_string(
+            &main,
+            FrontendKind::Compile,
+            &CompileOptions::defaults(),
+            &out_path,
+            &mut sink,
+        );
+        let text = text.unwrap_or_else(|| {
+            panic!(
+                "compile via auto-match must succeed; output: {}",
+                String::from_utf8_lossy(&sink)
+            )
+        });
+        assert!(
+            text.contains("mini_answer"),
+            "emitted SA must carry the matched module's function:\n{text}"
+        );
+    }
+
+    #[test]
+    fn automatch_ambiguous_name_fails_loudly_with_candidates() {
+        let tree = TempTree::new("automatch_amb");
+        tree.write(
+            "sla_std/automatch_index.tsv",
+            "dup_name\tfn\tsla_std/wrap/a.sla\ndup_name\tfn\tsla_std/wrap/b.sla\n",
+        );
+        tree.write(
+            "sla_std/wrap/a.sla",
+            "fn dup_name() -> i32 { return 1; }\n",
+        );
+        tree.write(
+            "sla_std/wrap/b.sla",
+            "fn dup_name() -> i32 { return 2; }\n",
+        );
+        let main = tree.write(
+            "main.sla",
+            "fn main() -> i32 { return dup_name(); }\n",
+        );
+        let mut sink: Vec<u8> = Vec::new();
+        let frontend = run_frontend(&main, FrontendKind::Check, None, &mut sink);
+        assert!(
+            frontend.is_none(),
+            "an ambiguous auto-match must not guess a module"
+        );
+        let out = String::from_utf8_lossy(&sink).into_owned();
+        assert!(
+            out.contains("AutoMatch Error") && out.contains("'dup_name'"),
+            "the error must name the ambiguous name; output: {out}"
+        );
+        assert!(
+            out.contains("sla_std/wrap/a.sla") && out.contains("sla_std/wrap/b.sla"),
+            "the error must list both candidate modules; output: {out}"
+        );
+    }
+
+    #[test]
+    fn automatch_local_definition_wins() {
+        let tree = TempTree::new("automatch_local");
+        tree.write(
+            "sla_std/automatch_index.tsv",
+            "mini_answer\tfn\tsla_std/wrap/mini.sla\n",
+        );
+        // sla_std/wrap/mini.sla is deliberately ABSENT: any
+        // import attempt would fail loudly, so success proves
+        // the local definition won and nothing was imported.
+        let main = tree.write(
+            "main.sla",
+            "fn mini_answer() -> i32 { return 7; }\nfn main() -> i32 { return mini_answer(); }\n",
+        );
+        let mut sink: Vec<u8> = Vec::new();
+        let frontend = run_frontend(&main, FrontendKind::Check, None, &mut sink);
+        assert!(
+            frontend.is_some(),
+            "local definition must win; output: {}",
+            String::from_utf8_lossy(&sink)
+        );
+        assert!(
+            !String::from_utf8_lossy(&sink).contains("auto-matched"),
+            "no auto-match note may print when the local definition wins"
+        );
+    }
+
+    #[test]
+    fn automatch_explicit_import_wins() {
+        let tree = TempTree::new("automatch_explicit");
+        tree.write(
+            "sla_std/automatch_index.tsv",
+            "mini_answer\tfn\tsla_std/wrap/mini.sla\n",
+        );
+        // The index's module is absent from the tree; the
+        // explicit import of lib.sla provides the name, so
+        // success proves auto-match stayed out of the way.
+        tree.write("lib.sla", "fn mini_answer() -> i32 { return 9; }\n");
+        let main = tree.write(
+            "main.sla",
+            "@import \"lib.sla\"\nfn main() -> i32 { return mini_answer(); }\n",
+        );
+        let mut sink: Vec<u8> = Vec::new();
+        let frontend = run_frontend(&main, FrontendKind::Check, None, &mut sink);
+        assert!(
+            frontend.is_some(),
+            "explicit import must win; output: {}",
+            String::from_utf8_lossy(&sink)
+        );
+        assert!(
+            !String::from_utf8_lossy(&sink).contains("auto-matched"),
+            "no auto-match note may print when an explicit import provides the name"
+        );
+    }
+
+    #[test]
+    fn automatch_imports_macro_module() {
+        // SA macros live in the same index (kind=macro): a call
+        // to an imported-macro name with no @import pulls the
+        // defining .sa file into the contract load.
+        let tree = TempTree::new("automatch_macro");
+        tree.write(
+            "sla_std/automatch_index.tsv",
+            "MINI_PTR\tmacro\tsa_std/mini.sa\n",
+        );
+        tree.write(
+            "sa_std/mini.sa",
+            "[MACRO] MINI_PTR %out_ptr, %slice_reg\n    %out_ptr = copy %slice_reg\n[END_MACRO]\n",
+        );
+        let main = tree.write(
+            "main.sla",
+            "fn take(p: ptr) -> i32 { return 0; }\nfn main() -> i32 { return take(MINI_PTR(\"x\")); }\n",
+        );
+        let mut sink: Vec<u8> = Vec::new();
+        let frontend = run_frontend(&main, FrontendKind::Check, None, &mut sink);
+        assert!(
+            frontend.is_some(),
+            "macro auto-match must succeed; output: {}",
+            String::from_utf8_lossy(&sink)
+        );
+        assert!(
+            String::from_utf8_lossy(&sink).contains("auto-matched 'MINI_PTR'"),
+            "note must name the matched macro; output: {}",
+            String::from_utf8_lossy(&sink)
+        );
+    }

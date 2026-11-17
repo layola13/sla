@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""Generate the SLA auto-match std index (LINE-AUTOMATCH-IMPL).
+
+The auto-match feature lets the compiler resolve an otherwise
+unresolved name against the std surface: when exactly one std
+module declares the name, that module is imported as if the user
+had written the `@import` (see ~/workspace/sla-prelude/PLAN.md).
+
+This script builds the name -> module index from the same sources
+the thin wrappers are generated from:
+
+  * sla_std/**/*.sla   top-level `fn` / `struct` / `enum` / `trait`
+                       / `macro` / `const` / `@extern` declarations
+                       (module = "sla_std/<relpath>")
+  * sa_std/**/*.sai    `@extern` declarations
+                       (module = "sa_std/<relpath>")
+  * sa_std/**/*.sa     `[MACRO] NAME` definitions
+                       (module = "sa_std/<relpath>")
+
+Output: a deterministic TSV, one `name<TAB>kind<TAB>module` row
+per declaration, sorted by (name, module, kind). A name declared
+by two or more modules is kept as multiple rows: the ambiguity is
+data — the compiler reports it loudly at the use site instead of
+guessing. The file is shared by both SLA implementations (Zig and
+Rust); it ships inside sla_std/ so the runtime resolution that
+finds sla_std finds the index with it.
+
+Usage:
+  python3 scripts/gen_automatch_index.py \
+      [--sla-std <dir>] [--sa-std <dir>] [--out <file>]
+
+Defaults: --sla-std is this repo's sla_std/, --out is
+<sla-std>/automatch_index.tsv. --sa-std is optional; without it
+only the sla_std surface is indexed (the header records which
+roots were scanned so a partial index is never mistaken for a
+complete one).
+"""
+
+import argparse
+import os
+import re
+import sys
+
+SLA_DECL_PATTERNS = [
+    ("fn", re.compile(r"^(?:pub\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)")),
+    ("type", re.compile(r"^(?:pub\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)")),
+    ("type", re.compile(r"^(?:pub\s+)?enum\s+([A-Za-z_][A-Za-z0-9_]*)")),
+    ("type", re.compile(r"^(?:pub\s+)?trait\s+([A-Za-z_][A-Za-z0-9_]*)")),
+    ("macro", re.compile(r"^(?:pub\s+)?macro\s+([A-Za-z_][A-Za-z0-9_]*)")),
+    ("const", re.compile(r"^(?:pub\s+)?const\s+([A-Za-z_][A-Za-z0-9_]*)")),
+    ("extern", re.compile(r"^@extern\s+([A-Za-z_][A-Za-z0-9_]*)")),
+]
+SAI_EXTERN = re.compile(r"^@extern\s+([A-Za-z_][A-Za-z0-9_]*)")
+SA_MACRO = re.compile(r"^\[MACRO\]\s+([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def iter_files(root, suffixes):
+    out = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames.sort()
+        for name in sorted(filenames):
+            if name.endswith(suffixes):
+                out.append(os.path.join(dirpath, name))
+    return out
+
+
+def module_path(root, prefix, path):
+    rel = os.path.relpath(path, root).replace(os.sep, "/")
+    return prefix + "/" + rel
+
+
+def scan_sla_std(root):
+    rows = []
+    for path in iter_files(root, (".sla",)):
+        module = module_path(root, "sla_std", path)
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                for kind, pat in SLA_DECL_PATTERNS:
+                    m = pat.match(line)
+                    if m:
+                        rows.append((m.group(1), kind, module))
+                        break
+    return rows
+
+
+def scan_sa_std(root):
+    rows = []
+    for path in iter_files(root, (".sai",)):
+        module = module_path(root, "sa_std", path)
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                m = SAI_EXTERN.match(line)
+                if m:
+                    rows.append((m.group(1), "extern", module))
+    for path in iter_files(root, (".sa",)):
+        module = module_path(root, "sa_std", path)
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                m = SA_MACRO.match(line)
+                if m:
+                    rows.append((m.group(1), "macro", module))
+    return rows
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ap.add_argument("--sla-std", default=os.path.join(repo, "sla_std"))
+    ap.add_argument("--sa-std", default=None)
+    ap.add_argument("--out", default=None)
+    args = ap.parse_args()
+
+    sla_std = os.path.abspath(args.sla_std)
+    out_path = args.out or os.path.join(sla_std, "automatch_index.tsv")
+
+    rows = set()
+    scanned = []
+    rows.update(scan_sla_std(sla_std))
+    scanned.append("sla_std")
+    if args.sa_std:
+        sa_std = os.path.abspath(args.sa_std)
+        rows.update(scan_sa_std(sa_std))
+        scanned.append("sa_std")
+
+    rows = sorted(rows, key=lambda r: (r[0], r[2], r[1]))
+    names = {r[0] for r in rows}
+    ambiguous = sorted({r[0] for r in rows if sum(1 for x in rows if x[0] == r[0]) > 1})
+
+    with open(out_path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("# SLA auto-match std index -- GENERATED by scripts/gen_automatch_index.py.\n")
+        fh.write("# Do not edit by hand; regenerate after any std surface change.\n")
+        for s in scanned:
+            fh.write("# scanned: " + s + "\n")
+        fh.write("# rows=%d unique_names=%d ambiguous_names=%d\n" % (len(rows), len(names), len(ambiguous)))
+        fh.write("# columns: name<TAB>kind<TAB>module\n")
+        for name, kind, module in rows:
+            fh.write("%s\t%s\t%s\n" % (name, kind, module))
+
+    print("wrote %s: %d rows, %d unique names, %d ambiguous names"
+          % (out_path, len(rows), len(names), len(ambiguous)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

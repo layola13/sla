@@ -19,6 +19,7 @@
 //! check / test. Exit codes are the per-command codes the Zig
 //! original returns.
 
+mod automatch;
 mod cli_help;
 mod cmdio;
 mod commands;

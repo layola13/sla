@@ -293,6 +293,107 @@ pub fn run_frontend(
     };
     stage_done(stderr, profile, &format!("{prefix}parse"), start);
 
+    // Auto-match std imports (LINE-AUTOMATCH-IMPL): the stage
+    // below runs one expansion -> registration -> check pass.
+    // When its candidate scan (or an undefined-name diagnostic)
+    // finds std modules to import, it returns Retry and this
+    // loop re-runs the stage with those modules appended to the
+    // root program's imports — the same road an explicit
+    // `@import` takes, so expansion, contract load, signature
+    // registration and the freshness closure all treat the
+    // matched modules exactly like user-written imports. The
+    // loop is bounded; its last round runs with the scan
+    // disabled so the natural checker diagnostic surfaces.
+    let base_dir = Path::new(file).parent().unwrap_or_else(|| Path::new("."));
+    let loaded_index = crate::automatch::AutomatchIndex::load(base_dir);
+    let mut extra_imports: Vec<String> = Vec::new();
+    let mut round = 0usize;
+    loop {
+        let scan_enabled = round <= MAX_AUTOMATCH_ROUNDS;
+        let (index_ref, index_path) = match &loaded_index {
+            Some((index, path)) => (Some(index), Some(path.as_str())),
+            None => (None, None),
+        };
+        match run_frontend_stage(
+            file,
+            kind,
+            test_filter,
+            &root,
+            &extra_imports,
+            index_ref,
+            index_path,
+            scan_enabled,
+            profile,
+            stderr,
+        ) {
+            StageOutcome::Done(frontend) => return Some(frontend),
+            StageOutcome::Failed => return None,
+            StageOutcome::Retry(matches) => {
+                for (name, module) in &matches {
+                    let _ = writeln!(
+                        stderr,
+                        "note: auto-matched '{name}' from \"{module}\" (auto-import)"
+                    );
+                    if !extra_imports.contains(module) {
+                        extra_imports.push(module.clone());
+                    }
+                }
+                round += 1;
+            }
+        }
+    }
+}
+
+/// Bound on auto-match retry rounds (each round imports at
+/// least one new module; real programs need a handful).
+const MAX_AUTOMATCH_ROUNDS: usize = 8;
+
+enum StageOutcome {
+    Done(Frontend),
+    /// (name, module) pairs to import before re-running.
+    Retry(Vec<(String, String)>),
+    Failed,
+}
+
+/// One expansion -> contract-load -> registration -> check
+/// pass over the parsed root, with the auto-matched
+/// `extra_imports` injected at the head of the root program's
+/// declarations (where a user's own `@import` lines sit).
+#[allow(clippy::too_many_arguments)]
+fn run_frontend_stage(
+    file: &str,
+    kind: FrontendKind,
+    test_filter: Option<&str>,
+    parsed_root: &Node,
+    extra_imports: &[String],
+    index: Option<&crate::automatch::AutomatchIndex>,
+    index_path: Option<&str>,
+    scan_enabled: bool,
+    profile: bool,
+    stderr: &mut impl Write,
+) -> StageOutcome {
+    let prefix = if kind == FrontendKind::Check { "check " } else { "" };
+    let mut root = parsed_root.clone();
+    if !extra_imports.is_empty() {
+        if let Node::Program(program) = &mut root {
+            let mut decls: Vec<Node> =
+                Vec::with_capacity(program.decls.len() + extra_imports.len());
+            for path in extra_imports {
+                if !program
+                    .decls
+                    .iter()
+                    .any(|d| matches!(d, Node::ImportDecl(i) if &i.path == path))
+                {
+                    decls.push(Node::ImportDecl(sla_ast::ImportDecl {
+                        path: path.clone(),
+                    }));
+                }
+            }
+            decls.extend(program.decls.iter().cloned());
+            program.decls = decls;
+        }
+    }
+
     // Root import paths before expansion replaces them (the
     // contract loader below recurses through them).
     let root_import_paths: Vec<String> = match &root {
@@ -340,7 +441,7 @@ pub fn run_frontend(
     let mut root_flags: Vec<bool> = Vec::new();
     if matches!(kind, FrontendKind::TestCodegen | FrontendKind::Check | FrontendKind::Compile) {
         let Node::Program(parsed) = &root else {
-            return None;
+            return StageOutcome::Failed;
         };
         let start = Instant::now();
         let options = sla_plugin::sla_expand::SlaImportExpansionOptions {
@@ -361,7 +462,7 @@ pub fn run_frontend(
                     stderr,
                     "Import Error: failed to expand @import modules: {err}"
                 );
-                return None;
+                return StageOutcome::Failed;
             }
         }
         stage_done(stderr, profile, "sla import expansion", start);
@@ -375,7 +476,7 @@ pub fn run_frontend(
             stderr,
             "Error: failed to desugar defer statements: {err}"
         );
-        return None;
+        return StageOutcome::Failed;
     }
     // Test-codegen pre-check pruning (plugin_compile.zig
     // runSlaFrontend): pruneTestsByFilter, then the syntactic
@@ -423,7 +524,7 @@ pub fn run_frontend(
     }
 
     let Node::Program(program) = &root else {
-        return None;
+        return StageOutcome::Failed;
     };
 
     let start = Instant::now();
@@ -439,6 +540,15 @@ pub fn run_frontend(
             }
         }
     }
+    // Auto-matched modules join the contract load exactly like
+    // retained expanded imports (their `.sla` decls are already
+    // in the program via the injected ImportDecls; this list is
+    // what pulls their `.sai`/`.sa` contracts and macros in).
+    for path in extra_imports {
+        if !import_paths.contains(path) {
+            import_paths.push(path.clone());
+        }
+    }
     let report = match sla_parser::contract_load::load_imported_contracts(
         &import_paths,
         Path::new(file),
@@ -449,7 +559,7 @@ pub fn run_frontend(
                 stderr,
                 "Import Error: failed to load @import contracts: {err}"
             );
-            return None;
+            return StageOutcome::Failed;
         }
     };
     for func in &report.externs {
@@ -485,7 +595,7 @@ pub fn run_frontend(
                 "Type Check Error: failed to verify types: {} (error.{zig_err})",
                 diag.message
             );
-            return None;
+            return StageOutcome::Failed;
         }
     }
     // R-1 fix (all kinds) + R-2 replay note: imported macros
@@ -528,8 +638,59 @@ pub fn run_frontend(
     }
     stage_done(stderr, profile, &format!("{prefix}load contracts"), start);
 
+    // Auto-match scan (LINE-AUTOMATCH-IMPL): names the expanded
+    // program references but nothing defines — not the program
+    // itself, not an explicit import, not a builtin — are looked
+    // up in the std index. A name with exactly one providing
+    // module re-enters this stage with that module imported
+    // (StageOutcome::Retry); names with two or more providers
+    // are remembered here and reported loudly below if the
+    // checker then proves the name really is unresolved.
+    let mut ambiguous: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    if scan_enabled {
+        if let Some(index) = index {
+            let known = crate::automatch::known_names(&checker, program);
+            let candidates = crate::automatch::collect_candidates(program, &known);
+            if !candidates.is_empty() {
+                let already_imported: std::collections::HashSet<String> =
+                    import_paths.iter().cloned().collect();
+                let (new_matches, amb) =
+                    crate::automatch::plan_matches(index, &candidates, &already_imported);
+                ambiguous = amb;
+                if !new_matches.is_empty() {
+                    return StageOutcome::Retry(new_matches);
+                }
+            }
+        }
+    }
+
     let start = Instant::now();
     if let Err(diag) = checker.check_program(program) {
+        // Auto-match diagnostic path: when the checker proved a
+        // name unresolved and the index settles it, act on that
+        // instead of surfacing the bare undefined error — two or
+        // more providers are a loud ambiguity error naming the
+        // candidate modules; a unique provider the scan did not
+        // reach retries with the module imported.
+        if scan_enabled {
+            if let Some(index) = index {
+                if let Some(name) = crate::automatch::undefined_name(&diag) {
+                    if let Some(modules) = ambiguous.get(&name) {
+                        let _ = writeln!(
+                            stderr,
+                            "AutoMatch Error: '{name}' is declared by multiple std modules ({}); add an explicit @import to choose one",
+                            modules.join(", ")
+                        );
+                        return StageOutcome::Failed;
+                    }
+                    let modules = index.modules_for(&name);
+                    if modules.len() == 1 && !import_paths.contains(&modules[0]) {
+                        return StageOutcome::Retry(vec![(name, modules[0].clone())]);
+                    }
+                }
+            }
+        }
         // Zig checkProgram returns the checker's own error and the
         // command layer prints its name verbatim; the Rust diagnostic
         // kinds carry the same identifiers (the message text already
@@ -541,7 +702,7 @@ pub fn run_frontend(
             "Type Check Error: failed to verify types: {} (error.{zig_err})",
             diag.message
         );
-        return None;
+        return StageOutcome::Failed;
     }
     stage_done(stderr, profile, &format!("{prefix}type check"), start);
 
@@ -552,8 +713,16 @@ pub fn run_frontend(
         Some(dir) => closure.push(dir.join("sa.mod").to_string_lossy().into_owned()),
         None => closure.push("sa.mod".to_string()),
     }
+    // The auto-match index joins the freshness closure: a std
+    // update that changes the index must invalidate artifacts
+    // whose compilation the index could have steered. (Matched
+    // module files already join through expanded_modules and
+    // the contract closure above, like explicit imports.)
+    if let Some(index_path) = index_path {
+        closure.push(index_path.to_string());
+    }
 
-    Some(Frontend {
+    StageOutcome::Done(Frontend {
         root,
         checker,
         closure,
