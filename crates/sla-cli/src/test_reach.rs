@@ -375,6 +375,24 @@ impl<'a> Collector<'a> {
             Node::UnsafeExpr(unsafe_expr) => self.collect_block(&unsafe_expr.body, caller),
             Node::AwaitExpr(await_expr) => self.collect_expr(&await_expr.expr, caller),
             Node::TryExpr(try_expr) => self.collect_expr(&try_expr.expr, caller),
+            // Zig plugin_reachability.zig:2647-2657: the spawn /
+            // defer call and the select arms' receive calls and
+            // bodies are reachable from the enclosing callable.
+            // Without these arms a function referenced only by a
+            // `go` inside a test body was pruned before checking
+            // (Undefined call at the spawn site).
+            Node::GoStmt(go_stmt) => self.collect_expr(&go_stmt.call, caller),
+            Node::DeferStmt(defer_stmt) => {
+                self.collect_expr(&defer_stmt.call, caller)
+            }
+            Node::SelectStmt(select) => {
+                for arm in &select.arms {
+                    if let Some(recv) = &arm.recv {
+                        self.collect_expr(recv, caller);
+                    }
+                    self.collect_block(&arm.body, caller);
+                }
+            }
             Node::BinaryExpr(bin) => {
                 self.collect_expr(&bin.left, caller);
                 self.collect_expr(&bin.right, caller);
