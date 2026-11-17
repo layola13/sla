@@ -51,10 +51,14 @@ impl<'a> Parser<'a> {
             Tag::KeywordGo => {
                 // `go` in expression position (let bindings,
                 // returns): the spawn is an expression whose
-                // value is the join handle.
+                // value is the join handle. F-G2: the same
+                // contextual `supervised` rule as the statement
+                // position (parse_go_stmt).
                 self.advance();
+                let supervised = self.eat_contextual_supervised();
                 let call = self.parse_expr(6)?;
                 Ok(Node::GoStmt(sla_ast::stmts::GoStmt {
+                    supervised,
                     call: Box::new(call),
                 }))
             }

@@ -303,6 +303,12 @@ impl<'c> Codegen<'c> {
                 Ok(reg)
             }
             Node::UnsafeExpr(ue) => self.gen_block_tail_value_into_fresh(&ue.body),
+            // F-G2: a supervised spawn in expression position
+            // emits the spawn sequence (go_spawn.rs) and yields
+            // the handle. Plain `go` falls through to the
+            // catch-all, keeping the F-3 unsupported signature
+            // byte-identical.
+            Node::GoStmt(go) if go.supervised => self.gen_supervised_go_expr(go),
             other => Err(TextError::Unsupported {
                 feature: format!("expression kind {:?}", expr_kind_name(other)),
                 zig_ref: "codegen.zig:12824 (genExpr)",

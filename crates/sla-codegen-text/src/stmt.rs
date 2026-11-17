@@ -48,8 +48,15 @@ impl<'c> Codegen<'c> {
             // the runtime batch; the check-level slice passes the
             // statements through scope-only so unrelated codegen
             // fixtures keep compiling (full lowering is R-4
-            // jurisdiction).
-            Node::GoStmt(_) | Node::DeferStmt(_) | Node::SelectStmt(_) => {},
+            // jurisdiction). F-G2 exception: a supervised spawn
+            // lowers for real (go_spawn.rs); plain `go` keeps the
+            // pass-through byte-identically.
+            Node::GoStmt(go) => {
+                if go.supervised {
+                    self.gen_supervised_go_stmt(go)?;
+                }
+            }
+            Node::DeferStmt(_) | Node::SelectStmt(_) => {},
             // A `using` declaration inside a function body only
             // scopes the checker's extension resolution (already
             // done); it emits nothing, exactly as the SAB

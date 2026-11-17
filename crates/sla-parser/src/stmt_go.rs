@@ -20,11 +20,30 @@ use crate::error::{ParseError, ParseErrorKind};
 use crate::parser::Parser;
 
 impl<'a> Parser<'a> {
+    /// F-G2 contextual `supervised` marker (Zig parser.zig
+    /// parseGoExpr): directly after `go`, the identifier
+    /// `supervised` is consumed as the supervised-spawn flag
+    /// only when the token after it is another identifier (the
+    /// callee). `go supervised(...)` therefore stays a plain
+    /// spawn of a function named `supervised`.
+    pub(crate) fn eat_contextual_supervised(&mut self) -> bool {
+        if self.peek() != Tag::Identifier || self.cur_text() != "supervised" {
+            return false;
+        }
+        if self.peek2() != Tag::Identifier {
+            return false;
+        }
+        self.advance();
+        true
+    }
+
     pub fn parse_go_stmt(&mut self) -> Result<Node, ParseError> {
         self.expect(Tag::KeywordGo)?;
+        let supervised = self.eat_contextual_supervised();
         let call = self.parse_expr(0)?;
         self.expect(Tag::Semicolon)?;
         Ok(Node::GoStmt(GoStmt {
+            supervised,
             call: Box::new(call),
         }))
     }

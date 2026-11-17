@@ -106,6 +106,12 @@ pub struct ReleaseStmt {
 /// callee, at most one argument, no borrow payloads).
 #[derive(Debug, Clone, PartialEq)]
 pub struct GoStmt {
+    /// F-G2: `go supervised` marker (Zig ast.zig GoExpr
+    /// `.supervised`): the spawn runs under the runtime trap-sink
+    /// trampoline via `sa_task_spawn_supervised` instead of
+    /// `sa_task_spawn`. Contextual: only set when `supervised`
+    /// is followed by another identifier (the callee).
+    pub supervised: bool,
     pub call: Box<Node>,
 }
 

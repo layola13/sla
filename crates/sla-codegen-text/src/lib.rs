@@ -46,6 +46,7 @@ mod expr_match;
 mod extern_macro;
 mod format;
 mod func;
+mod go_spawn;
 mod agg_literal;
 mod into;
 mod layout;

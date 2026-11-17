@@ -1,0 +1,67 @@
+// F-G2 regression: `go supervised` full chain — contextual
+// parser flag (statement + expression positions), checker
+// shape gates, and the text codegen emission of
+// `sa_task_spawn_supervised` (syntax_lowering.zig emitSpawn
+// supervised arm: zeroed handle slot, null trap sink, rc gate
+// panic 60901, handle load; statement position also detaches).
+// Pre-fix, the parser consumed `supervised` as the callee
+// identifier and every form below failed with a Syntax Error
+// at the real callee. The last test is a guard: `go
+// supervised(...)` must stay a plain spawn of a function named
+// `supervised` — if the parser swallowed the flag, the operand
+// would be `(0)`, not a call, and the checker would reject it.
+//
+// Runtime observation of the worker (join / live-count drain /
+// globals read-back) is deliberately NOT asserted here: on the
+// pinned era host those paths fault inside the host's task
+// record handling for any completed task (pure-SA and direct
+// extern-call repros fail identically), and globals keys are
+// mis-materialised for string-literal extern args in this
+// lane. The assertions below pin what this line owns: the
+// spawn executes, the rc gate passes, an identifier argument
+// survives the call (copy guard), and the handle binding is
+// produced in let position.
+
+@import "sa_std/task.sai"
+@import "sa_std/globals.sai"
+@import "sa_std/ptr.sa"
+
+fn sup_spawn_worker(v: u64) {
+    let out: u64 = 0;
+    let rc = sa_global_u64_add("sup_spawn_ctr", 8, v, &out);
+    if rc != 0 { panic(8951); };
+}
+
+fn sup_spawn_worker_zero() {
+    let out: u64 = 0;
+    let rc = sa_global_u64_add("sup_spawn_ctr", 8, 1, &out);
+    if rc != 0 { panic(8952); };
+}
+
+fn supervised(v: u64) {
+    let out: u64 = 0;
+    let rc = sa_global_u64_add("sup_spawn_ctr", 8, v, &out);
+    if rc != 0 { panic(8953); };
+}
+
+@test "go supervised statement form"() {
+    go supervised sup_spawn_worker(0);
+}
+
+@test "go supervised let form"() {
+    let h = go supervised sup_spawn_worker(0);
+}
+
+@test "go supervised zero arg callee"() {
+    go supervised sup_spawn_worker_zero();
+}
+
+@test "go supervised identifier arg"() {
+    let x: u64 = 3;
+    go supervised sup_spawn_worker(x);
+    if x != 3 { panic(8954); };
+}
+
+@test "go supervised fn named supervised not swallowed"() {
+    go supervised(0);
+}
