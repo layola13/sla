@@ -802,6 +802,9 @@ impl<'c> Codegen<'c> {
              @sla_future_ready_poll(&data_slot: ptr, &ctx_slot: ptr, &out_poll_slot: ptr):\n\
              L_ENTRY:\n\
              \x20   EXPAND FUTURE_READY_SET_POLL_STATE out_poll_slot, data_slot\n\
+             \x20   !data_slot\n\
+             \x20   !ctx_slot\n\
+             \x20   !out_poll_slot\n\
              \x20   return\n\
              \n\
              @sla_future_defer_ready_poll(&data_slot: ptr, &ctx_slot: ptr, &out_poll_slot: ptr):\n\
@@ -829,6 +832,9 @@ impl<'c> Codegen<'c> {
              L_DEFER_READY_DONE:\n\
              \x20   !defer_ready_is_initial\n\
              \x20   !defer_ready_stage\n\
+             \x20   !data_slot\n\
+             \x20   !ctx_slot\n\
+             \x20   !out_poll_slot\n\
              \x20   return\n\
              \n\
              @sla_future_join2_poll(&data_slot: ptr, &ctx_slot: ptr, &out_poll_slot: ptr):\n\
@@ -841,6 +847,9 @@ impl<'c> Codegen<'c> {
              \x20   !join2_poll_value\n\
              \x20   !join2_poll_tag\n\
              \x20   !join2_poll_tmp\n\
+             \x20   !data_slot\n\
+             \x20   !ctx_slot\n\
+             \x20   !out_poll_slot\n\
              \x20   return\n\
              \n\
              @sla_future_select2_poll(&data_slot: ptr, &ctx_slot: ptr, &out_poll_slot: ptr):\n\
@@ -853,6 +862,9 @@ impl<'c> Codegen<'c> {
              \x20   !select2_poll_value\n\
              \x20   !select2_poll_tag\n\
              \x20   !select2_poll_tmp\n\
+             \x20   !data_slot\n\
+             \x20   !ctx_slot\n\
+             \x20   !out_poll_slot\n\
              \x20   return\n\
              \n",
         );

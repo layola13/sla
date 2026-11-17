@@ -113,6 +113,9 @@ impl<'c> Codegen<'c> {
         }
         self.ins("!async_done");
         self.ins("!async_stage");
+        self.ins("!data_slot");
+        self.ins("!ctx_slot");
+        self.ins("!out_poll_slot");
         self.ins("return");
         self.w("\n");
         Ok(())
@@ -236,6 +239,9 @@ impl<'c> Codegen<'c> {
         }
         self.ins("!async_done");
         self.ins("!async_stage");
+        self.ins("!data_slot");
+        self.ins("!ctx_slot");
+        self.ins("!out_poll_slot");
         self.ins("return");
         self.w("\n");
         Ok(())
@@ -454,6 +460,9 @@ impl<'c> Codegen<'c> {
              \x20   !async_loop_awaiting\n\
              \x20   !async_loop_done\n\
              \x20   !async_loop_stage\n\
+             \x20   !data_slot\n\
+             \x20   !ctx_slot\n\
+             \x20   !out_poll_slot\n\
              \x20   return\n\n",
         );
         Ok(())

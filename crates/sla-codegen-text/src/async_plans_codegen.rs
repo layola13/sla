@@ -303,6 +303,9 @@ impl<'c> Codegen<'c> {
              L_ASYNC_SINGLE_AWAIT_DONE:\n\
              \x20   !async_done\n\
              \x20   !async_stage\n\
+             \x20   !data_slot\n\
+             \x20   !ctx_slot\n\
+             \x20   !out_poll_slot\n\
              \x20   return\n\n",
             &[("%BIND%", &plan.binding_name)],
         ));
@@ -498,6 +501,9 @@ impl<'c> Codegen<'c> {
              \x20   !async_poll_first\n\
              \x20   !async_done\n\
              \x20   !async_stage\n\
+             \x20   !data_slot\n\
+             \x20   !ctx_slot\n\
+             \x20   !out_poll_slot\n\
              \x20   return\n\n",
         );
         Ok(())
@@ -595,6 +601,9 @@ impl<'c> Codegen<'c> {
              L_ASYNC_JOIN2_AWAIT_DONE:\n\
              \x20   !async_done\n\
              \x20   !async_stage\n\
+             \x20   !data_slot\n\
+             \x20   !ctx_slot\n\
+             \x20   !out_poll_slot\n\
              \x20   return\n\n",
         );
         Ok(())
