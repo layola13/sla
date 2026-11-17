@@ -85,9 +85,19 @@ impl<'c> Codegen<'c> {
             });
         }
 
-        // Entry: the callee's fn-ptr vtable address, passed to
-        // the raw `*entry` parameter in deref form — the exact
-        // shape a hand-written direct call takes.
+        // Entry: the callee's fn-ptr vtable address. The raw
+        // `*entry` parameter of sa_task_spawn{,_supervised}
+        // must receive the function pointer stored in the
+        // vtable's call slot, not the vtable address itself:
+        // passing `*` of the vtable-address register starts the
+        // goroutine at a data address and the process faults
+        // later at join/recv (LINE-SPAWN-ENTRY; proven by the
+        // LINE-MONITOR SA-level mutation and by the Zig
+        // emitter's SA for both the named-function form and
+        // the local fn-ptr binding form, which both load the
+        // call slot first). The load+cast chain is therefore
+        // materialised just before the spawn call below, for
+        // both entry shapes.
         //
         // F-G8: a named function has no runtime register, so its
         // vtable address is materialized into a fresh temp. A
@@ -176,18 +186,35 @@ impl<'c> Codegen<'c> {
             sink_ctx = Some(sc);
         }
 
+        // Materialise the entry function pointer out of the
+        // vtable call slot (offset 0, ptr width, cast to ptr -
+        // the exact chain in the Zig emitter's SA and in the
+        // LINE-MONITOR mutation): loaded = load {entry}+0 as
+        // ptr; entry_fn = loaded as ptr; !loaded, then the
+        // spawn takes *entry_fn and entry_fn is retired first
+        // after the call. For a local fn-ptr binding the
+        // binding register itself stays live (it is re-spawned
+        // per loop iteration); only the loaded/cast temps are
+        // retired here.
+        let entry_loaded = self.new_tmp();
+        self.ins(&format!("{entry_loaded} = load {entry}+0 as ptr"));
+        let entry_fn = self.new_tmp();
+        self.ins(&format!("{entry_fn} = {entry_loaded} as ptr"));
+        self.emit_release(&entry_loaded)?;
+
         let rc = self.new_tmp();
         if supervised {
             let sk = sink.as_ref().expect("supervised sink");
             let sc = sink_ctx.as_ref().expect("supervised sink ctx");
             self.ins(&format!(
-                "{rc} = call @sa_task_spawn_supervised(*{entry}, {arg_display}, *{sk}, *{sc}, &{slot})"
+                "{rc} = call @sa_task_spawn_supervised(*{entry_fn}, {arg_display}, *{sk}, *{sc}, &{slot})"
             ));
         } else {
             self.ins(&format!(
-                "{rc} = call @sa_task_spawn(*{entry}, {arg_display}, &{slot})"
+                "{rc} = call @sa_task_spawn(*{entry_fn}, {arg_display}, &{slot})"
             ));
         }
+        self.emit_release(&entry_fn)?;
         for reg in &release_after {
             self.emit_release(reg)?;
         }
