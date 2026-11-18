@@ -126,6 +126,9 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
             .get(&sla_lowering::node_key(call))
             .map(Vec::as_slice)
     }
+    fn call_arg_array_to_slice_borrow(&self, arg: &Node) -> bool {
+        self.checker.is_array_to_slice_borrow_arg(arg)
+    }
     fn expr_type_by_key(&self, key: usize) -> Option<&sla_ast::Type> {
         self.checker.expr_types.get(&key)
     }

@@ -30,10 +30,10 @@
 //! checker (check_call.rs) — see D-C21 in
 //! docs/divergences/checker.md.
 //!
-//! Deliberately NOT here (registered in checker.md): the
-//! borrow-array-to-slice coercion side table (this crate has
-//! no `array_to_slice_borrow_args` table; the coercion is not
-//! recognized on method paths either). The name-keyed std
+//! The borrow-array-to-slice coercion and its
+//! `array_to_slice_borrow_args` side table ARE here (ported by
+//! LINE-ARRAY2SLICE, closing that part of D-C21): see
+//! `plain_call_arg_matches`. The name-keyed std
 //! leaf cascade and the static-constructor leaves that used
 //! to be listed here were ported by the R-1 line into
 //! check_leaves.rs / check_receiver_leaves.rs (+2).
@@ -41,9 +41,10 @@
 use crate::checker::{Checker, FuncSig, ParamSig};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::types_util::{
-    concrete_type_name, dyn_trait_name, is_numeric_type, is_string_type,
-    node_key_of, peel_borrow_pointer, type_desc, type_tag_name,
-    types_equal, types_structurally_equal,
+    can_coerce_borrow_array_to_borrow_slice, concrete_type_name,
+    dyn_trait_name, is_numeric_type, is_string_type, node_key_of,
+    peel_borrow_pointer, type_desc, type_tag_name, types_equal,
+    types_structurally_equal,
 };
 use sla_ast::exprs::{CallExpr, Literal};
 use sla_ast::node::Node;
@@ -310,13 +311,12 @@ impl Checker {
     // -- the shared signature checker (method paths) ----------------
 
     /// Mirrors Zig `plainCallArgMatches`: the unwrapped-borrow
-    /// equality, the string-literal-to-String case, and the
-    /// borrow-expression-to-pointer-parameter case. (Zig's
-    /// borrow-array-to-slice coercion is not recognized here: this
-    /// crate carries no `array_to_slice_borrow_args` side table —
-    /// D-C21.)
+    /// equality, the string-literal-to-String case, the
+    /// borrow-array-to-slice coercion (which also records the
+    /// argument in `array_to_slice_borrow_args`, like Zig), and
+    /// the borrow-expression-to-pointer-parameter case.
     fn plain_call_arg_matches(
-        &self,
+        &mut self,
         param_ty: &Type,
         arg: &Node,
         arg_ty: &Type,
@@ -327,6 +327,12 @@ impl Checker {
         if matches!(arg, Node::Literal(Literal::StringVal(_)))
             && is_string_type(param_ty)
         {
+            return true;
+        }
+        if matches!(arg, Node::BorrowExpr(_))
+            && can_coerce_borrow_array_to_borrow_slice(param_ty, arg_ty)
+        {
+            self.record_array_to_slice_borrow_arg(arg);
             return true;
         }
         if !matches!(arg, Node::BorrowExpr(_)) {
@@ -716,7 +722,7 @@ impl Checker {
 /// both signature checkers; the plain path consults it only from the
 /// borrow-typed-parameter arm, matching that arm's Zig verdicts.
 pub fn plain_call_arg_matches_pub(
-    checker: &Checker,
+    checker: &mut Checker,
     param_ty: &Type,
     arg: &Node,
     arg_ty: &Type,

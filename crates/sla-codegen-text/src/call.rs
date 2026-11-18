@@ -138,8 +138,9 @@ impl<'c> Codegen<'c> {
 
 
     /// codegen.zig:9860 `genCallArgFromMaterializationPlan`. The
-    /// Value and AutoBorrow arms are ported; every other plan kind
-    /// belongs to a deferred family and fails loudly.
+    /// Value, AutoBorrow and ArrayToSliceBorrow arms are ported;
+    /// every other plan kind belongs to a deferred family and
+    /// fails loudly.
     pub(crate) fn gen_call_arg_from_materialization_plan(
         &mut self,
         arg: &Node,
@@ -416,11 +417,92 @@ impl<'c> Codegen<'c> {
                     consume_reg: None,
                 })
             }
+            CallArgMaterializationKind::ArrayToSliceBorrow => {
+                self.gen_array_borrow_to_slice_arg(arg)
+            }
             kind => Err(crate::TextError::Unsupported {
                 feature: format!("call arg materialization kind {kind:?}"),
                 zig_ref: "codegen.zig:9860 (genCallArgFromMaterializationPlan)",
             }),
         }
+    }
+
+    /// codegen.zig `genArrayBorrowToSliceArg`: materialize a
+    /// slice view of the borrowed array and pass a borrow of the
+    /// view slot; the array's base register is released after
+    /// the call only when the borrowed expression's result needs
+    /// release (the view itself is a stack slot, forgotten with
+    /// the frame like Zig's).
+    pub(crate) fn gen_array_borrow_to_slice_arg(
+        &mut self,
+        arg: &Node,
+    ) -> Result<LoweredCallArg> {
+        let slice_reg = self.new_tmp();
+        let base_release_reg = self.gen_array_borrow_to_slice_into(&slice_reg, arg)?;
+        Ok(LoweredCallArg {
+            reg: format!("&{slice_reg}"),
+            release_after_call: false,
+            release_reg: base_release_reg,
+            consume_reg: None,
+        })
+    }
+
+    /// codegen.zig `genArrayBorrowToSliceInto`: emit the slice
+    /// view of `arg`'s array operand into `target` (a stack
+    /// Slice slot); returns the base source register when it
+    /// must be released after the call, else None.
+    fn gen_array_borrow_to_slice_into(
+        &mut self,
+        target: &str,
+        arg: &Node,
+    ) -> Result<Option<String>> {
+        let Node::BorrowExpr(b) = arg else {
+            return unsupported(
+                "array-to-slice borrow of a non-borrow argument",
+                "codegen.zig (genArrayBorrowToSliceInto)",
+            );
+        };
+        let inner = &b.expr;
+        let inner_ty = self.expr_type(inner).ok_or_else(|| {
+            crate::TextError::MissingType {
+                context: "array-to-slice borrow operand type".to_string(),
+            }
+        })?;
+        let Type::Array(arr) = &inner_ty else {
+            return unsupported(
+                "array-to-slice borrow of a non-array operand",
+                "codegen.zig (genArrayBorrowToSliceInto)",
+            );
+        };
+        let arr_len = arr.len;
+        let base_source_reg = self.gen_expr(inner)?;
+        let base_reg = if let Node::Identifier(name) = &**inner {
+            if self.global_const_bindings.contains(name) {
+                let addr_reg = self.new_tmp();
+                self.ins(&format!("{addr_reg} = &{base_source_reg}"));
+                addr_reg
+            } else {
+                base_source_reg.clone()
+            }
+        } else {
+            base_source_reg.clone()
+        };
+        let len_reg = self.new_tmp();
+        self.emit_int_const(&len_reg, arr_len as i64);
+        self.stack_alloc_bindings.insert(target.to_string());
+        self.ins(&format!("{target} = stack_alloc Slice_SIZE"));
+        self.ins(&format!(
+            "EXPAND SLICE_NEW {target}, {base_reg}, {len_reg}"
+        ));
+        self.emit_release(&len_reg)?;
+        if base_reg != base_source_reg {
+            self.emit_release(&base_reg)?;
+        }
+        Ok(if sla_lowering::expr_result_needs_release(inner) {
+            Some(base_source_reg)
+        } else {
+            None
+        })
     }
 
     /// Shared argument planning for expr/statement calls to a known

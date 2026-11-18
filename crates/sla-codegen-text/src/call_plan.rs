@@ -74,7 +74,10 @@ impl<'c> Codegen<'c> {
             abi_borrow_auto_borrow: param
                 .map(|p| abi_param_needs_borrow_arg(p.is_borrow, &p.ty))
                 .unwrap_or(false),
-            array_to_slice_borrow: false,
+            // codegen.zig:10016: the checker's side table, or the
+            // structural macro-inline fallback below.
+            array_to_slice_borrow: self.check.call_arg_array_to_slice_borrow(arg)
+                || self.macro_array_to_slice_borrow_arg(arg, param),
             dyn_borrow_trait_name: None,
             copy_struct_value: call_arg_is_copy_struct_value(
                 arg,
@@ -145,5 +148,38 @@ impl<'c> Codegen<'c> {
             plan
         };
         self.gen_call_arg_from_materialization_plan(arg, param, &plan)
+    }
+
+    /// codegen.zig:9848 `macroArrayToSliceBorrowArg`: inside a
+    /// macro inline the checker never visited the body call, so
+    /// the borrow-array -> slice coercion is recognized
+    /// structurally — a borrow of an identifier whose macro-arg
+    /// type is an array, passed to a borrow-of-slice parameter.
+    pub(crate) fn macro_array_to_slice_borrow_arg(
+        &self,
+        arg: &Node,
+        param: Option<&Param>,
+    ) -> bool {
+        if self.macro_inline_depth == 0 {
+            return false;
+        }
+        let Node::BorrowExpr(b) = arg else {
+            return false;
+        };
+        let Node::Identifier(name) = &*b.expr else {
+            return false;
+        };
+        let Some(param) = param else {
+            return false;
+        };
+        if (!param.is_borrow && !matches!(*param.ty, Type::Borrow(_)))
+            || crate::place::slice_element_type(&param.ty).is_none()
+        {
+            return false;
+        }
+        let Some(inner_ty) = self.macro_arg_type_for_name(name) else {
+            return false;
+        };
+        matches!(inner_ty, Type::Array(_))
     }
 }

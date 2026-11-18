@@ -271,6 +271,12 @@ pub struct Checker {
     /// keyed by the call node (Zig keys by the `*const CallExpr`
     /// sub-object; the containing node address is the Rust analogue).
     pub macro_call_try_cleanups: HashMap<usize, Vec<String>>,
+    /// `array_to_slice_borrow_args` (Zig type_checker.zig:172):
+    /// call-argument nodes accepted by the borrow-array -> slice
+    /// coercion (`canCoerceBorrowArrayToBorrowSlice`), keyed like
+    /// the other side tables. The emitter materializes a slice
+    /// view for exactly these arguments.
+    pub array_to_slice_borrow_args: std::collections::HashSet<usize>,
     /// `dyn_box_coercions` / `dyn_rc_coercions`: value node -> trait
     /// name for `Box<dyn Trait>` / `Rc<dyn Trait>` let coercions.
     pub dyn_box_coercions: HashMap<usize, String>,
@@ -353,6 +359,7 @@ impl Checker {
             match_arm_exit_cleanups: HashMap::new(),
             await_cleanups: HashMap::new(),
             macro_call_try_cleanups: HashMap::new(),
+            array_to_slice_borrow_args: std::collections::HashSet::new(),
             dyn_box_coercions: HashMap::new(),
             dyn_rc_coercions: HashMap::new(),
             loop_ctx: Vec::new(),
@@ -366,6 +373,20 @@ impl Checker {
             current_self_ty: None,
             current_func: None,
         }
+    }
+
+    /// Record a call argument accepted by the borrow-array ->
+    /// slice coercion (Zig: `array_to_slice_borrow_args.put`).
+    pub fn record_array_to_slice_borrow_arg(&mut self, arg: &Node) {
+        self.array_to_slice_borrow_args
+            .insert(types_util::node_key_of(arg));
+    }
+
+    /// Whether the checker accepted this call argument by the
+    /// borrow-array -> slice coercion.
+    pub fn is_array_to_slice_borrow_arg(&self, arg: &Node) -> bool {
+        self.array_to_slice_borrow_args
+            .contains(&types_util::node_key_of(arg))
     }
 
     // -- registration (mirrors the register* API of TypeChecker) -----

@@ -178,6 +178,15 @@ pub trait CheckInfo {
         None
     }
 
+    /// `tc.array_to_slice_borrow_args`: the checker accepted this
+    /// call argument by the borrow-array -> slice coercion, so the
+    /// emitter must materialize a slice view of the array
+    /// (stack_alloc Slice_SIZE + SLICE_NEW) instead of passing the
+    /// raw array borrow.
+    fn call_arg_array_to_slice_borrow(&self, _arg: &Node) -> bool {
+        false
+    }
+
     /// `tc.expr_types` by precomputed node key (the macro-arg
     /// table stores arg nodes by key, mirroring Zig's
     /// pointer-keyed `macro_arg_exprs`).
@@ -249,6 +258,7 @@ pub struct MapCheckInfo {
     pub macros: HashSet<String>,
     pub macro_decls: HashMap<String, MacroDecl>,
     pub macro_call_try_cleanups: HashMap<usize, Vec<String>>,
+    pub array_to_slice_borrow_args: std::collections::HashSet<usize>,
     pub aliases: HashMap<String, String>,
     pub resolved_symbols: HashMap<usize, String>,
     /// Struct names whose values are Copy even though the field walk
@@ -329,6 +339,11 @@ impl MapCheckInfo {
         names: Vec<String>,
     ) -> &mut Self {
         self.macro_call_try_cleanups.insert(node_key(call), names);
+        self
+    }
+
+    pub fn add_array_to_slice_borrow_arg(&mut self, arg: &Node) -> &mut Self {
+        self.array_to_slice_borrow_args.insert(node_key(arg));
         self
     }
 
@@ -424,6 +439,10 @@ impl CheckInfo for MapCheckInfo {
         self.macro_call_try_cleanups
             .get(&node_key(call))
             .map(Vec::as_slice)
+    }
+
+    fn call_arg_array_to_slice_borrow(&self, arg: &Node) -> bool {
+        self.array_to_slice_borrow_args.contains(&node_key(arg))
     }
 
     fn expr_type_by_key(&self, key: usize) -> Option<&Type> {

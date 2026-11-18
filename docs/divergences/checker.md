@@ -438,6 +438,14 @@ INT-2 线测试的文案 pin 外全绿（见 D-C18 跨线注记）。
   `unsafe_depth` 计数器已入 checker（UnsafeExpr 臂维护），
   关联形与裸名形 read_volatile 均按现头口径镜像；余两件
   （dyn_borrow_args 记录面、array_to_slice 强转）仍在册。
+  **【LINE-ARRAY2SLICE 销账 2026-11-18】**：第二件已销——
+  `array_to_slice_borrow_args` 侧表已入 checker，
+  `plainCallArgMatches` 的 borrow-array→slice 强转
+  （`canCoerceBorrowArrayToBorrowSlice`）已镜像于
+  check_method.rs（plain 与方法两路共用、接受即记录），
+  发射侧经 CheckInfo 事实 + 宏内联结构谓词接通
+  ArrayToSliceBorrow 计划臂（SLICE_NEW 物化）；余一件
+  （dyn_borrow_args 记录面）仍在册。
 - 观察（不立单）：match 守卫的 TypeMismatch 在 Zig 无
   setError、靠包裹层合成「checkExpr failed at node tag
   match_expr」——与 D-C9 同族的诊断面缺口，既有登记覆盖。

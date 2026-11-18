@@ -374,6 +374,27 @@ pub fn slice_element_type(ty: &Type) -> Option<Type> {
     user_defined_generic_inner(ty, "Slice")
 }
 
+/// Mirrors type_checker.zig `canCoerceBorrowArrayToBorrowSlice`:
+/// a borrow-of-array argument coerces to a borrow-of-slice
+/// parameter when the slice element type equals the array
+/// element type (under the permissive `types_equal`).
+pub fn can_coerce_borrow_array_to_borrow_slice(param_ty: &Type, arg_ty: &Type) -> bool {
+    let Type::Borrow(arg_inner) = arg_ty else {
+        return false;
+    };
+    let target_ty = match param_ty {
+        Type::Borrow(inner) => inner.as_ref(),
+        other => other,
+    };
+    let Some(slice_elem) = slice_element_type(target_ty) else {
+        return false;
+    };
+    let Type::Array(arr) = &**arg_inner else {
+        return false;
+    };
+    types_equal(&slice_elem, &arr.elem)
+}
+
 /// Mirrors lowering_rules `vecElementType` (`Vec<T>` -> `T`).
 pub fn vec_element_type(ty: &Type) -> Option<Type> {
     user_defined_generic_inner(ty, "Vec")

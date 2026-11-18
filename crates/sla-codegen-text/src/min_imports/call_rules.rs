@@ -375,12 +375,107 @@ impl<'a> Scanner<'a> {
             self.flags.string = true;
         }
 
+        self.array_to_slice_call_rule(call);
         self.projection_clone_args(call);
         if let Some(callee) = &call.callee {
             self.walk(callee);
         }
         for arg in &call.args {
             self.walk(arg);
+        }
+    }
+
+    /// Callee parameters as (is_borrow, type) pairs, in the same
+    /// lookup order as `callee_string_params` (checker table,
+    /// then the program-tree index, then the receiver's type).
+    /// Extern signatures are skipped: their ABI spellings do not
+    /// carry the slice shape, and checker-visited extern call
+    /// sites are covered by the fact probe in walk().
+    fn callee_param_shapes(&self, call: &CallExpr) -> Option<Vec<(bool, Type)>> {
+        let mut keys: Vec<String> = vec![call.func_name.clone()];
+        if let Some(target) = &call.associated_target {
+            keys.push(mangle_method_name(target, &call.func_name));
+            keys.push(format!("{target}__{}", call.func_name));
+            keys.push(format!("{target}::{}", call.func_name));
+        }
+        for key in &keys {
+            if let Some(decl) = self.check.func(key) {
+                return Some(
+                    decl.params
+                        .iter()
+                        .map(|p| (p.is_borrow, p.ty.as_ref().clone()))
+                        .collect(),
+                );
+            }
+            if let Some(decl) = self.fn_index.get(key) {
+                return Some(
+                    decl.params
+                        .iter()
+                        .map(|p| (p.is_borrow, p.ty.as_ref().clone()))
+                        .collect(),
+                );
+            }
+        }
+        if call.associated_target.is_none() && !call.args.is_empty() {
+            if let Some(recv_ty) = self.check.expr_type(&call.args[0]) {
+                if let Type::UserDefined(u) = peel_borrow_pointer_type(recv_ty) {
+                    let key = mangle_method_name(&u.name, &call.func_name);
+                    if let Some(decl) = self.check.func(&key) {
+                        return Some(
+                            decl.params
+                                .iter()
+                                .map(|p| (p.is_borrow, p.ty.as_ref().clone()))
+                                .collect(),
+                        );
+                    }
+                    if let Some(decl) = self.fn_index.get(&key) {
+                        return Some(
+                            decl.params
+                                .iter()
+                                .map(|p| (p.is_borrow, p.ty.as_ref().clone()))
+                                .collect(),
+                        );
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// The macro-body twin of the walk() fact probe: a call
+    /// inside a macro body is never checker-visited, so no
+    /// `array_to_slice_borrow_args` fact exists for it, yet the
+    /// inline expansion still materializes the slice view
+    /// (SLICE_NEW). Flag `string_format` when a borrow of an
+    /// array literal, or of an identifier with no recorded type
+    /// (the macro-body signature), is passed to a borrow-of-slice
+    /// parameter. A false positive only keeps the import.
+    fn array_to_slice_call_rule(&mut self, call: &CallExpr) {
+        let Some(params) = self.callee_param_shapes(call) else {
+            return;
+        };
+        for (i, arg) in call.args.iter().enumerate() {
+            let Some((is_borrow, ty)) = params.get(i) else {
+                continue;
+            };
+            if !(*is_borrow || matches!(ty, Type::Borrow(_))) {
+                continue;
+            }
+            if crate::place::slice_element_type(ty).is_none() {
+                continue;
+            }
+            let Node::BorrowExpr(b) = arg else {
+                continue;
+            };
+            match &*b.expr {
+                Node::ArrayLiteral(_) | Node::RepeatArrayLiteral(_) => {
+                    self.flags.string_format = true;
+                }
+                Node::Identifier(_) if self.check.expr_type(arg).is_none() => {
+                    self.flags.string_format = true;
+                }
+                _ => {}
+            }
         }
     }
 

@@ -1,0 +1,20 @@
+@import "sa_std/core/slice.sa";
+
+fn slice_second(values: &[i32]) -> i32 {
+    return values[1];
+}
+
+macro slice_second_macro(out, values) {
+    out = slice_second(&values);
+}
+
+@test "array to slice borrow minim"() {
+    let values: [i32; 3] = [4i32, 5i32, 6i32];
+    let direct = slice_second(&values);
+    if direct != 5i32 { panic(101); };
+    let lit = slice_second(&[7i32, 8i32, 9i32]);
+    if lit != 8i32 { panic(102); };
+    let via_macro = 0i32;
+    slice_second_macro(via_macro, values);
+    if via_macro != 5i32 { panic(103); };
+}

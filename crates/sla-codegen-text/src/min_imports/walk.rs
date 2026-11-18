@@ -15,6 +15,16 @@ impl<'a> Scanner<'a> {
                 self.flags.string = true;
             }
         }
+        // Array->slice call-arg materialization (call.rs
+        // ArrayToSliceBorrow arm) emits SLICE_NEW, whose home
+        // (core/slice.sa) reaches the program through
+        // string_format.sa — the same provider as the other
+        // SLICE_NEW sites in the parent module docs. Macro-body
+        // sites carry no checker fact; call_rules.rs covers them
+        // structurally.
+        if self.check.call_arg_array_to_slice_borrow(node) {
+            self.flags.string_format = true;
+        }
         match node {
             Node::Program(p) => {
                 for d in &p.decls {
