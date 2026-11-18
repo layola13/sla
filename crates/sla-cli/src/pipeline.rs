@@ -518,7 +518,7 @@ fn run_frontend_stage(
         let start = Instant::now();
         if let Err(err) = sla_ast::monomorphize::monomorphize_program(&mut root) {
             let _ = writeln!(stderr, "{err}");
-            return None;
+            return StageOutcome::Failed;
         }
         stage_done(stderr, profile, &format!("{prefix}monomorphize"), start);
     }
