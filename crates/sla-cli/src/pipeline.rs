@@ -43,7 +43,8 @@ use checker_info::CheckerInfo;
 use sla_ast::node::Node;
 use sla_checker::Checker;
 use std::io::Write;
-use std::path::Path;
+use sla_parser::imports::{import_path_from_line, resolve_import_files};
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 const MAX_SOURCE_BYTES: usize = 10 * 1024 * 1024;
@@ -66,48 +67,68 @@ fn stage_done(stderr: &mut impl Write, enabled: bool, label: &str, start: Instan
 // -- seed prescan (D-P3 duty, same line-scan as sla-oracle) ---------------------
 
 fn prescan_sla_imports(source_path: &Path, source: &str) -> (Vec<String>, Vec<String>) {
+    // Zig `prescanSlaImportTypes` (D-P3): the root parse seeds
+    // struct/enum names from every `.sla` file reachable through
+    // the root's @import closure — quoted or bare paths, glob
+    // patterns expanded through the same resolver the expansion
+    // stage uses. The previous direct-read form silently skipped
+    // glob imports (read_to_string on a `*.sla` path fails) and
+    // bare import lines, so wildcard-imported struct names were
+    // invisible at parse time and their literals failed with
+    // SyntaxError.
+    use std::collections::HashSet;
     let mut types: Vec<String> = Vec::new();
     let mut enums: Vec<String> = Vec::new();
+    let mut visited: HashSet<String> = HashSet::new();
     let base_dir = source_path.parent().unwrap_or_else(|| Path::new("."));
-    for line in source.lines() {
-        let Some(path) = import_path_of_line(line) else {
-            continue;
-        };
-        if !path.ends_with(".sla") {
-            continue;
-        }
-        let Ok(text) = std::fs::read_to_string(base_dir.join(&path)) else {
-            continue;
-        };
-        for line in text.lines() {
-            let mut words = line.trim_start().split_whitespace();
-            let mut kw = words.next().unwrap_or("");
-            if kw == "pub" {
-                kw = words.next().unwrap_or("");
-            }
-            let name = words.next().unwrap_or("");
-            if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+    let mut queue: Vec<(PathBuf, String)> =
+        vec![(base_dir.to_path_buf(), source.to_string())];
+    while let Some((dir, src)) = queue.pop() {
+        for line in src.split('\n') {
+            let Some(child) = import_path_from_line(line) else {
+                continue;
+            };
+            if !child.ends_with(".sla") {
                 continue;
             }
-            let bucket = match kw {
-                "struct" => &mut types,
-                "enum" => &mut enums,
-                _ => continue,
-            };
-            if !bucket.iter().any(|n| n == name) {
-                bucket.push(name.to_string());
+            if let Ok(files) = resolve_import_files(&dir, &child, None) {
+                for file in files {
+                    if !visited.insert(file.path.clone()) {
+                        continue;
+                    }
+                    collect_prescan_type_names(&file.source, &mut types, &mut enums);
+                    let child_dir = Path::new(&file.path)
+                        .parent()
+                        .map(Path::to_path_buf)
+                        .unwrap_or_else(|| dir.clone());
+                    queue.push((child_dir, file.source.clone()));
+                }
             }
         }
     }
     (types, enums)
 }
 
-fn import_path_of_line(line: &str) -> Option<String> {
-    let line = line.trim();
-    let rest = line.strip_prefix("@import")?.trim_start();
-    let rest = rest.strip_prefix('"')?;
-    let end = rest.find('"')?;
-    Some(rest[..end].to_string())
+fn collect_prescan_type_names(source: &str, types: &mut Vec<String>, enums: &mut Vec<String>) {
+    for line in source.lines() {
+        let mut words = line.trim_start().split_whitespace();
+        let mut kw = words.next().unwrap_or("");
+        if kw == "pub" {
+            kw = words.next().unwrap_or("");
+        }
+        let name = words.next().unwrap_or("");
+        if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+            continue;
+        }
+        let bucket = match kw {
+            "struct" => &mut *types,
+            "enum" => &mut *enums,
+            _ => continue,
+        };
+        if !bucket.iter().any(|n| n == name) {
+            bucket.push(name.to_string());
+        }
+    }
 }
 
 // -- parse diagnostics (parser.zig printDiagnostic) ------------------------------
