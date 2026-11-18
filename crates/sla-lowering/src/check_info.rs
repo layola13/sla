@@ -136,6 +136,17 @@ pub trait CheckInfo {
         None
     }
 
+    /// `tc.select_arm_exit_cleanups` (goroutine batch): the
+    /// checker's per-arm pattern-binding exit cleanups for `stmt`
+    /// (a `SelectStmt` node), indexed by arm position in the
+    /// statement's arm list, with the timeout arm at index
+    /// `arms.len()`. Same contract as `match_arm_exit_cleanups`:
+    /// `None` when the checker recorded nothing for this select;
+    /// the emitter prints the list at the arm's fallthrough exit.
+    fn select_arm_exit_cleanups(&self, _stmt: &Node, _arm: usize) -> Option<&[String]> {
+        None
+    }
+
     /// `tc.funcs`: function declarations by (unmangled) name.
     fn func(&self, _name: &str) -> Option<&FuncDecl> {
         None
@@ -251,6 +262,9 @@ pub struct MapCheckInfo {
     /// Stage 5b checker-plans: match node key -> one exit-cleanup
     /// list per arm, in arm order.
     pub match_arm_exit_cleanups: HashMap<usize, Vec<Vec<String>>>,
+    /// Goroutine batch: select node key -> one exit-cleanup list
+    /// per arm (arm order; timeout arm at index `arms.len()`).
+    pub select_arm_exit_cleanups: HashMap<usize, Vec<Vec<String>>>,
     pub funcs: HashMap<String, FuncDecl>,
     pub extern_funcs: HashSet<String>,
     pub extern_sigs: HashMap<String, ExternSigView>,
@@ -298,6 +312,15 @@ impl MapCheckInfo {
         names: Vec<Vec<String>>,
     ) -> &mut Self {
         self.match_arm_exit_cleanups.insert(node_key(expr), names);
+        self
+    }
+
+    pub fn add_select_arm_exit_cleanups(
+        &mut self,
+        stmt: &Node,
+        names: Vec<Vec<String>>,
+    ) -> &mut Self {
+        self.select_arm_exit_cleanups.insert(node_key(stmt), names);
         self
     }
 
@@ -407,6 +430,13 @@ impl CheckInfo for MapCheckInfo {
     fn match_arm_exit_cleanups(&self, expr: &Node, arm: usize) -> Option<&[String]> {
         self.match_arm_exit_cleanups
             .get(&node_key(expr))?
+            .get(arm)
+            .map(|v| v.as_slice())
+    }
+
+    fn select_arm_exit_cleanups(&self, stmt: &Node, arm: usize) -> Option<&[String]> {
+        self.select_arm_exit_cleanups
+            .get(&node_key(stmt))?
             .get(arm)
             .map(|v| v.as_slice())
     }

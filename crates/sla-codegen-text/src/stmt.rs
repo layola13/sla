@@ -45,17 +45,17 @@ impl<'c> Codegen<'c> {
             Node::BlockStmt(blk) => self.gen_scoped_block(&blk.body)?,
             Node::ArenaStmt(blk) => self.gen_scoped_block(&blk.body)?,
             // R-3 goroutine batch: spawn/defer/select lower in
-            // the runtime batch; the check-level slice passes the
-            // statements through scope-only so unrelated codegen
-            // fixtures keep compiling (full lowering is R-4
-            // jurisdiction). F-G2 exception: a supervised spawn
-            // lowers for real (go_spawn.rs); plain `go` keeps the
-            // pass-through byte-identically. F-G4 exception: a
-            // select lowers for real (select.rs); `defer` keeps
-            // the pass-through (F-G5 jurisdiction).
+            // the runtime batch. F-G2: a supervised spawn lowers
+            // for real (go_spawn.rs); plain `go` statement form
+            // lowers for real too (detached spawn, DEF-R1).
+            // F-G4 exception: a select lowers for real
+            // (select.rs); `defer` keeps the pass-through
+            // (F-G5 jurisdiction).
             Node::GoStmt(go) => {
                 if go.supervised {
                     self.gen_supervised_go_stmt(go)?;
+                } else {
+                    self.gen_plain_go_stmt(go)?;
                 }
             }
             Node::DeferStmt(_) => {
@@ -64,7 +64,7 @@ impl<'c> Codegen<'c> {
                     "syntax_lowering.zig (internal: defer statement survived the desugar pass)",
                 )
             }
-            Node::SelectStmt(sel) => self.gen_select_stmt(sel)?,
+            Node::SelectStmt(sel) => self.gen_select_stmt(stmt, sel)?,
             // A `using` declaration inside a function body only
             // scopes the checker's extension resolution (already
             // done); it emits nothing, exactly as the SAB

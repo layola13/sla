@@ -1,0 +1,36 @@
+// Regression (LINE-GO-FAMILY): a select recv arm's pattern
+// bindings must be retired at the arm's exit. For an
+// address-resident (tuple) payload the binding register is a
+// pointer into the select slot; the emitter printed no release
+// for it and the host reported it live at function exit
+// (MemoryLeak; corpus test_unit_go_monitor, "monitor channel
+// works in select", reduced to this shape).
+
+@import "sa_std/globals.sai"
+@import "sa_std/task.sai"
+
+fn gsta_worker(arg: u64) {
+    let out: u64 = 0;
+    let rc = sa_global_u64_add("gsta_ctr", 8, 7, &out);
+    if rc != 0 { panic(9320); };
+}
+
+@test "select recv arm tuple payload binding retires at arm exit"() {
+    let h = go gsta_worker(0);
+    let m = monitor(h);
+    let got: i32 = 0;
+    select {
+        case let (msg, closed) = m.recv() {
+            if msg.0 != h { panic(9321); };
+            if msg.1 != 0 { panic(9322); };
+            got = 1;
+        }
+        timeout(5000000000) {
+            panic(9323);
+        }
+    }
+    if got != 1 { panic(9324); };
+    let status = sa_task_join(h);
+    if status != 0 { panic(9325); };
+    m.destroy();
+}

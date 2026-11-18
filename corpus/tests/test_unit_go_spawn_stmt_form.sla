@@ -1,0 +1,34 @@
+// Regression (LINE-GO-FAMILY): a bare statement-form `go f();`
+// spawn must be emitted (detached form: spawn + sa_task_detach,
+// Zig syntax_lowering.zig emitSpawn, DEF-R1). The text codegen
+// kept an R-3 scope-only pass-through for plain statement-form
+// go and emitted nothing, so the goroutine never ran (corpus
+// test_unit_go_spawn, "go spawn statement form runs").
+
+@import "sa_std/task.sai"
+@import "sa_std/globals.sai"
+
+fn gs_stmt_bump() {
+    let out: u64 = 0;
+    let rc = sa_global_u64_add("gs_stmt_ctr", 11, 1, &out);
+    if rc != 0 { panic(9311); };
+}
+
+fn gs_stmt_read() -> u64 {
+    let v: u64 = 0;
+    let rc = sa_global_u64_get("gs_stmt_ctr", 11, &v);
+    if rc == 3 { return 0; };
+    if rc != 0 { panic(9312); };
+    return v;
+}
+
+@test "bare go statement spawns and runs"() {
+    let before = gs_stmt_read();
+    go gs_stmt_bump();
+    let spins: u64 = 0;
+    while gs_stmt_read() < before + 1 {
+        sa_task_yield();
+        spins = spins + 1;
+        if spins > 1000000 { panic(9313); };
+    }
+}

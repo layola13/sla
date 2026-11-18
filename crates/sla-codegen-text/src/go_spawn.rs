@@ -12,8 +12,9 @@
 //! emitted here too (F-3): the same sequence with
 //! `sa_task_spawn(entry, arg, &slot)` and no sink pair,
 //! mirroring Zig syntax_lowering.zig `emitSpawn`
-//! (detached=false). Statement position keeps its scope-only
-//! pass-through, byte-identical to before this line.
+//! (detached=false). Statement position is the detached form
+//! (emitSpawn detached=true, DEF-R1): spawn + `sa_task_detach`
+//! + releases, exactly the supervised statement shape.
 //!
 //! Register discipline (F-G1/CHANNEW experience, applied to the
 //! spawn site): an identifier argument whose register IS the
@@ -55,6 +56,20 @@ impl<'c> Codegen<'c> {
     /// value is the join handle loaded out of the slot.
     pub(crate) fn gen_plain_go_expr(&mut self, go: &GoStmt) -> Result<String> {
         self.emit_spawn(go, false)
+    }
+
+    /// Statement position, plain `go`: spawn + `sa_task_detach(handle)`
+    /// (Zig syntax_lowering.zig emitSpawn detached=true, DEF-R1: a
+    /// bare `go` statement discards the handle, so the runtime is
+    /// told to reap the completion record at exit). Same shape as
+    /// the supervised statement form above.
+    pub(crate) fn gen_plain_go_stmt(&mut self, go: &GoStmt) -> Result<()> {
+        let handle = self.emit_spawn(go, false)?;
+        let rc = self.new_tmp();
+        self.ins(&format!("{rc} = call @sa_task_detach({handle})"));
+        self.emit_release(&rc)?;
+        self.emit_release(&handle)?;
+        Ok(())
     }
 
     fn emit_spawn(&mut self, go: &GoStmt, supervised: bool) -> Result<String> {

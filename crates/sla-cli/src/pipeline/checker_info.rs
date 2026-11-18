@@ -83,6 +83,15 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
             .get(arm)
             .map(Vec::as_slice)
     }
+    fn select_arm_exit_cleanups(&self, stmt: &Node, arm: usize) -> Option<&[String]> {
+        // Goroutine batch: same keying as the match-arm table --
+        // the checker keys by the select node's own address.
+        self.checker
+            .select_arm_exit_cleanups
+            .get(&sla_lowering::node_key(stmt))?
+            .get(arm)
+            .map(Vec::as_slice)
+    }
     fn type_is_copy_value(&self, ty: &sla_ast::Type) -> bool {
         self.checker.type_is_copy(ty)
     }

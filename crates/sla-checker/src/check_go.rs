@@ -22,9 +22,12 @@
 //!   call so its argument walk sees the spawn's arguments).
 //! * `defer` requires a call operand (DeferNonCall otherwise);
 //!   the call itself is checked normally.
-//! * `select` may not appear in an `async fn` (GoAsyncSelect,
-//!   R2's async-select diag); case arms check their receive
-//!   call and bind the pattern names with the payload type.
+//! * a BLOCKING `select` may not appear in an `async fn`
+//!   (GoAsyncSelect, R2's async-select diag): no default arm and
+//!   no timeout arm, mirroring Zig `checkSelectStmt`; a select
+//!   with a default or timeout arm is non-blocking and stays
+//!   legal. Case arms check their receive call and bind the
+//!   pattern names with the payload type.
 
 use sla_ast::exprs::CallExpr;
 use sla_ast::node::Node;
@@ -272,18 +275,29 @@ impl Checker {
         Ok(())
     }
 
-    pub fn check_select_stmt(&mut self, stmt: &SelectStmt) -> CheckResult<()> {
-        if self
+    pub fn check_select_stmt(
+        &mut self,
+        stmt: &SelectStmt,
+        stmt_key: usize,
+    ) -> CheckResult<()> {
+        // Zig `checkSelectStmt`: inside an async fn only a blocking
+        // select is forbidden (it would park the executor); a select
+        // carrying a default arm or a timeout arm never blocks and
+        // stays legal (corpus test_unit_go_async_interop).
+        let is_async = self
             .current_func
             .as_ref()
             .map(|f| f.is_async)
-            .unwrap_or(false)
-        {
+            .unwrap_or(false);
+        let non_blocking =
+            stmt.timeout.is_some() || stmt.arms.iter().any(|arm| arm.is_default);
+        if is_async && !non_blocking {
             return Err(err(
                 ErrorKind::GoAsyncSelect,
-                "GoAsyncSelect: `select` is not available inside an async fn".to_string(),
+                "GoAsyncSelect: blocking `select` (no default or timeout case) is not available inside an async fn".to_string(),
             ));
         }
+        let mut arm_exit: Vec<Vec<String>> = Vec::new();
         for arm in &stmt.arms {
             self.scopes.push_frame();
             let mut arm_result = Ok(());
@@ -323,16 +337,30 @@ impl Checker {
             if arm_result.is_ok() {
                 arm_result = self.check_block(&arm.body);
             }
-            self.scopes.pop_frame();
+            let arm_frame = self.scopes.pop_frame();
+            arm_exit.push(crate::check_program::block_exit_cleanups(
+                &arm_frame.bindings,
+            ));
             arm_result?;
         }
         if let Some(timeout) = &stmt.timeout {
             self.check_expr(&timeout.expr)?;
             self.scopes.push_frame();
             let body_result = self.check_block(&timeout.body);
-            self.scopes.pop_frame();
+            let timeout_frame = self.scopes.pop_frame();
+            arm_exit.push(crate::check_program::block_exit_cleanups(
+                &timeout_frame.bindings,
+            ));
             body_result?;
+        } else {
+            arm_exit.push(Vec::new());
         }
+        // The arm pattern bindings live in the arm frame, not in
+        // any statement list, so no statement cleanup retires
+        // them; record the per-arm exit lists (match-arm plan
+        // shape) for the emitter, indexed by arm position with
+        // the timeout arm at `stmt.arms.len()`.
+        self.select_arm_exit_cleanups.insert(stmt_key, arm_exit);
         Ok(())
     }
 }

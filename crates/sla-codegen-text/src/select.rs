@@ -64,19 +64,26 @@ impl<'c> Codegen<'c> {
     }
 
     /// syntax_lowering.zig `lowerSelect`, emitted directly.
-    pub(crate) fn gen_select_stmt(&mut self, sel: &SelectStmt) -> Result<()> {
+    pub(crate) fn gen_select_stmt(&mut self, stmt: &Node, sel: &SelectStmt) -> Result<()> {
         // Partition arms: `default` is an arm in this AST (Zig
         // keeps it beside the cases); the timeout arm is the
-        // statement's own field.
+        // statement's own field. Arm positions in `sel.arms` are
+        // tracked alongside: the checker's per-arm exit-cleanup
+        // lists are indexed by that position (timeout arm at
+        // `sel.arms.len()`).
         let mut cases: Vec<&SelectArm> = Vec::new();
+        let mut case_arm_index: Vec<usize> = Vec::new();
         let mut default_body: Option<&Vec<Node>> = None;
-        for arm in &sel.arms {
+        let mut default_arm_index: Option<usize> = None;
+        for (arm_idx, arm) in sel.arms.iter().enumerate() {
             if arm.is_default {
                 if default_body.is_none() {
                     default_body = Some(&arm.body);
+                    default_arm_index = Some(arm_idx);
                 }
             } else {
                 cases.push(arm);
+                case_arm_index.push(arm_idx);
             }
         }
         let n = cases.len();
@@ -218,6 +225,7 @@ impl<'c> Codegen<'c> {
             value: i64,
             case: Option<usize>,
             body: &'x Vec<Node>,
+            arm_index: usize,
         }
         let mut branches: Vec<Branch> = Vec::new();
         if let Some(t) = &sel.timeout {
@@ -225,6 +233,7 @@ impl<'c> Codegen<'c> {
                 value: -2,
                 case: None,
                 body: &t.body,
+                arm_index: sel.arms.len(),
             });
         }
         if let Some(body) = default_body {
@@ -232,6 +241,7 @@ impl<'c> Codegen<'c> {
                 value: -1,
                 case: None,
                 body,
+                arm_index: default_arm_index.unwrap_or(sel.arms.len()),
             });
         }
         for (i, arm) in cases.iter().enumerate() {
@@ -239,6 +249,7 @@ impl<'c> Codegen<'c> {
                 value: i as i64,
                 case: Some(i),
                 body: &arm.body,
+                arm_index: case_arm_index[i],
             });
         }
 
@@ -279,6 +290,23 @@ impl<'c> Codegen<'c> {
                 .map(|s| stmt_terminates(s))
                 .unwrap_or(false);
             if !body_terminates {
+                // Arm-scope exit (checker-plans, mirroring the
+                // match-arm plan in expr_match.rs): the arm's
+                // pattern bindings are not statements, so no
+                // statement cleanup retires them; the checker
+                // recorded each arm's still-active bindings
+                // during check_select_stmt and the emitter prints
+                // that list here, before the jump to the select
+                // end (emit_release no-ops for consumed / stack /
+                // borrow registers).
+                if let Some(list) = self
+                    .check
+                    .select_arm_exit_cleanups(stmt, branch.arm_index)
+                {
+                    for name in list.to_vec() {
+                        self.emit_release(&name)?;
+                    }
+                }
                 any_fallthrough = true;
                 self.ins(&format!("jmp {end_label}"));
             }

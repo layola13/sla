@@ -51,7 +51,9 @@ impl Checker {
                 self.check_go_stmt(g).map(|_| ())
             }
             Node::DeferStmt(d) => self.check_defer_stmt(d),
-            Node::SelectStmt(s) => self.check_select_stmt(s),
+            Node::SelectStmt(s) => {
+                self.check_select_stmt(s, crate::types_util::node_key_of(node))
+            }
             Node::ExprStmt(inner) => {
                 let ty = self.check_expr(inner)?;
                 // R-6 (F1): a bare statement that discards a

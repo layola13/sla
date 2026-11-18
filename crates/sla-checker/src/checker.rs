@@ -261,6 +261,14 @@ pub struct Checker {
     /// bindings (mirroring block cleanups), so the emitter prints
     /// the checker's verdict instead of its arm-exit approximation.
     pub match_arm_exit_cleanups: HashMap<usize, Vec<Vec<String>>>,
+    /// `select_arm_exit_cleanups` (goroutine batch): per-arm
+    /// pattern-binding exit cleanups, keyed by the select
+    /// statement node's key; one list per arm in arm order, with
+    /// the timeout arm at index `arms.len()`. Recorded during
+    /// `check_select_stmt` from each arm frame's still-active
+    /// bindings (the match-arm plan shape), so the emitter prints
+    /// the checker's verdict instead of approximating arm exits.
+    pub select_arm_exit_cleanups: HashMap<usize, Vec<Vec<String>>>,
     /// `await_cleanups` (Zig type_checker.zig:150): bindings to
     /// release if an await suspends, keyed by the await node. Kept
     /// apart from `cleanups`, whose await-adjacent entries mean
@@ -357,6 +365,7 @@ impl Checker {
             cleanups: HashMap::new(),
             phi_cleanups: HashMap::new(),
             match_arm_exit_cleanups: HashMap::new(),
+            select_arm_exit_cleanups: HashMap::new(),
             await_cleanups: HashMap::new(),
             macro_call_try_cleanups: HashMap::new(),
             array_to_slice_borrow_args: std::collections::HashSet::new(),
