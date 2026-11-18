@@ -1,0 +1,71 @@
+// LINE-FORIN-PROTOCOL regression: collection for-in forms.
+// Before the port, the Rust checker accepted only arrays and
+// generic user-defined types (taking the first generic argument
+// as the element type) and the text codegen rejected every
+// collection form outright, so all three loops below failed.
+// The protocol form mirrors test_unit_for_in_protocol.sla; the
+// array forms mirror Zig's test_unit_for_in_struct_array.sla
+// (aggregate elements bind the element address, scalar elements
+// load).
+struct Item {
+    x: i32,
+    y: i32,
+}
+
+struct Bag {
+    len: i64,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+}
+
+impl Bag {
+    fn iter_len(&self) -> i64 {
+        return self.len;
+    }
+
+    fn iter_at(&self, index: i64) -> Item {
+        let first: i64 = 0;
+        if index == first {
+            return Item { x: self.x0, y: self.y0 };
+        };
+        return Item { x: self.x1, y: self.y1 };
+    }
+}
+
+fn bag_sum(bag: Bag) -> i32 {
+    let total: i32 = 0;
+    for item in bag {
+        total = total + item.x;
+    }
+    return total;
+}
+
+fn scalars_sum() -> i32 {
+    let xs = [10, 20, 12];
+    let total: i32 = 0;
+    for x in xs {
+        total = total + x;
+    }
+    return total;
+}
+
+fn pairs_sum() -> i32 {
+    let inbox = [
+        Item { x: 1, y: 2 },
+        Item { x: 2, y: 3 },
+    ];
+    let total: i32 = 0;
+    for item in inbox {
+        total = total + item.x + item.y;
+    }
+    return total;
+}
+
+@test "for in protocol and array forms"() {
+    let bag = Bag { len: 2, x0: 1, y0: 2, x1: 3, y1: 4 };
+    if bag_sum(bag) != 4 { panic(1501); };
+    if scalars_sum() != 42 { panic(1502); };
+    if pairs_sum() != 8 { panic(1503); };
+}

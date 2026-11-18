@@ -41,9 +41,9 @@
 use crate::checker::{Checker, FuncSig, ParamSig};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::types_util::{
-    concrete_type_name, dyn_trait_name, is_string_type, node_key_of,
-    peel_borrow_pointer, type_desc, type_tag_name, types_equal,
-    types_structurally_equal,
+    concrete_type_name, dyn_trait_name, is_numeric_type, is_string_type,
+    node_key_of, peel_borrow_pointer, type_desc, type_tag_name,
+    types_equal, types_structurally_equal,
 };
 use sla_ast::exprs::{CallExpr, Literal};
 use sla_ast::node::Node;
@@ -152,6 +152,53 @@ impl Checker {
             return types_equal(&param.ty, recv);
         }
         types_equal(&param.ty, recv_ty) || types_equal(&param.ty, recv)
+    }
+
+    /// Mirrors Zig `methodForType` (type_checker.zig:3322): the
+    /// receiver type is unwrapped through borrow/pointer layers
+    /// and must be user-defined; the method is the `funcs` entry
+    /// keyed `{type}_{method}`.
+    pub(crate) fn method_for_type(
+        &self,
+        ty: &Type,
+        method_name: &str,
+    ) -> Option<FuncSig> {
+        let recv = peel_borrow_pointer(ty);
+        let Type::UserDefined(u) = recv else {
+            return None;
+        };
+        self.funcs.get(&format!("{}_{}", u.name, method_name)).cloned()
+    }
+
+    /// Mirrors Zig `protocolIterableElementType`
+    /// (type_checker.zig:4714): a type is iterable by protocol
+    /// when it offers `iter_len` (one receiver parameter, numeric
+    /// return) and `iter_at` (receiver plus one numeric index
+    /// parameter); the element type is `iter_at`'s return type.
+    /// Both receiver parameters must match the iterated type
+    /// under the usual receiver rules.
+    pub(crate) fn protocol_iterable_element_type(
+        &self,
+        ty: &Type,
+    ) -> Option<Type> {
+        let len_func = self.method_for_type(ty, "iter_len")?;
+        let at_func = self.method_for_type(ty, "iter_at")?;
+        if len_func.params.len() != 1 || at_func.params.len() != 2 {
+            return None;
+        }
+        if !self.receiver_param_matches(&len_func.params[0], ty) {
+            return None;
+        }
+        if !self.receiver_param_matches(&at_func.params[0], ty) {
+            return None;
+        }
+        if !is_numeric_type(&len_func.ret_ty) {
+            return None;
+        }
+        if !is_numeric_type(&at_func.params[1].ty) {
+            return None;
+        }
+        Some(at_func.ret_ty.clone())
     }
 
     /// Mirrors Zig `extensionReceiverParamMatches`: the general

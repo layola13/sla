@@ -11,7 +11,8 @@ use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::rules::{plan_function_exit_cleanup, FunctionExitCleanupAction, ValueState};
 use crate::types_util::{
     is_borrow_like_type, is_discard_name, is_internal_symbol, is_primitive_scalar,
-    node_key_of, node_tag, type_desc, types_equal, value_assignable_to,
+    node_key_of, node_tag, peel_borrow_pointer, type_desc, type_tag_name,
+    types_equal, value_assignable_to,
 };
 use sla_ast::node::Node;
 use sla_ast::types::{Primitive, Type};
@@ -604,7 +605,8 @@ impl Checker {
 
     /// `for`: range form (`start..end`, loop variable takes the bound
     /// type) and collection form (loop variable takes the element
-    /// type of an array / Vec-like). Body checked exactly once.
+    /// type of an array, or of a type implementing the iterable
+    /// protocol). Body checked exactly once.
     fn check_for(
         &mut self,
         var_name: &str,
@@ -624,15 +626,26 @@ impl Checker {
             start_ty
         } else {
             let coll_ty = self.check_expr(start)?;
-            match coll_ty {
+            // Zig for_stmt collection arm (type_checker.zig:8017):
+            // an array iterates its element type; any other value
+            // must implement the iterable protocol (`iter_len` /
+            // `iter_at`, see protocol_iterable_element_type) and
+            // iterates `iter_at`'s return type. Anything else is a
+            // TypeMismatch naming the value's tag.
+            match peel_borrow_pointer(&coll_ty) {
                 Type::Array(a) => (*a.elem).clone(),
-                Type::UserDefined(u) if !u.generics.is_empty() => u.generics[0].clone(),
-                _ => {
-                    return Err(Diagnostic::new(
-                        ErrorKind::TypeMismatch,
-                        "for collection is not iterable in this slice",
-                    ))
-                }
+                _ => match self.protocol_iterable_element_type(&coll_ty) {
+                    Some(elem) => elem,
+                    None => {
+                        return Err(Diagnostic::new(
+                            ErrorKind::TypeMismatch,
+                            format!(
+                                "for iterable value must be array or implement Iterable: start tag={}",
+                                type_tag_name(&coll_ty)
+                            ),
+                        ))
+                    }
+                },
             }
         };
         let pre = self.scopes.save_states();

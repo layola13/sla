@@ -260,6 +260,32 @@ pub fn peel_borrow_pointer_type(ty: &Type) -> &Type {
     }
 }
 
+/// lowering_rules.zig:6075 `concreteTypeName`: the user-defined
+/// name under any borrow/pointer layers, or None for any other
+/// shape.
+pub fn concrete_type_name(ty: &Type) -> Option<&str> {
+    match peel_borrow_pointer_type(ty) {
+        Type::UserDefined(u) => Some(&u.name),
+        _ => None,
+    }
+}
+
+/// codegen.zig:15328 `forInArrayElemBindsAddress` (CLOSING-F):
+/// fixed-array element types whose value register denotes the
+/// element's storage address (plain structs, tuples, nested
+/// arrays — the aggregate-image types). Runtime handle types
+/// (String, Vec, channels, cells, ...) keep the load path: their
+/// element slot holds the handle word itself.
+pub fn for_in_array_elem_binds_address(elem_ty: &Type) -> bool {
+    match elem_ty {
+        Type::UserDefined(u) => {
+            !crate::names::is_excluded_aggregate_home_name(&u.name)
+        }
+        Type::Tuple(_) | Type::Array(_) => true,
+        _ => false,
+    }
+}
+
 /// lowering_rules.zig:6237 `rawPointerValueType` (private there).
 pub fn raw_pointer_value_type(ty: &Type) -> bool {
     match ty {

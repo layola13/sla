@@ -270,3 +270,80 @@ fn array_variable_arg_width_mismatch_still_rejected() {
     let err = result.expect_err("width-mismatched variable must fail");
     assert_eq!(err.kind, ErrorKind::TypeMismatch, "{err:?}");
 }
+
+/// LINE-FORIN-PROTOCOL: a concrete type offering the iterable
+/// protocol (`iter_len(&self) -> i64`, `iter_at(&self, i64) ->
+/// Elem`) is a legal for-in collection, and the loop variable
+/// takes `iter_at`'s return type (Zig
+/// `protocolIterableElementType`, type_checker.zig:4714). Before
+/// the port the collection arm only accepted arrays and generic
+/// user-defined types, so this was rejected with "for collection
+/// is not iterable in this slice".
+#[test]
+fn for_in_protocol_impl_passes() {
+    let source = "struct Item { x: i32 }\n\
+struct Bag { len: i64, x0: i32, x1: i32 }\n\
+impl Bag {\n\
+    fn iter_len(&self) -> i64 { return self.len; }\n\
+    fn iter_at(&self, index: i64) -> Item { return Item { x: self.x0 }; }\n\
+}\n\
+fn sum(bag: Bag) -> i32 {\n\
+    let total: i32 = 0;\n\
+    for item in bag { total = total + item.x; }\n\
+    return total;\n\
+}\n";
+    let result = check_source(source);
+    assert!(result.is_ok(), "{result:?}");
+}
+
+/// Control: array for-in keeps passing (the element type is the
+/// array's element type, as before the port).
+#[test]
+fn for_in_array_passes() {
+    let source = "fn sum() -> i32 {\n\
+    let xs = [10, 20, 12];\n\
+    let total: i32 = 0;\n\
+    for x in xs { total = total + x; }\n\
+    return total;\n\
+}\n";
+    let result = check_source(source);
+    assert!(result.is_ok(), "{result:?}");
+}
+
+/// A user-defined type WITHOUT the protocol methods is not
+/// iterable: TypeMismatch with Zig's message and the value's
+/// tag (type_checker.zig:8020).
+#[test]
+fn for_in_non_iterable_struct_rejected() {
+    let source = "struct Plain { x: i32 }\n\
+fn sum(p: Plain) -> i32 {\n\
+    let total: i32 = 0;\n\
+    for item in p { total = total + item.x; }\n\
+    return total;\n\
+}\n";
+    let result = check_source(source);
+    let err = result.expect_err("protocol-less struct must fail");
+    assert_eq!(err.kind, ErrorKind::TypeMismatch, "{err:?}");
+    assert!(
+        err.message.contains(
+            "for iterable value must be array or implement Iterable: start tag=user_defined"
+        ),
+        "{err:?}"
+    );
+}
+
+/// Zig parity: `Vec<T>` offers no `iter_len`/`iter_at`, so a
+/// Vec for-in is rejected at check level (the old slice arm's
+/// first-generic-argument heuristic accepted it here and left
+/// the failure to codegen).
+#[test]
+fn for_in_vec_rejected_like_zig() {
+    let source = "fn sum(v: Vec<i32>) -> i32 {\n\
+    let total: i32 = 0;\n\
+    for x in v { total = total + x; }\n\
+    return total;\n\
+}\n";
+    let result = check_source(source);
+    let err = result.expect_err("Vec for-in must fail at check level");
+    assert_eq!(err.kind, ErrorKind::TypeMismatch, "{err:?}");
+}

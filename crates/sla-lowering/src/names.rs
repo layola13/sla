@@ -124,3 +124,38 @@ pub fn mangle_method_name(ty_name: &str, method_name: &str) -> String {
 pub fn mangle_trait_method_name(ty_name: &str, trait_name: &str, method_name: &str) -> String {
     format!("{ty_name}__{trait_name}_{method_name}")
 }
+
+/// lowering_rules.zig:1361 `isExcludedAggregateHomeName`:
+/// user-defined type names that never receive an aggregate stack
+/// home. These are runtime handle / cell types whose bindings are
+/// not plain record values: string and collection headers are
+/// served by their buffer registries, Cell/RefCell/Atomic* live
+/// in heap cells by design (their addresses may escape into
+/// owners), and the channel/concurrency handles are copyable
+/// runtime words. The aggregate-home class is plain struct values
+/// and tuples only.
+pub fn is_excluded_aggregate_home_name(name: &str) -> bool {
+    matches!(
+        name,
+        "String"
+            | "Vec"
+            | "GrowVec"
+            | "VecDeque"
+            | "HashMap"
+            | "HashSet"
+            | "BTreeMap"
+            | "BTreeSet"
+            | "Cell"
+            | "RefCell"
+            | "AtomicI32"
+            | "AtomicUsize"
+            | "AtomicPtr"
+            | "AtomicBool"
+            | "ManuallyDrop"
+            | "Chan"
+            | "Sender"
+            | "Receiver"
+            | "Mutex"
+            | "RwLock"
+    )
+}
