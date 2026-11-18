@@ -45,6 +45,7 @@ mod destructure;
 mod expr;
 mod expr_if;
 mod expr_match;
+mod expr_switch;
 mod extern_macro;
 mod format;
 mod func;

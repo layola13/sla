@@ -20,6 +20,7 @@ impl<'c> Codegen<'c> {
             Node::BinaryExpr(_) => self.gen_binary_expr(expr),
             Node::IfExpr(_) => self.gen_if_expr(expr),
             Node::MatchExpr(_) => self.gen_match_expr(expr),
+            Node::SwitchExpr(_) => self.gen_switch_expr(expr),
             Node::CallExpr(_) => self.gen_expr_call(expr),
             Node::IndexExpr(idx) => {
                 // Vec/GrowVec scalar-element reads

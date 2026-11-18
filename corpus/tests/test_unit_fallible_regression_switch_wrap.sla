@@ -1,0 +1,34 @@
+@import "sla_std/wrap/fs.sla"
+
+// LINE-FALLIBLE regression anchor: two base defects in one file.
+// (1) An imported struct literal in a typed let was rejected by
+// the parser (SyntaxError: found '{', expected semicolon) when
+// the root file's seed prescan could not resolve the `sla_std/`
+// import, leaving `FsReadBuffer` unseeded as a known type name.
+// (2) A `switch` statement had no emission in sla-codegen-text
+// (unsupported expression kind "switch_expr" from genExpr).
+// Both shapes are exercised against the fallible wrapper surface
+// this family covers.
+
+fn classify_status(value: u64) -> u64 {
+    switch value {
+        0 => {
+            return 100;
+        },
+        default => {},
+    };
+    return value + 1;
+}
+
+@test "fallible regression switch and imported struct literal"() {
+    let b: FsReadBuffer = FsReadBuffer { raw: 0 };
+    if b.raw != 0 {
+        panic(47001);
+    };
+    if classify_status(0) != 100 {
+        panic(47002);
+    };
+    if classify_status(41) != 42 {
+        panic(47003);
+    };
+}

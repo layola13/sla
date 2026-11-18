@@ -332,7 +332,20 @@ impl<'c> Codegen<'c> {
                     self.gen_block(&case.body)?;
                 }
             }
-            self.emit_match_phi_cleanups(case.body.last())?;
+            // Arm-exit cleanups (phi + pattern-binding releases)
+            // serve the merge path only: on a terminating arm the
+            // block already ends in a terminator (return / break /
+            // continue / panic), and printing releases after it
+            // leaves the block unterminated in the host's eyes
+            // (FallthroughForbidden — e.g. a `return payload;` arm
+            // in test_unit_fallible_extern_payload_direct, whose
+            // payload register the checker lists for arm exit).
+            // The terminator's own pre-terminator cleanup pass
+            // covers the exit path. (The Zig genMatchExpr emits no
+            // arm-exit cleanups at all.)
+            if !terminates {
+                self.emit_match_phi_cleanups(case.body.last())?;
+            }
             // Arm-scope exit (stage 5b checker-plans): pattern
             // bindings are not statements, so no checker cleanup
             // retires them; the checker recorded each arm's
@@ -350,7 +363,7 @@ impl<'c> Codegen<'c> {
             // authoritative, and the old text-scan approximation
             // (`^alias` / `return alias` substring search over the
             // emitted body) is gone.
-            if !wildcard {
+            if !terminates && !wildcard {
                 if let Some(list) = self.check.match_arm_exit_cleanups(expr, i) {
                     for name in list.to_vec() {
                         self.emit_release(&name)?;
