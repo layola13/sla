@@ -1,0 +1,40 @@
+// Regression (LINE-FNPTR-REMAINDER): a function item stored
+// directly in a local struct literal materialises a fresh
+// vtable-address temp; the literal's plain field store must
+// retire that temp after the store (Zig
+// structFieldTempNeedsRelease), or the host verifier rejects
+// the function with MemoryLeak (trap 1012) for a live register
+// at exit. The let-slot release gate misses it because the
+// value expression is an identifier.
+
+fn reg_local_true(x: i32) -> bool {
+    return true;
+}
+
+fn reg_local_answer(x: i32) -> i32 {
+    return x + 40;
+}
+
+struct RegLocalFnPtrHolder {
+    f: fn(i32) -> bool,
+}
+
+struct RegLocalIntFnPtrHolder {
+    g: fn(i32) -> i32,
+}
+
+@test "fn ptr item stored in local struct literal"() {
+    let holder = RegLocalFnPtrHolder { f: reg_local_true };
+    let f = holder.f;
+    if f(1) != true {
+        panic(1511);
+    }
+}
+
+@test "int fn ptr item stored in local struct literal"() {
+    let holder = RegLocalIntFnPtrHolder { g: reg_local_answer };
+    let g = holder.g;
+    if g(2) != 42 {
+        panic(1512);
+    }
+}

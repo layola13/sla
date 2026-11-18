@@ -721,9 +721,17 @@ impl<'c> Codegen<'c> {
 
     /// C2 sab_carried_indirect_sig: SA primitive name for one
     /// component of a carried fn-pointer signature. Mirrors Zig
-    /// `fnPtrSigParamName` (bool params ride i1; a boolean return
-    /// rides i32); a type with no SA primitive rendering yields
-    /// None and the call carries no record (Zig's `catch null`).
+    /// `fnPtrSigParamName` (bool params ride i1); a type with no
+    /// SA primitive rendering yields None and the call carries
+    /// no record (Zig's `catch null`). The return component is
+    /// rendered by `fn_ptr_carried_sig` itself: a boolean return
+    /// must read `u8`, the name the callee's own definition
+    /// header carries (sla_lowering abi type name), because the
+    /// host resolves a text-path `call_indirect` against the
+    /// record as declared — an `i32` record against a `u8`
+    /// callee corrupts the result value (LINE-FNPTR-REMAINDER;
+    /// Zig's `fnPtrSigRetName` i32 mirrors the SAB backend's
+    /// abi return type, whose record the host reads differently).
     fn fn_ptr_sig_param_name(ty: &Type) -> Option<&'static str> {
         match ty {
             Type::Primitive(p) => Some(match p {
@@ -753,7 +761,7 @@ impl<'c> Codegen<'c> {
             params.push(Self::fn_ptr_sig_param_name(ty)?);
         }
         let ret = if matches!(*fp.ret, Type::Primitive(Primitive::Boolean)) {
-            "i32"
+            "u8"
         } else {
             Self::fn_ptr_sig_param_name(&fp.ret)?
         };

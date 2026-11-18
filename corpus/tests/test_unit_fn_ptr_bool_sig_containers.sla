@@ -1,0 +1,74 @@
+// Regression (LINE-FNPTR-REMAINDER): a bool-returning function
+// pointer read back out of a container (struct field, Vec index)
+// or called repeatedly through a parameter must return the
+// callee's actual value. The text emitter rendered the carried
+// signature of the indirect call with an i32 return while the
+// callee is declared -> u8; the host resolves call_indirect
+// from the carried record, so the result was read corrupted
+// (the three failing subtests of test_unit_fn_ptr_value:
+// 1405 struct return, 1407 vec push, 1409 repeated branches).
+
+fn reg_bool_true(x: i32) -> bool {
+    return true;
+}
+
+fn reg_bool_false(x: i32) -> bool {
+    return false;
+}
+
+fn reg_is_even(x: i32) -> bool {
+    return x % 2 == 0;
+}
+
+struct RegFnPtrHolder {
+    f: fn(i32) -> bool,
+}
+
+fn reg_holder_new(f: fn(i32) -> bool) -> RegFnPtrHolder {
+    return RegFnPtrHolder { f: f };
+}
+
+fn reg_vec_push(values: Vec<fn(i32) -> bool>, f: fn(i32) -> bool) -> Vec<fn(i32) -> bool> {
+    values.push(f);
+    return values;
+}
+
+fn reg_count_matches(f: fn(i32) -> bool) -> i64 {
+    let count: i64 = 0;
+    let i: i32 = 0;
+    while i < 4 {
+        if f(i) {
+            count = count + 1;
+        };
+        i = i + 1;
+    }
+    return count;
+}
+
+@test "bool fn ptr survives struct return"() {
+    let holder = reg_holder_new(reg_bool_true);
+    let f = holder.f;
+    if f(1) != true {
+        panic(1501);
+    }
+}
+
+@test "bool fn ptr survives vec push through function"() {
+    let values: Vec<fn(i32) -> bool> = Vec::new();
+    let values1 = reg_vec_push(values, reg_bool_false);
+    let values2 = reg_vec_push(values1, reg_bool_true);
+    let f0 = values2[0];
+    if f0(2) {
+        panic(1502);
+    };
+    let f1 = values2[1];
+    if f1(2) != true {
+        panic(1503);
+    }
+}
+
+@test "bool fn ptr parameter drives repeated branches"() {
+    if reg_count_matches(reg_is_even) != 2 {
+        panic(1504);
+    }
+}

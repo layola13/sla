@@ -16,7 +16,9 @@ use sla_ast::{
     ArrayLiteral, EnumLiteral, Literal, Node, RepeatArrayLiteral, StructDecl, StructLiteral,
     TupleLiteral, Type,
 };
-use sla_lowering::{call_arg_needs_release, peel_borrow_pointer_type, root_identifier};
+use sla_lowering::{
+    call_arg_needs_release, is_temporary_register_name, peel_borrow_pointer_type, root_identifier,
+};
 
 use crate::codegen::{type_size, type_string, Codegen};
 use crate::layout;
@@ -123,6 +125,35 @@ impl<'c> Codegen<'c> {
             self.emit_release(val_reg)?;
         }
         Ok(())
+    }
+
+    /// codegen.zig:17334 `structFieldTempNeedsRelease`: after a
+    /// plain field store, the produced register is retired when
+    /// the value expression's result needs release, or when the
+    /// register is a fresh temporary that is not the value's own
+    /// binding register — the case the let-slot gate
+    /// (`stored_value_needs_release`) misses: an identifier that
+    /// materialised a new temp (a function name in fn-ptr
+    /// position lowers to a fresh `&vtable` temp) leaves that
+    /// temp live at function exit (MemoryLeak, trap 1012;
+    /// LINE-FNPTR-REMAINDER).
+    pub(crate) fn struct_field_temp_needs_release(
+        &self,
+        value: &Node,
+        generated_reg: &str,
+    ) -> bool {
+        if self.expr_result_reg_needs_release(value) {
+            return true;
+        }
+        if !is_temporary_register_name(generated_reg) {
+            return false;
+        }
+        if let Node::Identifier(name) = value {
+            if generated_reg == self.resolve_binding_name(name) {
+                return false;
+            }
+        }
+        true
     }
 
     /// codegen.zig:16051 `genStructLiteralInto` (direct + move
@@ -351,7 +382,7 @@ impl<'c> Codegen<'c> {
                 self.ins(&format!(
                     "store {target}+{offset}, {val_reg} as {ty_str}"
                 ));
-                if self.stored_value_needs_release(value) {
+                if self.struct_field_temp_needs_release(value, &val_reg) {
                     self.emit_release(&val_reg)?;
                 }
             } else if val_reg.starts_with('&') || val_reg.starts_with('^') {
