@@ -1,0 +1,24 @@
+@import "sa_std/core/option.sa"
+
+// Regression (LINE-S100-TYPEMISMATCH): the parser's `?.`
+// optional-chain desugar omitted Zig's `Some(...)` wrap around
+// the then value (parser.zig question_dot arm builds
+// some_call), so the desugared if-let had then-branch type T
+// against else-branch None and the checker rejected every
+// `?.` use with "if expression branch type mismatch". Corpus
+// origin: test_unit_optional_chain. On the base this file
+// fails type checking; with the fix the chain yields
+// Option<T> and `??` unwraps it.
+
+struct S100Point {
+    x: i32,
+    y: i32,
+}
+
+@test "s100 optional chain field"() {
+    let p: Option<S100Point> = Some(S100Point { x: 1, y: 2 });
+    if (p?.x ?? -1) != 1 { panic(51); };
+    if (p?.y ?? -1) != 2 { panic(52); };
+    let q: Option<S100Point> = None;
+    if (q?.x ?? -1) != -1 { panic(53); };
+}

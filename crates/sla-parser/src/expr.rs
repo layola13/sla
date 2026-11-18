@@ -139,6 +139,14 @@ impl<'a> Parser<'a> {
                         field_name,
                     })
                 };
+                // Zig wraps the then value in `Some(...)`
+                // (parser.zig question_dot arm: some_call), so
+                // the if-let's branches are Option<T> / None and
+                // the chain's type is Option<T>. The port omitted
+                // the wrap, leaving then = T against else = None
+                // — a checker "if expression branch type mismatch"
+                // on every `?.` use (test_unit_optional_chain).
+                let wrapped = Parser::make_call("Some", vec![wrapped]);
                 left = Node::IfExpr(IfExpr {
                     cond: Box::new(left),
                     let_chain: Some(vec![cond]),
