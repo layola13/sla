@@ -4,7 +4,10 @@
 //! `src/parser.zig`.
 //!
 //! Desugars applied here, exactly as in Zig:
-//!   `-x`  -> `0 - x` at operand precedence 6 (so `-a + b` is `-(a + b)`)
+//!   `-x`  -> `0 - x` at operand precedence 8 (DEF-UNARY-MINUS, Zig
+//!     0cc23855: binary +/- (7) and */% (8) stay OUTSIDE the negation,
+//!     so `-a + b` is `(-a) + b`; `as` (9) and postfix (10) still fold
+//!     into the operand)
 //!   `!x`  -> `x == false` with the operand at precedence 8
 //!   `&x` / `^x` / `*x` / `await x` wrap the precedence-6 operand.
 
@@ -86,7 +89,7 @@ impl<'a> Parser<'a> {
             }
             Tag::Minus => {
                 self.advance();
-                let operand = self.parse_expr(6)?;
+                let operand = self.parse_expr(8)?;
                 Ok(Node::BinaryExpr(BinaryExpr {
                     op: BinaryOp::Sub,
                     left: Box::new(Node::Literal(Literal::IntVal(0))),
