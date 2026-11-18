@@ -1,0 +1,45 @@
+// Regression (LINE-S100-TYPEMISMATCH): the checker's bare-name
+// `sum` builtin arm ran before receiver-inferred method
+// resolution, so a method call `x.sum()` on a user struct with
+// an inherent (or trait) `sum` method was rejected as
+// "sum over {Type}" without ever trying the method. In Zig the
+// receiver-inferred block (type_checker.zig :9669) precedes the
+// bare-name sum arm (:10693), so the method wins. Corpus
+// origin: test_unit_impl_static_methods ("sum over
+// StaticTriple") and test_unit_trait_static_dispatch ("sum
+// over TraitDispatchPair"). On the base this file fails type
+// checking; with the fix both method forms resolve and run.
+
+struct S100Pair {
+    left: i32,
+    right: i32,
+}
+
+impl S100Pair {
+    fn sum(self) -> i32 {
+        return self.left + self.right;
+    }
+}
+
+trait S100Total {
+    fn total(&self) -> i32;
+}
+
+struct S100Trio {
+    a: i32,
+    b: i32,
+    c: i32,
+}
+
+impl S100Trio {
+    fn sum(self) -> i32 {
+        return self.a + self.b + self.c;
+    }
+}
+
+@test "s100 inherent sum method wins over builtin arm"() {
+    let p = S100Pair { left: 8, right: 13 };
+    if p.sum() != 21 { panic(41); };
+    let t = S100Trio { a: 2, b: 3, c: 5 };
+    if t.sum() != 10 { panic(42); };
+}

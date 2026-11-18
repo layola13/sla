@@ -111,6 +111,23 @@ impl Checker {
 
         // 1. `sum` special: element type of an array / Vec-like.
         if name == "sum" {
+            // Zig's order: receiver-inferred resolution
+            // (type_checker.zig :9669) runs long before the
+            // bare-name `sum` arm (:10693), so a user type's own
+            // `sum` method (inherent or trait) wins over the
+            // builtin element sum. This port's phase-1 order put
+            // the special first, so `triple.sum()` on a struct
+            // with an inherent `sum` was rejected as "sum over
+            // {Type}" without ever trying the method
+            // (test_unit_impl_static_methods,
+            // test_unit_trait_static_dispatch). No std receiver
+            // leaf knows `sum`, so consulting the receiver
+            // cascade here can only resolve user methods; the
+            // builtin arm below keeps its verdicts otherwise
+            // (sum over Option still TypeMismatch).
+            if let Some(result) = self.check_receiver_call(call) {
+                return result;
+            }
             if call.args.len() != 1 {
                 return Err(Diagnostic::new(
                     ErrorKind::InvalidArgsCount,
