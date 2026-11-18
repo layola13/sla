@@ -1,0 +1,50 @@
+// LINE-IMPORTED-1 minim: a repeat literal with u8 elements emits
+// EXPAND SLA_ARRAY_FILL_U8, whose macro body calls @sa_mem_set.
+// The callee is defined in sa_std/core/mem.sa and reaches the
+// program only through the base-import closure (core/slice.sa
+// importers); the A1 minimal-import scan kept none of the five
+// base imports for this shape, so host verification trapped with
+// UnknownRegister "callee is not declared" at the @sa_mem_set
+// call. Baseline: both tests fail with that signature. Fixed:
+// the scan keeps string_format for a u8 repeat literal (the
+// literal's recorded type, the repeated value's recorded type,
+// or the struct field's declared type in field position).
+
+struct FillEntry {
+    tag: [u8; 8],
+    weight: i32,
+}
+
+struct FillBag {
+    entries: [FillEntry; 2],
+    level: i32,
+}
+
+fn fill_checksum() -> i32 {
+    let bag = FillBag {
+        entries: [FillEntry { tag: [0; 8], weight: 5 }; 2],
+        level: 9,
+    };
+    let first = bag.entries[0];
+    if first.tag[3] != 0 {
+        return -1;
+    };
+    return first.weight + bag.level;
+}
+
+@test "repeat u8 fill in struct field declares sa_mem_set"() {
+    if fill_checksum() != 14 {
+        panic(43701);
+    };
+}
+
+@test "root repeat u8 fill declares sa_mem_set"() {
+    let a = [0u8; 8];
+    if a[3] != 0 {
+        panic(43702);
+    };
+    let b = [7u8; 4];
+    if b[0] + b[3] != 14 {
+        panic(43703);
+    };
+}

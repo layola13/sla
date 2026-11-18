@@ -224,6 +224,24 @@ impl<'a> Scanner<'a> {
                 // a struct literal field is deep-cloned when the
                 // field type needs it.
                 for field in &l.fields {
+                    // Field position is where a repeat literal's
+                    // own recorded type may be absent (agg_literal
+                    // context-typed emission); the declared field
+                    // type still proves a u8 fill.
+                    if matches!(&*field.value, Node::RepeatArrayLiteral(_)) {
+                        if let Some(field_ty) =
+                            self.struct_field_ty(l.ty.as_ref(), &field.name)
+                        {
+                            if let Type::Array(arr) = &field_ty {
+                                if matches!(
+                                    &*arr.elem,
+                                    Type::Primitive(sla_ast::Primitive::U8)
+                                ) {
+                                    self.flags.string_format = true;
+                                }
+                            }
+                        }
+                    }
                     if matches!(&*field.value, Node::FieldExpr(_) | Node::IndexExpr(_))
                         && Self::projection_root(&field.value).is_some()
                     {
@@ -269,7 +287,12 @@ impl<'a> Scanner<'a> {
                     self.walk(e);
                 }
             }
-            Node::RepeatArrayLiteral(r) => self.walk(&r.value),
+            Node::RepeatArrayLiteral(r) => {
+                if self.repeat_fill_needs_string_format(node, r) {
+                    self.flags.string_format = true;
+                }
+                self.walk(&r.value);
+            }
             Node::SwitchExpr(sw) => {
                 self.walk(&sw.val);
                 for case in &sw.cases {
@@ -321,6 +344,33 @@ impl<'a> Scanner<'a> {
             // emit nothing on their own.
             _ => {}
         }
+    }
+
+    /// agg_literal.rs `gen_repeat_array_literal_into_typed`: a
+    /// repeat literal with u8 elements emits EXPAND
+    /// SLA_ARRAY_FILL_U8, whose (unconditionally emitted) macro
+    /// body calls @sa_mem_set. @sa_mem_set is defined in
+    /// sa_std/core/mem.sa and reaches the program only through
+    /// the core/slice.sa importers among the five base imports
+    /// (string.sa / string_format.sa) -- the same provider shape
+    /// as SLICE_NEW -- so the cheaper closure (string_format)
+    /// stays imported for such a site. The element type is read
+    /// from the literal's recorded array type, or from the
+    /// repeated value's recorded type (a suffixed `0u8`).
+    fn repeat_fill_needs_string_format(
+        &self,
+        node: &Node,
+        r: &sla_ast::RepeatArrayLiteral,
+    ) -> bool {
+        if let Some(Type::Array(arr)) = self.check.expr_type(node) {
+            if matches!(&*arr.elem, Type::Primitive(sla_ast::Primitive::U8)) {
+                return true;
+            }
+        }
+        matches!(
+            self.check.expr_type(&r.value),
+            Some(Type::Primitive(sla_ast::Primitive::U8))
+        )
     }
 
     /// Aggregate-literal elements (tuple / array): a projection

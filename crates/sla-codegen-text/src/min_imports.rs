@@ -51,6 +51,16 @@
 //!   so any such site keeps `string_format` (the cheaper of the
 //!   two closures — the strip probe: dropping `string_format`
 //!   alone saves ~25 ms, dropping `string` alone ~430 ms).
+//!   The same provider shape covers the array fill: a repeat
+//!   literal with u8 elements emits EXPAND SLA_ARRAY_FILL_U8
+//!   (agg_literal.rs), whose unconditionally emitted macro body
+//!   calls `@sa_mem_set`; that callee is defined in
+//!   `core/mem.sa` and reaches the program through the same
+//!   `core/slice.sa` importers, so a u8 repeat literal also
+//!   keeps `string_format` (walk.rs
+//!   `repeat_fill_needs_string_format`, plus the struct-field
+//!   declared-type route for field position, where the
+//!   literal's own recorded type may be absent).
 //! - `print` (`sa_std/io/print.sai`): any `println()` — every
 //!   arm calls `@sa_print_bytes` (println.rs).
 //! - `fmt` (`sa_std/fmt.sai`): a `println` `{}` hole filled with
