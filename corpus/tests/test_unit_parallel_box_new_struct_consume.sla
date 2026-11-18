@@ -1,0 +1,42 @@
+@import "sa_std/vec.sa"
+@import "sa_std/core/arc.sa"
+@import "sa_std/core/box.sa"
+
+// Minim for LINE-PARALLEL: a plain-field struct binding passed to
+// Box::new must be retired as consumed at the call (Zig
+// constructorArgNeedsConsume, DEF-TEXT31-BOX-CONSUME). The base text
+// emitter planned the argument as a CopyStructValue copy, forgot the
+// copy, and left the source register Active at function exit
+// (host MemoryLeak 1012 on `world`).
+
+struct ParallelBoxConsumeWorld {
+    value: i32,
+}
+
+fn parallel_box_consume_get(world: Arc<*ParallelBoxConsumeWorld>) -> i32 {
+    return 11;
+}
+
+fn parallel_box_consume_shared(value: i32) -> Arc<*ParallelBoxConsumeWorld> {
+    let world = ParallelBoxConsumeWorld { value: value };
+    let boxed = Box::new(world);
+    let raw = Box::into_raw(boxed);
+    return Arc::new(raw);
+}
+
+fn parallel_box_consume_via_param(world: ParallelBoxConsumeWorld) -> i32 {
+    let boxed = Box::new(world);
+    let raw = Box::into_raw(boxed);
+    let shared = Arc::new(raw);
+    return parallel_box_consume_get(shared);
+}
+
+@test "parallel box new consumes plain struct local"() {
+    let shared = parallel_box_consume_shared(5);
+    if parallel_box_consume_get(shared) != 11 { panic(52901); };
+}
+
+@test "parallel box new consumes plain struct param"() {
+    let world = ParallelBoxConsumeWorld { value: 7 };
+    if parallel_box_consume_via_param(world) != 11 { panic(52902); };
+}

@@ -128,6 +128,30 @@ impl<'c> Codegen<'c> {
         Ok((reg, name, generics))
     }
 
+    /// codegen.zig:13671 `constructorArgNeedsConsume`
+    /// (DEF-TEXT31-BOX-CONSUME): retire the source of a
+    /// Box/Rc/Arc::new argument as consumed when the argument
+    /// needed a release temp, when gen_expr materialised a fresh
+    /// temp for it, or when it is a root identifier the checker
+    /// consumed (its type is not Copy under the checker's own
+    /// oracle — the same fact consume_std_constructor_arg used,
+    /// exposed here through CheckInfo::type_is_copy_value).
+    fn constructor_arg_needs_consume(&self, arg: &Node, arg_reg: &str) -> bool {
+        if sla_lowering::call_arg_needs_release(arg) {
+            return true;
+        }
+        if sla_lowering::is_temporary_register_name(arg_reg) {
+            return true;
+        }
+        if !matches!(arg, Node::Identifier(_)) {
+            return false;
+        }
+        match self.expr_type(arg) {
+            Some(ty) => !self.check.type_is_copy_value(&ty),
+            None => false,
+        }
+    }
+
     fn surface_value(&mut self, call: &CallExpr, idx: usize) -> Result<LoweredCallArg> {
         self.gen_planned_call_arg(&call.args[idx], None, false)
     }
@@ -283,11 +307,37 @@ impl<'c> Codegen<'c> {
                     }
                     return Ok(Some(SurfaceCall::Value(reg)));
                 }
-                ("Box", "new")
-                | ("Box", "into_raw")
+                ("Box", "new") | ("Rc", "new") | ("Arc", "new") => {
+                    // codegen.zig isBoxNewCall / isRcNewCall /
+                    // isArcNewCall arms: the argument is generated
+                    // plainly (genExpr — no call-argument plan) and
+                    // the source retires as consumed exactly when
+                    // constructorArgNeedsConsume says so. Planning
+                    // it through surface_value_consumed selected
+                    // the shallow-copy plan for plain-field struct
+                    // identifiers: the copy was forgotten and the
+                    // source binding — already consumed in the
+                    // checker's plan, so absent from the exit
+                    // cleanups — stayed Active at function exit
+                    // (host MemoryLeak 1012, LINE-PARALLEL).
+                    if call.args.len() != 1 {
+                        return Err(missing_fact());
+                    }
+                    let macro_name = match (target.as_str(), name) {
+                        ("Box", "new") => "BOX_NEW",
+                        ("Rc", "new") => "RC_NEW",
+                        _ => "ARC_NEW",
+                    };
+                    let value = self.gen_expr(&call.args[0])?;
+                    let reg = self.new_tmp();
+                    self.ins(&format!("EXPAND {macro_name} {reg}, {value}"));
+                    if self.constructor_arg_needs_consume(&call.args[0], &value) {
+                        self.emit_forget_moved_value(&value)?;
+                    }
+                    return Ok(Some(SurfaceCall::Value(reg)));
+                }
+                ("Box", "into_raw")
                 | ("Box", "from_raw")
-                | ("Rc", "new")
-                | ("Arc", "new")
                 | ("RefCell", "new")
                 | ("Mutex", "new")
                 | ("RwLock", "new") => {
@@ -295,11 +345,8 @@ impl<'c> Codegen<'c> {
                         return Err(missing_fact());
                     }
                     let macro_name = match (target.as_str(), name) {
-                        ("Box", "new") => "BOX_NEW",
                         ("Box", "into_raw") => "BOX_INTO_RAW",
                         ("Box", "from_raw") => "BOX_FROM_RAW",
-                        ("Rc", "new") => "RC_NEW",
-                        ("Arc", "new") => "ARC_NEW",
                         ("RefCell", "new") => "REFCELL_U64_NEW",
                         ("Mutex", "new") => "MUTEX_NEW_I32",
                         _ => "RWLOCK_NEW_I32",
