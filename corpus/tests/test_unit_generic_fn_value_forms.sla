@@ -1,0 +1,28 @@
+// FB-012 regression: generic functions referenced as VALUES with
+// nested and multi-parameter type arguments. Before the pipeline
+// gained its monomorphization stage, any bare generic function
+// reference reached the checker uninstantiated and died with a
+// bare CompileError at the generic_func_ref arm; the plain
+// `ident<i32>` forms live in test_unit_fn_ptr_value.sla (subtests
+// "generic function can be specialized as function pointer value"
+// and "generic function specialization can be passed as
+// argument"). These two forms were the triage's unverified gap:
+// a nested type argument (Vec<i32>) and a two-parameter template,
+// both in @test form (acceptance must use `sla test`: `sla check`
+// does not parse @test bodies).
+
+fn fb012_ident<T>(value: T) -> T { return value; }
+
+fn fb012_pair2<A, B>(a: A, b: B) -> A { return a; }
+
+@test "nested generic ref as value"() {
+    let f: fn(Vec<i32>) -> Vec<i32> = fb012_ident<Vec<i32>>;
+    let got = f(Vec::new());
+    if got.len() != 0 { panic(1501); };
+}
+
+@test "two-param generic ref as value"() {
+    let f: fn(i32, bool) -> i32 = fb012_pair2<i32, bool>;
+    let got = f(7, true);
+    if got != 7 { panic(1502); };
+}

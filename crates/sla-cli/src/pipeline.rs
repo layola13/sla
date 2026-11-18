@@ -14,14 +14,17 @@
 //! then the CLI-D5 prunes in crate::test_prune (TestCodegen:
 //! filter + reachability; Compile: imported-body
 //! reachability, rooted at the root file's decls)]
-//! → contract load + extern registration + IMP-4 imported-
+//! → monomorphize (sla_ast::monomorphize, FB-012; after the
+//! prunes, mirroring the Zig expand → test-filter →
+//! monomorphize → load-contracts order) → contract load +
+//! extern registration + IMP-4 imported-
 //! signature registration (crate::pipeline::expand_wire) →
 //! type check → tail
 //! codegen → freshness store. Stages with no port in
 //! the existing crates — source_expand (@expand_tuple), the
 //! reachability-selective expansion mode (IMP-1; Compile
 //! runs the bodies-kept combination instead, see the
-//! expansion site), defer desugar, monomorphizer, syntax
+//! expansion site), defer desugar, syntax
 //! (go/chan/select), the SAB audit, the IMP-4 alias metadata
 //! table, and output import-path rewriting — are NOT silently
 //! skipped:
@@ -399,6 +402,24 @@ pub fn run_frontend(
             &root_flags,
         );
         stage_done(stderr, profile, "compile reachable imported-body prune", start);
+    }
+
+    // FB-012: monomorphize (monomorphizer.zig via
+    // plugin_compile.zig) — after the prunes, before contract
+    // load + check_program, in the Zig stage order. The prune
+    // counts GenericFuncRef / generic calls as reference edges
+    // (test_reach.rs), so used templates are still present;
+    // instances are appended as ordinary declarations and the
+    // checker never sees a GenericFuncRef on this path (D-C11).
+    // Error text is MonomorphizeError's Display, mirroring
+    // plugin_compile.zig byte-for-byte.
+    {
+        let start = Instant::now();
+        if let Err(err) = sla_ast::monomorphize::monomorphize_program(&mut root) {
+            let _ = writeln!(stderr, "{err}");
+            return None;
+        }
+        stage_done(stderr, profile, &format!("{prefix}monomorphize"), start);
     }
 
     let Node::Program(program) = &root else {

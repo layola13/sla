@@ -329,8 +329,14 @@ fn while_let_pattern_mismatch_rejected() {
 
 #[test]
 fn generic_func_ref_rejected_compile_error() {
-    // Zig type_checker.zig:3209 — the arm is a bare
-    // `return TypeError.CompileError` (FB-012).
+    // FB-012 guardrail for direct-checker use: the pipeline's
+    // monomorphizer resolves value-form references before the
+    // checker runs, but a GenericFuncRef handed straight to the
+    // checker is still rejected with CompileError. (The Zig arm
+    // was a bare `return TypeError.CompileError` when this test
+    // was written — D-C14; sa_plugin_sla da1a09d2 has since made
+    // it loud with the function named, and check_expr.rs mirrors
+    // that text. This test pins the rejection + kind.)
     let gref = Node::GenericFuncRef(GenericFuncRef {
         func_name: "id".to_string(),
         generics: vec![],

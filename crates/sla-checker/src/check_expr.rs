@@ -366,17 +366,23 @@ impl Checker {
                 self.unsafe_depth -= 1;
                 Ok(result?.unwrap_or_else(void_ty))
             }
-            Node::GenericFuncRef(_) => {
-                // The Zig arm is a bare `return TypeError.CompileError`
-                // (type_checker.zig:3209) with NO setError: a generic
-                // function reference that survives monomorphization
-                // into the checker is simply rejected, and the
-                // caller's wrapper synthesizes the fallback text.
-                // Generic INSTANTIATION is the monomorphizer's job,
-                // upstream of the checker entirely (D-C11 / FB-012).
+            Node::GenericFuncRef(gref) => {
+                // FB-012 / D-C14: this arm is unreachable in the
+                // normal pipeline (the monomorphizer materializes
+                // generic instances before checking, D-C11). If a
+                // reference leaks through — direct-checker use or
+                // a monomorphizer gap — reject it loudly and name
+                // the function, mirroring the Zig arm's setError
+                // text (type_checker.zig, fixed in sa_plugin_sla
+                // da1a09d2; the bare `return TypeError.CompileError`
+                // it replaced is what the old fallback text here
+                // mirrored).
                 Err(Diagnostic::new(
                     ErrorKind::CompileError,
-                    "checkExpr failed at node tag generic_func_ref",
+                    format!(
+                        "CompileError: generic function reference `{}` reached the type checker uninstantiated; generic instances must be materialized by the monomorphizer before checking",
+                        gref.func_name
+                    ),
                 ))
             }
             _ => Err(Diagnostic::out_of_slice(crate::types_util::node_tag(node))),
