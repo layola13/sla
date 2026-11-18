@@ -910,10 +910,7 @@ impl<'c> Codegen<'c> {
             return self.gen_imported_macro_call_expr(call, &view);
         }
         if self.check.is_macro(&func_name) {
-            return unsupported(
-                "user macro call expansion",
-                "codegen.zig:15480 (imported/user macro call plans)",
-            );
+            return self.gen_user_macro_call(expr, call);
         }
         if let Some(sig) = self.check.extern_sig(&func_name) {
             return self.gen_extern_call(call, &sig);
@@ -1212,10 +1209,7 @@ impl<'c> Codegen<'c> {
             return self.gen_imported_macro_call_stmt(call, &view);
         }
         if self.check.is_macro(&func_name) {
-            return unsupported(
-                "user macro statement call",
-                "codegen.zig:1900 (genCallStmt macro path)",
-            );
+            return self.gen_user_macro_call_stmt(expr, call);
         }
         if let Some(sig) = self.check.extern_sig(&func_name) {
             return self.gen_extern_call_stmt(expr, call, &sig);

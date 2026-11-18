@@ -61,6 +61,7 @@ mod program;
 mod release;
 mod stmt;
 mod stmt_while;
+mod user_macro;
 
 pub use codegen::Codegen;
 pub use sla_lowering::LoweringError;

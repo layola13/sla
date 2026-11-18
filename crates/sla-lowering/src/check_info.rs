@@ -13,7 +13,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use sla_ast::{FuncDecl, Node, StructDecl, Type};
+use sla_ast::{FuncDecl, MacroDecl, Node, StructDecl, Type};
 
 use crate::abi::type_is_copy_value_leaf;
 use crate::node_key;
@@ -164,6 +164,37 @@ pub trait CheckInfo {
         false
     }
 
+    /// `tc.macros`: the user-macro declaration (params, declared
+    /// parameter types, body) the text backend's inline expansion
+    /// consumes (Zig codegen reads `tc.macros` directly).
+    fn macro_decl(&self, _name: &str) -> Option<&MacroDecl> {
+        None
+    }
+
+    /// `tc.macro_call_try_cleanups`: caller-side bindings to
+    /// release when a `?` inside the macro body propagates out of
+    /// this call, keyed by the call node.
+    fn macro_call_try_cleanups(&self, _call: &Node) -> Option<&[String]> {
+        None
+    }
+
+    /// `tc.expr_types` by precomputed node key (the macro-arg
+    /// table stores arg nodes by key, mirroring Zig's
+    /// pointer-keyed `macro_arg_exprs`).
+    fn expr_type_by_key(&self, _key: usize) -> Option<&Type> {
+        None
+    }
+
+    /// Zig `lowering_rules.macroBodyConsumesParam` over the named
+    /// macro's body: true when the body consumes the parameter's
+    /// value (the temp-arg retirement in the inline expansion
+    /// skips parameters the body already consumed). On checked
+    /// programs this equals the checker's sequence consumption
+    /// being Always (conditional consumption is a checker error).
+    fn macro_body_consumes_param(&self, _macro_name: &str, _param: &str) -> bool {
+        false
+    }
+
     /// `tc.resolveFunctionAlias`.
     fn resolve_alias(&self, name: &str) -> String {
         name.to_string()
@@ -216,6 +247,8 @@ pub struct MapCheckInfo {
     pub extern_sigs: HashMap<String, ExternSigView>,
     pub imported_macros: HashMap<String, ImportedMacroView>,
     pub macros: HashSet<String>,
+    pub macro_decls: HashMap<String, MacroDecl>,
+    pub macro_call_try_cleanups: HashMap<usize, Vec<String>>,
     pub aliases: HashMap<String, String>,
     pub resolved_symbols: HashMap<usize, String>,
     /// Struct names whose values are Copy even though the field walk
@@ -281,6 +314,21 @@ impl MapCheckInfo {
 
     pub fn add_macro(&mut self, name: &str) -> &mut Self {
         self.macros.insert(name.to_string());
+        self
+    }
+
+    pub fn add_macro_decl(&mut self, decl: MacroDecl) -> &mut Self {
+        self.macros.insert(decl.name.clone());
+        self.macro_decls.insert(decl.name.clone(), decl);
+        self
+    }
+
+    pub fn add_macro_call_try_cleanups(
+        &mut self,
+        call: &Node,
+        names: Vec<String>,
+    ) -> &mut Self {
+        self.macro_call_try_cleanups.insert(node_key(call), names);
         self
     }
 
@@ -366,6 +414,20 @@ impl CheckInfo for MapCheckInfo {
 
     fn is_macro(&self, name: &str) -> bool {
         self.macros.contains(name)
+    }
+
+    fn macro_decl(&self, name: &str) -> Option<&MacroDecl> {
+        self.macro_decls.get(name)
+    }
+
+    fn macro_call_try_cleanups(&self, call: &Node) -> Option<&[String]> {
+        self.macro_call_try_cleanups
+            .get(&node_key(call))
+            .map(Vec::as_slice)
+    }
+
+    fn expr_type_by_key(&self, key: usize) -> Option<&Type> {
+        self.expr_types.get(&key)
     }
 
     fn resolve_alias(&self, name: &str) -> String {

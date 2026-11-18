@@ -665,6 +665,32 @@ impl<'c> Codegen<'c> {
                 // loaded pointee handle, never the source register
                 // (returning the source register lets the consumer
                 // move it, and the pointee load is lost).
+                // codegen.zig:20228, borrow arm `deref_smart_pointer`
+                // shape: inside a macro inline, `&*box` is a ptr_add
+                // alias of the box register itself — the handle IS
+                // the pointee address, and the generic `&deref_temp`
+                // tail below would address a value temp with no
+                // storage (host segfault on the callee's load).
+                // Box only, and only in inlines, exactly as in Zig.
+                if self.macro_inline_depth > 0 {
+                    let box_source = match &source_ty {
+                        Some(ty) => matches!(
+                            peel_borrow_pointer_type(ty),
+                            Type::UserDefined(u)
+                                if u.name == "Box" && u.generics.len() == 1
+                        ),
+                        None => false,
+                    };
+                    if box_source {
+                        let source = self.gen_expr(&d.expr)?;
+                        let addr = self.new_tmp();
+                        self.ins(&format!("{addr} = ptr_add {source}, 0"));
+                        if sla_lowering::expr_result_needs_release(&d.expr) {
+                            self.borrow_source_temps.insert(addr.clone(), source);
+                        }
+                        return Ok(addr);
+                    }
+                }
                 let smart_source = match &source_ty {
                     Some(ty) => matches!(
                         peel_borrow_pointer_type(ty),

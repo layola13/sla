@@ -216,8 +216,9 @@ impl<'c> Codegen<'c> {
                 } else {
                     generated
                 };
-                if let Some(inner_ty) = self.expr_type(&d.expr) {
-                    let smart_macro = match sla_lowering::peel_borrow_pointer_type(&inner_ty) {
+                let inner_ty_opt = self.expr_type(&d.expr);
+                if let Some(inner_ty) = &inner_ty_opt {
+                    let smart_macro = match sla_lowering::peel_borrow_pointer_type(inner_ty) {
                         Type::UserDefined(u) if u.generics.len() == 1 => match u.name.as_str() {
                             "Rc" => Some("RC_GET"),
                             "Arc" => Some("ARC_GET"),
@@ -235,6 +236,35 @@ impl<'c> Codegen<'c> {
                     }
                 }
                 let deref_ty = self.require_expr_type(expr, "deref result type")?;
+                // DEF-DEREF-BORROW-WRITE (Zig codegen.zig deref arm):
+                // dereferencing a borrow to an aggregate yields the
+                // pointee record address itself — a borrow value IS
+                // the pointee address in the text backend's model.
+                // Loading through it reinterprets the record's first
+                // word as a pointer. Excluded: a pointee that is
+                // itself a smart pointer (its value is the handle
+                // cell address), and smart-pointer deref results.
+                // The ptr_add materializes a disposable alias temp
+                // so consumers never retire the borrow's register.
+                fn smart_deref_type(ty: &Type) -> bool {
+                    matches!(ty, Type::UserDefined(u)
+                        if u.generics.len() == 1
+                            && matches!(u.name.as_str(), "Box" | "Rc" | "Arc"))
+                }
+                if let Some(Type::Borrow(pointee)) = &inner_ty_opt {
+                    if !smart_deref_type(pointee) {
+                        let aggregate_result = match &deref_ty {
+                            Type::UserDefined(_) => !smart_deref_type(&deref_ty),
+                            Type::Tuple(_) | Type::Array(_) => true,
+                            _ => false,
+                        };
+                        if aggregate_result {
+                            let reg = self.new_tmp();
+                            self.ins(&format!("{reg} = ptr_add {inner}, 0"));
+                            return Ok(reg);
+                        }
+                    }
+                }
                 let reg = self.new_tmp();
                 self.ins(&format!(
                     "{reg} = load {inner}+0 as {}",
@@ -310,7 +340,18 @@ impl<'c> Codegen<'c> {
                 ));
                 Ok(reg)
             }
-            Node::UnsafeExpr(ue) => self.gen_block_tail_value_into_fresh(&ue.body),
+            Node::UnsafeExpr(ue) => {
+                // codegen.zig:20573: an unsafe block inside an
+                // active user-macro inline is the macro's value
+                // form (genUserMacroUnsafeValueInline).
+                if self.macro_inline_depth > 0 {
+                    if let Some(decl) = self.active_inline_macro.clone() {
+                        return self.gen_user_macro_unsafe_value_inline(&decl, &ue.body);
+                    }
+                }
+                self.gen_block_tail_value_into_fresh(&ue.body)
+            }
+            Node::TryExpr(t) => self.gen_try_expr(expr, t),
             // F-G2: a supervised spawn in expression position
             // emits the spawn sequence (go_spawn.rs) and yields
             // the handle. F-3: a plain spawn in expression
@@ -645,6 +686,111 @@ impl<'c> Codegen<'c> {
             self.emit_release(&r)?;
         }
         Ok(result)
+    }
+
+    /// codegen.zig:24137 `try_expr`: postfix `?` unwrapper. The
+    /// error path emits the branch-scoped cleanups for the try
+    /// node (inside a user-macro inline, the macro-call try
+    /// cleanup list) and returns the whole inner value.
+    fn gen_try_expr(&mut self, expr: &Node, try_expr: &sla_ast::TryExpr) -> Result<String> {
+        let inner_ty = self
+            .resolved_type_for_expr(&try_expr.expr)
+            .ok_or_else(|| TextError::MissingType {
+                context: "try operand type".to_string(),
+            })?;
+        // Option arm.
+        if let Type::UserDefined(u) = &inner_ty {
+            if u.name == "Option" && u.generics.len() == 1 {
+                let inner_reg = self.gen_expr(&try_expr.expr)?;
+                let is_some = self.new_tmp();
+                self.ins(&format!("EXPAND OPTION_IS_SOME {is_some}, {inner_reg}"));
+                let some_label = self.new_label("L_TRY_OPTION_SOME");
+                let none_label = self.new_label("L_TRY_OPTION_NONE");
+                self.w(&format!(
+                    "    br {is_some} -> {some_label}, {none_label}\n\n"
+                ));
+                self.wl(&format!("{none_label}:"));
+                self.ins(&format!("!{is_some}"));
+                self.emit_branch_scoped_cleanup_for_node(expr)?;
+                self.w(&format!("    return {inner_reg}\n\n"));
+                self.wl(&format!("{some_label}:"));
+                self.ins(&format!("!{is_some}"));
+                let some_val = self.new_tmp();
+                self.ins(&format!("EXPAND OPTION_GET {some_val}, {inner_reg}"));
+                self.ins(&format!("!{inner_reg}"));
+                return Ok(some_val);
+            }
+            if u.name == "Result" && !u.generics.is_empty() {
+                let inner_reg = self.gen_expr(&try_expr.expr)?;
+                let is_ok = self.new_tmp();
+                self.ins(&format!("EXPAND RESULT_IS_OK {is_ok}, {inner_reg}"));
+                let ok_label = self.new_label("L_TRY_RESULT_OK");
+                let err_label = self.new_label("L_TRY_RESULT_ERR");
+                self.w(&format!("    br {is_ok} -> {ok_label}, {err_label}\n\n"));
+                self.wl(&format!("{err_label}:"));
+                self.ins(&format!("!{is_ok}"));
+                self.emit_branch_scoped_cleanup_for_node(expr)?;
+                self.w(&format!("    return {inner_reg}\n\n"));
+                self.wl(&format!("{ok_label}:"));
+                self.ins(&format!("!{is_ok}"));
+                let ok_val = self.new_tmp();
+                self.ins(&format!("EXPAND RESULT_GET_OK {ok_val}, {inner_reg}"));
+                self.ins(&format!("!{inner_reg}"));
+                return Ok(ok_val);
+            }
+        }
+        // User-defined result-struct arm.
+        let result_ty = sla_lowering::peel_borrow_pointer_type(&inner_ty).clone();
+        let type_name = match &result_ty {
+            Type::UserDefined(u) => u.name.clone(),
+            _ => {
+                return Err(TextError::MissingType {
+                    context: "try operand is not an Option/Result/result struct"
+                        .to_string(),
+                })
+            }
+        };
+        let decl = self
+            .check
+            .struct_decl(&type_name)
+            .cloned()
+            .ok_or_else(|| TextError::MissingType {
+                context: format!("try result struct `{type_name}` declaration"),
+            })?;
+        let (is_err_offset, is_err_ty) =
+            crate::layout::struct_field_layout(&decl, "is_err").ok_or_else(|| {
+                TextError::MissingType {
+                    context: "try result struct `is_err` field".to_string(),
+                }
+            })?;
+        let (value_offset, value_ty) =
+            crate::layout::struct_field_layout(&decl, "value").ok_or_else(|| {
+                TextError::MissingType {
+                    context: "try result struct `value` field".to_string(),
+                }
+            })?;
+        let inner_reg = self.gen_expr(&try_expr.expr)?;
+        let is_err = self.new_tmp();
+        self.ins(&format!(
+            "{is_err} = load {inner_reg}+{is_err_offset} as {}",
+            crate::codegen::type_string(&is_err_ty)
+        ));
+        let ok_label = self.new_label("L_TRY_OK");
+        let err_label = self.new_label("L_TRY_ERR");
+        self.w(&format!("    br {is_err} -> {err_label}, {ok_label}\n\n"));
+        self.wl(&format!("{err_label}:"));
+        self.ins(&format!("!{is_err}"));
+        self.emit_branch_scoped_cleanup_for_node(expr)?;
+        self.w(&format!("    return {inner_reg}\n\n"));
+        self.wl(&format!("{ok_label}:"));
+        self.ins(&format!("!{is_err}"));
+        let ok_val = self.new_tmp();
+        self.ins(&format!(
+            "{ok_val} = load {inner_reg}+{value_offset} as {}",
+            crate::codegen::type_string(&value_ty)
+        ));
+        self.ins(&format!("!{inner_reg}"));
+        Ok(ok_val)
     }
 
     /// Helper for the unsafe-block expression: tail value into a

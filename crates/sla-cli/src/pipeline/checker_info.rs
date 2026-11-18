@@ -117,6 +117,25 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
     fn is_macro(&self, name: &str) -> bool {
         self.checker.macros.contains_key(name)
     }
+    fn macro_decl(&self, name: &str) -> Option<&sla_ast::MacroDecl> {
+        self.checker.macros.get(name)
+    }
+    fn macro_call_try_cleanups(&self, call: &Node) -> Option<&[String]> {
+        self.checker
+            .macro_call_try_cleanups
+            .get(&sla_lowering::node_key(call))
+            .map(Vec::as_slice)
+    }
+    fn expr_type_by_key(&self, key: usize) -> Option<&sla_ast::Type> {
+        self.checker.expr_types.get(&key)
+    }
+    fn macro_body_consumes_param(&self, macro_name: &str, param: &str) -> bool {
+        let Some(mac) = self.checker.macros.get(macro_name) else {
+            return false;
+        };
+        sla_checker::rules::macro_param_consumption(&mac.body, param)
+            == sla_checker::rules::MacroParamConsumption::Always
+    }
     fn imported_macro(&self, name: &str) -> Option<sla_lowering::ImportedMacroView> {
         // `tc.imported_macros` projection (the registry the
         // contract loader generated from each imported `.sa`

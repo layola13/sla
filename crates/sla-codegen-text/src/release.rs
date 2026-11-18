@@ -546,6 +546,12 @@ impl<'c> Codegen<'c> {
 
     /// codegen.zig `emitBranchScopedCleanupForNode`.
     pub(crate) fn emit_branch_scoped_cleanup_for_node(&mut self, node: &Node) -> Result<()> {
+        // codegen.zig:2776: inside a user-macro inline, the
+        // recorded macro-call try cleanup list replaces the
+        // node's own branch-scoped list.
+        if let Some(names) = self.active_macro_try_cleanup.clone() {
+            return self.emit_branch_scoped_cleanup_list(&names);
+        }
         if let Some(list) = self.check.cleanups(node) {
             let names: Vec<String> = list.to_vec();
             self.emit_branch_scoped_cleanup_list(&names)?;

@@ -264,6 +264,47 @@ fn node_consumption(node: &Node, param: &str) -> MacroParamConsumption {
         }
         Node::BlockStmt(b) => block_consumption(&b.body, param),
         Node::ReleaseStmt(r) => consumption_of_name(&r.var_name, param),
+        // Zig `macroNodeConsumption` literal arms
+        // (control_flow_rules.zig:152-172): a move buried in a
+        // literal's field/element values consumes exactly as a
+        // bare move does. These arms were missing, so a macro
+        // that moves a parameter into a struct literal
+        // (`out = Holder { value: ^value };`) reported Never and
+        // the caller kept the source binding Active — its exit
+        // cleanup then dropped the moved value a second time
+        // (double free at runtime).
+        Node::StructLiteral(l) => {
+            let mut acc = match &l.update_expr {
+                Some(u) => node_consumption(u, param),
+                None => MacroParamConsumption::Never,
+            };
+            for f in &l.fields {
+                acc = sequence_consumption(acc, node_consumption(&f.value, param));
+            }
+            acc
+        }
+        Node::EnumLiteral(l) => {
+            let mut acc = MacroParamConsumption::Never;
+            for f in &l.fields {
+                acc = sequence_consumption(acc, node_consumption(&f.value, param));
+            }
+            acc
+        }
+        Node::TupleLiteral(l) => {
+            let mut acc = MacroParamConsumption::Never;
+            for e in &l.elements {
+                acc = sequence_consumption(acc, node_consumption(e, param));
+            }
+            acc
+        }
+        Node::ArrayLiteral(l) => {
+            let mut acc = MacroParamConsumption::Never;
+            for e in &l.elements {
+                acc = sequence_consumption(acc, node_consumption(e, param));
+            }
+            acc
+        }
+        Node::RepeatArrayLiteral(l) => node_consumption(&l.value, param),
         _ => MacroParamConsumption::Never,
     }
 }

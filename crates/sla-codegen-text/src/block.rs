@@ -160,8 +160,29 @@ impl<'c> Codegen<'c> {
                 type_string(target_ty)
             ));
         }
-        // (Zig: storeResultSlotTransferredValueState — RefCell state
-        // transfer bookkeeping, untracked in the slice.)
+        // Zig `storeResultSlotTransferredValueState` (codegen.zig
+        // :2279), minus the RefCell companion branch (borrow-typed
+        // targets keep their companion bookkeeping in the let /
+        // assign paths): the store lifecycle is
+        // planResultSlotStoreLifecycle over
+        // planResultSlotTransfer(target_ty), whose transfers_value
+        // is exactly abiPassesAsPointer(target_ty). A transferred
+        // value leaves a temporary source register Active unless it
+        // is retired with `^src` (the value now lives in the slot);
+        // named bindings stay live. A non-transferred source is
+        // released when the value expression's result needs it.
+        // Without this, an EXPAND-produced tail value (e.g.
+        // OPTION_NEW_SOME in an if branch) leaked at function exit
+        // (MemoryLeak 1012).
+        if sla_lowering::abi_passes_as_pointer(target_ty) {
+            if sla_lowering::is_temporary_register_name(&value_reg)
+                && !self.consumed_bindings.contains(&value_reg)
+            {
+                self.emit_forget_moved_value(&value_reg)?;
+            }
+        } else if sla_lowering::call_arg_needs_release(value_expr) {
+            self.emit_release(&value_reg)?;
+        }
 
         if !stmt_terminates(last) {
             if let Some(list) = self.check.cleanups(last) {

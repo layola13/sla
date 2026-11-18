@@ -39,6 +39,12 @@
 //!   extern_macro.rs writebacks), an imported-macro call whose
 //!   macro lives in `string.sa` (the `EXPAND` itself names it),
 //!   any `String::…` associated call (conservative).
+//!   Also the `@sa_mem_free` provider: deep drops of smart
+//!   pointers (`Box` / `Rc` / `Arc`, drop.rs) and the HashMap
+//!   slot free (map.rs) emit `call @sa_mem_free`, whose only
+//!   declaration among the five is the `@extern` in
+//!   `string.sa`; any node whose recorded type materializes
+//!   such a value keeps `string` (walk.rs top-of-walk probe).
 //! - `string_format` (`sa_std/string_format.sa`):
 //!   `format()` (FORMAT_BEGIN / FORMAT_PUSH_*, format.rs).
 //!   Also the slice provider of last resort: every string
@@ -128,6 +134,34 @@ fn ty_has_string(ty: &Type) -> bool {
         }
         Type::FnPtr(sig) => {
             sig.params.iter().any(ty_has_string) || ty_has_string(sig.ret.as_ref())
+        }
+        _ => false,
+    }
+}
+
+/// A type materializes a value whose deep drop (or map slot
+/// free) emits `call @sa_mem_free`: a smart pointer or a
+/// HashMap, at any nesting depth. Syntactic only, like
+/// [`ty_has_string`].
+fn ty_has_mem_free_value(ty: &Type) -> bool {
+    match ty {
+        Type::UserDefined(u) => {
+            matches!(u.name.as_str(), "Box" | "Rc" | "Arc" | "HashMap")
+                || u.generics.iter().any(ty_has_mem_free_value)
+        }
+        Type::Borrow(inner) | Type::Pointer(inner) => {
+            ty_has_mem_free_value(inner.as_ref())
+        }
+        Type::Array(arr) => ty_has_mem_free_value(arr.elem.as_ref()),
+        Type::Tuple(tup) => tup.elems.iter().any(ty_has_mem_free_value),
+        Type::Future(inner) => ty_has_mem_free_value(inner.as_ref()),
+        Type::Closure(sig) => {
+            sig.params.iter().any(ty_has_mem_free_value)
+                || ty_has_mem_free_value(sig.ret.as_ref())
+        }
+        Type::FnPtr(sig) => {
+            sig.params.iter().any(ty_has_mem_free_value)
+                || ty_has_mem_free_value(sig.ret.as_ref())
         }
         _ => false,
     }

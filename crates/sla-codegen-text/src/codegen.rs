@@ -108,6 +108,22 @@ pub struct Codegen<'c> {
     /// (arrived through the call-argument copy) from a local one.
     pub(crate) param_bindings: HashSet<String>,
 
+    /// User-macro inline expansion state (codegen.zig
+    /// `macro_arg_exprs` / `macro_arg_types` / `macro_inline_depth`
+    /// / `active_inline_macro` / `active_macro_try_cleanup`).
+    /// Arg nodes are stored by node key — this lane's equivalent
+    /// of Zig's pointer-keyed map — and their types read back
+    /// through CheckInfo::expr_type_by_key.
+    pub(crate) macro_arg_exprs: HashMap<String, usize>,
+    pub(crate) macro_arg_types: HashMap<String, Type>,
+    pub(crate) macro_inline_depth: usize,
+    pub(crate) active_inline_macro: Option<sla_ast::MacroDecl>,
+    pub(crate) active_macro_try_cleanup: Option<Vec<String>>,
+    /// One-shot loop-counter slot override for a `for` statement
+    /// generated inside a user-macro inline: the hygiene slot is
+    /// allocated at the inline site, not hoisted at function entry.
+    pub(crate) for_slot_override: Option<(usize, String)>,
+
     // Program-wide state.
     pub(crate) global_const_bindings: HashSet<String>,
     pub(crate) global_scalar_consts: Vec<(String, Literal)>,
@@ -255,6 +271,12 @@ impl<'c> Codegen<'c> {
             update_moved_fields: HashSet::new(),
             tainted_bindings: HashMap::new(),
             param_bindings: HashSet::new(),
+            macro_arg_exprs: HashMap::new(),
+            macro_arg_types: HashMap::new(),
+            macro_inline_depth: 0,
+            active_inline_macro: None,
+            active_macro_try_cleanup: None,
+            for_slot_override: None,
             global_const_bindings: HashSet::new(),
             global_scalar_consts: Vec::new(),
             func_index: Vec::new(),
@@ -392,6 +414,12 @@ impl<'c> Codegen<'c> {
         self.update_moved_fields.clear();
         self.tainted_bindings.clear();
         self.param_bindings.clear();
+        self.macro_arg_exprs.clear();
+        self.macro_arg_types.clear();
+        self.macro_inline_depth = 0;
+        self.active_inline_macro = None;
+        self.active_macro_try_cleanup = None;
+        self.for_slot_override = None;
         self.clear_binding_aliases();
         self.let_binding_aliases.clear();
         self.hoisted_allocs.clear();
@@ -461,7 +489,20 @@ impl<'c> Codegen<'c> {
     }
 
     pub(crate) fn expr_type(&self, node: &Node) -> Option<Type> {
-        self.check.expr_type(node).cloned()
+        let fact = self.check.expr_type(node).cloned();
+        match fact {
+            Some(ty) if ty != Type::Infer => Some(ty),
+            _ if self.macro_inline_depth > 0 => {
+                // Inside a user-macro inline, body nodes carry no
+                // checker facts (untyped macro bodies are never
+                // type-checked); Zig's single resolver
+                // (resolvedTypeForExpr) derives their types
+                // structurally, so this lane does the same — scoped
+                // to the inline so non-macro emission is unchanged.
+                self.resolved_type_for_expr(node).or(fact)
+            }
+            other => other,
+        }
     }
 
     pub(crate) fn require_expr_type(&self, node: &Node, context: &'static str) -> Result<Type> {
@@ -543,6 +584,198 @@ impl<'c> Codegen<'c> {
             .iter()
             .find(|(n, _)| n == name)
             .map(|(_, t)| t.clone())
+    }
+
+    /// codegen.zig `macroArgTypeForName`: the recorded macro-arg
+    /// type for a name (skipping Infer), else the recorded arg
+    /// expression's checker type (also skipping Infer).
+    pub(crate) fn macro_arg_type_for_name(&self, name: &str) -> Option<Type> {
+        if let Some(ty) = self.macro_arg_types.get(name) {
+            if *ty != Type::Infer {
+                return Some(ty.clone());
+            }
+        }
+        if let Some(key) = self.macro_arg_exprs.get(name) {
+            if let Some(ty) = self.check.expr_type_by_key(*key) {
+                if *ty != Type::Infer {
+                    return Some(ty.clone());
+                }
+            }
+        }
+        None
+    }
+
+    /// codegen.zig `newInlineMacroLocal`: the hygiene-renamed
+    /// register for a macro-body local.
+    pub(crate) fn new_inline_macro_local(&mut self, macro_name: &str, local: &str) -> String {
+        let idx = self.macro_local_idx;
+        self.macro_local_idx += 1;
+        format!("__sla_macro_{macro_name}_{local}_{idx}")
+    }
+
+    /// codegen.zig `fieldTypeForType` (structs via the CheckInfo
+    /// projection; tuples by numeric field name).
+    pub(crate) fn field_type_for_type(&self, ty: &Type, name: &str) -> Option<Type> {
+        let curr = sla_lowering::peel_borrow_pointer_type(ty);
+        if let Type::Tuple(t) = curr {
+            let index: usize = name.parse().ok()?;
+            return t.elems.get(index).cloned();
+        }
+        if let Type::UserDefined(u) = curr {
+            let decl = self.check.struct_decl(&u.name)?;
+            for field in &decl.fields {
+                if field.name == name {
+                    return Some((*field.ty).clone());
+                }
+            }
+        }
+        None
+    }
+
+    /// codegen.zig:5322 `resolvedTypeForExpr`: the checker fact
+    /// first (skipping Infer), then the structural fallback chain.
+    /// Macro bodies of untyped macros are never type-checked, so
+    /// body nodes reach codegen with no facts at all; this chain
+    /// is what the Zig emitter resolves them with.
+    pub(crate) fn resolved_type_for_expr(&self, expr: &Node) -> Option<Type> {
+        if let Some(ty) = self.check.expr_type(expr) {
+            if *ty != Type::Infer {
+                return Some(ty.clone());
+            }
+        }
+        match expr {
+            Node::Literal(lit) => Some(Type::Primitive(match lit {
+                sla_ast::Literal::IntVal(_) => sla_ast::Primitive::I64,
+                sla_ast::Literal::FloatVal(_) => sla_ast::Primitive::F64,
+                sla_ast::Literal::BoolVal(_) => sla_ast::Primitive::Boolean,
+                sla_ast::Literal::StringVal(_) => sla_ast::Primitive::RawPtr,
+            })),
+            Node::Identifier(name) => self
+                .macro_arg_type_for_name(name)
+                .or_else(|| self.local_binding_type_for_name(name))
+                // Zig `localBindingTypeForName`'s second step: the
+                // type recorded under the resolved (aliased)
+                // register name — match payload bindings and other
+                // alias-introduced bindings are remembered there.
+                .or_else(|| {
+                    let resolved = self.resolve_binding_name(name);
+                    if resolved != *name {
+                        self.local_binding_type_for_name(&resolved)
+                    } else {
+                        None
+                    }
+                }),
+            Node::CallExpr(call) => {
+                if let Some(func) = self.func_decl(&call.func_name) {
+                    return Some((*func.ret_ty).clone());
+                }
+                None
+            }
+            Node::BinaryExpr(bin) => {
+                use sla_ast::BinaryOp as B;
+                if matches!(
+                    bin.op,
+                    B::Eq | B::Ne | B::Lt | B::Le | B::Gt | B::Ge
+                        | B::LogicalAnd | B::LogicalOr
+                ) {
+                    return Some(Type::Primitive(sla_ast::Primitive::Boolean));
+                }
+                self.resolved_type_for_expr(&bin.left)
+                    .or_else(|| self.resolved_type_for_expr(&bin.right))
+            }
+            Node::BorrowExpr(b) => self
+                .resolved_type_for_expr(&b.expr)
+                .map(|inner| Type::Borrow(Box::new(inner))),
+            Node::DerefExpr(d) => {
+                let source_ty = self.resolved_type_for_expr(&d.expr)?;
+                match source_ty {
+                    Type::Borrow(inner) | Type::Pointer(inner) => Some((*inner).clone()),
+                    Type::UserDefined(u) if u.generics.len() == 1
+                        && matches!(u.name.as_str(), "Rc" | "Arc" | "Box") =>
+                    {
+                        Some(u.generics[0].clone())
+                    }
+                    _ => None,
+                }
+            }
+            Node::CastExpr(cast) => Some((*cast.ty).clone()),
+            Node::FieldExpr(f) => {
+                let target_ty = self.resolved_type_for_expr(&f.expr)?;
+                self.field_type_for_type(&target_ty, &f.field_name)
+            }
+            Node::IndexExpr(idx) => {
+                let target_ty = self.resolved_type_for_expr(&idx.target)?;
+                match sla_lowering::peel_borrow_pointer_type(&target_ty) {
+                    Type::Array(arr) => Some((*arr.elem).clone()),
+                    Type::UserDefined(u)
+                        if matches!(
+                            u.name.as_str(),
+                            "Slice" | "Vec" | "GrowVec" | "VecDeque"
+                        ) =>
+                    {
+                        u.generics.first().cloned()
+                    }
+                    _ => None,
+                }
+            }
+            Node::StructLiteral(lit) => Some((*lit.ty).clone()),
+            Node::TupleLiteral(lit) => {
+                if lit.elements.is_empty() {
+                    return None;
+                }
+                let mut elems = Vec::with_capacity(lit.elements.len());
+                for elem in &lit.elements {
+                    elems.push(self.resolved_type_for_expr(elem)?);
+                }
+                Some(Type::Tuple(sla_ast::TupleType { elems }))
+            }
+            Node::ArrayLiteral(lit) => {
+                let first = lit.elements.first()?;
+                let elem_ty = self.resolved_type_for_expr(first)?;
+                Some(Type::Array(sla_ast::ArrayType {
+                    elem: Box::new(elem_ty),
+                    len: lit.elements.len(),
+                }))
+            }
+            Node::RepeatArrayLiteral(lit) => {
+                let elem_ty = self.resolved_type_for_expr(&lit.value)?;
+                Some(Type::Array(sla_ast::ArrayType {
+                    elem: Box::new(elem_ty),
+                    len: lit.len,
+                }))
+            }
+            Node::MoveExpr(m) => self.resolved_type_for_expr(&m.expr),
+            // Rust-lane compensation arms: the Zig checker records
+            // body-node types at macro declaration (checkMacro),
+            // so Zig's chain needs no if/match arms; this lane's
+            // checker records none for untyped macros, so the
+            // result type is derived from the branch tails.
+            Node::IfExpr(ife) => {
+                let tail_ty = |block: &[Node]| -> Option<Type> {
+                    match block.last() {
+                        Some(Node::ExprStmt(e)) => self.resolved_type_for_expr(e),
+                        _ => None,
+                    }
+                };
+                tail_ty(&ife.then_block)
+                    .or_else(|| ife.else_block.as_ref().and_then(|b| tail_ty(b)))
+                    // A statement-position if has no value tail in
+                    // either branch; its type is void (the fact the
+                    // Zig checker's checkMacro would have recorded).
+                    .or_else(|| {
+                        Some(Type::Primitive(sla_ast::Primitive::VoidType))
+                    })
+            }
+            Node::MatchExpr(m) => m
+                .cases
+                .iter()
+                .find_map(|case| match case.body.last() {
+                    Some(Node::ExprStmt(e)) => self.resolved_type_for_expr(e),
+                    _ => None,
+                })
+                .or_else(|| Some(Type::Primitive(sla_ast::Primitive::VoidType))),
+            _ => None,
+        }
     }
 
     pub(crate) fn global_scalar_const(&self, name: &str) -> Option<Literal> {

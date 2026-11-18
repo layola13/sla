@@ -1,0 +1,48 @@
+// LINE-IMPORTED-2 minim (S2): a user macro forwards its
+// parameter's field place into an imported macro's borrowed
+// operand (`SLA_IMPORTED_WRITE_PAIR_LEFT(holder.pair)` — the
+// macro body only takes `&%value`). The direct macro-param
+// consumption analysis counted a bare mention of the parameter
+// as a move, so the caller's `holder` root was consumed by the
+// outer macro call and the reads after it trapped UseAfterMove.
+// Zig `macroNodeConsumption` has no identifier arm: a bare
+// mention is never a move. Baseline: check fails with
+// UseAfterMove (`holder` already consumed). Fixed: 37 + 5 = 42.
+
+@import "import_fixtures/imported_borrow_helpers.sa"
+
+struct MacroMovePair {
+    left: i64,
+    right: i64,
+}
+
+struct MacroMoveHolder {
+    pair: MacroMovePair,
+}
+
+fn imported_macro_write_pair_left(value: &MacroMovePair) -> i64 {
+    value.left = 37;
+    value.left
+}
+
+macro macro_move_write_inner(holder) {
+    SLA_IMPORTED_WRITE_PAIR_LEFT(holder.pair);
+}
+
+macro macro_move_write_outer(holder) {
+    macro_move_write_inner(holder);
+}
+
+fn macro_move_pair_field_write() -> i64 {
+    let holder = MacroMoveHolder {
+        pair: MacroMovePair { left: 3, right: 5 },
+    };
+    macro_move_write_outer(holder);
+    holder.pair.left + holder.pair.right
+}
+
+@test "user macro forwarding field place to imported macro keeps root"() {
+    if macro_move_pair_field_write() != 42 {
+        panic(43811);
+    };
+}

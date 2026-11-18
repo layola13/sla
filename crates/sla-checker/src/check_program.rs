@@ -674,10 +674,21 @@ pub(crate) fn block_exit_cleanups(bindings: &[crate::scope::Binding]) -> Vec<Str
         if is_internal_symbol(&b.name) {
             continue;
         }
-        let borrowed_by_active = bindings.iter().any(|other| {
-            other.state == ValueState::Active
-                && other.borrow_source.as_deref() == Some(b.name.as_str())
-        });
+        // issue013 skip, narrowed exactly as Zig's
+        // `issue013SkipApplies` (type_checker.zig:570): the skip
+        // exists because a borrow alias shares the source's
+        // register, so it applies only when the CANDIDATE itself
+        // is borrow-typed (Zig: isBorrowLikeType minus the
+        // primitive raw_ptr exclusion = Borrow only). An owned
+        // binding that merely HAS an active borrower (e.g. a
+        // struct local borrowed by `let alias = &pair;`) keeps
+        // its own exit cleanup; skipping it leaked the register
+        // at function exit (MemoryLeak 1012).
+        let borrowed_by_active = matches!(b.ty, Type::Borrow(_))
+            && bindings.iter().any(|other| {
+                other.state == ValueState::Active
+                    && other.borrow_source.as_deref() == Some(b.name.as_str())
+            });
         if borrowed_by_active {
             continue;
         }

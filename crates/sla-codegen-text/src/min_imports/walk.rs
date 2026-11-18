@@ -6,6 +6,15 @@ use super::*;
 
 impl<'a> Scanner<'a> {
     pub(super) fn walk(&mut self, node: &Node) {
+        // `@sa_mem_free` provider probe (see the parent module
+        // docs): a node whose recorded type materializes a smart
+        // pointer or a HashMap can reach the deep-drop / map-free
+        // emission sites that call it, so `string` stays imported.
+        if let Some(ty) = self.check.expr_type(node) {
+            if ty_has_mem_free_value(ty) {
+                self.flags.string = true;
+            }
+        }
         match node {
             Node::Program(p) => {
                 for d in &p.decls {

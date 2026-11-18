@@ -319,7 +319,36 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
         operand_index: usize,
     ) -> Result<String> {
         let bit = 1u64 << operand_index;
-        if view.address_slot_arg_mask & bit != 0 {
+        let direct_address = view.address_slot_arg_mask & bit != 0;
+        let addressable = direct_address || view.borrowed_arg_mask & bit != 0;
+        if addressable {
+            // Zig `planArgValueBypassAction`'s raw-pointer arm
+            // (genImportedMacroArg checks it before the addressable
+            // routing): raw pointer-like values stay in value
+            // registers — materializing them into stack slots (or
+            // passing place addresses) turns `&%arg` inside the
+            // macro body into a pointer-to-pointer ABI mismatch
+            // for std/runtime calls such as sa_json_object_get
+            // (lowering_rules.zig:4048). A call whose name ends in
+            // _PTR / _AS_PTR (or is `as_ptr`) counts as producing a
+            // raw pointer value too.
+            let bypass_ty = self.expr_type(arg);
+            let raw_pointer_value = match &bypass_ty {
+                Some(Type::Primitive(Primitive::RawPtr))
+                | Some(Type::Pointer(_))
+                | Some(Type::Borrow(_)) => true,
+                _ => false,
+            } || match arg {
+                Node::CallExpr(c) => {
+                    c.func_name.ends_with("_PTR")
+                        || c.func_name.ends_with("_AS_PTR")
+                        || c.func_name == "as_ptr"
+                }
+                _ => false,
+            };
+            if raw_pointer_value {
+                return self.gen_expr(arg);
+            }
             return match arg {
                 Node::Identifier(name) => {
                     let resolved = self.resolve_binding_name(name);
@@ -367,6 +396,61 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
                         crate::codegen::type_string(&ty)
                     ));
                     Ok(slot)
+                }
+                // Projection shapes (field / index / deref) route
+                // through Zig's planAddressableArgLoweringAction:
+                // a direct-address-slot parameter (the body loads
+                // or stores through the operand as memory) takes
+                // the place address itself; a borrowed-only
+                // parameter (the body only forms `&%param`) takes
+                // a stack slot holding a copy of the projected
+                // value — passing the loaded value register makes
+                // the body's `&%param` address a register with no
+                // storage and the host segfaults. Pointer-passed
+                // (aggregate) projections keep the value path:
+                // field/index pass the projection register, derefs
+                // pass the address expression.
+                Node::FieldExpr(_) | Node::IndexExpr(_) | Node::DerefExpr(_) => {
+                    let arg_ty = self.expr_type(arg);
+                    let pointer_passed = arg_ty
+                        .as_ref()
+                        .map(|ty| sla_lowering::abi_passes_as_pointer(ty))
+                        .unwrap_or(false);
+                    if direct_address {
+                        // Zig planAddressableArgLoweringAction's
+                        // std-owner branch: a direct-address-slot
+                        // projection of a std-owner handle type
+                        // (String, Vec, Box, ...) passes the loaded
+                        // handle — the place slot holds a one-word
+                        // pointer to the heap header, and passing
+                        // the place address makes the macro body
+                        // read the slot as if it were the header
+                        // (STR_LEN(a.unit) trapped BorrowConflict).
+                        let std_owner = matches!(
+                            &arg_ty,
+                            Some(Type::UserDefined(u)) if matches!(
+                                u.name.as_str(),
+                                "Vec" | "GrowVec" | "VecDeque" | "String"
+                                    | "Box" | "Rc" | "Arc" | "HashMap"
+                                    | "BTreeMap" | "HashSet" | "BTreeSet"
+                                    | "RefCell" | "Mutex" | "RwLock"
+                                    | "JoinHandle"
+                            )
+                        );
+                        if std_owner {
+                            self.gen_expr(arg)
+                        } else {
+                            self.gen_imported_macro_address_expression_arg(arg)
+                        }
+                    } else if pointer_passed {
+                        if matches!(arg, Node::DerefExpr(_)) {
+                            self.gen_imported_macro_address_expression_arg(arg)
+                        } else {
+                            self.gen_expr(arg)
+                        }
+                    } else {
+                        self.gen_imported_macro_slot_copy_arg(arg)
+                    }
                 }
                 // Composite values are pointer-represented in
                 // this codegen (a string literal's register is
@@ -446,6 +530,159 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
         }
     }
 
+    /// Zig `genImportedMacroAddressExpressionArg`: the operand
+    /// is the projected place's own address. Field/index and
+    /// borrow/pointer derefs reuse the `&place` generation (its
+    /// field/index arms are genFieldAddress/genIndexAddress, its
+    /// deref arm is the ptr_add / cell-load pair); a smart-pointer
+    /// deref passes the deref expression itself, as in Zig.
+    fn gen_imported_macro_address_expression_arg(
+        &mut self,
+        arg: &Node,
+    ) -> Result<String> {
+        match arg {
+            Node::FieldExpr(f) => {
+                let projection = self.gen_field_address(f)?;
+                self.remember_address_projection_source(&projection);
+                Ok(projection.ptr)
+            }
+            Node::IndexExpr(idx) => {
+                let address = self.gen_index_address(idx)?;
+                self.remember_index_address_source(&address);
+                Ok(address.ptr)
+            }
+            Node::DerefExpr(d) => {
+                // The `&*p` shapes of into.rs's borrow arm, called
+                // on the original nodes (a synthetic BorrowExpr
+                // node has no checker facts recorded under its key).
+                let source_ty = self.expr_type(&d.expr);
+                let smart_source = match &source_ty {
+                    Some(ty) => matches!(
+                        sla_lowering::peel_borrow_pointer_type(ty),
+                        Type::UserDefined(u)
+                            if matches!(u.name.as_str(), "Box" | "Rc" | "Arc")
+                    ),
+                    None => false,
+                };
+                if smart_source {
+                    return self.gen_expr(arg);
+                }
+                let plain_source = match &source_ty {
+                    Some(ty) => {
+                        let typed = matches!(ty, Type::Borrow(_) | Type::Pointer(_));
+                        let borrow_param = match &*d.expr {
+                            Node::Identifier(name) => self
+                                .borrow_param_bindings
+                                .contains(&self.resolve_binding_name(name)),
+                            _ => false,
+                        };
+                        typed || borrow_param
+                    }
+                    None => false,
+                };
+                if !plain_source {
+                    return self.gen_expr(arg);
+                }
+                let source = self.gen_expr(&d.expr)?;
+                let addr = self.new_tmp();
+                let pointer_aggregate = matches!(source_ty, Some(Type::Pointer(_)))
+                    && match self.expr_type(arg) {
+                        Some(target_ty) => !matches!(
+                            target_ty,
+                            Type::Infer
+                                | Type::Primitive(_)
+                                | Type::Pointer(_)
+                                | Type::Borrow(_)
+                                | Type::FnPtr(_)
+                        ),
+                        None => false,
+                    };
+                if pointer_aggregate {
+                    self.ins(&format!("{addr} = load {source}+0 as ptr"));
+                } else {
+                    self.ins(&format!("{addr} = ptr_add {source}, 0"));
+                }
+                if sla_lowering::expr_result_needs_release(&d.expr) {
+                    self.borrow_source_temps.insert(addr.clone(), source);
+                }
+                Ok(addr)
+            }
+            _ => self.gen_expr(arg),
+        }
+    }
+
+    /// Zig `genImportedMacroAddressExpressionMaterializedSlotArg`:
+    /// materialize a stack slot, copy the projected value into it,
+    /// and pass the slot (the macro body forms `&%param` over the
+    /// slot's storage). The slot is registered as a stack_alloc
+    /// binding and, as in Zig, is not retired by the caller loop.
+    /// The value generation is `gen_expr(arg)`: for the scalar
+    /// projection shapes that reach this path it emits exactly
+    /// Zig's address-then-load sequence with its intermediates
+    /// settled inline.
+    fn gen_imported_macro_slot_copy_arg(&mut self, arg: &Node) -> Result<String> {
+        let arg_ty = self
+            .expr_type(arg)
+            .ok_or_else(|| crate::TextError::MissingType {
+                context: "macro address-expression slot argument type".to_string(),
+            })?
+            .clone();
+        let slot = self.new_tmp();
+        self.stack_alloc_bindings.insert(slot.clone());
+        self.ins(&format!(
+            "{slot} = stack_alloc {}",
+            crate::codegen::type_size(&arg_ty)
+        ));
+        let value = self.gen_expr(arg)?;
+        self.ins(&format!(
+            "store {slot}+0, {value} as {}",
+            crate::codegen::type_string(&arg_ty)
+        ));
+        if self.expr_result_reg_needs_release(arg)
+            && sla_lowering::is_temporary_register_name(&value)
+        {
+            self.emit_release(&value)?;
+        }
+        Ok(slot)
+    }
+
+    /// Zig `genImportedMacroCall`'s release_regs loop: a lowered
+    /// argument register that materialized a fresh temp (a deref
+    /// ptr_add alias, a load temp, a call result the macro does
+    /// not consume) stays Active after the EXPAND unless the
+    /// caller retires it — the macro body only retires operands
+    /// it consumes. Mirrors `importedMacroValueArgNeedsRelease`'s
+    /// first arm (exprResultRegNeedsRelease) plus the identifier
+    /// alias-temp arm, via the plain call path's
+    /// `call_arg_result_temp_needs_release`. Directly consumed
+    /// value args (the parity table behind
+    /// `mark_imported_macro_consumed_value_arg`) are retired by
+    /// the expansion itself and skipped here.
+    fn retire_imported_macro_arg_temps(
+        &mut self,
+        call: &sla_ast::CallExpr,
+        lowered: &[(&Node, String)],
+        first_arg_index: usize,
+    ) -> Result<()> {
+        for (j, (arg, operand)) in lowered.iter().enumerate() {
+            if sla_lowering::imported_macro_direct_call_consumes_value_arg(
+                &call.func_name,
+                first_arg_index + j,
+            ) {
+                continue;
+            }
+            if self.stack_alloc_bindings.contains(operand) {
+                continue;
+            }
+            if sla_lowering::is_temporary_register_name(operand)
+                && self.call_arg_result_temp_needs_release(arg, operand)
+            {
+                self.emit_release(operand)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Expression position (Zig `genImportedMacroCall`): the
     /// macro's single leading output is a fresh result register
     /// and the call's arguments fill the remaining operands.
@@ -463,16 +700,19 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
         }
         let result = self.new_tmp();
         let mut operands = vec![result.clone()];
+        let mut lowered: Vec<(&Node, String)> = Vec::new();
         for (i, arg) in call.args.iter().enumerate() {
             let operand = self.gen_imported_macro_arg(arg, view, view.leading_outputs + i)?;
             self.mark_imported_macro_consumed_value_arg(call, i, arg, &operand);
-            operands.push(operand);
+            operands.push(operand.clone());
+            lowered.push((arg, operand));
         }
         self.ins(&format!(
             "EXPAND {} {}",
             call.func_name,
             operands.join(", ")
         ));
+        self.retire_imported_macro_arg_temps(call, &lowered, 0)?;
         Ok(result)
     }
 
@@ -491,6 +731,7 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
             );
         }
         let mut operands: Vec<String> = Vec::new();
+        let mut lowered: Vec<(&Node, String)> = Vec::new();
         let mut writebacks: Vec<(AggregateOutputWriteback, Type, String)> = Vec::new();
         for (i, arg) in call.args.iter().enumerate() {
             if i < view.leading_outputs {
@@ -553,7 +794,8 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
             } else {
                 let operand = self.gen_imported_macro_arg(arg, view, i)?;
                 self.mark_imported_macro_consumed_value_arg(call, i, arg, &operand);
-                operands.push(operand);
+                operands.push(operand.clone());
+                lowered.push((arg, operand));
             }
         }
         self.ins(&format!(
@@ -637,6 +879,7 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
                 self.emit_release(temp)?;
             }
         }
+        self.retire_imported_macro_arg_temps(call, &lowered, view.leading_outputs)?;
         Ok(())
     }
 

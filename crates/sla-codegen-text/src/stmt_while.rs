@@ -11,7 +11,7 @@
 //! the iterable protocol (`iter_len` once, `iter_at` per index).
 
 use sla_ast::{Node, Type};
-use sla_lowering::block_terminates;
+use sla_lowering::{block_terminates, node_key};
 
 use crate::codegen::{type_size, type_string, Codegen};
 use crate::{unsupported, Result, TextError};
@@ -93,7 +93,10 @@ impl<'c> Codegen<'c> {
             return self.gen_for_collection_stmt(stmt);
         }
         let end_expr: &Node = for_stmt.end.as_deref().expect("end present");
-        let slot = format!("{}_slot", for_stmt.var_name);
+        let slot = match &self.for_slot_override {
+            Some((key, slot)) if *key == node_key(stmt) => slot.clone(),
+            _ => format!("{}_slot", for_stmt.var_name),
+        };
         let counter_ty = self
             .expr_type(&for_stmt.start)
             .unwrap_or(Type::Primitive(sla_ast::Primitive::I64));
@@ -276,7 +279,10 @@ impl<'c> Codegen<'c> {
             ));
         }
 
-        let slot = format!("{}_slot", for_stmt.var_name);
+        let slot = match &self.for_slot_override {
+            Some((key, slot)) if *key == node_key(stmt) => slot.clone(),
+            _ => format!("{}_slot", for_stmt.var_name),
+        };
         self.ins(&format!("store {slot}+0, 0 as i64"));
 
         let head_label = self.new_label("L_FOR_HEAD");
