@@ -108,13 +108,25 @@ impl<'c> Codegen<'c> {
             }
         }
 
-        // The five hard-coded imports, in this exact order, duplicates
-        // kept (codegen.zig:7052-7056).
-        self.wl("@import \"sa_std/string.sa\"");
-        self.wl("@import \"sa_std/string_format.sa\"");
-        self.wl("@import \"sa_std/io/print.sai\"");
-        self.wl("@import \"sa_std/fmt.sai\"");
-        self.wl("@import \"sa_std/core/panic.sa\"");
+        // A1 (LINE-SMALLTIER-FIX): the five hard-coded imports are
+        // emitted only when the scan proves the emitted SA text
+        // needs them (codegen.zig:7052-7056 order kept).
+        let min_imports = crate::min_imports::scan_min_imports(program, self.check);
+        if min_imports.string {
+            self.wl("@import \"sa_std/string.sa\"");
+        }
+        if min_imports.string_format {
+            self.wl("@import \"sa_std/string_format.sa\"");
+        }
+        if min_imports.print {
+            self.wl("@import \"sa_std/io/print.sai\"");
+        }
+        if min_imports.fmt {
+            self.wl("@import \"sa_std/fmt.sai\"");
+        }
+        if min_imports.panic {
+            self.wl("@import \"sa_std/core/panic.sa\"");
+        }
 
         self.emit_array_fill_macros();
 
