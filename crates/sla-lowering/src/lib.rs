@@ -36,7 +36,10 @@ pub use async_plans::*;
 pub use async_plans_loop::*;
 pub use async_runtime::*;
 pub use call_args::*;
-pub use check_info::{CheckInfo, ExternParamView, ExternSigView, ImportedMacroView, MapCheckInfo};
+pub use check_info::{
+    imported_macro_direct_call_consumes_value_arg, CheckInfo, ExternParamView, ExternSigView,
+    ImportedMacroView, MapCheckInfo,
+};
 pub use collect::collect_repeated_let_bindings;
 pub use control_flow::*;
 pub use names::*;

@@ -1,0 +1,17 @@
+// LINE-IMPORTED-2 minim (S3): `FS_READ_BUFFER_FREE`'s body
+// moves its by-value argument (`call
+// @sa_fs_read_buffer_free(^%buffer)`), so the expansion consumes
+// the caller's register; the text emitter did not mirror that
+// consumption compiler-side, and the scope-end cleanup emitted
+// a second `!buffer` — host UseAfterMove (1009). Zig
+// `genImportedMacroCall` marks the binding consumed via
+// `importedMacroDirectCallConsumesValueArg` (lowering_rules).
+// Baseline: host trap at `!buffer`. Fixed: released once.
+
+@import "sa_std/fs.sa"
+
+@test "imported macro move arg is released once"() {
+    let buffer: u64 = 0;
+    let status = FS_READ_BUFFER_FREE(buffer);
+    let observed = status;
+}

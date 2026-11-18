@@ -170,7 +170,17 @@ fn consumption_of_name(name: &str, param: &str) -> MacroParamConsumption {
 
 fn node_consumption(node: &Node, param: &str) -> MacroParamConsumption {
     match node {
-        Node::Identifier(name) => consumption_of_name(name, param),
+        // Zig `macroNodeConsumption` has no identifier arm: a
+        // bare mention of the parameter (a call argument, a field
+        // place root, an index target) is not a move — consumption
+        // enters only through the move/try/release arms below and
+        // through forwarded user-macro calls
+        // (`macro_node_forwarded_consumption`). Counting a bare
+        // mention as Always made every user macro that forwards
+        // a parameter into an imported macro's borrowed operand
+        // (e.g. `WRITE(holder.pair)`) consume the caller's root
+        // binding (LINE-IMPORTED-2, S2).
+        Node::Identifier(_) => MacroParamConsumption::Never,
         Node::MoveExpr(m) => {
             // Zig: a `move` of the parameter consumes it unconditionally
             // when the moved operand names the parameter.

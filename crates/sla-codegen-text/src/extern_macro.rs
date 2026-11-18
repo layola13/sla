@@ -416,6 +416,36 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
         self.gen_expr(arg)
     }
 
+    /// Zig `genImportedMacroCall` (codegen.zig:14946), parity
+    /// with SAB `importedMacroDirectCallConsumesValueArg`: the
+    /// macro body moves (`^`) this value arg, so the verifier
+    /// marks the source Consumed; mirror that compiler-side so
+    /// tail cleanups skip it instead of emitting a second `!`
+    /// (UseAfterMove). Only when the source binding was passed
+    /// through by value — a materialized slot moves the slot
+    /// temp, not the source. No `^` marker is emitted here
+    /// because the macro body already carries it.
+    fn mark_imported_macro_consumed_value_arg(
+        &mut self,
+        call: &sla_ast::CallExpr,
+        call_arg_index: usize,
+        arg: &Node,
+        operand: &str,
+    ) {
+        if !sla_lowering::imported_macro_direct_call_consumes_value_arg(
+            &call.func_name,
+            call_arg_index,
+        ) {
+            return;
+        }
+        if let Node::Identifier(name) = arg {
+            let resolved = self.resolve_binding_name(name);
+            if operand == name || operand == resolved {
+                self.mark_consumed_binding(&resolved);
+            }
+        }
+    }
+
     /// Expression position (Zig `genImportedMacroCall`): the
     /// macro's single leading output is a fresh result register
     /// and the call's arguments fill the remaining operands.
@@ -434,7 +464,9 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
         let result = self.new_tmp();
         let mut operands = vec![result.clone()];
         for (i, arg) in call.args.iter().enumerate() {
-            operands.push(self.gen_imported_macro_arg(arg, view, view.leading_outputs + i)?);
+            let operand = self.gen_imported_macro_arg(arg, view, view.leading_outputs + i)?;
+            self.mark_imported_macro_consumed_value_arg(call, i, arg, &operand);
+            operands.push(operand);
         }
         self.ins(&format!(
             "EXPAND {} {}",
@@ -519,7 +551,9 @@ fn abi_fallible_payload_name(ret_abi: &str) -> &str {
                     }
                 }
             } else {
-                operands.push(self.gen_imported_macro_arg(arg, view, i)?);
+                let operand = self.gen_imported_macro_arg(arg, view, i)?;
+                self.mark_imported_macro_consumed_value_arg(call, i, arg, &operand);
+                operands.push(operand);
             }
         }
         self.ins(&format!(
