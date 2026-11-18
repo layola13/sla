@@ -1,0 +1,32 @@
+// LINE-REG3 regression: nested copy-struct literal field
+// (codegen.zig genStructLiteralInto deep-copy arm, REG2-D3).
+// The deep-copied field register must be settled with the
+// consume marker in the store itself; at the base it stayed
+// Active at function exit (MemoryLeak, trap 1012 - the
+// ip_mask_from_prefix_len family shape).
+
+@derive(copy)
+struct Reg3Inner {
+    tag: u64,
+    hi: u64,
+    lo: u64,
+}
+
+@derive(copy)
+struct Reg3Outer {
+    addr: Reg3Inner,
+    len: u32,
+}
+
+fn reg3_inner_sum(i: Reg3Inner) -> u64 {
+    return i.tag + i.hi + i.lo;
+}
+
+fn reg3_make(tag: u64) -> u64 {
+    let o: Reg3Outer = Reg3Outer { addr: Reg3Inner { tag: tag, hi: 1, lo: 2 }, len: 7 };
+    return reg3_inner_sum(o.addr) + (o.len as u64);
+}
+
+@test "reg3 regression nested copy literal"() {
+    if reg3_make(10) != 20 { panic(9111); };
+}

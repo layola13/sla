@@ -1,0 +1,30 @@
+// LINE-REG3 regression: branch-consumption compensation
+// (codegen.zig emitBranchConsumptionCompensation, the beta fix).
+// A binding consumed on only one branch path must be released
+// at the end of the other path; at the base the merge point saw
+// the register Active on one predecessor and Consumed on the
+// other (PhiStateConflict, trap 1015 - the redis_client /
+// redis_session family shape).
+
+fn reg3_take_string(s: String) -> u64 {
+    return len(s);
+}
+
+@test "reg3 regression branch compensation then only"() {
+    let s: String = format("abc");
+    if len(s) > 2 {
+        let n = reg3_take_string(s);
+        if n != 3 { panic(9101); };
+    };
+}
+
+@test "reg3 regression branch compensation else only"() {
+    let s: String = format("xy");
+    if len(s) > 5 {
+        let z = 1;
+        if z != 1 { panic(9102); };
+    } else {
+        let n = reg3_take_string(s);
+        if n != 2 { panic(9103); };
+    };
+}

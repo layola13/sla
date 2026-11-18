@@ -1,0 +1,33 @@
+// LINE-REG3 regression: assign into a copy-struct target from
+// an identifier value (codegen.zig assign_stmt identifier arm).
+// At the base every copy-struct target assign was rejected as
+// an unsupported deep-copy shape - the proxy_parse family
+// shape (out = a over an IpAddr-shaped local).
+
+@derive(copy)
+struct Reg3Addr {
+    tag: u64,
+    hi: u64,
+    lo: u64,
+}
+
+fn reg3_pick(flag: bool) -> u64 {
+    let out: Reg3Addr = Reg3Addr { tag: 1, hi: 2, lo: 3 };
+    let r: Option<Reg3Addr> = Some(Reg3Addr { tag: 4, hi: 5, lo: 6 });
+    match r {
+        Some(a) => {
+            out = a;
+        },
+        None => {
+        },
+    };
+    if flag {
+        return out.tag + out.hi + out.lo;
+    };
+    return out.tag;
+}
+
+@test "reg3 regression copy struct assign"() {
+    if reg3_pick(true) != 15 { panic(9131); };
+    if reg3_pick(false) != 4 { panic(9132); };
+}

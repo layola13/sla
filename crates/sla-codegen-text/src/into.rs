@@ -322,11 +322,20 @@ impl<'c> Codegen<'c> {
                 // Deep-copy arm: the field value is copied into
                 // a fresh record and the copy's pointer is stored;
                 // the source value keeps its own ownership.
+                // REG2-D3 (codegen.zig genStructLiteralInto deep-copy
+                // arm): settle the copy register with the consume
+                // marker in the store itself, or the nested
+                // allocation stays Active at function exit
+                // (MemoryLeak, trap 1012 — the
+                // @sla__ip_mask_from_prefix_len shape: a nested
+                // copy-struct literal field). The update arm above
+                // already stores `^{copied}`; this arm was missing
+                // the marker.
                 let val_reg = self.gen_expr(value)?;
                 let copied = self.new_tmp();
                 self.gen_copy_value_into(&copied, &val_reg, &field_ty)?;
                 self.ins(&format!(
-                    "store {target}+{offset}, {copied} as {}",
+                    "store {target}+{offset}, ^{copied} as {}",
                     type_string(&field_ty)
                 ));
                 if call_arg_needs_release(value) {

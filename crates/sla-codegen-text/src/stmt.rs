@@ -1300,9 +1300,25 @@ impl<'c> Codegen<'c> {
             .expr_type(&assign.target)
             .or_else(|| self.local_binding_type_for_name(&resolved_name));
 
-        // Copy-struct target: release + deep copy into (deferred).
+        // Copy-struct target with an identifier value
+        // (codegen.zig:16680, the assign_stmt identifier arm):
+        // release the target's old value, evaluate the source,
+        // deep-copy it into the target register and unmark the
+        // target consumed, then return — the Zig arm fires ONLY
+        // for identifier values; every other value shape falls
+        // through to the generic assign path below. (The reg3
+        // proxy_parse shape: `out = a` over an IpAddr local.)
+        // Non-identifier copy-struct assigns stay loud here: the
+        // generic path below has no copy-struct store form.
         if let Some(ty) = &target_ty {
             if self.check.type_is_copy_struct(ty) {
+                if matches!(&*assign.value, Node::Identifier(_)) {
+                    self.emit_release(&resolved_name)?;
+                    let source_reg = self.gen_expr(&assign.value)?;
+                    self.gen_copy_value_into(&resolved_name, &source_reg, ty)?;
+                    self.consumed_bindings.remove(&resolved_name);
+                    return Ok(());
+                }
                 return unsupported(
                     "assign into copy-struct target (deep-copy family)",
                     "codegen.zig:11110 (copy-struct assign)",

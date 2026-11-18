@@ -1,0 +1,17 @@
+// LINE-REG3 regression: collect<String>() over an array
+// iterator (codegen.zig stringCollectSource / genStringCollect).
+// At the base the chain degraded into the EXPAND catch-all
+// (EXPAND iter / EXPAND collect - UndefinedMacro at the host),
+// the proxy_bytes family shape.
+
+@test "reg3 regression string collect array"() {
+    let arr: [u8; 3] = [65u8, 66u8, 67u8];
+    let s: String = arr.iter().collect<String>();
+    if len(s) != 3 { panic(9121); };
+}
+
+@test "reg3 regression string collect repeat array"() {
+    let one_arr: [u8; 1] = [65u8; 1];
+    let one_str: String = one_arr.iter().collect<String>();
+    if len(one_str) != 1 { panic(9122); };
+}

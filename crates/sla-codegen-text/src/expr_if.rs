@@ -8,7 +8,7 @@
 //! deferred and fails loudly.
 
 use sla_ast::{Node, Type};
-use sla_lowering::{block_terminates, is_void_type};
+use sla_lowering::{block_terminates, is_discard_name, is_void_type};
 
 use crate::codegen::{type_size, type_string, Codegen};
 use crate::{unsupported, Result};
@@ -51,6 +51,21 @@ impl<'c> Codegen<'c> {
         let needs_merge = !then_terminates || !else_terminates;
 
         let consumed_snapshot = self.snapshot_consumed();
+        // Branch-compensation candidates (codegen.zig
+        // `emitBranchConsumptionCompensation`, the β fix): the
+        // pre-branch live owned bindings — named locals/params
+        // known at branch entry, minus discard names, minus
+        // global consts, minus live RefCell borrow handles.
+        let live_owned: Vec<String> = self
+            .local_binding_types
+            .iter()
+            .map(|(n, _)| n.clone())
+            .filter(|n| {
+                !is_discard_name(n)
+                    && !self.global_const_bindings.contains(n)
+                    && !self.refcell_borrow_handles.contains_key(n)
+            })
+            .collect();
         self.w(&format!(
             "    br {cond_reg} -> {then_label}, {else_label}\n\n"
         ));
@@ -65,13 +80,15 @@ impl<'c> Codegen<'c> {
             }
         }
         self.emit_phi_cleanups(ife.then_block.last())?;
-        if needs_merge && !then_terminates {
-            self.w(&format!("    jmp {merge_label}\n"));
-        }
-        self.w("\n");
-        if then_terminates {
-            self.restore_consumed(&consumed_snapshot);
-        }
+        // The then side's jump (and any compensation releases)
+        // are deferred to the compensation step below, which
+        // inserts them at this offset.
+        let then_text_end = self.out.len();
+        let then_end_snapshot = self.snapshot_consumed();
+        // The Zig restores the pre-branch state before generating
+        // the else side unconditionally (consumed / store-moved /
+        // borrow / RefCell books).
+        self.restore_consumed(&consumed_snapshot);
 
         self.wl(&format!("{else_label}:"));
         self.w(&format!("    !{cond_reg}\n"));
@@ -85,16 +102,42 @@ impl<'c> Codegen<'c> {
             }
         }
         self.emit_phi_cleanups(else_body.last())?;
-        if needs_merge && !else_terminates {
-            self.w(&format!("    jmp {merge_label}\n"));
-        }
-        self.w("\n");
-        if else_terminates {
-            self.restore_consumed(&consumed_snapshot);
-        }
 
         if needs_merge {
+            self.emit_branch_compensation(
+                &live_owned,
+                &consumed_snapshot.0,
+                &then_end_snapshot.0,
+                then_text_end,
+                &merge_label,
+                then_terminates,
+                else_terminates,
+            )?;
+            // Post-merge settle (codegen.zig, the call-site tail):
+            // both sides reach the merge -> consumed is the union
+            // of the two end states; the else side terminates ->
+            // the then end state survives; the then side
+            // terminates -> the else end state (already live).
+            if !then_terminates && !else_terminates {
+                let union: std::collections::HashSet<String> = then_end_snapshot
+                    .0
+                    .union(&self.consumed_bindings)
+                    .cloned()
+                    .collect();
+                self.consumed_bindings = union;
+            } else if else_terminates {
+                self.restore_consumed(&then_end_snapshot);
+            }
             self.wl(&format!("{merge_label}:"));
+        } else {
+            // Both sides terminate: the Zig inserts the deferred
+            // blank line at the end of the then segment and prints
+            // one after the else segment.
+            self.out.insert_str(then_text_end, "\n");
+            self.w("\n");
+            if else_terminates {
+                self.restore_consumed(&then_end_snapshot);
+            }
         }
         match result_slot {
             Some(slot) => {
@@ -110,6 +153,69 @@ impl<'c> Codegen<'c> {
             // allocation with no emission (D-C5).
             None => Ok(self.new_tmp()),
         }
+    }
+
+    /// codegen.zig:2440 `emitBranchConsumptionCompensation` (the
+    /// β fix): a binding consumed on exactly one branch path is
+    /// released at the end of the OTHER path, before that path's
+    /// jump to the merge — otherwise the merge point sees the
+    /// register Active on one predecessor and Consumed on the
+    /// other (PhiStateConflict, trap 1015; the reg3 redis_client
+    /// / redis_session shape). The Zig store-moved differential
+    /// (`emitBranchSettle`) and load-class settle have no state
+    /// in this lane (no store-moved set, no load-class tracking);
+    /// the family shapes consume through plain calls, which this
+    /// core differential path covers.
+    fn emit_branch_compensation(
+        &mut self,
+        live_owned: &[String],
+        pre_consumed: &std::collections::HashSet<String>,
+        then_consumed: &std::collections::HashSet<String>,
+        then_text_end: usize,
+        merge_label: &str,
+        then_terminates: bool,
+        else_terminates: bool,
+    ) -> Result<()> {
+        let else_consumed = self.consumed_bindings.clone();
+        if !then_terminates && !else_terminates {
+            // Consumed only on the then path: release at the end
+            // of the else path (appended live, before its jump).
+            for name in live_owned {
+                if then_consumed.contains(name)
+                    && !pre_consumed.contains(name)
+                    && !else_consumed.contains(name)
+                {
+                    self.emit_release(name)?;
+                }
+            }
+        }
+        if !else_terminates {
+            self.w(&format!("    jmp {merge_label}\n"));
+        }
+        self.w("\n");
+        if !then_terminates {
+            // Consumed only on the else path: release at the end
+            // of the then path — rendered into a scratch buffer
+            // and inserted at then_text_end, followed by the
+            // then jump and the segment's blank line.
+            let live_out = std::mem::take(&mut self.out);
+            if !else_terminates {
+                for name in live_owned {
+                    if else_consumed.contains(name)
+                        && !pre_consumed.contains(name)
+                        && !then_consumed.contains(name)
+                    {
+                        self.consumed_bindings.remove(name);
+                        self.emit_release(name)?;
+                    }
+                }
+            }
+            self.w(&format!("    jmp {merge_label}\n"));
+            self.w("\n");
+            let scratch = std::mem::replace(&mut self.out, live_out);
+            self.out.insert_str(then_text_end, &scratch);
+        }
+        Ok(())
     }
 
     /// Phi cleanup registers attached to a block's last statement are

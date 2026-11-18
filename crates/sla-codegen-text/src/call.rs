@@ -1013,6 +1013,18 @@ impl<'c> Codegen<'c> {
             return Ok(result.unwrap_or_else(|| self.new_tmp()));
         }
 
+        // collect::<String>() over an iterator chain
+        // (codegen.zig:21752, via `stringCollectSource` /
+        // `genStringCollect`): builds the String byte by byte.
+        // Placed where the Zig cascade checks it — after the
+        // fn-pointer path, before plain known-function
+        // resolution; without it the chain degrades into the
+        // EXPAND catch-all (`EXPAND iter` / `EXPAND collect`,
+        // UndefinedMacro at the host).
+        if let Some(source) = Self::string_collect_source(call) {
+            return self.gen_string_collect(source);
+        }
+
         // Plain known-function call; a `using` extension call
         // site keeps the bare name, so fall back to the unique
         // tail-segment match (SAB driver tail) before the
@@ -1112,6 +1124,215 @@ impl<'c> Codegen<'c> {
         self.ins(&line);
         let _ = call_arg_needs_release;
         Ok(result)
+    }
+
+    /// codegen.zig:6680 `stringCollectSource`: the source node
+    /// of a `collect::<String>()` terminal — the single argument
+    /// of an `iter()` / `into_iter()` call, optionally under a
+    /// `copied()` wrapper. Returns None for every other shape.
+    fn string_collect_source<'n>(call: &'n sla_ast::CallExpr) -> Option<&'n Node> {
+        if call.func_name != "collect" || call.args.len() != 1 || call.generics.len() != 1 {
+            return None;
+        }
+        let is_string = matches!(
+            &call.generics[0],
+            Type::UserDefined(u) if crate::place::local_name(&u.name) == "String"
+        );
+        if !is_string {
+            return None;
+        }
+        let iter_call = match &call.args[0] {
+            Node::CallExpr(c) => c,
+            _ => return None,
+        };
+        let is_iter = |c: &sla_ast::CallExpr| {
+            (c.func_name == "iter" || c.func_name == "into_iter") && c.args.len() == 1
+        };
+        if is_iter(iter_call) {
+            return Some(&iter_call.args[0]);
+        }
+        if iter_call.func_name == "copied" && iter_call.args.len() == 1 {
+            if let Node::CallExpr(inner) = &iter_call.args[0] {
+                if is_iter(inner) {
+                    return Some(&inner.args[0]);
+                }
+            }
+        }
+        None
+    }
+
+    /// codegen.zig:6899 `genStringCollect`: build a String by
+    /// pushing every byte of an array / Vec<u8> / &[u8] source
+    /// into a fresh string buffer. The array arm unrolls; the
+    /// Vec and slice arms loop over an index slot.
+    pub(crate) fn gen_string_collect(&mut self, source: &Node) -> Result<String> {
+        let source_ty = self.expr_type(source).ok_or_else(|| crate::TextError::MissingType {
+            context: "collect::<String> source type".to_string(),
+        })?;
+        let peeled = sla_lowering::peel_borrow_pointer_type(&source_ty).clone();
+        let array = match &peeled {
+            Type::Array(arr) => Some(arr.clone()),
+            _ => None,
+        };
+        let elem_ty = if let Some(arr) = &array {
+            (*arr.elem).clone()
+        } else if let Some(e) = crate::place::slice_element_type(&source_ty) {
+            e
+        } else if let Some((_, e)) = crate::place::vec_like_element_type(&source_ty) {
+            e
+        } else {
+            return unsupported(
+                "collect::<String> source shape",
+                "codegen.zig:6899 (genStringCollect)",
+            );
+        };
+        if crate::codegen::type_string(&elem_ty) != "u8" {
+            return unsupported(
+                "collect::<String> element type",
+                "codegen.zig:6899 (genStringCollect)",
+            );
+        }
+
+        let out_reg = self.new_tmp();
+        self.ins(&format!("EXPAND STRING_BUF_NEW {out_reg}"));
+
+        if let Some(arr) = &array {
+            let elem_size = crate::codegen::type_size(&elem_ty);
+            let base_source_reg = self.gen_expr(source)?;
+            let mut base_reg = base_source_reg.clone();
+            if let Node::Identifier(name) = source {
+                if self.global_const_bindings.contains(name) {
+                    let addr_reg = self.new_tmp();
+                    self.ins(&format!("{addr_reg} = &{base_source_reg}"));
+                    base_reg = addr_reg;
+                }
+            }
+            for i in 0..arr.len {
+                let off_reg = self.new_tmp();
+                self.emit_int_const(&off_reg, (i * elem_size) as i64);
+                let item_ptr = self.new_tmp();
+                self.ins(&format!("{item_ptr} = ptr_add {base_reg}, {off_reg}"));
+                let item_reg = self.new_tmp();
+                self.ins(&format!("{item_reg} = load {item_ptr}+0 as u8"));
+                self.ins(&format!(
+                    "EXPAND STRING_BUF_PUSH_BYTE {out_reg}, {item_reg}"
+                ));
+                self.emit_release(&off_reg)?;
+                self.emit_release(&item_ptr)?;
+                self.emit_release(&item_reg)?;
+            }
+            if call_arg_needs_release(source) {
+                self.emit_release(&base_reg)?;
+            }
+            if base_reg != base_source_reg {
+                self.emit_release(&base_reg)?;
+            }
+            return Ok(out_reg);
+        }
+
+        if crate::place::vec_like_element_type(&source_ty).is_some() {
+            let vec_reg = self.gen_expr(source)?;
+            let len_reg = self.new_tmp();
+            self.ins(&format!("{len_reg} = call @sa_vec_len(&{vec_reg})"));
+            let data_reg = self.new_tmp();
+            self.ins(&format!("{data_reg} = load {vec_reg}+Vec_ptr as ptr"));
+            let idx_slot = self.new_tmp();
+            self.ins(&format!("{idx_slot} = stack_alloc 8"));
+            self.ins(&format!("store {idx_slot}+0, 0 as u64"));
+            let head_label = self.new_label("L_VEC_STRING_COLLECT_HEAD");
+            let body_label = self.new_label("L_VEC_STRING_COLLECT_BODY");
+            let end_label = self.new_label("L_VEC_STRING_COLLECT_END");
+            self.ins(&format!("jmp {head_label}"));
+            self.wl("");
+
+            self.wl(&format!("{head_label}:"));
+            let idx_reg = self.new_tmp();
+            self.ins(&format!("{idx_reg} = load {idx_slot}+0 as u64"));
+            let more_reg = self.new_tmp();
+            self.ins(&format!("{more_reg} = ult {idx_reg}, {len_reg}"));
+            self.ins(&format!("br {more_reg} -> {body_label}, {end_label}"));
+            self.wl("");
+
+            self.wl(&format!("{body_label}:"));
+            self.ins(&format!("!{more_reg}"));
+            let item_ptr = self.new_tmp();
+            self.ins(&format!("{item_ptr} = ptr_add {data_reg}, {idx_reg}"));
+            let item_reg = self.new_tmp();
+            self.ins(&format!("{item_reg} = load {item_ptr}+0 as u8"));
+            self.ins(&format!(
+                "EXPAND STRING_BUF_PUSH_BYTE {out_reg}, {item_reg}"
+            ));
+            let next_idx = self.new_tmp();
+            self.ins(&format!("{next_idx} = add {idx_reg}, 1"));
+            self.ins(&format!("store {idx_slot}+0, {next_idx} as u64"));
+            self.emit_release(&item_ptr)?;
+            self.emit_release(&item_reg)?;
+            self.emit_release(&next_idx)?;
+            self.emit_release(&idx_reg)?;
+            self.ins(&format!("jmp {head_label}"));
+            self.wl("");
+
+            self.wl(&format!("{end_label}:"));
+            self.ins(&format!("!{more_reg}"));
+            self.emit_release(&idx_reg)?;
+            self.emit_release(&len_reg)?;
+            self.emit_release(&data_reg)?;
+            if call_arg_needs_release(source) {
+                self.emit_release(&vec_reg)?;
+            }
+            return Ok(out_reg);
+        }
+
+        let slice_reg = self.gen_expr(source)?;
+        let base_ptr = self.new_tmp();
+        self.ins(&format!("{base_ptr} = load {slice_reg}+Slice_ptr as ptr"));
+        let len_reg = self.new_tmp();
+        self.ins(&format!("{len_reg} = load {slice_reg}+Slice_len as u64"));
+        let idx_slot = self.new_tmp();
+        self.ins(&format!("{idx_slot} = stack_alloc 8"));
+        self.ins(&format!("store {idx_slot}+0, 0 as u64"));
+        let head_label = self.new_label("L_STRING_COLLECT_HEAD");
+        let body_label = self.new_label("L_STRING_COLLECT_BODY");
+        let end_label = self.new_label("L_STRING_COLLECT_END");
+        self.ins(&format!("jmp {head_label}"));
+        self.wl("");
+
+        self.wl(&format!("{head_label}:"));
+        let idx_reg = self.new_tmp();
+        self.ins(&format!("{idx_reg} = load {idx_slot}+0 as u64"));
+        let done_reg = self.new_tmp();
+        self.ins(&format!("{done_reg} = eq {idx_reg}, {len_reg}"));
+        self.ins(&format!("br {done_reg} -> {end_label}, {body_label}"));
+        self.wl("");
+
+        self.wl(&format!("{body_label}:"));
+        self.ins(&format!("!{done_reg}"));
+        let off_reg = self.new_tmp();
+        self.ins(&format!("{off_reg} = ptr_add {base_ptr}, {idx_reg}"));
+        let item_reg = self.new_tmp();
+        self.ins(&format!("{item_reg} = load {off_reg}+0 as u8"));
+        self.ins(&format!(
+            "EXPAND STRING_BUF_PUSH_BYTE {out_reg}, {item_reg}"
+        ));
+        let next_idx = self.new_tmp();
+        self.ins(&format!("{next_idx} = add {idx_reg}, 1"));
+        self.ins(&format!("store {idx_slot}+0, {next_idx} as u64"));
+        self.emit_release(&off_reg)?;
+        self.emit_release(&item_reg)?;
+        self.emit_release(&next_idx)?;
+        self.emit_release(&idx_reg)?;
+        self.ins(&format!("jmp {head_label}"));
+        self.wl("");
+
+        self.wl(&format!("{end_label}:"));
+        self.ins(&format!("!{done_reg}"));
+        self.emit_release(&idx_reg)?;
+        self.emit_release(&base_ptr)?;
+        self.emit_release(&len_reg)?;
+        if call_arg_needs_release(source) {
+            self.emit_release(&slice_reg)?;
+        }
+        Ok(out_reg)
     }
 
     /// codegen.zig:14312 `genRawPointerStringLiteralArg`: the
