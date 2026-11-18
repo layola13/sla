@@ -1076,16 +1076,25 @@ impl<'c> Codegen<'c> {
 
     /// F-B1 (`__slice_view` intrinsic, LINE-BORROW follow-up):
     /// materialize the view the way Zig builds a slice from
-    /// (ptr, len) — stack-allocate a {ptr, len} slot and fill it
-    /// with SLICE_NEW (codegen.zig `genArrayBorrowToSliceInto`
-    /// / string-literal arms; sa_std/core/slice.sa). This is the
-    /// same form the string-literal path (codegen.rs
-    /// `gen_literal_value`) already emits, so no extra macro
-    /// import is needed: SLICE_NEW resolves in the census env
-    /// wherever a string literal does. The two arguments are
-    /// planned as plain value args (Option/Result constructor
-    /// precedent: no declared params exist for an intrinsic)
-    /// and cleaned up by the shared call-arg machinery.
+    /// (ptr, len) — heap-allocate a {ptr, len} slot and fill it
+    /// with SLICE_NEW (codegen.zig `genSliceViewCall`;
+    /// sa_std/core/slice.sa). This is the same form the
+    /// string-literal path (codegen.rs `gen_literal_value`)
+    /// already emits, so no extra macro import is needed:
+    /// SLICE_NEW resolves in the census env wherever a string
+    /// literal does. The two arguments are planned as plain
+    /// value args (Option/Result constructor precedent: no
+    /// declared params exist for an intrinsic) and cleaned up
+    /// by the shared call-arg machinery.
+    ///
+    /// F-B7 (LINE-STACKESCAPE-FIX): the cell must be `alloc`,
+    /// not `stack_alloc` — the annotated wrapper returns it,
+    /// and a stack allocation cannot escape its frame
+    /// (StackEscape). The result is deliberately NOT registered
+    /// in `stack_alloc_bindings`: it is a heap cell whose
+    /// ownership transfers to the caller, and the stack-address
+    /// treatment in block.rs / expr.rs / extern_macro.rs must
+    /// not apply to it.
     fn gen_slice_view_call(&mut self, call: &sla_ast::CallExpr) -> Result<String> {
         if call.args.len() != 2 {
             return unsupported(
@@ -1096,8 +1105,7 @@ impl<'c> Codegen<'c> {
         let ptr = self.gen_planned_call_arg(&call.args[0], None, false)?;
         let len = self.gen_planned_call_arg(&call.args[1], None, false)?;
         let result = self.new_tmp();
-        self.stack_alloc_bindings.insert(result.clone());
-        self.ins(&format!("{result} = stack_alloc Slice_SIZE"));
+        self.ins(&format!("{result} = alloc Slice_SIZE"));
         self.ins(&format!(
             "EXPAND SLICE_NEW {result}, {}, {}",
             ptr.reg, len.reg
