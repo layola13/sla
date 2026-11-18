@@ -1,0 +1,45 @@
+@import "sa_std/vec.sa"
+
+// LINE-DEEP minim (DEF deep-drop crash-A, replace semantics):
+// assigning a deep place read into another place MOVES the value
+// out of the source place (the source reads back empty), and a
+// field read stored into an identifier binding is a deep CLONE
+// (clone-on-extract), never an alias. Pre-fix both shapes aliased:
+// the source kept its header after the transfer (panic 4504
+// shape) and the extracted binding shared the source's buffers
+// (panic 4801 shape).
+
+struct BatchMin {
+    items: Vec<Vec<u8>>,
+    tag: u64,
+}
+
+fn filled_vec(n: u64, seed: u8) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(seed + (i % 5) as u8);
+        i = i + 1;
+    }
+    return v;
+}
+
+@test "replace minim moves deep field between raw ptr holders"() {
+    let src = Box::into_raw(Box::new(BatchMin { items: Vec::new(), tag: 1 }));
+    let dst = Box::into_raw(Box::new(BatchMin { items: Vec::new(), tag: 2 }));
+    (*src).items.push(filled_vec(48, 2));
+    (*dst).items = (*src).items;
+    if len((*dst).items) != 1 { panic(4501); };
+    if len((*src).items) != 0 { panic(4504); };
+    if (*dst).tag != 2 { panic(4508); };
+}
+
+@test "replace minim clone on extract for deref rooted reads"() {
+    let src = Box::into_raw(Box::new(BatchMin { items: Vec::new(), tag: 1 }));
+    (*src).items.push(filled_vec(48, 2));
+    let z: Vec<Vec<u8>> = Vec::new();
+    z = (*src).items;
+    (*src).items.push(filled_vec(48, 3));
+    if len(z) != 1 { panic(4801); };
+    if len((*src).items) != 2 { panic(4802); };
+}

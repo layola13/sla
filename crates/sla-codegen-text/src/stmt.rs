@@ -551,6 +551,231 @@ impl<'c> Codegen<'c> {
 
     /// RUST-STAGE10-SHAPE-E (E3, Zig-style source compensation).
     ///
+    /// DEF-deep-drop crash-A (replace semantics): the general
+    /// source-nulling path, mirroring the Zig checker's
+    /// `replaceSourceForAssign` demarcation (type_checker.zig:1862)
+    /// and codegen's `emitReplaceSourceNullText` (codegen.zig:1834).
+    /// Path 1 above only sees identifier-rooted field chains; this
+    /// path covers the remaining transferable place reads -- a
+    /// field/index/deref place (move wrappers stripped) holding a
+    /// handle value whose drop plan the source tail frees, rooted at
+    /// an owned binding, stored into a provably different place.
+    /// After the store, a fresh empty handle is written back into
+    /// the source place so the transferred value has exactly one
+    /// owner. Shapes that cannot be proven different, borrow-rooted
+    /// sources (clone-on-extract territory, binding points only),
+    /// and non-handle plans keep the plain store, exactly as the
+    /// Zig annotation declines them.
+    fn emit_replace_source_null_general(
+        &mut self,
+        target: &Node,
+        value: &Node,
+        fallback_ty: &Type,
+    ) -> Result<()> {
+        let mut rhs = value;
+        while let Node::MoveExpr(m) = rhs {
+            rhs = &m.expr;
+        }
+        if !matches!(
+            rhs,
+            Node::FieldExpr(_) | Node::IndexExpr(_) | Node::DerefExpr(_)
+        ) {
+            return Ok(());
+        }
+        let value_ty = self
+            .expr_type(rhs)
+            .unwrap_or_else(|| fallback_ty.clone());
+        if !matches!(
+            self.plan_value_drop(&value_ty),
+            crate::drop::DropPlan::Buffer
+                | crate::drop::DropPlan::BufferGrowVec
+                | crate::drop::DropPlan::DeepVec(_)
+                | crate::drop::DropPlan::DeepGrowVec(_)
+                | crate::drop::DropPlan::ArcPtr(_)
+                | crate::drop::DropPlan::RcPtr(_)
+                | crate::drop::DropPlan::BoxPtr(_)
+        ) {
+            return Ok(());
+        }
+        let Some(src_key) = Self::place_key(rhs) else {
+            return Ok(());
+        };
+        let Some(dst_key) = Self::place_key(target) else {
+            return Ok(());
+        };
+        if !Self::place_keys_diverge(&src_key, &dst_key) {
+            return Ok(());
+        }
+        if !self.place_root_owned(&src_key.0) {
+            return Ok(());
+        }
+        let mut active: Vec<Type> = Vec::new();
+        let fresh = self.gen_fresh_empty_value(&value_ty, &mut active)?;
+        match rhs {
+            Node::FieldExpr(f) => {
+                let addr = self.gen_field_address(f)?;
+                self.ins(&format!(
+                    "store {}+0, {fresh} as {}",
+                    addr.ptr,
+                    type_string(&value_ty)
+                ));
+                self.emit_forget_moved_value(&fresh)?;
+                self.remember_address_projection_source(&addr);
+                self.emit_release(&addr.ptr)?;
+            }
+            Node::IndexExpr(ix) => {
+                let addr = self.gen_index_address(ix)?;
+                self.ins(&format!(
+                    "store {}+0, {fresh} as {}",
+                    addr.ptr,
+                    type_string(&addr.elem_ty)
+                ));
+                self.emit_forget_moved_value(&fresh)?;
+                self.remember_index_address_source(&addr);
+                self.finish_index_address(&addr)?;
+            }
+            Node::DerefExpr(d) => {
+                let ptr_reg = self.gen_expr(&d.expr)?;
+                self.ins(&format!(
+                    "store {ptr_reg}+0, {fresh} as {}",
+                    type_string(&value_ty)
+                ));
+                self.emit_forget_moved_value(&fresh)?;
+                if self.expr_result_reg_needs_release(&d.expr) {
+                    self.emit_release(&ptr_reg)?;
+                }
+            }
+            _ => unreachable!(),
+        }
+        Ok(())
+    }
+
+    /// A place spine as (root binding, root-to-leaf projections) --
+    /// the codegen-side analogue of the Zig checker's
+    /// `taintKeyOfPlace` / codegen's `dropPlaceKeyText`. Slice and
+    /// borrow projections and non-identifier roots have no key.
+    fn place_key(expr: &Node) -> Option<(String, Vec<PlaceSeg>)> {
+        let mut segs: Vec<PlaceSeg> = Vec::new();
+        let mut cur = expr;
+        loop {
+            match cur {
+                Node::FieldExpr(f) => {
+                    segs.push(PlaceSeg::Field(f.field_name.clone()));
+                    cur = &f.expr;
+                }
+                Node::IndexExpr(ix) => {
+                    match &*ix.index {
+                        Node::Literal(Literal::IntVal(v)) => {
+                            segs.push(PlaceSeg::IndexLit(*v));
+                        }
+                        _ => segs.push(PlaceSeg::IndexDyn),
+                    }
+                    cur = &ix.target;
+                }
+                Node::DerefExpr(d) => {
+                    segs.push(PlaceSeg::Deref);
+                    cur = &d.expr;
+                }
+                Node::MoveExpr(m) => {
+                    cur = &m.expr;
+                }
+                Node::Identifier(name) => {
+                    segs.reverse();
+                    return Some((name.clone(), segs));
+                }
+                _ => return None,
+            }
+        }
+    }
+
+    /// Two place keys provably denote different places: different
+    /// roots, or a definitely-differing projection before either
+    /// spine ends. Equal keys, prefix keys, and uncertain pairs
+    /// (a dynamic index against a literal one) do not diverge --
+    /// the nulling store must never clobber the target place or an
+    /// intermediate the source derivation loads.
+    fn place_keys_diverge(
+        a: &(String, Vec<PlaceSeg>),
+        b: &(String, Vec<PlaceSeg>),
+    ) -> bool {
+        if a.0 != b.0 {
+            return true;
+        }
+        let shared = a.1.len().min(b.1.len());
+        for i in 0..shared {
+            let definite = match (&a.1[i], &b.1[i]) {
+                (PlaceSeg::Field(x), PlaceSeg::Field(y)) => x != y,
+                (PlaceSeg::IndexLit(x), PlaceSeg::IndexLit(y)) => x != y,
+                (PlaceSeg::Field(_), _)
+                | (_, PlaceSeg::Field(_))
+                | (PlaceSeg::Deref, PlaceSeg::IndexLit(_))
+                | (PlaceSeg::IndexLit(_), PlaceSeg::Deref)
+                | (PlaceSeg::Deref, PlaceSeg::IndexDyn)
+                | (PlaceSeg::IndexDyn, PlaceSeg::Deref) => true,
+                _ => false,
+            };
+            if definite {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Zig `placeSpineRootOwned`: the spine root is a binding whose
+    /// type is not borrow-like. Unknown bindings are not owned.
+    fn place_root_owned(&self, root: &str) -> bool {
+        let resolved = self.resolve_binding_name(root);
+        match self.local_binding_type_for_name(&resolved) {
+            Some(ty) => !matches!(ty, Type::Borrow(_)),
+            None => false,
+        }
+    }
+
+    /// DEF-5 / DEF-AOF-EXIT69 clone-on-extract for identifier
+    /// assignment targets (codegen.zig `cloneBorrowedHandleFieldValue`,
+    /// assign arm): when the RHS is a field read whose type carries
+    /// owning handles (String / Vec / GrowVec / Box / Rc / Arc, or a
+    /// struct with deep fields), the stored value is a deep clone of
+    /// the field and the loaded view temp is retired. Other shapes
+    /// keep the plain load (identifier moves and plain copies are
+    /// unaffected).
+    fn clone_on_extract_value(
+        &mut self,
+        value: &Node,
+        raw_reg: String,
+    ) -> Result<String> {
+        if raw_reg.starts_with('^') || raw_reg.starts_with('&') {
+            return Ok(raw_reg);
+        }
+        if !matches!(value, Node::FieldExpr(_)) {
+            return Ok(raw_reg);
+        }
+        let Some(ty) = self.expr_type(value) else {
+            return Ok(raw_reg);
+        };
+        let cloneable = match &ty {
+            Type::UserDefined(u) => {
+                matches!(
+                    u.name.as_str(),
+                    "String" | "Vec" | "GrowVec" | "Box" | "Rc" | "Arc"
+                ) || (crate::place::struct_decl_lookup(self.check, &u.name)
+                    .is_some()
+                    && self.deep_clone_needed(&ty, 0))
+            }
+            _ => false,
+        };
+        if !cloneable {
+            return Ok(raw_reg);
+        }
+        match self.gen_deep_clone_value(&raw_reg, &ty)? {
+            Some(cloned) => {
+                self.emit_release(&raw_reg)?;
+                Ok(cloned)
+            }
+            None => Ok(raw_reg),
+        }
+    }
+
     /// After a field-assign move-out (`dst.f = src.g`), the source field's
     /// storage is now owned by the destination, but nothing records the
     /// move — the source binding's tail still frees the field, so the same
@@ -581,8 +806,23 @@ impl<'c> Codegen<'c> {
         value: &Node,
         fallback_ty: &Type,
     ) -> Result<()> {
-        let Some(value_place) = Self::field_place_path(value) else {
+        if self.compensation_field_chain(target, value, fallback_ty)? {
             return Ok(());
+        }
+        self.emit_replace_source_null_general(target, value, fallback_ty)
+    }
+
+    /// Path 1 of the move-out compensation: identifier-rooted field
+    /// chains (the stage-10 shapes). Returns true when it nulled the
+    /// source place.
+    fn compensation_field_chain(
+        &mut self,
+        target: &Node,
+        value: &Node,
+        fallback_ty: &Type,
+    ) -> Result<bool> {
+        let Some(value_place) = Self::field_place_path(value) else {
+            return Ok(false);
         };
         let value_ty = self
             .expr_type(value)
@@ -597,12 +837,12 @@ impl<'c> Codegen<'c> {
                 | crate::drop::DropPlan::RcPtr(_)
                 | crate::drop::DropPlan::BoxPtr(_)
         ) {
-            return Ok(());
+            return Ok(false);
         }
         let distinct = match target {
             Node::FieldExpr(_) => {
                 let Some(target_place) = Self::field_place_path(target) else {
-                    return Ok(());
+                    return Ok(false);
                 };
                 Self::place_paths_diverge(&value_place, &target_place)
             }
@@ -618,11 +858,11 @@ impl<'c> Codegen<'c> {
             _ => false,
         };
         if !distinct {
-            return Ok(());
+            return Ok(false);
         }
         let field = match value {
             Node::FieldExpr(f) => f,
-            _ => return Ok(()),
+            _ => return Ok(false),
         };
         let src_addr = self.gen_field_address(field)?;
         let mut active: Vec<Type> = Vec::new();
@@ -635,7 +875,7 @@ impl<'c> Codegen<'c> {
         self.emit_forget_moved_value(&fresh)?;
         self.remember_address_projection_source(&src_addr);
         self.emit_release(&src_addr.ptr)?;
-        Ok(())
+        Ok(true)
     }
 
     /// RUST-STAGE10-SHAPE-E (E3): synthesize a fresh empty value of type
@@ -1073,6 +1313,12 @@ impl<'c> Codegen<'c> {
         // R2b (stage 6): an assigned literal takes its layout
         // from the target binding's type.
         let val = self.gen_expr_in_context(&assign.value, target_ty.as_ref())?;
+        // DEF-5 clone-on-extract (codegen.zig:16679): a handle-typed
+        // field read stored into an identifier target is a deep
+        // clone, never the aliasing load -- the parent place keeps
+        // (and drops) the field, so an aliasing binding would drop
+        // the same buffers a second time.
+        let val = self.clone_on_extract_value(&assign.value, val)?;
         let stored_val: String = match val.strip_prefix('^') {
             Some(stripped) => stripped.to_string(),
             None => val.clone(),
@@ -1368,4 +1614,14 @@ pub(crate) fn as_call(expr: &Node) -> Option<&CallExpr> {
         Node::CallExpr(c) => Some(c),
         _ => None,
     }
+}
+
+/// One projection step of a place spine (see
+/// `Codegen::place_key`).
+#[derive(Clone, PartialEq)]
+enum PlaceSeg {
+    Field(String),
+    IndexLit(i64),
+    IndexDyn,
+    Deref,
 }

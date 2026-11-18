@@ -975,6 +975,46 @@ impl<'c> Codegen<'c> {
             return Ok(result);
         }
 
+        // DEF-deep-copy (codegen.zig:22695): the explicit `.clone()`
+        // surface for value types -- String/Vec/GrowVec receivers
+        // (deep, elements included) and user structs (field by field
+        // through the record copy routine). A user-declared `clone`
+        // method resolves through the known-callee path above, so
+        // reaching here means the compiler-synthesised surface; the
+        // bare-name catch-all below would emit `EXPAND clone`, a
+        // macro that exists in no std tree (host UndefinedMacro).
+        if call.associated_target.is_none()
+            && call.func_name == "clone"
+            && call.args.len() == 1
+        {
+            if let Some(recv_ty) = self.expr_type(&call.args[0]) {
+                let cloneable = matches!(
+                    &recv_ty,
+                    Type::UserDefined(u)
+                        if u.name == "String"
+                            || u.name == "Vec"
+                            || u.name == "GrowVec"
+                            || crate::place::struct_decl_lookup(self.check, &u.name)
+                                .is_some()
+                );
+                if cloneable {
+                    let recv_reg = self.gen_expr(&call.args[0])?;
+                    let cloned = match self.gen_deep_clone_value(&recv_reg, &recv_ty)? {
+                        Some(reg) => reg,
+                        // Plain-copyable closure: the loaded temp is
+                        // already an independent copy.
+                        None => recv_reg.clone(),
+                    };
+                    if cloned != recv_reg
+                        && call_arg_needs_release(&call.args[0])
+                    {
+                        self.emit_release(&recv_reg)?;
+                    }
+                    return Ok(cloned);
+                }
+            }
+        }
+
         // Catch-all (mirrored deliberately): an unknown callee name
         // is assumed to be a macro and emitted as an EXPAND, with no
         // error. See docs/divergences/lowering-text.md.
