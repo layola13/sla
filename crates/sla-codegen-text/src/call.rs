@@ -287,11 +287,19 @@ impl<'c> Codegen<'c> {
                     // identifier root (call-result temp) is already
                     // freshly owned, so it moves as-is; map/set
                     // types keep the historical raw pass.
+                    // SPRINT-100 L2: the clone attempt is no longer
+                    // gated on deep_clone_needed — a POD struct field
+                    // (SCATTER-3's {ptr, len} slice) needs the fresh
+                    // record just as much: the callee drops the
+                    // record it was given, so the aliasing load is
+                    // freed under the still-live parent.
+                    // gen_deep_clone_value declines plain-copyable
+                    // types (None), which keeps scalar projections
+                    // on the raw pass.
                     if !raw_reg.starts_with('&') && !raw_reg.starts_with('^') {
                         if let Some(arg_ty) = self.expr_type(arg) {
                             if root_identifier(arg).is_some()
                                 && matches!(arg, Node::FieldExpr(_) | Node::IndexExpr(_))
-                                && self.deep_clone_needed(&arg_ty, 0)
                                 && self.uncloneable_type_name(&arg_ty, 0).is_none()
                             {
                                 if let Some(cloned) =

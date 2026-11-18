@@ -230,6 +230,8 @@ impl<'c> Codegen<'c> {
             if self.async_pending_return_emitted {
                 return Ok(());
             }
+            // DEF-AOF-EXIT69 clone-on-extract (see the generic path).
+            let val = self.clone_on_extract_value(&let_stmt.value, val)?;
             self.stack_alloc_bindings.insert(resolved_name.clone());
             self.ins(&format!(
                 "{resolved_name} = stack_alloc {}",
@@ -257,6 +259,8 @@ impl<'c> Codegen<'c> {
             if self.async_pending_return_emitted {
                 return Ok(());
             }
+            // DEF-AOF-EXIT69 clone-on-extract (see the generic path).
+            let val = self.clone_on_extract_value(&let_stmt.value, val)?;
             self.stack_alloc_bindings.insert(resolved_name.clone());
             self.assigned_value_slots.insert(resolved_name.clone());
             self.ins(&format!(
@@ -409,6 +413,13 @@ impl<'c> Codegen<'c> {
         if self.async_pending_return_emitted {
             return Ok(());
         }
+        // DEF-5 / DEF-AOF-EXIT69 clone-on-extract (the assign arm
+        // at gen_assign_stmt applies the same helper): a let binding
+        // initialized from a field read of a live owned parent takes
+        // a deep clone, never the aliasing load — the parent keeps
+        // (and drops) the field, so an aliasing binding would drop
+        // the same buffers a second time.
+        let val = self.clone_on_extract_value(&let_stmt.value, val)?;
         // The binding takes over the value register; a recorded
         // borrow source moves with it (codegen.zig:14942).
         self.transfer_borrow_source_to_binding(&val, &resolved_name);
