@@ -442,6 +442,19 @@ pub fn imported_macro_expression_result_kind(
         "SLA_FS_READ_TO_STRING",
         "SLA_FS_READ_FILE",
         "SLA_FS_METADATA",
+        // CLASSB-DEF3 (Zig lowering_rules.zig
+        // importedMacroExpressionResultKind): ptr.sa read macros
+        // whose expansions load a u64 — the plain/unaligned/volatile
+        // spellings the _READ_U64 suffix rule does not reach.
+        // PTR_READ_U64 is covered by that suffix rule; it was
+        // previously pinned to raw_pointer in the list below, which
+        // made every comparison on its result a checker TypeMismatch
+        // (REG4-CHECKER-PTR-READ).
+        "PTR_READ",
+        "PTR_READ_UNALIGNED",
+        "PTR_READ_VOLATILE",
+        "PTR_READ_UNALIGNED_U64",
+        "PTR_READ_VOLATILE_U64",
     ];
     if U64_NAMES.contains(&name) {
         return Some(K::U64);
@@ -463,7 +476,6 @@ pub fn imported_macro_expression_result_kind(
         "RAW_WAKER_VTABLE_NEW",
         "FUTURE_POLL_FN_STATE_NEW",
         "FUTURE_POLL_FN_STATE_POLL",
-        "PTR_READ_U64",
         "WAKER_FROM_RAW",
         "CONTEXT_FROM_WAKER",
         "ONCE_NEW",
@@ -485,11 +497,18 @@ pub fn imported_macro_expression_result_kind(
         "PIN_PTR_EQ",
         "PIN_MUT_PTR_EQ",
     ];
-    if BOOL_NAMES.contains(&name) {
+    if BOOL_NAMES.contains(&name) || name.starts_with("JSON_IS_") {
         return Some(K::Boolean);
     }
     const U8_NAMES: &[&str] = &[
         "SLA_BYTE_AT",
+        // CLASSB-DEF3: PTR_BYTE_AT's expansion loads the byte as u8;
+        // it matched no rule, so an unannotated
+        // `let c = PTR_BYTE_AT(p, n);` left the call typeless. The
+        // unaligned/volatile U8 spellings have the same gap.
+        "PTR_BYTE_AT",
+        "PTR_READ_UNALIGNED_U8",
+        "PTR_READ_VOLATILE_U8",
         "JSON_AS_BOOL",
         "SLA_JSON_AS_BOOL",
         "SLA_FS_EXISTS",
@@ -508,7 +527,8 @@ pub fn imported_macro_expression_result_kind(
     if name.ends_with("_READ_U64") {
         return Some(K::U64);
     }
-    if name.ends_with("_READ_I32") {
+    if name.ends_with("_READ_I32") || name == "PTR_READ_VOLATILE_I32" {
+        // CLASSB-DEF3: the volatile i32 spelling (see PTR_BYTE_AT).
         return Some(K::I32);
     }
     if name == "JSON_AS_I64" || name == "SLA_JSON_AS_I64" || name.ends_with("_GET_I64")

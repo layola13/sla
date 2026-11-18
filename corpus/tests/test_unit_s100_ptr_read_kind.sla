@@ -1,0 +1,26 @@
+@import "sa_std/slot_pool.sla"
+
+// Regression (LINE-S100-TYPEMISMATCH, mirrors Zig CLASSB-DEF3 /
+// REG4-CHECKER-PTR-READ): the imported-macro expression result
+// kind pinned PTR_READ_U64 to raw_pointer, shadowing the
+// _READ_U64 suffix rule, so comparing its result against an
+// integer literal was "comparison requires matching operand
+// types, actual raw_ptr and i64" (corpus origin:
+// test_unit_reg4_slot_pool). The plain PTR_READ spelling
+// matched no rule at all. Both classify u64 in Zig's
+// importedMacroExpressionResultKind. On the base this file
+// fails type checking; with the fix it passes and the reads
+// return the written word.
+
+struct S100Word { lo: u64 }
+
+@test "s100 ptr read u64 kind minim"() {
+    let raw = Box::into_raw(Box::new(S100Word { lo: 0 }));
+    let g: ptr = raw as ptr;
+    PTR_WRITE_U64(g, 111);
+    if PTR_READ_U64(g) != 111 { panic(31); };
+    if PTR_READ(g) != 111 { panic(32); };
+    let v: u64 = PTR_READ_U64(g);
+    if v != 111 { panic(33); };
+    let _reclaim = unsafe { Box::from_raw(raw) };
+}
