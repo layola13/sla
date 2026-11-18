@@ -1,0 +1,33 @@
+@import "sa_std/rel_link.sla"
+
+// LINE-REG3 S2 regression: a call-result temporary consumed by a
+// read-only EXPAND projection (PTR_ADDR over a call result, free
+// `len` over a Vec call result, a unary Option projection over a
+// call result) was never released after the expansion and stayed
+// Active at function exit (host MemoryLeak 1012). Base signatures:
+// rel_link @test (tmp_104), redis_value_full @test (tmp_961).
+
+fn reg3_s2_mk_vec() -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    return v;
+}
+
+fn reg3_s2_mk_opt() -> Option<u64> { return Some(7); }
+
+@test "reg3 s2 ptr addr of call result releases temp"() {
+    let buf: [u8; 64] = [0u8; 64];
+    let base: ptr = PTR_BYTE_ADD(&buf, 0);
+    let base_addr: u64 = PTR_ADDR(base);
+    if PTR_ADDR(rel_ptr(base, 0)) != base_addr { panic(9401); };
+    if PTR_ADDR(rel_ptr(base, 32)) != base_addr + 32 { panic(9402); };
+}
+
+@test "reg3 s2 len of call result releases temp"() {
+    if (len(reg3_s2_mk_vec()) as u64) != 0 { panic(9411); };
+}
+
+@test "reg3 s2 is_some of call result releases temp"() {
+    if reg3_s2_mk_opt().is_some() == false { panic(9421); };
+    let o = reg3_s2_mk_opt();
+    if o.is_some() == false { panic(9422); };
+}

@@ -1122,7 +1122,20 @@ impl<'c> Codegen<'c> {
             line.push_str(&format!(", {reg}"));
         }
         self.ins(&line);
-        let _ = call_arg_needs_release;
+        // Settle the temp args the expansion only reads (the Zig
+        // macro-call site settle): a call-result temp passed to a
+        // read-only macro -- `PTR_ADDR(rel_ptr(..))` is the family
+        // shape -- otherwise stays Active at function exit
+        // (MemoryLeak, LINE-REG3 S2). Macros whose body moves the
+        // arg (the FS_READ_BUFFER_FREE class) retire it inside the
+        // expansion and are the ported Zig exception.
+        for (idx, (arg, reg)) in call.args.iter().zip(arg_regs.iter()).enumerate() {
+            if call_arg_needs_release(arg)
+                && !sla_lowering::imported_macro_direct_call_consumes_value_arg(&func_name, idx)
+            {
+                self.emit_release(reg)?;
+            }
+        }
         Ok(result)
     }
 

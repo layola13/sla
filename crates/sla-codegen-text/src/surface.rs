@@ -437,6 +437,14 @@ impl<'c> Codegen<'c> {
             let (recv, _, _) = self.surface_receiver(call)?;
             let reg = self.new_tmp();
             self.ins(&format!("EXPAND {macro_name} {reg}, {recv}"));
+            // The receiver IS retired when it is an owned temp
+            // (same settle as the copied()/unwrap_or arms above):
+            // `len(redis_value_bulk(&e))` otherwise leaves the
+            // call-result register Active at function exit
+            // (MemoryLeak, LINE-REG3 S2).
+            if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                self.emit_release(&recv)?;
+            }
             return Ok(Some(SurfaceCall::Value(reg)));
         }
         // ---- receiver methods ----
@@ -470,6 +478,13 @@ impl<'c> Codegen<'c> {
             let (recv, _, _) = self.surface_receiver(call)?;
             let reg = self.new_tmp();
             self.ins(&format!("EXPAND {macro_name} {reg}, {recv}"));
+            // Same receiver settle as the free-len arm: a
+            // call-result Option/Result temp read by a unary
+            // projection otherwise stays Active at function exit
+            // (MemoryLeak, LINE-REG3 S2).
+            if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                self.emit_release(&recv)?;
+            }
             return Ok(Some(SurfaceCall::Value(reg)));
         }
         match (tname.as_str(), name) {
