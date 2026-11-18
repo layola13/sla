@@ -1,0 +1,69 @@
+struct Handle {
+    raw: u64,
+}
+
+fn make_ok() -> Handle! {
+    return Ok(Handle { raw: 42 });
+}
+
+fn make_ok_u64() -> u64! {
+    return Ok(42);
+}
+
+fn make_err() -> Handle! {
+    return Err(7);
+}
+
+fn get_raw(b: &Handle) -> u64 {
+    return b.raw;
+}
+
+@test "match ok arm rebinds outer struct binding"() {
+    let r = make_ok();
+    let h: Handle = Handle { raw: 0 };
+    match r {
+        Ok(v) => {
+            h = v;
+        },
+        Err(e) => {
+            panic(48001);
+        },
+    };
+    if get_raw(&h) != 42 {
+        panic(48002);
+    };
+}
+
+@test "match ok arm rebinds outer primitive binding"() {
+    let r = make_ok_u64();
+    let x: u64 = 0;
+    match r {
+        Ok(v) => {
+            x = v;
+        },
+        Err(e) => {
+            panic(48011);
+        },
+    };
+    if x != 42 {
+        panic(48012);
+    };
+}
+
+@test "match err arm leaves outer struct binding at initial value"() {
+    let r = make_err();
+    let h: Handle = Handle { raw: 0 };
+    match r {
+        Ok(v) => {
+            h = v;
+        },
+        Err(e) => {
+            if e != 7 {
+                panic(48021);
+            };
+        },
+    };
+    if h.raw != 0 {
+        panic(48022);
+    };
+}

@@ -1102,8 +1102,19 @@ impl<'c> Codegen<'c> {
                 "store {resolved_name}+0, {stored_val} as {}",
                 type_string(ty)
             ));
-        } else if self.addressable_bindings.contains(&target_name)
-            || self.stack_alloc_bindings.contains(&resolved_name)
+        // DEF-6 (codegen.zig assign cascade): only genuinely
+        // materialized stack slots may be stored through. An
+        // addressable-only binding (e.g. a struct literal, whose
+        // register holds the heap cell's address and whose `&x` is
+        // taken elsewhere) keeps its value IN the register; storing
+        // through it writes the new value's pointer into the old
+        // cell's first word. Such bindings fall through to the
+        // release-and-rebind branch below, which is the form the
+        // Zig cascade uses for them. (Every binding for which the
+        // store is correct -- addressable-storage primitives,
+        // assigned-value slots, `var` stmts, stack_alloc calls --
+        // is already in stack_alloc_bindings.)
+        } else if self.stack_alloc_bindings.contains(&resolved_name)
         {
             let ty = target_ty
                 .as_ref()
