@@ -1,0 +1,21 @@
+// SPRINT-100 L5 minim: `String.as_bytes()` expands
+// STRING_BUF_AS_BYTES. On the base tree the call falls to the
+// EXPAND catch-all (`EXPAND as_bytes`), which the host rejects
+// with UndefinedMacro.
+
+fn s100_sum_as_bytes(s: &String) -> u64 {
+    let bs = s.as_bytes();
+    let n = len(bs);
+    let t: u64 = 0;
+    let i: u64 = 0;
+    while i < n {
+        t = t + (bs[i] as u64);
+        i = i + 1;
+    }
+    return t;
+}
+
+@test "s100 as_bytes minim"() {
+    let s: String = format("hi");
+    if s100_sum_as_bytes(&s) != 209 { panic(10031); };
+}

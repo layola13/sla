@@ -1,0 +1,15 @@
+// SPRINT-100 L5 minim: `va_next_*` reads lower to the native
+// `va_arg` instruction. On the base tree the call falls to the
+// EXPAND catch-all (`EXPAND va_next_i32`), which the host
+// rejects with UndefinedMacro.
+
+extern "C" fn s100_va_sum2(fixed: i32, args: ...) -> i64 {
+    let a = va_next_i32(args);
+    let b = va_next_i32(args);
+    return fixed as i64 + a as i64 + b as i64;
+}
+
+@test "s100 va_next minim"() {
+    let total = unsafe { s100_va_sum2(1, 20, 3) };
+    if total != 24 { panic(10011); };
+}

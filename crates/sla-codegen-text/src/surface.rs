@@ -40,6 +40,19 @@ fn peel_name(ty: &Type) -> Option<(&str, &[Type])> {
     }
 }
 
+/// Peel `&T` / `*T` layers and return the innermost type,
+/// whatever its kind (unlike `peel_name`, which only admits
+/// user-defined types).
+fn peel_borrow_pointer(ty: &Type) -> &Type {
+    let mut cur = ty;
+    loop {
+        match cur {
+            Type::Borrow(inner) | Type::Pointer(inner) => cur = inner,
+            _ => return cur,
+        }
+    }
+}
+
 fn missing_fact() -> crate::TextError {
     crate::TextError::MissingType {
         context: "std surface call".to_string(),
@@ -169,18 +182,23 @@ impl<'c> Codegen<'c> {
         call: &CallExpr,
         idx: usize,
     ) -> Result<LoweredCallArg> {
+        self.surface_value_consumed_node(&call.args[idx])
+    }
+
+    /// Node form of `surface_value_consumed` (the bare `vec(...)`
+    /// constructor plans its element arguments the same way a
+    /// push plans its value argument, but they are not at a
+    /// fixed call-argument index).
+    fn surface_value_consumed_node(&mut self, arg: &Node) -> Result<LoweredCallArg> {
         // String literals keep the unplanned path: planning them
         // against a String parameter selects the
         // RawPointerStringLiteral kind (a C-string pointer),
         // which collection inserts do not accept — they take the
         // string value the literal materialises as.
-        if matches!(
-            &call.args[idx],
-            Node::Literal(sla_ast::Literal::StringVal(_))
-        ) {
-            return self.surface_value(call, idx);
+        if matches!(arg, Node::Literal(sla_ast::Literal::StringVal(_))) {
+            return self.gen_planned_call_arg(arg, None, false);
         }
-        let param = self.expr_type(&call.args[idx]).map(|ty| Param {
+        let param = self.expr_type(arg).map(|ty| Param {
             name: String::new(),
             ty: Box::new(ty),
             is_borrow: false,
@@ -188,7 +206,7 @@ impl<'c> Codegen<'c> {
             fallible_sugar: false,
             is_var: false,
         });
-        let mut planned = self.gen_planned_call_arg(&call.args[idx], param.as_ref(), false)?;
+        let mut planned = self.gen_planned_call_arg(arg, param.as_ref(), false)?;
         // EXPAND operands do not carry the `^` capability prefix
         // (the host rejects it with CapabilityMismatch): the
         // transfer is expressed by the plain operand plus the
@@ -410,8 +428,77 @@ impl<'c> Codegen<'c> {
                 return Ok(Some(SurfaceCall::Value(reg)));
             }
         }
+        // ---- bare `vec(...)` constructor (codegen.zig:16097) ----
+        // VEC_NEW plus one VEC_PUSH per element, each element
+        // planned exactly as the ("Vec", "push") receiver arm
+        // plans its value. Without this arm the call fell to the
+        // bare-name catch-all and synthesised `EXPAND vec`, a
+        // macro that exists in no std tree (host UndefinedMacro,
+        // test_unit_def_zrange_vec_handle).
+        if call.func_name == "vec"
+            && call.associated_target.is_none()
+            && call.callee.is_none()
+        {
+            let result_ty = self.expr_type(expr).ok_or(missing_fact())?;
+            let (_, generics) = peel_name(&result_ty).ok_or(missing_fact())?;
+            let elem = generics.first().ok_or(missing_fact())?.clone();
+            let reg = self.new_tmp();
+            self.ins(&format!("EXPAND VEC_NEW {reg}"));
+            for arg in &call.args {
+                if let Some(copy_reg) =
+                    self.push_arg_copy_materialization_node(arg, &elem)?
+                {
+                    self.ins(&format!(
+                        "EXPAND VEC_PUSH {reg}, {copy_reg}, {}",
+                        slot_size(&elem)
+                    ));
+                    // The copy's ownership moves into the vec:
+                    // forget it, never release (same as the push
+                    // receiver arm).
+                    self.emit_forget_moved_value(&copy_reg)?;
+                    continue;
+                }
+                let planned = self.surface_value_consumed_node(arg)?;
+                let value = planned.reg.clone();
+                self.ins(&format!(
+                    "EXPAND VEC_PUSH {reg}, {value}, {}",
+                    slot_size(&elem)
+                ));
+                self.surface_finish_value(&planned, true)?;
+            }
+            return Ok(Some(SurfaceCall::Value(reg)));
+        }
         // ---- free `len` over the surface containers ----
         if call.func_name == "len" && call.args.len() == 1 && call.callee.is_none() {
+            // DEF-2 / bend2 (Zig len arm, codegen.zig:16134): a
+            // fixed array's length is the compile-time element
+            // count (an integer constant, the argument is not
+            // generated); a bare `ptr` carries no length field
+            // and is NUL-scanned with CSTR_LEN (shared plan
+            // planLenRawPtrReceiver — parameters and STR_PTR
+            // results are genuine C strings; an inferred
+            // `let s = "lit"` binding types as a Slice in this
+            // checker and takes the SLICE_GET_LEN arm below).
+            // Both shapes fell to the EXPAND catch-all before
+            // (`EXPAND len`, host UndefinedMacro:
+            // test_unit_bend2_parity_array, test_unit_def2_ptr_len).
+            if let Some(arg_ty) = self.expr_type(&call.args[0]) {
+                match peel_borrow_pointer(arg_ty) {
+                    Type::Array(arr) => {
+                        let n = arr.len;
+                        let reg = self.new_tmp();
+                        self.ins(&format!("{reg} = {n}"));
+                        return Ok(Some(SurfaceCall::Value(reg)));
+                    }
+                    Type::Primitive(Primitive::RawPtr) => {
+                        let recv = self.gen_expr(&call.args[0])?;
+                        let reg = self.new_tmp();
+                        self.ins(&format!("EXPAND CSTR_LEN {reg}, {recv}"));
+                        return Ok(Some(SurfaceCall::Value(reg)));
+                    }
+                    _ => {}
+                }
+            }
             let macro_name = match self.classify_receiver(call) {
                 Some((tname, _)) => match tname.as_str() {
                     "Vec" => "VEC_LEN",
@@ -445,6 +532,36 @@ impl<'c> Codegen<'c> {
             if sla_lowering::call_arg_needs_release(&call.args[0]) {
                 self.emit_release(&recv)?;
             }
+            return Ok(Some(SurfaceCall::Value(reg)));
+        }
+        // ---- String `as_bytes` / `bytes` (codegen.zig:17391) ----
+        // An owned String expands STRING_BUF_AS_BYTES; a bare
+        // C-string pointer or a byte array expands STR_AS_BYTES
+        // (both in sa_std/string.sa; the min-import scan already
+        // keeps string.sa for String-receiver method calls).
+        // Without this arm the call fell to the EXPAND catch-all
+        // (`EXPAND as_bytes`, host UndefinedMacro:
+        // test_unit_def2_string_as_bytes, test_unit_def6_string_rebind).
+        // The receiver is not released (Zig emits no release here).
+        if (call.func_name == "as_bytes" || call.func_name == "bytes")
+            && call.args.len() == 1
+            && call.callee.is_none()
+        {
+            let macro_name = match self.expr_type(&call.args[0]) {
+                Some(ty) => match peel_borrow_pointer(ty) {
+                    Type::UserDefined(u) if u.name == "String" => {
+                        "STRING_BUF_AS_BYTES"
+                    }
+                    Type::Primitive(Primitive::RawPtr) | Type::Array(_) => {
+                        "STR_AS_BYTES"
+                    }
+                    _ => return Ok(None),
+                },
+                None => return Ok(None),
+            };
+            let recv = self.gen_expr(&call.args[0])?;
+            let reg = self.new_tmp();
+            self.ins(&format!("EXPAND {macro_name} {reg}, {recv}"));
             return Ok(Some(SurfaceCall::Value(reg)));
         }
         // ---- receiver methods ----
@@ -627,6 +744,62 @@ impl<'c> Codegen<'c> {
                 let reg = self.new_tmp();
                 self.ins(&format!("EXPAND {macro_name} {reg}, {recv}, {value}"));
                 self.surface_finish_value(&planned, consumed)?;
+                Ok(Some(SurfaceCall::Value(reg)))
+            }
+            ("HashSet", "remove") => {
+                // DEF-RUST-STRKEY (std_surface.sla_meta: `method
+                // HashSet remove sa_std/hashset.sa SET_REMOVE
+                // out,receiver,value deps=sa_set_remove,sa_map_del`).
+                // The checker half already landed (check_std_leaf3:
+                // the key is a probe, NOT consumed, result bool —
+                // as with contains); this is the missing codegen
+                // arm. Without it the call fell to the EXPAND
+                // catch-all (`EXPAND remove`, host UndefinedMacro:
+                // test_unit_def_rust_set_remove_str). String keys
+                // key on CONTENT via @sa_set_remove_str (the
+                // SET_REMOVE_STR dep chain), mirroring the
+                // insert/contains str path above.
+                if call.args.len() != 2 {
+                    return Err(missing_fact());
+                }
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let elem_ty = generics.first().cloned();
+                let str_elem = elem_ty
+                    .as_ref()
+                    .map(|t| crate::map::is_string_key_type(t))
+                    .unwrap_or(false);
+                if str_elem {
+                    let lit = self.gen_hashmap_literal_key_reg(
+                        &call.args[1],
+                        elem_ty.as_ref(),
+                    )?;
+                    let (value_reg, planned, owned_literal) = match lit {
+                        Some(kr) => (kr.reg, None, kr.owned_literal_string),
+                        None => {
+                            let planned = self.surface_value(call, 1)?;
+                            let reg = planned.reg.clone();
+                            (reg, Some(planned), false)
+                        }
+                    };
+                    let reg = self.new_tmp();
+                    self.ins(&format!(
+                        "{reg} = call @sa_set_remove_str(&{recv}, &{value_reg})"
+                    ));
+                    if let Some(planned) = &planned {
+                        self.surface_finish_value(planned, false)?;
+                    }
+                    if owned_literal {
+                        // A probe does not adopt its key (same
+                        // as the HashMap get arm).
+                        self.emit_release(&value_reg)?;
+                    }
+                    return Ok(Some(SurfaceCall::Value(reg)));
+                }
+                let planned = self.surface_value(call, 1)?;
+                let value = planned.reg.clone();
+                let reg = self.new_tmp();
+                self.ins(&format!("EXPAND SET_REMOVE {reg}, {recv}, {value}"));
+                self.surface_finish_value(&planned, false)?;
                 Ok(Some(SurfaceCall::Value(reg)))
             }
             ("HashMap", "insert") | ("BTreeMap", "insert") => {

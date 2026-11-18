@@ -1,0 +1,18 @@
+// SPRINT-100 L5 minim: free `len()` over a fixed array (the
+// compile-time element count) and over a bare `ptr` (a C-string
+// NUL scan, CSTR_LEN). On the base tree both fall to the EXPAND
+// catch-all (`EXPAND len`), which the host rejects with
+// UndefinedMacro.
+@import "sa_std/ptr.sa"
+@import "sa_std/string.sa"
+
+fn s100_len_of_ptr(p: ptr) -> u64 {
+    return len(p);
+}
+
+@test "s100 len array and ptr minim"() {
+    let a: [i64; 3] = [1, 2, 3];
+    if len(a) != 3 { panic(10021); };
+    if a.len() != 3 { panic(10022); };
+    if s100_len_of_ptr(STR_PTR("hello")) != 5 { panic(10023); };
+}

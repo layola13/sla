@@ -1145,6 +1145,38 @@ impl<'c> Codegen<'c> {
             return self.gen_slice_view_call(call);
         }
 
+        // Extern variadic batch (codegen.zig:15613): a
+        // `va_next_*` read lowers to the native `va_arg`
+        // instruction with the promoted read type. There is no
+        // std macro by that name, so the catch-all's
+        // `EXPAND va_next_i32` dies at the host with
+        // UndefinedMacro (test_unit_variadic_define). The single
+        // argument is the VaList binding; generating it yields
+        // the binding's own register.
+        if call.associated_target.is_none() {
+            let va_prim = match func_name.as_str() {
+                "va_next_i32" => Some("i32"),
+                "va_next_i64" => Some("i64"),
+                "va_next_u32" => Some("u32"),
+                "va_next_u64" => Some("u64"),
+                "va_next_f64" => Some("f64"),
+                "va_next_ptr" => Some("ptr"),
+                _ => None,
+            };
+            if let Some(prim) = va_prim {
+                if call.args.len() != 1 {
+                    return unsupported(
+                        "va_next arity",
+                        "codegen.zig:15613 (va_next lowering)",
+                    );
+                }
+                let list_reg = self.gen_expr(&call.args[0])?;
+                let reg = self.new_tmp();
+                self.ins(&format!("{reg} = va_arg {list_reg}, {prim}"));
+                return Ok(reg);
+            }
+        }
+
         if sla_lowering::is_stack_alloc_node(expr) {
             let size = self.stack_alloc_size_of(expr);
             let result = self.new_tmp();

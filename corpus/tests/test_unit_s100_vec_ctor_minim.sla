@@ -1,0 +1,19 @@
+// SPRINT-100 L5 minim: the bare `vec(...)` constructor —
+// VEC_NEW plus one VEC_PUSH per element. On the base tree the
+// call falls to the EXPAND catch-all (`EXPAND vec`), which the
+// host rejects with UndefinedMacro.
+
+struct S100Pair {
+    tag: u64,
+    val: u64,
+}
+
+@test "s100 vec ctor minim"() {
+    let v: Vec<S100Pair> = vec(S100Pair { tag: 5, val: 50 }, S100Pair { tag: 6, val: 60 });
+    if len(v) != 2 { panic(10051); };
+    if v[0].tag != 5 { panic(10052); };
+    if v[1].val != 60 { panic(10053); };
+    let w: Vec<i64> = vec(1, 2, 3);
+    if len(w) != 3 { panic(10054); };
+    if w[2] != 3 { panic(10055); };
+}

@@ -291,7 +291,17 @@ impl<'c> Codegen<'c> {
         call: &CallExpr,
         elem: &Type,
     ) -> Result<Option<String>> {
-        let arg = &call.args[1];
+        self.push_arg_copy_materialization_node(&call.args[1], elem)
+    }
+
+    /// Node form of `push_arg_copy_materialization` (the bare
+    /// `vec(...)` constructor's elements sit at varying call
+    /// indices, not at args[1]).
+    pub(crate) fn push_arg_copy_materialization_node(
+        &mut self,
+        arg: &Node,
+        elem: &Type,
+    ) -> Result<Option<String>> {
         if !matches!(arg, Node::Identifier(_)) {
             return Ok(None);
         }

@@ -1,0 +1,21 @@
+// SPRINT-100 L5 minim: `HashSet.remove` — SET_REMOVE for
+// identity keys, @sa_set_remove_str for String keys (content
+// keying, probe disposition). On the base tree the call falls
+// to the EXPAND catch-all (`EXPAND remove`), which the host
+// rejects with UndefinedMacro.
+@import "sa_std/hashset.sa"
+@import "sa_std/string.sa"
+
+@test "s100 set remove minim"() {
+    let s: HashSet<i32> = HashSet::new();
+    s.insert(5);
+    s.insert(9);
+    if !s.remove(5) { panic(10041); };
+    if len(s) != 1 { panic(10042); };
+    let t: HashSet<String> = HashSet::new();
+    let a: String = format("elem-x");
+    t.insert(a);
+    let p: String = format("elem-x");
+    if !t.remove(p) { panic(10043); };
+    if len(t) != 0 { panic(10044); };
+}
