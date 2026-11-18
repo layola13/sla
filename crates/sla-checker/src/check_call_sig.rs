@@ -292,6 +292,36 @@ impl Checker {
                         &Type::Borrow(Box::new(param.ty.clone())),
                         &arg_ty,
                     )
+                    // Dyn-borrow parameter (Zig
+                    // checkCallArgsAgainstSignature's is_borrow +
+                    // dynTraitName arm, type_checker.zig:4596):
+                    // a borrow of a concrete type implementing
+                    // the trait coerces to the dyn borrow, and a
+                    // dyn argument of an extending trait coerces
+                    // up. The method path (check_method.rs
+                    // check_method_args) has this branch; the
+                    // plain-call path never did, so
+                    // `render(&sprite)` for `&item: dyn Draw`
+                    // was a TypeMismatch here only
+                    // (test_unit_dyn_borrow_arg). Zig's
+                    // dyn_borrow_args side table has no analogue
+                    // in this crate (D-C21), same as the method
+                    // path.
+                    || crate::types_util::dyn_trait_name(&param.ty).is_some_and(
+                        |trait_name| {
+                            if let Some(arg_trait) =
+                                crate::types_util::dyn_trait_name(&arg_ty)
+                            {
+                                self.trait_extends_trait(arg_trait, trait_name)
+                            } else {
+                                match &arg_ty {
+                                    Type::Borrow(inner) => self
+                                        .type_implements_trait(inner, trait_name),
+                                    _ => false,
+                                }
+                            }
+                        },
+                    )
             } else if let Type::Borrow(inner) = &arg_ty {
                 types_equal(&param.ty, inner)
             } else if let (Type::Array(a), Type::Array(b)) = (&param.ty, &arg_ty) {

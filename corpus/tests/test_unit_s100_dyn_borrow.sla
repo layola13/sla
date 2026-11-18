@@ -1,0 +1,37 @@
+@import "sa_std/core/trait_object.sa"
+
+// Regression (LINE-S100-TYPEMISMATCH): the plain-call signature
+// checker lacked the dyn-borrow parameter branch that Zig's
+// checkCallArgsAgainstSignature (type_checker.zig:4596) and
+// this crate's method path (check_method.rs check_method_args)
+// both have, so passing a borrow of a concrete implementor to
+// a `&dyn Trait` parameter was "argument for parameter
+// expects __dyn_T, actual borrow". Corpus origin:
+// test_unit_dyn_borrow_arg. On the base this file fails type
+// checking.
+
+trait S100Draw {
+    fn draw(&self) -> i32;
+}
+
+struct S100Sprite {
+    id: i32,
+}
+
+impl S100Draw for S100Sprite {
+    fn draw(&self) -> i32 {
+        return self.id + 5;
+    }
+}
+
+fn s100_render(&item: dyn S100Draw) -> i32 {
+    return item.draw();
+}
+
+@test "s100 concrete value coerces to borrowed dyn argument"() {
+    let sprite = S100Sprite { id: 37 };
+    let score = s100_render(&sprite);
+    if score != 42 {
+        panic(61);
+    };
+}
