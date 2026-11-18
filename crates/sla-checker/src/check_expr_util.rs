@@ -63,11 +63,43 @@ pub fn cast_allowed(inner: &Type, target: &Type) -> bool {
     if is_numeric_type(inner) && is_numeric_type(target) {
         return true;
     }
+    // Zig `isPointerCarrierCastType` (lowering_rules.zig): pointer,
+    // borrow, the raw_ptr primitive, and the atomic/waker
+    // user-defined carriers.
     let carrier = |t: &Type| {
         matches!(t, Type::Pointer(_) | Type::Borrow(_))
             || matches!(t, Type::Primitive(Primitive::RawPtr))
+            || matches!(t, Type::UserDefined(ud) if matches!(
+                ud.name.as_str(),
+                "AtomicI32" | "AtomicUsize" | "RawWaker" | "Waker" | "LocalWaker" | "Wake"
+            ))
     };
-    carrier(inner) && carrier(target)
+    if carrier(inner) && carrier(target) {
+        return true;
+    }
+    // ZOZI-2 (Zig type_checker.zig cast arm): a pointer carrier
+    // converts to any integer type and back (`handle as u64`,
+    // `addr as *T`, `p as raw_ptr` chains through them), and a
+    // function pointer converts to a raw_ptr / u64 / usize
+    // primitive or to a pointer / borrow type. The previous form
+    // admitted only carrier<->carrier, so the checker's own
+    // ptr_int_casts corpus shape was a TypeMismatch.
+    if carrier(inner) && crate::types_util::is_integer_type(target) {
+        return true;
+    }
+    if crate::types_util::is_integer_type(inner) && carrier(target) {
+        return true;
+    }
+    if matches!(inner, Type::FnPtr(_)) {
+        return matches!(target, Type::Pointer(_) | Type::Borrow(_))
+            || matches!(
+                target,
+                Type::Primitive(
+                    Primitive::RawPtr | Primitive::U64 | Primitive::Usize
+                )
+            );
+    }
+    false
 }
 
 pub fn index_result_type(target: &Type) -> Option<Type> {

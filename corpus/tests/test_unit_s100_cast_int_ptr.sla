@@ -1,0 +1,31 @@
+// Regression (LINE-S100-TYPEMISMATCH, mirrors Zig ZOZI-2): the
+// checker's cast table admitted only numeric <-> numeric and
+// carrier <-> carrier casts, so integer -> pointer and
+// pointer -> integer address reinterpretations were
+// TypeMismatch ("cannot cast u64 to raw_ptr" / "cannot cast
+// raw_ptr to u64") — the shape every smoke corpus file uses
+// (`p[0] as ptr`, `PTR_READ_U64(..) as u64`, `0 as ptr`).
+// Zig's cast arm (type_checker.zig, isPointerCarrierCastType)
+// admits pointer-carrier <-> integer in both directions.
+// On the base this file fails type checking; with the fix it
+// passes and the round trip preserves the address and pointee.
+// (Heap form: the stack form's &local identity round trip hits
+// a separate borrow-temp lifetime defect in address
+// materialization, documented by LINE-PTR.)
+
+struct S100CastBox { tag: i32 }
+
+@test "s100 int ptr cast roundtrip"() {
+    let raw = Box::into_raw(Box::new(S100CastBox { tag: 7 }));
+    let bits = raw as u64;
+    if bits == 0 { panic(11); };
+    let back = bits as *S100CastBox;
+    if back != raw { panic(12); };
+    if (*back).tag != 7 { panic(13); };
+    let zero: u64 = 0;
+    let nullp = zero as ptr;
+    if nullp != (0 as ptr) { panic(14); };
+    let signed: i64 = 0;
+    if signed as ptr != nullp { panic(15); };
+    let _reclaim = unsafe { Box::from_raw(raw) };
+}
