@@ -5,11 +5,14 @@
 //! The Zig cascade probes a series of handle-family tables before the
 //! plain `!name` default (mutex guards, RefCell borrow handles, file
 //! and metadata handles, mpsc/string/collection binding sets). The
-//! slice maintains only one of those tables — `borrow_source_temps`,
-//! populated by the place-address consumers (place.rs) — so the other
-//! probes are structurally absent here and the cascade reduces to
-//! the guards the slice can hit, in the Zig order: internal symbol,
-//! borrow-address-temp plan, `&`/`^` prefix, stack-alloc binding,
+//! slice maintains the `borrow_source_temps` table (populated by the
+//! place-address consumers, place.rs), the mutex guard/lock tables
+//! and the RefCell borrow-handle table with its result-slot
+//! companions; the remaining families' probes are structurally
+//! absent here. The cascade keeps the Zig order: internal symbol,
+//! borrow-address-temp plan, RefCell borrow handle, mutex guard,
+//! mutex lock result, RefCell cell sweep, `&`/`^` prefix,
+//! stack-alloc binding (with the result-slot RefCell release),
 //! global const, already-consumed, then the default release. Adding
 //! a handle family means adding its probe at the Zig position, not
 //! appending.
@@ -53,6 +56,99 @@ impl<'c> Codegen<'c> {
             self.borrow_source_temps
                 .insert(binding.to_string(), source_temp);
         }
+    }
+
+    /// codegen.zig genLetStmt handle cascade (16100-16133): a
+    /// binding that takes over a RefCell borrow register inherits
+    /// its handle, and the source register is consumed by the
+    /// takeover (the binding's own release settles the borrow).
+    pub(crate) fn transfer_refcell_borrow_handle(&mut self, value_reg: &str, binding: &str) {
+        if let Some(handle) = self.refcell_borrow_handles.remove(value_reg) {
+            self.refcell_borrow_handles
+                .insert(binding.to_string(), handle);
+            self.consumed_bindings.insert(value_reg.to_string());
+        }
+    }
+
+    /// codegen.zig:2258 `ensureResultSlotRefCellSlot`: the
+    /// companion slot for a stack slot, allocated on first use.
+    pub(crate) fn ensure_result_slot_refcell_slot(&mut self, slot: &str) -> String {
+        if let Some(existing) = self.result_slot_refcell_slots.get(slot) {
+            return existing.clone();
+        }
+        let cell_slot = self.new_tmp();
+        self.ins(&format!("{cell_slot} = alloc 8"));
+        self.result_slot_refcell_slots
+            .insert(slot.to_string(), cell_slot.clone());
+        cell_slot
+    }
+
+    /// codegen.zig:2247 `ensureResultSlotRefCellHandle`.
+    pub(crate) fn ensure_result_slot_refcell_handle(
+        &mut self,
+        slot: &str,
+        kind: sla_lowering::refcell::RefCellBorrowKind,
+    ) -> crate::codegen::ResultSlotRefCellHandle {
+        if let Some(existing) = self.result_slot_refcell_handles.get(slot) {
+            let mut updated = existing.clone();
+            updated.kind = kind;
+            self.result_slot_refcell_handles
+                .insert(slot.to_string(), updated.clone());
+            return updated;
+        }
+        let cell_slot = self.ensure_result_slot_refcell_slot(slot);
+        let meta = crate::codegen::ResultSlotRefCellHandle { cell_slot, kind };
+        self.result_slot_refcell_handles
+            .insert(slot.to_string(), meta.clone());
+        meta
+    }
+
+    /// codegen.zig:2285 `storeResultSlotTransferredValueState`
+    /// (the RefCell companion arm): a handle-carrying value
+    /// stored into a stack slot leaves its cell register in the
+    /// slot's companion slot, so the slot's later release can
+    /// settle the borrow. Returns true when a handle moved.
+    pub(crate) fn store_refcell_handle_companion_for_slot(
+        &mut self,
+        slot: &str,
+        value_reg: &str,
+    ) -> bool {
+        let Some(handle) = self.refcell_borrow_handles.remove(value_reg) else {
+            return false;
+        };
+        let meta = self.ensure_result_slot_refcell_handle(slot, handle.kind);
+        self.ins(&format!(
+            "store {}+0, {} as ptr",
+            meta.cell_slot, handle.cell_reg
+        ));
+        true
+    }
+
+    /// codegen.zig:2345 `releaseResultSlotRefCellHandle`: load
+    /// the cell register back out of the companion slot, settle
+    /// the borrow against it, and (when asked) retire the
+    /// companion slot itself.
+    pub(crate) fn release_result_slot_refcell_handle(
+        &mut self,
+        slot: &str,
+        remove_companion: bool,
+    ) -> Result<bool> {
+        let Some(entry) = self.result_slot_refcell_handles.get(slot).cloned() else {
+            return Ok(false);
+        };
+        let cell_reg = self.new_tmp();
+        self.ins(&format!("{cell_reg} = load {}+0 as ptr", entry.cell_slot));
+        self.ins(&format!(
+            "EXPAND {} {cell_reg}",
+            entry.kind.release_macro_name()
+        ));
+        self.emit_release(&cell_reg)?;
+        if remove_companion {
+            self.result_slot_refcell_handles.remove(slot);
+            self.result_slot_refcell_slots.remove(slot);
+            self.emit_release(&entry.cell_slot)?;
+        }
+        Ok(true)
     }
 
     /// codegen.zig:1136 `flushMutexGuardsForReceiver`.
@@ -139,14 +235,46 @@ impl<'c> Codegen<'c> {
             self.emit_release(&source_temp)?;
             return Ok(());
         }
+        // codegen.zig:1261 `refcell_borrow_handles` probe:
+        // releasing a live RefCell borrow settles the dynamic
+        // borrow against its cell (the RELEASE expansion), then
+        // retires the borrow register itself; a tracked owner
+        // temp is released last.
+        if let Some(handle) = self.refcell_borrow_handles.remove(&resolved) {
+            let has_owner_temp = handle
+                .cell_release_temp
+                .as_deref()
+                .map(|temp| temp != resolved)
+                .unwrap_or(false);
+            let plan = sla_lowering::refcell::plan_refcell_handle_release(has_owner_temp);
+            if plan.consume_handle_value {
+                self.consumed_bindings.insert(resolved.clone());
+            }
+            if plan.release_dynamic_borrow {
+                self.ins(&format!(
+                    "EXPAND {} {}",
+                    handle.kind.release_macro_name(),
+                    handle.cell_reg
+                ));
+            }
+            if plan.consume_handle_value {
+                self.ins(&format!("!{resolved}"));
+            }
+            if let Some(temp) = &handle.cell_release_temp {
+                if plan.release_owner_temps {
+                    let temp = temp.clone();
+                    self.emit_release(&temp)?;
+                }
+            }
+            return Ok(());
+        }
         // codegen.zig:1186 `mutex_guard_handles` probe: releasing
         // a live guard unlocks its mutex, retires the guard
         // register, and restores the receiver for its own
-        // scope-exit release. (Zig: mutex/rwlock/refcell/file/
-        // metadata handle families — only the mutex family is
-        // populated in this slice; RwLock/RefCell/file probes
-        // belong at their own Zig positions when those families
-        // land.)
+        // scope-exit release. (Zig: mutex/rwlock/file/metadata
+        // handle families — only the mutex and RefCell families
+        // are populated in this slice; RwLock/file probes belong
+        // at their own Zig positions when those families land.)
         if let Some(mutex_reg) = self.mutex_guard_handles.remove(&resolved) {
             self.ins(&format!("EXPAND MUTEX_UNLOCK {mutex_reg}"));
             self.release_temporary_handle_register(&mutex_reg)?;
@@ -165,12 +293,37 @@ impl<'c> Codegen<'c> {
             self.restore_mutex_receiver_after_guard_release(&mutex_reg);
             return Ok(());
         }
-        // (Zig: mutex/rwlock/refcell/file/metadata handle families —
-        // no such bindings exist in the slice.)
+        // (Zig: rwlock/file/metadata handle families — no such
+        // bindings exist in the slice.)
+        // codegen.zig:1342: releasing a cell register first
+        // settles every live borrow handle taken from it (the
+        // borrow must end before the cell's own release retires
+        // the storage it points into). The handle being released
+        // itself is skipped — its own probe above settled it.
+        {
+            let mut handles_to_release: Vec<String> = Vec::new();
+            for (handle_name, handle) in &self.refcell_borrow_handles {
+                if sla_lowering::refcell::plan_refcell_handle_cell_release(
+                    handle.cell_reg == resolved,
+                    handle_name == &resolved,
+                ) {
+                    handles_to_release.push(handle_name.clone());
+                }
+            }
+            for handle_name in handles_to_release {
+                self.emit_release(&handle_name)?;
+            }
+        }
         if resolved.starts_with('&') || resolved.starts_with('^') {
             return Ok(());
         }
         if self.stack_alloc_bindings.contains(&resolved) {
+            // codegen.zig:1377: a stack slot may carry a RefCell
+            // borrow in its companion slot; settle it as part of
+            // the slot's release.
+            if self.release_result_slot_refcell_handle(&resolved, true)? {
+                self.consumed_bindings.insert(resolved.clone());
+            }
             return Ok(());
         }
         if self.global_const_bindings.contains(&resolved) {

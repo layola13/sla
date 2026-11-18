@@ -27,6 +27,7 @@ pub mod control_flow;
 pub mod deferred;
 pub mod names;
 pub mod reachability;
+pub mod refcell;
 pub mod release_facts;
 pub mod scalar_ops;
 

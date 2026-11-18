@@ -1,0 +1,22 @@
+fn read_index_borrow(values: [i32; 3], index: int) -> i32 {
+    let borrowed = &values[index];
+    *borrowed
+};
+
+fn read_borrowed_index_borrow(values: &[i32; 3], index: int) -> i32 {
+    let borrowed = &values[index];
+    *borrowed
+};
+
+fn read_borrowed_deref(&value: i32) -> i32 {
+    let borrowed = &*value;
+    *borrowed
+};
+
+@test "array by value then borrowed, and borrow of deref"() {
+    let values = [4i32, 5i32, 6i32];
+    if read_index_borrow(values, 1) != 5 { panic(1); };
+    if read_borrowed_index_borrow(&values, 2) != 6 { panic(2); };
+    let value: i32 = 10;
+    if read_borrowed_deref(&value) != 10 { panic(3); };
+}

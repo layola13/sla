@@ -602,7 +602,88 @@ impl<'c> Codegen<'c> {
                 }
                 Ok(format!("&{resolved}"))
             }
-            Node::DerefExpr(d) => self.gen_expr(&d.expr),
+            Node::DerefExpr(d) => {
+                // codegen.zig:20073 `planAddressOf` deref shapes: a
+                // borrow or plain-pointer source already holds the
+                // place address, so `&*p` clones the pointer
+                // register with `ptr_add +0` — returning the source
+                // register itself would let the consumer move it
+                // out from under its own exit cleanup
+                // (UnknownRegister at the source's release, e.g.
+                // `&*value` for a `&value: i32` parameter). A
+                // pointer source whose pointee is a pointer-backed
+                // aggregate addresses the cell's content instead.
+                // Smart-pointer sources (Box/Rc/Arc/RefCell after
+                // peeling) and all other shapes keep the historical
+                // fallthrough below.
+                let source_ty = self.expr_type(&d.expr);
+                let plain_source = match &source_ty {
+                    Some(ty) => {
+                        let peeled = peel_borrow_pointer_type(ty);
+                        let smart = matches!(peeled, Type::UserDefined(u) if matches!(u.name.as_str(), "Box" | "Rc" | "Arc" | "RefCell"));
+                        let typed = matches!(ty, Type::Borrow(_) | Type::Pointer(_));
+                        let borrow_param = match &*d.expr {
+                            Node::Identifier(name) => self
+                                .borrow_param_bindings
+                                .contains(&self.resolve_binding_name(name)),
+                            _ => false,
+                        };
+                        (typed || borrow_param) && !smart
+                    }
+                    None => false,
+                };
+                if plain_source {
+                    let source = self.gen_expr(&d.expr)?;
+                    let addr = self.new_tmp();
+                    let pointer_aggregate = matches!(source_ty, Some(Type::Pointer(_)))
+                        && match self.expr_type(&borrow.expr) {
+                            Some(target_ty) => !matches!(
+                                target_ty,
+                                Type::Infer
+                                    | Type::Primitive(_)
+                                    | Type::Pointer(_)
+                                    | Type::Borrow(_)
+                                    | Type::FnPtr(_)
+                            ),
+                            None => false,
+                        };
+                    if pointer_aggregate {
+                        self.ins(&format!("{addr} = load {source}+0 as ptr"));
+                    } else {
+                        self.ins(&format!("{addr} = ptr_add {source}, 0"));
+                    }
+                    if sla_lowering::expr_result_needs_release(&d.expr) {
+                        self.borrow_source_temps.insert(addr.clone(), source);
+                    }
+                    return Ok(addr);
+                }
+                // codegen.zig:20202 `deref_smart_pointer` shape
+                // (non-macro-inline fallthrough to the generic
+                // tail at 20218): generate the deref itself, then
+                // take the address of its result temp — `&*item`
+                // for a Box/Rc/Arc source is the address of the
+                // loaded pointee handle, never the source register
+                // (returning the source register lets the consumer
+                // move it, and the pointee load is lost).
+                let smart_source = match &source_ty {
+                    Some(ty) => matches!(
+                        peel_borrow_pointer_type(ty),
+                        Type::UserDefined(u)
+                            if matches!(u.name.as_str(), "Box" | "Rc" | "Arc")
+                    ),
+                    None => false,
+                };
+                if smart_source {
+                    let inner = self.gen_expr(&borrow.expr)?;
+                    let reg = self.new_tmp();
+                    self.ins(&format!("{reg} = &{inner}"));
+                    if sla_lowering::expr_result_needs_release(&borrow.expr) {
+                        self.borrow_source_temps.insert(reg.clone(), inner);
+                    }
+                    return Ok(reg);
+                }
+                self.gen_expr(&d.expr)
+            }
             Node::FieldExpr(f) => {
                 // codegen.zig:18463 borrow arm, `.field` shape: a
                 // smart-pointer field's borrow is the field value

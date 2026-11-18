@@ -239,7 +239,9 @@ impl<'c> Codegen<'c> {
                 "store {resolved_name}+0, {val} as {}",
                 type_string(&ty_or_err)
             ));
-            if call_arg_needs_release(&let_stmt.value) {
+            if self.store_refcell_handle_companion_for_slot(&resolved_name, &val) {
+                self.emit_forget_moved_value(&val)?;
+            } else if call_arg_needs_release(&let_stmt.value) {
                 self.emit_release(&val)?;
             }
             return Ok(());
@@ -265,7 +267,9 @@ impl<'c> Codegen<'c> {
                 "store {resolved_name}+0, {val} as {}",
                 type_string(&ty_or_err)
             ));
-            if call_arg_needs_release(&let_stmt.value) {
+            if self.store_refcell_handle_companion_for_slot(&resolved_name, &val) {
+                self.emit_forget_moved_value(&val)?;
+            } else if call_arg_needs_release(&let_stmt.value) {
                 self.emit_release(&val)?;
             }
             return Ok(());
@@ -408,6 +412,10 @@ impl<'c> Codegen<'c> {
         // The binding takes over the value register; a recorded
         // borrow source moves with it (codegen.zig:14942).
         self.transfer_borrow_source_to_binding(&val, &resolved_name);
+        // A RefCell borrow handle moves with it too (codegen.zig
+        // genLetStmt handle cascade): the binding's own cleanup
+        // settles the dynamic borrow.
+        self.transfer_refcell_borrow_handle(&val, &resolved_name);
         // Async state maps move with the value too
         // (codegen.zig:11232 transferResultSlotValueState).
         self.transfer_future_state(&val, &resolved_name);

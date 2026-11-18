@@ -854,6 +854,74 @@ impl<'c> Codegen<'c> {
                 }
                 Ok(Some(SurfaceCall::Value(reg)))
             }
+            ("RefCell", "borrow") | ("RefCell", "borrow_mut") => {
+                // codegen.zig:22461 `planRefCellBorrowCall` arm:
+                // the try-borrow expansion writes a status and
+                // the borrow slot; the status branches to a
+                // panic block (code 107) on conflict and is
+                // retired on both arms. The result is the slot
+                // itself for a scalar payload, or the pointer
+                // stored in the slot for a pointer / smart
+                // pointer payload (the slot register is released
+                // right after the load). The result register is
+                // registered as a borrow handle so its cleanup
+                // settles the dynamic borrow (release.rs).
+                if call.args.len() != 1 {
+                    return Err(missing_fact());
+                }
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let inner = generics.first().ok_or(missing_fact())?.clone();
+                let kind = if name == "borrow" {
+                    sla_lowering::refcell::RefCellBorrowKind::Shared
+                } else {
+                    sla_lowering::refcell::RefCellBorrowKind::Mutable
+                };
+                let value_kind =
+                    sla_lowering::refcell::plan_refcell_borrow_value_kind(&inner);
+                let guard = sla_lowering::refcell::plan_refcell_borrow_runtime_guard();
+                let ok_reg = self.new_tmp();
+                let slot_reg = self.new_tmp();
+                let err_label = self.new_label("L_REFCELL_BORROW_PANIC");
+                let end_label = self.new_label("L_REFCELL_BORROW_END");
+                self.ins(&format!(
+                    "EXPAND {} {ok_reg}, {slot_reg}, {recv}",
+                    kind.try_borrow_macro_name()
+                ));
+                self.ins(&format!("br {ok_reg} -> {end_label}, {err_label}"));
+                self.wl(&format!("{err_label}:"));
+                if guard.release_status_on_conflict {
+                    self.ins(&format!("!{ok_reg}"));
+                }
+                self.ins(&format!("panic({})", guard.conflict_panic_code));
+                self.wl(&format!("{end_label}:"));
+                if guard.release_status_on_success {
+                    self.ins(&format!("!{ok_reg}"));
+                }
+                let (action, release_slot) =
+                    sla_lowering::refcell::plan_refcell_borrow_result_sa_text(value_kind);
+                let borrow_reg = match action {
+                    sla_lowering::refcell::RefCellBorrowResultAction::UseBorrowSlot => {
+                        slot_reg.clone()
+                    }
+                    sla_lowering::refcell::RefCellBorrowResultAction::LoadPointerPayload => {
+                        let payload_reg = self.new_tmp();
+                        self.ins(&format!("{payload_reg} = load {slot_reg}+0 as ptr"));
+                        if release_slot {
+                            self.emit_release(&slot_reg)?;
+                        }
+                        payload_reg
+                    }
+                };
+                self.refcell_borrow_handles.insert(
+                    borrow_reg.clone(),
+                    crate::codegen::RefCellBorrowHandle {
+                        cell_reg: recv,
+                        kind,
+                        cell_release_temp: None,
+                    },
+                );
+                Ok(Some(SurfaceCall::Value(borrow_reg)))
+            }
             ("Mutex", "lock") => {
                 // codegen.zig:21569-21590: the lock itself is a
                 // statement (`MUTEX_LOCK %lock_ptr`, mutex.sa:56

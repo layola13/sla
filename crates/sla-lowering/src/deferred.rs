@@ -35,9 +35,9 @@ pub const DEFERRED_FAMILIES: &[DeferredFamily] = &[
         note: "Trait-object coercions and dynamic dispatch slot resolution.",
     },
     DeferredFamily {
-        name: "refcell handle plans (beyond call-arg lifecycle)",
-        zig_ref: "lowering_rules.zig (planRefCellHandleRelease, planRefCellValueStateTransfer, planRefCellLoopStateMerge, ...)",
-        note: "The RefCell borrow-handle state machine; the small call-arg lifecycle and borrow-address-temp plans ARE ported (call_args.rs). planRefCellLoopStateMerge's restoresPreLoop fact is consumed by the loop emitters as a no-op restore in the slice because no RefCell state is tracked.",
+        name: "refcell handle plans (value-state transfer / loop-state merge)",
+        zig_ref: "lowering_rules.zig (planRefCellValueStateTransfer, planRefCellLoopStateMerge, ...)",
+        note: "The borrow-call, borrow-result, runtime-guard, handle-registration and handle-release plans ARE ported (refcell.rs), as are the small call-arg lifecycle and borrow-address-temp plans (call_args.rs); the text emitter tracks live borrow handles and result-slot companions. Still deferred: the value-state transfer cascade for non-let value flow and planRefCellLoopStateMerge, whose restoresPreLoop fact is consumed by the loop emitters as a no-op restore in the slice.",
     },
     DeferredFamily {
         name: "while-let / let-pattern plans",

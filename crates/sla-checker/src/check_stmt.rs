@@ -566,6 +566,21 @@ impl Checker {
                     {
                         continue;
                     }
+                    // issue013 (type_checker.zig `issue013SkipApplies`,
+                    // applied in the return collection): a borrow
+                    // binding that another still-active binding was
+                    // aliased from is settled by the alias's own
+                    // release — codegen emits a bare register move
+                    // for the alias let, so releasing the source too
+                    // retires a consumed register (UnknownRegister).
+                    // The raw_ptr narrowing is folded in: borrow-like
+                    // here is Borrow | RawPtr, and a raw_ptr alias is
+                    // a distinct register copy, so only Borrow skips.
+                    if matches!(b.ty, Type::Borrow(_))
+                        && self.borrow_source_aliased_by_other_active(&b.name)
+                    {
+                        continue;
+                    }
                     names.push(b.name.clone());
                 }
             }
@@ -586,6 +601,13 @@ impl Checker {
                 idx -= 1;
                 for b in &self.scopes.frames[idx].bindings {
                     if b.state != ValueState::Active || is_internal_symbol(&b.name) {
+                        continue;
+                    }
+                    // issue013 skip, same as the valued path above
+                    // (Zig's return collection applies it uniformly).
+                    if matches!(b.ty, Type::Borrow(_))
+                        && self.borrow_source_aliased_by_other_active(&b.name)
+                    {
                         continue;
                     }
                     names.push(b.name.clone());

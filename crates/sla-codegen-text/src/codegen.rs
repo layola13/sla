@@ -4,11 +4,12 @@
 //! 10437-10460).
 //!
 //! State that the Zig original threads as parameters or keeps in
-//! handle-family tables the slice never populates (RefCell borrow
-//! handles, mutex/file/metadata handle maps, future/task tables) is
-//! not carried here; the release cascade documents where those checks
-//! sat. `hoisted_allocs` is per-function state instead of a threaded
-//! parameter (restructuring note, divergences (b)).
+//! handle-family tables the slice never populates (file/metadata
+//! handle maps) is not carried here; the release cascade documents
+//! where those checks sat. RefCell borrow handles and their
+//! result-slot companions ARE carried (refcell.rs plans in
+//! sla-lowering). `hoisted_allocs` is per-function state instead of
+//! a threaded parameter (restructuring note, divergences (b)).
 
 use std::collections::{HashMap, HashSet};
 
@@ -19,6 +20,25 @@ use sla_lowering::{
 };
 
 use crate::{unsupported, Result, TextError};
+
+/// codegen.zig:113 `RefCellBorrowHandle`: the cell register a
+/// borrow was taken from, the borrow kind, and an optional
+/// owner temp that also needs release when the handle settles.
+#[derive(Debug, Clone)]
+pub(crate) struct RefCellBorrowHandle {
+    pub(crate) cell_reg: String,
+    pub(crate) kind: sla_lowering::refcell::RefCellBorrowKind,
+    pub(crate) cell_release_temp: Option<String>,
+}
+
+/// codegen.zig:119 `ResultSlotRefCellHandle`: the companion
+/// slot holding a stored value's cell register, plus the
+/// borrow kind to release with.
+#[derive(Debug, Clone)]
+pub(crate) struct ResultSlotRefCellHandle {
+    pub(crate) cell_slot: String,
+    pub(crate) kind: sla_lowering::refcell::RefCellBorrowKind,
+}
 
 pub struct Codegen<'c> {
     pub(crate) check: &'c dyn CheckInfo,
@@ -143,6 +163,21 @@ pub struct Codegen<'c> {
     /// emits `EXPAND MUTEX_UNLOCK` for the mutex and retires
     /// the guard register (codegen.zig:1186).
     pub(crate) mutex_guard_handles: HashMap<String, String>,
+    /// codegen.zig `refcell_borrow_handles`: a live RefCell
+    /// borrow register -> the handle recorded when its
+    /// `borrow` / `borrow_mut` expansion ran. `emitRelease`
+    /// settles the dynamic borrow from this table (the
+    /// REFCELL_U64_RELEASE_* expansion against the cell
+    /// register) before the plain register retire.
+    pub(crate) refcell_borrow_handles: HashMap<String, RefCellBorrowHandle>,
+    /// codegen.zig `result_slot_refcell_handles` /
+    /// `result_slot_refcell_slots`: when a handle-carrying
+    /// value is stored into a stack slot, the cell register is
+    /// kept in a companion slot (an `alloc 8` whose +0 word
+    /// holds the cell register) so the slot's own release can
+    /// settle the borrow after the value register is gone.
+    pub(crate) result_slot_refcell_handles: HashMap<String, ResultSlotRefCellHandle>,
+    pub(crate) result_slot_refcell_slots: HashMap<String, String>,
     /// Worker-body capture bindings (codegen.zig
     /// `thread_capture_regs`): identifier reads inside a
     /// generated worker resolve to the slot loads.
@@ -232,6 +267,9 @@ impl<'c> Codegen<'c> {
             inline_thread_handles: HashSet::new(),
             mutex_lock_results: HashMap::new(),
             mutex_guard_handles: HashMap::new(),
+            refcell_borrow_handles: HashMap::new(),
+            result_slot_refcell_handles: HashMap::new(),
+            result_slot_refcell_slots: HashMap::new(),
             thread_capture_regs: HashMap::new(),
             loop_break_labels: Vec::new(),
             loop_continue_labels: Vec::new(),
@@ -368,6 +406,9 @@ impl<'c> Codegen<'c> {
         self.executor_task_counts.clear();
         self.mutex_lock_results.clear();
         self.mutex_guard_handles.clear();
+        self.refcell_borrow_handles.clear();
+        self.result_slot_refcell_handles.clear();
+        self.result_slot_refcell_slots.clear();
         self.async_pending_return_emitted = false;
     }
 
@@ -465,6 +506,20 @@ impl<'c> Codegen<'c> {
         // adjudication itself is untouched.
         if matches!(ty, Type::FnPtr(_)) {
             return true;
+        }
+        // An array of copy values is a copy value (Zig codegen
+        // `typeIsCopyValue` `.array` arm; the checker's leaf
+        // predicate `is_copy_value` carries the same arm, but the
+        // CheckInfo fact answers with `type_is_copy`, under which
+        // an array is never Copy — the same caliber split as Chan
+        // and FnPtr above). Planning a by-value array argument
+        // with the non-Copy answer transfers ownership out of the
+        // source binding, so a later borrow of the same array
+        // (`read_index_borrow(values, 1)` then
+        // `read_borrowed_index_borrow(&values, 2)`) trapped
+        // UseAfterMove 1009 in the host.
+        if let Type::Array(arr) = ty {
+            return self.type_is_copy_value(&arr.elem);
         }
         self.check.type_is_copy_value(ty)
     }

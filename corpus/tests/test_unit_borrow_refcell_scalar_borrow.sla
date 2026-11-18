@@ -1,0 +1,26 @@
+@import "sa_std/core/box.sa"
+@import "sa_std/core/refcell.sa"
+
+fn read_scalar(cell: &RefCell<i32>) -> i32 {
+    let borrowed = cell.borrow();
+    return *borrowed;
+}
+
+fn write_scalar(cell: &RefCell<i32>, value: i32) -> void {
+    let borrowed = cell.borrow_mut();
+    *borrowed = value;
+}
+
+fn read_boxed(cell: &RefCell<Box<i32>>) -> i32 {
+    let borrowed = cell.borrow();
+    return *borrowed;
+}
+
+@test "refcell scalar borrow read write"() {
+    let cell = RefCell::new(7);
+    if read_scalar(&cell) != 7 { panic(1); };
+    write_scalar(&cell, 9);
+    if read_scalar(&cell) != 9 { panic(2); };
+    let boxed = RefCell::new(Box::new(3));
+    if read_boxed(&boxed) != 3 { panic(3); };
+}

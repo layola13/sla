@@ -1,0 +1,19 @@
+struct AliasPayload {
+    value: int,
+}
+
+fn dead_alias(env: &AliasPayload) -> int {
+    let alias: &AliasPayload = env;
+    return 0;
+}
+
+fn live_alias(env: &AliasPayload) -> int {
+    let alias: &AliasPayload = env;
+    return alias.value;
+}
+
+@test "borrow param alias cleanup skips moved source"() {
+    let payload = AliasPayload { value: 42 };
+    if dead_alias(&payload) != 0 { panic(1); };
+    if live_alias(&payload) != 42 { panic(2); };
+}

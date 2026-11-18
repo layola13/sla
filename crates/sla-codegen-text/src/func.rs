@@ -124,17 +124,21 @@ impl<'c> Codegen<'c> {
         for p in &f.params {
             self.remember_local_binding_type(&p.name, &p.ty);
             self.param_bindings.insert(p.name.clone());
-            if p.is_borrow {
+            // codegen.zig:10412: a parameter is a borrow parameter
+            // when it carries the borrow prefix OR its type is a
+            // borrow (the `&[T; N]` / `&T` annotation form).
+            if p.is_borrow || matches!(&*p.ty, Type::Borrow(_)) {
                 self.borrow_param_bindings.insert(p.name.clone());
             }
-            if let Type::Borrow(inner) = &*p.ty {
-                if matches!(&**inner, Type::Array(_)) {
-                    return unsupported(
-                        "borrowed slice parameter prologue",
-                        "codegen.zig:7540 (slice param materialization)",
-                    );
-                }
-            }
+            // A borrowed ARRAY parameter needs no prologue at all:
+            // Zig's slice materialization (codegen.zig:10453) fires
+            // only when the borrowed type is a `Slice<T>` (its
+            // element-type probe returns null for a fixed array),
+            // so `&[i32; 3]` arrives as a bare pointer borrow and
+            // the body indexes it directly (@sla__read_borrowed_
+            // index_borrow in the Zig emission has no prologue).
+            // The previous port rejected this shape as an
+            // unsupported "borrowed slice parameter prologue".
             if !p.is_borrow && !p.is_move && self.binding_needs_addressable_storage(&p.name, &p.ty)
             {
                 let raw_param = self.new_tmp();
