@@ -57,6 +57,7 @@ mod checker_alias;
 mod check_arena_tail;
 mod check_call_assoc;
 mod check_call_sig;
+pub mod check_call_places;
 mod check_overload_extern;
 mod check_macro;
 mod check_macro_typed;

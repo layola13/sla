@@ -371,6 +371,16 @@ impl Checker {
                 ),
             ));
         }
+        // View-types stage 1 (LINE-VIEWARGS-FIX): method calls go
+        // through the same Zig `checkCallArgsAgainstSignature`
+        // place-overlap gate as plain calls (the receiver is
+        // args[0] / params[0] here).
+        self.check_call_arg_place_overlaps(
+            name,
+            &sig.params,
+            &sig.param_may_write,
+            args,
+        )?;
         for (i, (param, arg)) in sig.params.iter().zip(args.iter()).enumerate()
         {
             if param.is_move && !matches!(arg, Node::MoveExpr(_)) {

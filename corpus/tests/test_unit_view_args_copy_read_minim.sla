@@ -1,0 +1,29 @@
+// LINE-VIEWARGS-FIX positive control: a call that forwards a
+// borrowed root while also passing by-value Copy reads of its
+// fields is legal (the DEF-12 Copy-read exemption): the reads
+// produce independent value copies and cannot alias the borrow.
+// Must check rc=0 and pass as a unit test on BOTH the baseline
+// (sla 9913f601) and the fixed tree — the call-argument place
+// gate must not reject it.
+
+struct Doc {
+    soff: Vec<u64>,
+    slen: Vec<u64>,
+}
+
+fn f(doc: &Doc, off: u64, len: u64) -> u64 {
+    return doc.slen[0] + off + len;
+}
+
+fn run(doc: &Doc) -> u64 {
+    let idx = 0u64;
+    return f(doc, doc.soff[idx], doc.slen[idx]);
+}
+
+@test "view args copy read minim ok"() {
+    let doc = Doc { soff: Vec::new(), slen: Vec::new() };
+    doc.soff.push(11u64);
+    doc.slen.push(13u64);
+    let got = run(&doc);
+    if got != 37u64 { panic(104); };
+}

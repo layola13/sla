@@ -143,6 +143,7 @@ fn imported_sig(params: Vec<ParamSig>, ret_ty: Type) -> FuncSig {
         ret_borrow_origin: None,
         is_async: false,
         is_variadic: false,
+        param_may_write: Vec::new(),
     }
 }
 

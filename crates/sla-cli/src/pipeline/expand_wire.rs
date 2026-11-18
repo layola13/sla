@@ -46,6 +46,7 @@ fn func_sig(func: &FuncDecl) -> FuncSig {
         ret_borrow_origin: None,
         is_async: func.is_async,
         is_variadic: func.is_variadic,
+        param_may_write: sla_checker::check_call_places::param_may_write_flags(func),
     }
 }
 

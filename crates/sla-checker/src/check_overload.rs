@@ -34,6 +34,7 @@ pub(crate) fn sig_of_decl(func: &FuncDecl) -> FuncSig {
         ret_borrow_origin: None,
         is_async: func.is_async,
         is_variadic: func.is_variadic,
+        param_may_write: crate::check_call_places::param_may_write_flags(func),
     }
 }
 

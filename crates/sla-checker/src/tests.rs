@@ -646,6 +646,7 @@ fn imported_println_in_test_block() {
             ret_borrow_origin: None,
             is_async: false,
             is_variadic: false,
+            param_may_write: Vec::new(),
         },
     );
     let program = Program {

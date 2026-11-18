@@ -172,6 +172,7 @@ fn r6_unify_imported_set_resolves() {
         ret_borrow_origin: None,
         is_async: false,
         is_variadic: false,
+        param_may_write: Vec::new(),
     };
     let sig_pair = crate::checker::FuncSig {
         params: vec![
@@ -196,6 +197,7 @@ fn r6_unify_imported_set_resolves() {
         ret_borrow_origin: None,
         is_async: false,
         is_variadic: false,
+        param_may_write: Vec::new(),
     };
     checker.register_imported_overload_member("imp_pick", sig_i32);
     checker.register_imported_overload_member("imp_pick", sig_pair);

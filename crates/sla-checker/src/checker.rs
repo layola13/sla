@@ -52,6 +52,14 @@ pub struct FuncSig {
     pub is_async: bool,
     /// R-3: the declaration is extern-variadic (`...` marker).
     pub is_variadic: bool,
+    /// View-types stage 1 (LINE-VIEWARGS-FIX): per-parameter
+    /// may-write flags from the syntactic body scan
+    /// (`check_call_places::param_may_write_flags`, mirroring Zig
+    /// `paramMayBeWritten`). Consulted only by the call-argument
+    /// place-overlap gate's identical-place read-only refinement.
+    /// Empty = unknown (signature built without a declaration) and
+    /// is treated as may-write.
+    pub param_may_write: Vec<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -429,6 +437,7 @@ impl Checker {
             ret_borrow_origin: func.ret_borrow_origin.clone(),
             is_async: func.is_async,
             is_variadic: func.is_variadic,
+            param_may_write: crate::check_call_places::param_may_write_flags(func),
         };
         self.funcs.insert(symbol.to_string(), sig);
         if !func.generics.is_empty() {

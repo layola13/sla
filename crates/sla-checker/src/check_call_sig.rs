@@ -96,6 +96,18 @@ impl Checker {
         } else {
             &sig.ret_ty
         };
+        // View-types stage 1 (LINE-VIEWARGS-FIX): pairwise
+        // field-place overlap validation for this call's arguments
+        // (Zig `checkCallArgsAgainstSignature` runs
+        // `checkCallArgPlaceOverlaps` before per-arg checking so
+        // overlapping borrows are reported as borrow conflicts).
+        // Classification uses the DECLARED parameters, as in Zig.
+        self.check_call_arg_place_overlaps(
+            name,
+            &sig.params,
+            &sig.param_may_write,
+            args,
+        )?;
         for (param, arg) in sig_params.iter().zip(args.iter()) {
             // Var Phase-2: a `var` argument (`fill(var x)`) passes
             // the caller's slot itself. It is only well-formed

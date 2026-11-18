@@ -1,0 +1,22 @@
+// expect: BorrowConflict
+// LINE-VIEWARGS-FIX regression minim (shape: field and whole): a
+// field borrow (&s.a) passed together with a borrow of the whole
+// root (&s) in one call — the places overlap by prefix. Judged by
+// standalone `sla check`: accepted (rc=0) at sla 9913f601
+// (fail-before), BorrowConflict (rc=1) after the fix (pass-after).
+struct Pair { a: i64, b: i64 }
+
+fn mix(x: &i64, w: &Pair) {
+    *x = 10;
+    w.b = 20;
+}
+
+fn bad_field_and_whole() {
+    let s = Pair { a: 0, b: 0 };
+    mix(&s.a, &s);
+}
+
+fn main() -> i32 {
+    bad_field_and_whole();
+    return 0;
+}

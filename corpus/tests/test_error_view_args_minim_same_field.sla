@@ -1,0 +1,23 @@
+// expect: BorrowConflict
+// LINE-VIEWARGS-FIX regression minim (shape: identical places):
+// the same field borrowed twice in one call, and the callee writes
+// through both parameters, so the identical-place read-only
+// refinement does not apply. Judged by standalone `sla check`:
+// accepted (rc=0) at sla 9913f601 (fail-before), BorrowConflict
+// (rc=1) after the fix (pass-after).
+struct Pair { a: i64, b: i64 }
+
+fn set_both(x: &i64, y: &i64) {
+    *x = 10;
+    *y = 20;
+}
+
+fn bad_args_same_field() {
+    let s = Pair { a: 0, b: 0 };
+    set_both(&s.a, &s.a);
+}
+
+fn main() -> i32 {
+    bad_args_same_field();
+    return 0;
+}

@@ -1,0 +1,24 @@
+// expect: BorrowConflict
+// LINE-VIEWARGS-FIX regression minim (shape: prefix overlap): a
+// parent-path borrow and a child-path borrow in the same call
+// (&o.inner and &o.inner.x). The places are prefix-related but not
+// identical, so the rejection is unconditional. Judged by
+// standalone `sla check`: accepted (rc=0) at sla 9913f601
+// (fail-before), BorrowConflict (rc=1) after the fix (pass-after).
+struct Inner { x: i64, y: i64 }
+struct Outer { inner: Inner, z: i64 }
+
+fn two(p: &Inner, q: &i64) {
+    p.y = 7;
+    *q = 10;
+}
+
+fn bad_prefix_overlap() {
+    let o = Outer { inner: Inner { x: 0, y: 0 }, z: 0 };
+    two(&o.inner, &o.inner.x);
+}
+
+fn main() -> i32 {
+    bad_prefix_overlap();
+    return 0;
+}

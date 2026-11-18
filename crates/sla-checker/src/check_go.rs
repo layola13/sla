@@ -165,6 +165,7 @@ impl Checker {
                     ret_borrow_origin: None,
                     is_async: false,
                     is_variadic: false,
+                    param_may_write: Vec::new(),
                 })
             }
             _ => None,
