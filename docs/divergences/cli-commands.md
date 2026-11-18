@@ -146,6 +146,18 @@ SAB 路与 workspace build 出现）与 `.sla-cache/imports/*.lst`
   剪；模块表/imported macro 面在本管线无对应物（程序仅根
   文件）；rewriteProjectSnapshotTestShortcuts 未移植（保留名
   单已逐字镜像）；Zig SAB 尾的 check 后两道可达剪枝
+- **imported macro direct-callee 展开已接线（LINE-IMPORTED-3，
+  2026-11-18）**：上条「imported macro 面无对应物」中的
+  direct-callee 一项关闭——pipeline 在两道前置剪枝之前以
+  contract registry 的 name -> direct_callees 表喂
+  test_reach 的 collector，镜像 plugin_reachability.zig 的
+  call_expr 臂（非 associated 调用命中 imported macro 名时
+  标其 direct callees 可达）；仅被宏体引用的 fn 不再被剪
+  （此前发射后宿主报 UnknownRegister 1007 callee is not
+  declared）。模块表本体（模块限定别名、imported-mangled
+  解析）仍无对应物，登记不变。剪枝本地的 registry 加载
+  只作可达性输入：加载失败时表为空（剪枝行为与接线前
+  一致），权威 contract load 仍在原阶段序位置裁定错误。
   （post-typecheck syntactic + tc-based
   pruneUnreachableFilteredTestDecls）未移植，Rust 测试 SAB
   可能比 stock 多保留声明（不影响校验、影响字节对拍）。

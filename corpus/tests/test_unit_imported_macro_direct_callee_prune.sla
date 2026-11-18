@@ -1,0 +1,19 @@
+@import "import_fixtures/imported_borrow_helpers.sa"
+
+struct DCP { left: i64, right: i64 }
+struct DCH { pair: DCP }
+
+fn imported_macro_write_pair_left(value: &DCP) -> i64 {
+    value.left = 37;
+    value.left
+}
+
+fn direct_write() -> i64 {
+    let holder = DCH { pair: DCP { left: 3, right: 5 } };
+    SLA_IMPORTED_WRITE_PAIR_LEFT(holder.pair);
+    holder.pair.left + holder.pair.right
+}
+
+@test "imported macro direct callee survives prune"() {
+    if direct_write() != 42 { panic(43902); };
+}

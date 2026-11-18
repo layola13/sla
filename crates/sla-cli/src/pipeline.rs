@@ -478,6 +478,45 @@ fn run_frontend_stage(
         );
         return StageOutcome::Failed;
     }
+    // CLI-D5 imported-macro reachability wiring (LINE-IMPORTED-3):
+    // the prunes below mirror plugin_reachability.zig, whose
+    // call_expr arm marks an imported macro's direct callees
+    // reachable at the call site; that needs the contract
+    // registry's name -> direct_callees map BEFORE the prune.
+    // The authoritative contract load further down re-runs the
+    // same loader over the same import union and adjudicates
+    // errors at its pinned stage; this prune-local load is
+    // reachability input only, so a load error leaves the map
+    // empty (the prune then behaves exactly as it did before
+    // this wiring) and the error still surfaces below, unchanged.
+    let imported_macro_callees: std::collections::BTreeMap<String, Vec<String>> =
+        if matches!(kind, FrontendKind::TestCodegen | FrontendKind::Compile) {
+            let mut paths: Vec<String> = root_import_paths.clone();
+            if let Node::Program(program) = &root {
+                for decl in &program.decls {
+                    if let Node::ImportDecl(import) = decl {
+                        if !paths.contains(&import.path) {
+                            paths.push(import.path.clone());
+                        }
+                    }
+                }
+            }
+            match sla_parser::contract_load::load_imported_contracts(&paths, Path::new(file)) {
+                Ok(report) => {
+                    let mut map: std::collections::BTreeMap<String, Vec<String>> =
+                        std::collections::BTreeMap::new();
+                    for record in &report.imported_macro_registry {
+                        map.entry(record.name.clone())
+                            .or_insert_with(|| record.direct_callees.clone());
+                    }
+                    map
+                }
+                Err(_) => std::collections::BTreeMap::new(),
+            }
+        } else {
+            std::collections::BTreeMap::new()
+        };
+
     // Test-codegen pre-check pruning (plugin_compile.zig
     // runSlaFrontend): pruneTestsByFilter, then the syntactic
     // reachability prune — both BEFORE contract load and
@@ -490,7 +529,10 @@ fn run_frontend_stage(
         crate::test_prune::prune_tests_by_filter(&mut root, test_filter);
         stage_done(stderr, profile, "test filter prune", start);
         let start = Instant::now();
-        crate::test_prune::prune_unreachable_test_function_decls_before_type_check(&mut root);
+        crate::test_prune::prune_unreachable_test_function_decls_before_type_check(
+            &mut root,
+            &imported_macro_callees,
+        );
         stage_done(stderr, profile, "pre-typecheck reachable decl filter", start);
     }
 
@@ -501,6 +543,7 @@ fn run_frontend_stage(
         crate::test_prune::prune_unreachable_imported_function_decls_before_type_check(
             &mut root,
             &root_flags,
+            &imported_macro_callees,
         );
         stage_done(stderr, profile, "compile reachable imported-body prune", start);
     }

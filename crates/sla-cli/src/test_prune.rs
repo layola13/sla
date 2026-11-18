@@ -33,11 +33,15 @@
 //!   receiver marks every associated candidate — Zig's own
 //!   fallback when its typed marking finds no candidate). No decl
 //!   Zig keeps is ever dropped because of this difference.
-//! - No module table / imported macros: this pipeline's program
-//!   is the root file only (.sla import expansion and contract
-//!   loading live in the parser / contract layers), so
-//!   module-qualified aliasing, imported-mangled resolution and
-//!   imported-macro direct-callee expansion have no counterpart.
+//! - No module table: this pipeline's program is the root file
+//!   only (.sla import expansion and contract loading live in
+//!   the parser / contract layers), so module-qualified aliasing
+//!   and imported-mangled resolution have no counterpart.
+//!   Imported-macro direct-callee expansion IS wired
+//!   (LINE-IMPORTED-3): the pipeline supplies the contract
+//!   registry's name -> direct_callees map and the collector
+//!   marks those callees at imported-macro call sites,
+//!   mirroring plugin_reachability.zig's call_expr arm.
 //! - `rewriteProjectSnapshotTestShortcuts` is not ported (no
 //!   counterpart anywhere in this pipeline); the retained-helper
 //!   name list of `isProjectShortcutRetainedHelperName` IS
@@ -51,7 +55,7 @@
 //! `prune_unreachable_imported_function_decls_before_type_check`.
 
 use sla_ast::node::Node;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 // -- filter prune (plugin_compile.zig pruneTestsByFilter) -----------------------
 
@@ -89,11 +93,16 @@ use crate::test_reach::{
 /// (pre-typecheck call site; the reachability analysis lives in
 /// crate::test_reach, the decl filtering here). No-op when the
 /// program declares no callable or no @test.
-pub fn prune_unreachable_test_function_decls_before_type_check(root: &mut Node) {
+pub fn prune_unreachable_test_function_decls_before_type_check(
+    root: &mut Node,
+    imported_macro_callees: &BTreeMap<String, Vec<String>>,
+) {
     let Node::Program(program) = root else {
         return;
     };
-    let Some((reachable, referenced_types)) = collect_test_reachability(&program.decls) else {
+    let Some((reachable, referenced_types)) =
+        collect_test_reachability(&program.decls, imported_macro_callees)
+    else {
         return;
     };
 
@@ -229,6 +238,7 @@ pub fn root_decl_flags(root_decls: &[Node], expanded_decls: &[Node]) -> Vec<bool
 pub(crate) fn collect_compile_reachability(
     decls: &[Node],
     root_flags: &[bool],
+    imported_macro_callees: &BTreeMap<String, Vec<String>>,
 ) -> Option<(BTreeSet<String>, BTreeSet<String>)> {
     if root_flags.len() != decls.len() {
         return None;
@@ -238,7 +248,7 @@ pub(crate) fn collect_compile_reachability(
     if index.names.is_empty() {
         return None;
     }
-    let mut collector = Collector::new(&index);
+    let mut collector = Collector::new(&index, imported_macro_callees);
 
     for (decl, is_root) in decls.iter().zip(root_flags.iter()) {
         if !is_root {
@@ -341,12 +351,13 @@ pub(crate) fn collect_compile_reachability(
 pub fn prune_unreachable_imported_function_decls_before_type_check(
     root: &mut Node,
     root_flags: &[bool],
+    imported_macro_callees: &BTreeMap<String, Vec<String>>,
 ) {
     let Node::Program(program) = root else {
         return;
     };
     let Some((reachable, referenced_types)) =
-        collect_compile_reachability(&program.decls, root_flags)
+        collect_compile_reachability(&program.decls, root_flags, imported_macro_callees)
     else {
         return;
     };
@@ -510,7 +521,7 @@ fn main() -> i32 {
     #[test]
     fn reachability_prune_drops_main_and_unreachable() {
         let mut root = parse(SRC);
-        prune_unreachable_test_function_decls_before_type_check(&mut root);
+        prune_unreachable_test_function_decls_before_type_check(&mut root, &BTreeMap::new());
         let names = decl_names(&root);
         // Reachable from the two tests: while_sum + only_alpha + only_beta.
         assert!(names.contains(&"fn while_sum".to_string()), "{names:?}");
@@ -532,7 +543,7 @@ fn main() -> i32 {
         // and is dropped by the reachability prune.
         let mut root = parse(SRC);
         prune_tests_by_filter(&mut root, Some("alpha"));
-        prune_unreachable_test_function_decls_before_type_check(&mut root);
+        prune_unreachable_test_function_decls_before_type_check(&mut root, &BTreeMap::new());
         let names = decl_names(&root);
         assert!(names.contains(&"fn only_alpha".to_string()), "{names:?}");
         assert!(!names.contains(&"fn only_beta".to_string()), "{names:?}");
@@ -542,7 +553,7 @@ fn main() -> i32 {
     fn no_tests_means_no_reachability_prune() {
         let mut root = parse("fn main() -> i32 { return 1; }\nfn spare() -> i32 { return 2; }\n");
         let before = decl_names(&root);
-        prune_unreachable_test_function_decls_before_type_check(&mut root);
+        prune_unreachable_test_function_decls_before_type_check(&mut root, &BTreeMap::new());
         assert_eq!(decl_names(&root), before);
     }
 
@@ -553,7 +564,7 @@ fn main() -> i32 {
         // these nodes), and the pruned program is well-typed.
         let mut root = parse(SRC);
         prune_tests_by_filter(&mut root, Some("alpha"));
-        prune_unreachable_test_function_decls_before_type_check(&mut root);
+        prune_unreachable_test_function_decls_before_type_check(&mut root, &BTreeMap::new());
         let AstNode::Program(program) = &root else {
             panic!("program root");
         };
@@ -606,12 +617,54 @@ fn main() -> i32 {
             panic!("program root");
         };
         let flags = root_decl_flags(&root_program.decls, &expanded_program.decls);
-        prune_unreachable_imported_function_decls_before_type_check(&mut expanded, &flags);
+        prune_unreachable_imported_function_decls_before_type_check(
+            &mut expanded,
+            &flags,
+            &BTreeMap::new(),
+        );
         let names = decl_names(&expanded);
         assert_eq!(
             names,
             vec!["fn main".to_string(), "fn helper".to_string()],
             "{names:?}"
         );
+    }
+
+    #[test]
+    fn imported_macro_direct_callees_survive_the_prune() {
+        // CLI-D5 wiring (LINE-IMPORTED-3): a fn referenced only
+        // from an imported macro's body has no reference edge in
+        // the program at all — the edge exists only in the
+        // contract registry's direct_callees. Without the map
+        // the prune drops the callee (the host then reports the
+        // macro expansion's call as an undeclared callee); with
+        // the map the callee survives, mirroring
+        // plugin_reachability.zig's call_expr arm.
+        let src = r#"
+fn macro_only_callee() -> i32 { return 7; }
+fn unused_helper() -> i32 { return 3; }
+
+@test "macro shape"() {
+    IMPORTED_LIKE_MACRO();
+}
+"#;
+        let mut root = parse(src);
+        prune_unreachable_test_function_decls_before_type_check(&mut root, &BTreeMap::new());
+        let names = decl_names(&root);
+        assert!(
+            !names.contains(&"fn macro_only_callee".to_string()),
+            "{names:?}"
+        );
+
+        let mut root = parse(src);
+        let mut callees = BTreeMap::new();
+        callees.insert(
+            "IMPORTED_LIKE_MACRO".to_string(),
+            vec!["macro_only_callee".to_string()],
+        );
+        prune_unreachable_test_function_decls_before_type_check(&mut root, &callees);
+        let names = decl_names(&root);
+        assert!(names.contains(&"fn macro_only_callee".to_string()), "{names:?}");
+        assert!(!names.contains(&"fn unused_helper".to_string()), "{names:?}");
     }
 }

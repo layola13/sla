@@ -4,7 +4,11 @@
 //! in the single-root-module form this pipeline needs. Consumed
 //! only by crate::test_prune; see that module's doc for the stage
 //! order and the registered scope differences (no SyntacticFactSet
-//! analysis, no module table / imported macros).
+//! analysis, no module table). Imported macros reach the collector
+//! as the contract registry's name -> direct_callees map, supplied
+//! by the pipeline (CLI-D5 wiring, LINE-IMPORTED-3): Zig's
+//! call_expr arm marks those callees at the call site, and so
+//! does this port's.
 
 use sla_ast::node::Node;
 use sla_ast::Type;
@@ -226,6 +230,11 @@ impl<'a> CallableIndex<'a> {
 
 pub(crate) struct Collector<'a> {
     index: &'a CallableIndex<'a>,
+    /// Imported-macro direct callees by macro name (the contract
+    /// registry's `ImportedMacroRecord::direct_callees`): a call
+    /// to an imported macro marks these reachable, mirroring
+    /// plugin_reachability.zig's call_expr arm.
+    imported_macro_callees: &'a BTreeMap<String, Vec<String>>,
     pub(crate) reachable: BTreeSet<String>,
     pub(crate) referenced_types: BTreeSet<String>,
     pub(crate) worklist: Vec<String>,
@@ -233,9 +242,13 @@ pub(crate) struct Collector<'a> {
 }
 
 impl<'a> Collector<'a> {
-    pub(crate) fn new(index: &'a CallableIndex<'a>) -> Self {
+    pub(crate) fn new(
+        index: &'a CallableIndex<'a>,
+        imported_macro_callees: &'a BTreeMap<String, Vec<String>>,
+    ) -> Self {
         Collector {
             index,
+            imported_macro_callees,
             reachable: BTreeSet::new(),
             referenced_types: BTreeSet::new(),
             worklist: Vec::new(),
@@ -324,6 +337,17 @@ impl<'a> Collector<'a> {
                     let target = target.clone();
                     self.mark_associated_candidates(&call.func_name, Some(&target));
                 } else {
+                    // Zig plugin_reachability.zig (call_expr arm,
+                    // non-associated branch): a call to an imported
+                    // macro marks the macro body's direct callees
+                    // reachable — the emitted expansion calls them,
+                    // so the prune must keep them (CLI-D5 wiring).
+                    let imported_macro_callees = self.imported_macro_callees;
+                    if let Some(callees) = imported_macro_callees.get(&call.func_name) {
+                        for callee in callees {
+                            self.mark_reachable_func(callee);
+                        }
+                    }
                     self.mark_reachable_func(&call.func_name);
                     let receiver = if call.args.is_empty() {
                         None
@@ -604,6 +628,7 @@ fn associated_candidate_matches_receiver_type(
 /// @test present — the Zig early returns).
 pub(crate) fn collect_test_reachability(
     decls: &[Node],
+    imported_macro_callees: &BTreeMap<String, Vec<String>>,
 ) -> Option<(BTreeSet<String>, BTreeSet<String>)> {
     let mut index = CallableIndex {
         names: BTreeSet::new(),
@@ -616,7 +641,7 @@ pub(crate) fn collect_test_reachability(
     if index.names.is_empty() {
         return None;
     }
-    let mut collector = Collector::new(&index);
+    let mut collector = Collector::new(&index, imported_macro_callees);
 
     let mut saw_test = false;
     for decl in decls {
