@@ -1,0 +1,63 @@
+// LINE-VECINDEX-RET-FIX regression: a &self method (or a plain
+// function with a borrowed parameter) returning a Vec index read
+// of an aggregate element. Before the fix, the text emitter loaded
+// the Vec value straight off the borrowed base register, marking
+// it Composite; the function-exit cleanup plan transfers a result
+// rooted at that base, so nothing retired it and the host
+// reported error[MemoryLeak] at the return. The Zig emitter reads
+// the owner through its field address and projects through a
+// borrow of the loaded owner word (genVecOwnerReceiver), leaving
+// the base register untouched.
+struct Item {
+    x: i32,
+    y: i32,
+}
+
+struct Bag {
+    items: Vec<Item>,
+}
+
+impl Bag {
+    fn at(&self, index: i64) -> Item {
+        return self.items[index];
+    }
+}
+
+fn bag_new() -> Bag {
+    let items: Vec<Item> = Vec::new();
+    return Bag { items: items };
+}
+
+fn pick(bag: &Bag, index: i64) -> Item {
+    return bag.items[index];
+}
+
+@test "vec index return aggregate from borrowed self"() {
+    let bag = bag_new();
+    bag.items.push(Item { x: 7, y: 8 });
+    bag.items.push(Item { x: 9, y: 10 });
+
+    let a = bag.at(0);
+    if a.x != 7 { panic(52101); };
+    if a.y != 8 { panic(52102); };
+    let b = bag.at(1);
+    if b.x != 9 { panic(52103); };
+
+    // The borrowed calls must not free the caller's buffer.
+    bag.items.push(Item { x: 11, y: 12 });
+    let c = bag.at(2);
+    if c.x != 11 { panic(52104); };
+}
+
+@test "vec index return aggregate from borrowed param"() {
+    let bag = bag_new();
+    bag.items.push(Item { x: 3, y: 4 });
+
+    let a = pick(&bag, 0);
+    if a.x != 3 { panic(52105); };
+    if a.y != 4 { panic(52106); };
+
+    bag.items.push(Item { x: 5, y: 6 });
+    let b = pick(&bag, 1);
+    if b.x != 5 { panic(52107); };
+}

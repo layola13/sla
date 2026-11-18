@@ -334,7 +334,9 @@ impl<'c> Codegen<'c> {
     /// codegen.zig:1393 `planFunctionResultCleanup`: the lowering
     /// tail-cleanup plan, widened to a transfer when the cleanup name
     /// is the result's root and the result type is a non-Copy,
-    /// non-borrow-like value (the value itself is being returned).
+    /// non-borrow-like value (the value itself is being returned) —
+    /// but only when generating the result actually consumed the root
+    /// (see the TEXT35-OWNERSHIP guard below).
     pub(crate) fn plan_function_result_cleanup(
         &mut self,
         cleanup_name: &str,
@@ -350,6 +352,25 @@ impl<'c> Codegen<'c> {
                     if !self.type_is_copy_value(&result_ty)
                         && !is_borrow_like_type(&result_ty)
                     {
+                        // TEXT35-OWNERSHIP (DEF-TEXT-EXTRACT-ROOT-TRANSFER,
+                        // codegen.zig `planFunctionResultCleanupResolved`):
+                        // a field or index extraction result transfers the
+                        // root binding only when generating the result
+                        // actually consumed it. A plain extraction copies
+                        // the element/field out (load into a fresh
+                        // register), leaving the root register live: it
+                        // must take the base plan's normal release or it
+                        // leaks at the exit boundary
+                        // (`return self.items[index]`). This lane keeps no
+                        // separate store-moved table — every move/store
+                        // recording lands in `consumed_bindings`
+                        // (`mark_consumed_binding`), so the consumed probe
+                        // is the lane-faithful form of the Zig
+                        // consumed/store-moved pair.
+                        let resolved = self.resolve_binding_name(cleanup_name);
+                        if !self.consumed_bindings.contains(&resolved) {
+                            return Ok(base_plan);
+                        }
                         return Ok(FunctionTailCleanupAction::TransferResult);
                     }
                 }

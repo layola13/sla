@@ -39,6 +39,17 @@ pub(crate) struct FieldAddress {
     pub source_temp: Option<String>,
 }
 
+/// codegen.zig `VecReceiver`: the settled owner register for a
+/// Vec/GrowVec index operation — the register to project through,
+/// the register to release after the operation (if any), and the
+/// register to forget after the operation (if any).
+#[derive(Debug, Clone)]
+pub(crate) struct VecReceiver {
+    pub reg: String,
+    pub release_reg: Option<String>,
+    pub consume_reg: Option<String>,
+}
+
 /// Zig `vecLikeElementType` + `growVecElementType` discrimination:
 /// (is_grow, element type) for a Vec/GrowVec target type.
 pub(crate) fn vec_like_element_type(ty: &Type) -> Option<(bool, Type)> {
@@ -331,6 +342,47 @@ impl<'c> Codegen<'c> {
             self.borrow_source_temps
                 .insert(address.ptr.clone(), source_temp);
         }
+    }
+
+    /// codegen.zig `genVecOwnerReceiver`: the owner register for
+    /// a Vec/GrowVec index operation. A field-projection target
+    /// is read through its address — the owner word is loaded
+    /// into a fresh temp and projected through a borrow of it, so
+    /// the base binding's register is never opened as a
+    /// composite. (A direct value load off the base register
+    /// marks the base Composite; when the base is a borrowed
+    /// parameter whose function-exit cleanup plan transfers to a
+    /// result rooted at it, nothing retires the base and the
+    /// host reports MemoryLeak at the return —
+    /// RUST-TEXT-VECINDEX-RETURN-SELF-LEAK.) Any other target
+    /// evaluates directly; its result register is the release
+    /// candidate under the usual release fact.
+    pub(crate) fn gen_vec_owner_receiver(&mut self, target: &Node) -> Result<VecReceiver> {
+        if let Node::FieldExpr(field) = target {
+            let projection = self.gen_field_address(field)?;
+            self.remember_address_projection_source(&projection);
+            let owner = self.new_tmp();
+            self.ins(&format!("{owner} = load {}+0 as ptr", projection.ptr));
+            self.emit_release(&projection.ptr)?;
+            let borrowed = self.new_tmp();
+            self.ins(&format!("{borrowed} = &{owner}"));
+            return Ok(VecReceiver {
+                reg: borrowed.clone(),
+                release_reg: Some(borrowed),
+                consume_reg: Some(owner),
+            });
+        }
+        let reg = self.gen_expr(target)?;
+        let release_reg = if self.expr_result_reg_needs_release(target) {
+            Some(reg.clone())
+        } else {
+            None
+        };
+        Ok(VecReceiver {
+            reg,
+            release_reg,
+            consume_reg: None,
+        })
     }
 
     /// codegen.zig:16827 `genFieldAddress`.

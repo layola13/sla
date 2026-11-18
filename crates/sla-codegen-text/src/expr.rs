@@ -85,8 +85,13 @@ impl<'c> Codegen<'c> {
                 } else {
                     ("Vec_len", "Vec_ptr")
                 };
-                let vec_reg = self.gen_expr(&idx.target)?;
-                let vec_needs_release = self.expr_result_reg_needs_release(&idx.target);
+                // codegen.zig `genVecIndexRead` takes its owner
+                // register from `genVecOwnerReceiver`: a field
+                // target is projected through a borrow of the
+                // loaded owner word, never through the base
+                // binding's own register.
+                let receiver = self.gen_vec_owner_receiver(&idx.target)?;
+                let vec_reg = receiver.reg.clone();
                 let index_reg = self.gen_expr(&idx.index)?;
                 let len_reg = self.new_tmp();
                 let in_bounds_reg = self.new_tmp();
@@ -133,8 +138,11 @@ impl<'c> Codegen<'c> {
                 if self.expr_result_reg_needs_release(&idx.index) {
                     self.emit_release(&index_reg)?;
                 }
-                if vec_needs_release {
-                    self.emit_release(&vec_reg)?;
+                if let Some(release_reg) = &receiver.release_reg {
+                    self.emit_release(release_reg)?;
+                }
+                if let Some(consume_reg) = &receiver.consume_reg {
+                    self.emit_forget_moved_value(consume_reg)?;
                 }
                 Ok(reg)
             }
