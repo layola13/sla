@@ -1581,14 +1581,14 @@ impl<'c> Codegen<'c> {
         if let Some(list) = self.check.cleanups(stmt) {
             let names: Vec<String> = list.to_vec();
             for name in names {
-                let should_release = match &ret.value {
-                    Some(value) => self
-                        .plan_function_result_cleanup(&name, value)?
-                        .releases_value(),
-                    None => true,
-                };
-                if should_release {
-                    self.emit_release(&name)?;
+                match &ret.value {
+                    // Shared with the tail-expression path
+                    // (`emit_function_tail_cleanups`): release, or
+                    // retire only the husk for a binding transferred
+                    // into the returned composite (L2R2 Fix A
+                    // follow-up, R546 A_retire_marking).
+                    Some(value) => self.emit_function_result_cleanup(&name, value)?,
+                    None => self.emit_release(&name)?,
                 }
             }
         }

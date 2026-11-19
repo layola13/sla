@@ -1,0 +1,67 @@
+@import "sa_std/vec.sa"
+
+// SPRINT-100 L2R2 regression minim (return-composite move
+// transfer): a binding moved into a returned tuple literal or
+// an Option/Result constructor payload transfers at the
+// function tail — releasing it there frees the storage the
+// caller receives. Reduced from
+// test_unit_sa_aggregate_reassign_move_cleanup (the advance /
+// reassign loop) and test_unit_reg1_icmp (icmp_parse_message
+// wraps the message struct in Ok(...) and its payload Vec was
+// freed at the tail).
+
+struct L2r2Bag {
+    values: Vec<i32>,
+}
+
+fn l2r2_bag_new() -> L2r2Bag {
+    return L2r2Bag { values: Vec::new() };
+}
+
+fn l2r2_bag_advance(bag: L2r2Bag, value: i32) -> (L2r2Bag, i32) {
+    bag.values.push(value);
+    return (bag, value);
+}
+
+fn l2r2_bag_sum(limit: i32) -> i32 {
+    let bag = l2r2_bag_new();
+    let total = 0;
+    let i = 0;
+    while i < limit {
+        let (next_bag, value) = l2r2_bag_advance(bag, i + 1);
+        bag = next_bag;
+        total = total + value;
+        i = i + 1;
+    }
+    if len(bag.values) != limit { panic(101); };
+    return total;
+}
+
+@test "l2r2 return tuple move keeps vec alive"() {
+    let total = l2r2_bag_sum(4);
+    if total != 10 { panic(102); };
+}
+
+fn l2r2_wrap_ok(bag: L2r2Bag) -> Result<L2r2Bag, i32> {
+    return Ok(bag);
+}
+
+@test "l2r2 return ok move keeps vec alive"() {
+    let bag = l2r2_bag_new();
+    bag.values.push(41);
+    bag.values.push(42);
+    let r = l2r2_wrap_ok(bag);
+    // Allocation pressure: a fresh bag's buffer is the natural
+    // reuse candidate for the wrapped bag's freed buffer.
+    let other = l2r2_bag_new();
+    other.values.push(1);
+    other.values.push(2);
+    match r {
+        Ok(b) => {
+            if len(b.values) != 2 { panic(103); };
+            if b.values[0] != 41 { panic(104); };
+            if b.values[1] != 42 { panic(105); };
+        },
+        Err(e) => { panic(106); },
+    };
+}

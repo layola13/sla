@@ -28,6 +28,45 @@ use sla_lowering::{
 use crate::codegen::{Codegen, RefCellBorrowHandle};
 use crate::Result;
 
+/// SPRINT-100 L2R2: does generating `expr` MOVE the named binding
+/// into the value being built? Only the constituents that store
+/// the binding register itself count — a bare identifier or a
+/// `^identifier`, appearing as the whole expression, as a tuple /
+/// struct / enum literal constituent, or as the payload argument
+/// of an Option/Result constructor (which stores its argument
+/// directly, per the EXPAND constructor forms in call.rs). Any
+/// other shape (field/index extraction, a general call argument,
+/// a binary operand) may copy or clone, so it never counts.
+fn result_moves_binding(expr: &Node, name: &str) -> bool {
+    match expr {
+        Node::Identifier(n) => n == name,
+        Node::MoveExpr(mv) => result_moves_binding(&mv.expr, name),
+        Node::TupleLiteral(lit) => lit
+            .elements
+            .iter()
+            .any(|e| result_moves_binding(e, name)),
+        Node::StructLiteral(lit) => lit
+            .fields
+            .iter()
+            .any(|f| result_moves_binding(&f.value, name)),
+        Node::EnumLiteral(lit) => lit
+            .fields
+            .iter()
+            .any(|f| result_moves_binding(&f.value, name)),
+        Node::CallExpr(call) => {
+            (call.associated_target.is_none()
+                || matches!(
+                    call.associated_target.as_deref(),
+                    Some("Option") | Some("Result")
+                ))
+                && matches!(call.func_name.as_str(), "Some" | "Ok" | "Err")
+                && call.args.len() == 1
+                && result_moves_binding(&call.args[0], name)
+        }
+        _ => false,
+    }
+}
+
 impl<'c> Codegen<'c> {
     /// Snapshot/restore of the consumed set and the borrow-source
     /// table, the slice-visible part of the Zig branch-state
@@ -665,13 +704,43 @@ impl<'c> Codegen<'c> {
         if let Some(list) = self.check.cleanups(stmt) {
             let names: Vec<String> = list.to_vec();
             for name in names {
-                if self
-                    .plan_function_result_cleanup(&name, tail_expr)?
-                    .releases_value()
-                {
-                    self.emit_release(&name)?;
-                }
+                self.emit_function_result_cleanup(&name, tail_expr)?;
             }
+        }
+        Ok(())
+    }
+
+    /// Act on one function-result cleanup: release the binding when
+    /// the plan says so; retire only its husk when the plan
+    /// transfers a binding moved wholesale into the returned
+    /// composite; skip it when the value itself is returned (a
+    /// bare-identifier transfer — the register leaves with the
+    /// return value, so there is no husk to retire).
+    ///
+    /// The transfer arm is the L2R2 Fix A follow-up (R546
+    /// A_retire_marking). Fix A (d7e38e0a) returned TransferResult
+    /// for the moved-into-composite shape and then skipped the
+    /// release outright, so the source register stayed Active at
+    /// the exit boundary (MemoryLeak on reg1_icmp and on the two
+    /// head-green controls it regressed). `emit_release` retires
+    /// only the husk for whole-moved bindings — no field drops,
+    /// so the storage the caller receives is never freed — and is
+    /// a no-op when the binding was already consumed (the TEXT35
+    /// root lane). A bare-identifier transfer never lands here:
+    /// its register IS the returned value, and it is not
+    /// whole-moved.
+    pub(crate) fn emit_function_result_cleanup(
+        &mut self,
+        name: &str,
+        result_expr: &Node,
+    ) -> Result<()> {
+        let action = self.plan_function_result_cleanup(name, result_expr)?;
+        if action.releases_value() {
+            return self.emit_release(name);
+        }
+        let resolved = self.resolve_binding_name(name);
+        if self.whole_moved_bindings.contains(&resolved) {
+            return self.emit_release(name);
         }
         Ok(())
     }
@@ -718,6 +787,53 @@ impl<'c> Codegen<'c> {
                         }
                         return Ok(FunctionTailCleanupAction::TransferResult);
                     }
+                }
+            }
+        }
+        // SPRINT-100 L2R2 Fix A follow-up (R546 A_retire_marking):
+        // a composite result that MOVES the cleanup binding into
+        // the returned aggregate transfers it exactly like a
+        // bare-identifier result. The base plan only recognises an
+        // identifier / ^identifier RESULT, so a binding stored into
+        // a returned tuple/struct literal or an Option/Result
+        // constructor payload was released at the tail anyway —
+        // freeing the very storage the caller receives
+        // (icmp_parse_message: the payload Vec freed after
+        // RESULT_NEW_OK; tri_dispatch / move_bag_advance: the Vec
+        // deep-dropped / freed after the tuple store; pod_register:
+        // the registry Vec freed after the tuple store). Only
+        // bare-identifier / ^identifier constituents count: a
+        // field/index constituent is an extraction, governed by
+        // the root rule above, and a general call argument may
+        // have been cloned by the call-arg planners.
+        //
+        // The transfer alone is NOT the fix (Fix A d7e38e0a
+        // stopped here: it suppressed the tail free but never
+        // retired the source register, so the verifier flagged it
+        // Active at the exit boundary — MemoryLeak, plus the two
+        // head-green regressions). The binding is therefore ALSO
+        // recorded whole-moved, so the tail emitters retire only
+        // its husk (`emit_function_result_cleanup`) instead of
+        // skipping its release outright. Tuple/struct/enum
+        // constituents are usually already recorded by generation
+        // (`mark_binding_moved_into_aggregate`); the constructor
+        // payload leg (Some/Ok/Err via call.rs EXPAND forms) is
+        // NOT — this insert covers it uniformly.
+        if result_moves_binding(result_expr, cleanup_name) {
+            let binding_ty = self
+                .local_binding_type_for_name(cleanup_name)
+                .or_else(|| {
+                    self.local_binding_type_for_name(
+                        &self.resolve_binding_name(cleanup_name),
+                    )
+                });
+            if let Some(binding_ty) = binding_ty {
+                if !self.type_is_copy_value(&binding_ty)
+                    && !is_borrow_like_type(&binding_ty)
+                {
+                    let resolved = self.resolve_binding_name(cleanup_name);
+                    self.whole_moved_bindings.insert(resolved);
+                    return Ok(FunctionTailCleanupAction::TransferResult);
                 }
             }
         }
