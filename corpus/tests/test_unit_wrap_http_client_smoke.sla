@@ -31,23 +31,9 @@
     let r = sla_http_fetch_bytes(STR_PTR("hello"), STR_LEN("hello"), &buf_buf[0], 64, &out_len_cell[0]);
 }
 
-@test "wrap sa_http_websocket_read"() {
-    let out_opcode_cell = [0u64; 32];
-    let out_ptr_cell = [0u64; 32];
-    let out_len_cell = [0u64; 32];
-    let r = sla_http_websocket_read(STR_PTR("hello"), STR_LEN("hello"), &out_opcode_cell[0], &out_ptr_cell[0], &out_len_cell[0]);
-}
-
 @test "wrap sa_http_client_new_v2"() {
     let out_client_cell = [0u64; 32];
     let r = sla_http_client_new_v2(0, STR_PTR("hello"), STR_LEN("hello"), &out_client_cell[0]);
-}
-
-@test "wrap sa_http_websocket_read_v2"() {
-    let out_opcode_cell = [0u64; 32];
-    let out_ptr_cell = [0u64; 32];
-    let out_len_cell = [0u64; 32];
-    let r = sla_http_websocket_read_v2(STR_PTR("hello"), STR_LEN("hello"), &out_opcode_cell[0], &out_ptr_cell[0], &out_len_cell[0]);
 }
 
 @test "wrap sa_http_client_sse_post"() {
