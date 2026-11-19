@@ -1,0 +1,38 @@
+@import "sa_std/core/option.sa"
+
+enum MinimGate {
+    Open(i32),
+    Closed,
+}
+
+fn gate_code(g: MinimGate) -> i32 {
+    let code = if let MinimGate::Open(v) = g {
+        v
+    } else {
+        -1
+    };
+    return code;
+}
+
+@test "if-let enum pattern binds the payload"() {
+    if gate_code(MinimGate::Open(30)) != 30 { panic(97201); };
+    if gate_code(MinimGate::Closed) != -1 { panic(97202); };
+};
+
+@test "if-let chain requires every condition"() {
+    let a: Option<i32> = Some(3);
+    let b: Option<i32> = None;
+    let total = if let Some(x) = a && let Some(y) = b {
+        x + y
+    } else {
+        100
+    };
+    if total != 100 { panic(97203); };
+    let both: Option<i32> = Some(4);
+    let total2 = if let Some(x) = a && let Some(y) = both {
+        x + y
+    } else {
+        100
+    };
+    if total2 != 7 { panic(97204); };
+};

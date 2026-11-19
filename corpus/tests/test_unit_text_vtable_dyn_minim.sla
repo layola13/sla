@@ -1,0 +1,31 @@
+@import "sa_std/core/trait_object.sa"
+
+trait MinimShape {
+    fn area(&self) -> i32;
+    fn label(&self) -> i32;
+}
+
+struct MinimSquare {
+    side: i32,
+}
+
+impl MinimShape for MinimSquare {
+    fn area(&self) -> i32 {
+        return self.side * self.side;
+    }
+    fn label(&self) -> i32 {
+        return 7;
+    }
+}
+
+fn measure(&item: dyn MinimShape) -> i32 {
+    return item.area() + item.label();
+}
+
+@test "dyn borrow arg dispatches through the impl vtable"() {
+    let sq = MinimSquare { side: 4 };
+    let total = measure(&sq);
+    if total != 23 {
+        panic(97101);
+    };
+}
