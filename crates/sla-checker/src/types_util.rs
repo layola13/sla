@@ -100,9 +100,14 @@ pub fn is_internal_symbol(name: &str) -> bool {
     name == "return_ty_sentinel"
 }
 
-/// Zig `isDiscardName`: `_` and `_foo` bindings are never defined.
+/// Zig `isDiscardName` (lowering_rules.zig:4122,
+/// type_checker.zig:2842): exactly `_` — a `_foo` binding IS
+/// defined. The widened `starts_with('_')` form also swallowed
+/// the parser's synthesized `__chainK` temporaries, so a chain
+/// assignment's `let __chainK = v` never defined the temp and
+/// every read failed UndefinedVariable (test_unit_chain_assign).
 pub fn is_discard_name(name: &str) -> bool {
-    name.starts_with('_')
+    name == "_"
 }
 
 /// Primitive's Zig `@tagName`.

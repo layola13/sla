@@ -1,0 +1,16 @@
+// SPRINT-100 L5 minim: right-associative chain assignment
+// (`a = b = 5`) desugars to a `let __chainK` temporary. On the
+// base tree the checker's widened discard-name test swallowed
+// the temp's definition and the reads failed
+// UndefinedVariable: `__chain1`.
+
+@test "s100 chain assign minim"() {
+    let a = 0;
+    let b = 0;
+    a = b = 5;
+    if a + b != 10 { panic(10061); };
+    let c = 0;
+    a = c = 2;
+    if a + c != 4 { panic(10062); };
+    if b != 5 { panic(10063); };
+}
