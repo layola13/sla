@@ -199,14 +199,14 @@ impl Checker {
                             TypeAliasComponent::Ty(t) => {
                                 match crate::types_util::concrete_type_name(t) {
                                     Some(cname)
-                                        if self.structs.contains_key(&cname) =>
+                                        if self.structs.contains_key(cname) =>
                                     {
                                         let info =
-                                            self.structs.get(&cname).unwrap().clone();
+                                            self.structs.get(cname).unwrap().clone();
                                         fields.extend(info.fields.iter().cloned());
                                     }
                                     Some(cname)
-                                        if candidate_names.contains(cname.as_str()) =>
+                                        if candidate_names.contains(cname) =>
                                     {
                                         ready = false;
                                         break;
