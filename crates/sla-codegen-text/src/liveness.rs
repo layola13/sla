@@ -392,7 +392,10 @@ impl<'c> Codegen<'c> {
     /// the value for the consuming position instead.
     pub(crate) fn identifier_used_in_later_sibling(&self, name: &str) -> bool {
         for (children, current) in &self.expr_later_frames {
-            for child in &children[current.saturating_add(1)..] {
+            let Some(later) = children.get(current.saturating_add(1)..) else {
+                continue;
+            };
+            for child in later {
                 let node = unsafe { &**child };
                 if node_uses_identifier(node, name) {
                     return true;
