@@ -287,6 +287,11 @@ impl<'a> Parser<'a> {
             None
         };
         let body = self.parse_block()?;
+        // A trailing `;` after a loop block is a legal statement
+        // terminator (the expression-statement path eats it for
+        // `if`; the loop statements must eat it themselves or the
+        // block parser trips over the bare `;`).
+        self.eat(Tag::Semicolon);
         Ok(Node::ForStmt(ForStmt {
             var_name,
             start: Box::new(start),
@@ -307,6 +312,9 @@ impl<'a> Parser<'a> {
             (self.parse_expr(0)?, None)
         };
         let body = self.parse_block()?;
+        // See parse_for_stmt: eat an optional trailing `;`
+        // (`while let Some(x) = v.pop() { ... };` is corpus-legal).
+        self.eat(Tag::Semicolon);
         Ok(Node::WhileStmt(WhileStmt {
             cond: Box::new(cond),
             let_pattern,
