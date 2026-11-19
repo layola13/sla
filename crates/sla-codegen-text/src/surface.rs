@@ -43,7 +43,7 @@ fn peel_name(ty: &Type) -> Option<(&str, &[Type])> {
 /// Peel `&T` / `*T` layers and return the innermost type,
 /// whatever its kind (unlike `peel_name`, which only admits
 /// user-defined types).
-fn peel_borrow_pointer(ty: &Type) -> &Type {
+pub(crate) fn peel_borrow_pointer(ty: &Type) -> &Type {
     let mut cur = ty;
     loop {
         match cur {

@@ -554,6 +554,38 @@ impl<'c> Codegen<'c> {
                         }
                         _ => {}
                     }
+                    // codegen.zig `exprNeedsFfiCstrMacros`: a
+                    // bare `len` over a raw-pointer argument
+                    // emits `EXPAND CSTR_LEN` (sa_std/ffi.sa), as
+                    // does a `format` call with a raw-pointer
+                    // argument; without the ffi family import
+                    // the host traps UndefinedMacro on CSTR_LEN
+                    // (test_unit_def2_ptr_len). The peel is a
+                    // superset of Zig's direct primitive check —
+                    // an unused ffi import is harmless.
+                    let raw_ptr_arg = |n: &Node| {
+                        matches!(
+                            check.expr_type(n),
+                            Some(ty) if matches!(
+                                crate::surface::peel_borrow_pointer(ty),
+                                sla_ast::Type::Primitive(
+                                    sla_ast::Primitive::RawPtr
+                                )
+                            )
+                        )
+                    };
+                    if call.func_name == "len"
+                        && call.args.len() == 1
+                        && call.callee.is_none()
+                        && raw_ptr_arg(&call.args[0])
+                    {
+                        out.insert("ffi");
+                    }
+                    if call.func_name == "format"
+                        && call.args.iter().any(|a| raw_ptr_arg(a))
+                    {
+                        out.insert("ffi");
+                    }
                     if let Some(callee) = &call.callee {
                         walk(check, callee, out);
                     }
