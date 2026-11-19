@@ -15,16 +15,16 @@
 //! printed through the same resolution (the raw source names are
 //! not registers on this path).
 //!
-//! Ownership scope of this first form: payload loads are plain
-//! loads. An identifier scrutinee's own cleanup stays with the
-//! checker-recorded statement cleanups. A temporary scrutinee is
-//! released at the merge only when no arm binds a non-Copy
-//! payload (a moved-out heap payload would otherwise be released
-//! twice); with a non-Copy payload the temp scrutinee is left
-//! unreleased rather than double-released.
+//! Ownership scope: payload loads are plain loads (a load of an
+//! owned field moves it out in the verifier's model). An
+//! identifier scrutinee's own cleanup stays with the
+//! checker-recorded statement cleanups. A temporary scrutinee's
+//! shell is released at the merge on every path: arms that bound
+//! a payload have already moved that field out of the shell, so
+//! the release frees only the remainder.
 
 use sla_ast::{MatchCase, Node, Type};
-use sla_lowering::{block_terminates, is_void_type};
+use sla_lowering::{block_terminates, is_discard_name, is_void_type};
 
 use crate::layout;
 
@@ -204,16 +204,19 @@ impl<'c> Codegen<'c> {
         for case in &m.cases {
             plans.push(self.match_arm_plan(&class, &scrut_ty, case)?);
         }
-        let any_noncopy_payload = plans
-            .iter()
-            .flat_map(|p| p.loads.iter())
-            .any(|(_, _, ty)| !self.type_is_copy_value(ty));
-
         let scrut_reg = self.gen_expr(&m.val)?;
         let scrut_is_temp = !matches!(&*m.val, Node::Identifier(_));
-        let scrut_needs_release = scrut_is_temp
-            && !any_noncopy_payload
-            && self.expr_result_reg_needs_release(&m.val);
+        // A temporary scrutinee's shell is retired at the merge
+        // unconditionally: a payload binding load moves the payload
+        // out of the shell in the verifier's model, so the shell
+        // release frees only what no arm extracted (on arms that
+        // bind nothing it frees the whole value; on binding arms
+        // the extracted field is already MovedOut). Leaving the
+        // shell unreleased when any arm bound a non-Copy payload
+        // trapped MemoryLeak at the enclosing exit
+        // (test_unit_reg2d3_match_temp_scrutinee).
+        let scrut_needs_release =
+            scrut_is_temp && self.expr_result_reg_needs_release(&m.val);
 
         let expr_ty: Type = self.require_expr_type(expr, "match result")?;
         let has_value = !is_void_type(&expr_ty);
@@ -238,13 +241,33 @@ impl<'c> Codegen<'c> {
         };
 
         let consumed_snapshot = self.snapshot_consumed();
+        // Merge-compensation candidates (the N-way form of
+        // expr_if.rs's branch compensation): the pre-match live
+        // owned bindings, filtered exactly as on the if path.
+        let live_owned: Vec<String> = self
+            .local_binding_types
+            .iter()
+            .map(|(n, _)| n.clone())
+            .filter(|n| {
+                !is_discard_name(n)
+                    && !self.global_const_bindings.contains(n)
+                    && !self.refcell_borrow_handles.contains_key(n)
+            })
+            .collect();
+        let pre_consumed = consumed_snapshot.0.clone();
+        // The final test's mismatch edge reaches the merge with
+        // no arm having run; it is routed through a skip block
+        // (emitted just before the merge) that carries the
+        // compensation releases for that path.
+        let skip_label = self.new_label("L_MATCH_SKIP");
+        let mut fallthrough_arms: Vec<(usize, std::collections::HashSet<String>)> = Vec::new();
         let mut any_nonterminating = false;
         for (i, case) in m.cases.iter().enumerate() {
             let plan = &plans[i];
             let next_label = if i + 1 < n {
                 test_labels[i + 1].clone()
             } else {
-                merge_label.clone()
+                skip_label.clone()
             };
             self.wl(&format!("{}:", test_labels[i]));
             let cmp_reg: Option<String> = match (plan.tag, &tag_reg) {
@@ -375,11 +398,83 @@ impl<'c> Codegen<'c> {
             }
             if !terminates {
                 any_nonterminating = true;
+                fallthrough_arms.push((self.out.len(), self.consumed_bindings.clone()));
                 self.w(&format!("    jmp {merge_label}\n"));
             } else {
                 self.restore_consumed(&consumed_snapshot);
             }
             self.w("\n");
+        }
+        // Merge compensation (the N-way form of expr_if.rs's
+        // emit_branch_compensation): a live owned binding consumed
+        // on some but not all fallthrough arms is released on the
+        // arms that did not consume it, inserted before the arm's
+        // jump to the merge; the skip path releases everything any
+        // arm consumed. Without it the merge sees the binding
+        // Active on one predecessor and Consumed on another
+        // (PhiStateConflict — test_unit_match_merge_balance).
+        let union: std::collections::HashSet<String> = fallthrough_arms
+            .iter()
+            .flat_map(|(_, s)| s.iter().cloned())
+            .collect();
+        for (offset, arm_end) in fallthrough_arms.iter().rev() {
+            let missing: Vec<String> = live_owned
+                .iter()
+                .filter(|name| {
+                    union.contains(*name)
+                        && !arm_end.contains(*name)
+                        && !pre_consumed.contains(*name)
+                })
+                .cloned()
+                .collect();
+            if missing.is_empty() {
+                continue;
+            }
+            let live_out = std::mem::take(&mut self.out);
+            self.consumed_bindings = arm_end.clone();
+            for name in &missing {
+                self.emit_release(name)?;
+            }
+            let scratch = std::mem::replace(&mut self.out, live_out);
+            self.out.insert_str(*offset, &scratch);
+        }
+        // The skip block exists only when an edge references
+        // it: the last case's tag-test miss edge or its guard
+        // fail edge. An irrefutable last case without a guard
+        // jumps straight from its test block to the arm, and
+        // emitting the block anyway would park releases of live
+        // bindings in dead code.
+        let last_plan_has_test = plans
+            .last()
+            .map(|p| p.tag.is_some() && tag_reg.is_some())
+            .unwrap_or(false);
+        let last_case_has_guard = m
+            .cases
+            .last()
+            .map(|c| c.guard.is_some())
+            .unwrap_or(false);
+        if last_plan_has_test || last_case_has_guard {
+            self.wl(&format!("{skip_label}:"));
+            {
+                let saved = self.snapshot_consumed();
+                self.restore_consumed(&consumed_snapshot);
+                for name in &live_owned {
+                    if union.contains(name) && !pre_consumed.contains(name) {
+                        self.emit_release(name)?;
+                    }
+                }
+                self.restore_consumed(&saved);
+            }
+            self.w(&format!("    jmp {merge_label}\n"));
+        } else {
+            // Unreferenced: keep the block as a bare trampoline
+            // so the merge keeps a predecessor, exactly the
+            // topology the un-compensated dispatch produced.
+            self.wl(&format!("{skip_label}:"));
+            self.w(&format!("    jmp {merge_label}\n"));
+        }
+        if !fallthrough_arms.is_empty() {
+            self.consumed_bindings = union;
         }
         self.wl(&format!("{merge_label}:"));
         if let Some(tag) = &tag_reg {

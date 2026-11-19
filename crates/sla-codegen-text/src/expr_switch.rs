@@ -14,6 +14,7 @@
 
 use sla_ast::{Node, Type};
 use sla_lowering::block_terminates;
+use sla_lowering::is_discard_name;
 use sla_lowering::names::is_switch_default_pattern;
 
 use crate::codegen::Codegen;
@@ -51,6 +52,26 @@ impl<'c> Codegen<'c> {
         self.w(&format!("    jmp {}\n\n", check_labels[0]));
 
         let consumed_snapshot = self.snapshot_consumed();
+        // Merge-compensation candidates (the N-way form of
+        // expr_if.rs's branch compensation, as in expr_match.rs):
+        // the pre-switch live owned bindings.
+        let live_owned: Vec<String> = self
+            .local_binding_types
+            .iter()
+            .map(|(n, _)| n.clone())
+            .filter(|n| {
+                !is_discard_name(n)
+                    && !self.global_const_bindings.contains(n)
+                    && !self.refcell_borrow_handles.contains_key(n)
+            })
+            .collect();
+        let pre_consumed = consumed_snapshot.0.clone();
+        // The last check's mismatch edge reaches the merge with
+        // no case body having run; it is routed through a skip
+        // block (emitted just before the merge) that carries the
+        // compensation releases for that path.
+        let skip_label = self.new_label("L_SWITCH_SKIP");
+        let mut fallthrough_cases: Vec<(usize, std::collections::HashSet<String>)> = Vec::new();
         let mut previous_cond: Option<String> = None;
         let mut any_fallthrough = false;
         let mut has_default = false;
@@ -100,7 +121,7 @@ impl<'c> Codegen<'c> {
             let next_chk = if idx + 1 < n {
                 check_labels[idx + 1].clone()
             } else {
-                merge_label.clone()
+                skip_label.clone()
             };
             if is_default {
                 self.w(&format!("    jmp {}\n\n", case_labels[idx]));
@@ -124,6 +145,7 @@ impl<'c> Codegen<'c> {
             }
             self.gen_block(&case.body)?;
             if !terminates {
+                fallthrough_cases.push((self.out.len(), self.consumed_bindings.clone()));
                 self.w(&format!("    jmp {merge_label}\n"));
                 any_fallthrough = true;
             } else {
@@ -141,6 +163,70 @@ impl<'c> Codegen<'c> {
             .unwrap_or(false);
         let need_merge = any_fallthrough || !has_default || !last_is_default;
         if need_merge {
+            // Merge compensation (see expr_match.rs): a live
+            // owned binding consumed on some but not all
+            // fallthrough cases is released on the cases that did
+            // not consume it, inserted before the case's jump;
+            // the skip path releases everything any case consumed
+            // plus the last check's condition temp, which the
+            // case heads release on their own paths.
+            let union: std::collections::HashSet<String> = fallthrough_cases
+                .iter()
+                .flat_map(|(_, s)| s.iter().cloned())
+                .collect();
+            for (offset, case_end) in fallthrough_cases.iter().rev() {
+                let missing: Vec<String> = live_owned
+                    .iter()
+                    .filter(|name| {
+                        union.contains(*name)
+                            && !case_end.contains(*name)
+                            && !pre_consumed.contains(*name)
+                    })
+                    .cloned()
+                    .collect();
+                if missing.is_empty() {
+                    continue;
+                }
+                let live_out = std::mem::take(&mut self.out);
+                self.consumed_bindings = case_end.clone();
+                for name in &missing {
+                    self.emit_release(name)?;
+                }
+                let scratch = std::mem::replace(&mut self.out, live_out);
+                self.out.insert_str(*offset, &scratch);
+            }
+            // The skip block exists only when the last check's
+            // miss edge references it, i.e. the last case is not
+            // the default (a default last case is reached by an
+            // unconditional jump, so no miss edge leaves the last
+            // check). Emitting it otherwise would park a release
+            // of the last condition temp in dead code.
+            if !last_is_default {
+                self.wl(&format!("{skip_label}:"));
+                if let Some(cond) = &previous_cond {
+                    self.w(&format!("    !{cond}\n"));
+                }
+                {
+                    let saved = self.snapshot_consumed();
+                    self.restore_consumed(&consumed_snapshot);
+                    for name in &live_owned {
+                        if union.contains(name) && !pre_consumed.contains(name) {
+                            self.emit_release(name)?;
+                        }
+                    }
+                    self.restore_consumed(&saved);
+                }
+                self.w(&format!("    jmp {merge_label}\n"));
+            } else {
+                // Unreferenced (the default case is entered by
+                // an unconditional jump): bare trampoline, so
+                // the merge keeps a predecessor.
+                self.wl(&format!("{skip_label}:"));
+                self.w(&format!("    jmp {merge_label}\n"));
+            }
+            if !fallthrough_cases.is_empty() {
+                self.consumed_bindings = union;
+            }
             self.wl(&format!("{merge_label}:"));
             if val_needs_release {
                 self.emit_release(&val_reg)?;
