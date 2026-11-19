@@ -4,14 +4,20 @@
 //! no merge block is emitted, and a value-less if returns a freshly
 //! allocated but discarded temporary register (the invisible tmp_7
 //! in fixture 07 — coordinator item D-C5, resolved in
-//! docs/divergences/lowering-text.md). The if-let chain path is
-//! deferred and fails loudly.
+//! docs/divergences/lowering-text.md). The if-let chain path
+//! (codegen.zig's inline if-let arm of the expression cascade)
+//! chains one pattern test per condition: each test branches to
+//! the next test (or the then block) on success and to a fail
+//! block — which releases the bindings acquired so far and jumps
+//! to the else block — on failure. The `?.` optional-chain
+//! operator desugars to exactly this shape in the parser.
 
-use sla_ast::{Node, Type};
-use sla_lowering::{block_terminates, is_discard_name, is_void_type};
+use sla_ast::{EnumDecl, EnumPattern, IfExpr, IfLetCond, Node, Type};
+use sla_lowering::{block_terminates, call_arg_needs_release, is_discard_name, is_void_type};
 
 use crate::codegen::{type_size, type_string, Codegen};
-use crate::{unsupported, Result};
+use crate::layout;
+use crate::Result;
 
 impl<'c> Codegen<'c> {
     /// codegen.zig:15697 plain `genIfExpr` path.
@@ -20,11 +26,8 @@ impl<'c> Codegen<'c> {
             Node::IfExpr(i) => i,
             _ => unreachable!(),
         };
-        if ife.let_chain.is_some() {
-            return unsupported(
-                "if-let chain expression (pattern family deferred)",
-                "codegen.zig:15560 (genIfLetChain path)",
-            );
+        if let Some(chain) = &ife.let_chain {
+            return self.gen_if_let_chain(expr, ife, chain);
         }
         let cond_reg = self.gen_branch_condition_reg(&ife.cond)?;
         let expr_ty: Type = self.require_expr_type(expr, "if expression result")?;
@@ -230,5 +233,454 @@ impl<'c> Codegen<'c> {
             }
         }
         Ok(())
+    }
+
+    /// codegen.zig's if-let arm of the expression cascade: one
+    /// pattern test per chain condition. Each test's fail block
+    /// releases the bindings acquired by earlier conditions and
+    /// jumps to the else block; the success path binds the
+    /// pattern payload and falls through to the next test (the
+    /// last one falls into the then block). Pattern bindings the
+    /// then block does not consume are released at its end.
+    fn gen_if_let_chain(
+        &mut self,
+        expr: &Node,
+        ife: &IfExpr,
+        chain: &[IfLetCond],
+    ) -> Result<String> {
+        let expr_ty: Type = self.require_expr_type(expr, "if-let expression result")?;
+        let value_if = !is_void_type(&expr_ty);
+        let result_slot: Option<String> = if value_if {
+            let slot = self.new_tmp();
+            self.ins(&format!("{slot} = alloc {}", type_size(&expr_ty)));
+            Some(slot)
+        } else {
+            None
+        };
+        let then_label = self.new_label("L_IF_LET_THEN");
+        let else_label = self.new_label("L_IF_LET_ELSE");
+        let merge_label = self.new_label("L_IF_LET_MERGE");
+        let then_terminates = block_terminates(&ife.then_block);
+        let else_body: &[Node] = ife.else_block.as_deref().unwrap_or(&[]);
+        let else_terminates = block_terminates(else_body);
+        let needs_merge = !then_terminates || !else_terminates;
+        // Pattern binding names acquired along the success path,
+        // in acquisition order (Zig `acquired`).
+        let mut acquired: Vec<String> = Vec::new();
+
+        for (i, cond) in chain.iter().enumerate() {
+            let is_last = i + 1 == chain.len();
+            let success_label = if is_last {
+                then_label.clone()
+            } else {
+                self.new_label("L_IF_LET_NEXT")
+            };
+            let fail_label = self.new_label("L_IF_LET_FAIL");
+            let value_reg = self.gen_expr(&cond.value)?;
+            let branch_flag = self.new_tmp();
+            let pattern = &cond.pattern;
+            let enum_decl = self.enum_decl_for_pattern_value(&cond.value, pattern)?;
+            let success_on_true = enum_decl.is_some()
+                || pattern.variant_name == "Some"
+                || pattern.variant_name == "Ok";
+            if let Some(decl) = &enum_decl {
+                self.gen_enum_pattern_check(
+                    &value_reg,
+                    decl,
+                    &pattern.variant_name,
+                    &branch_flag,
+                )?;
+            } else if sla_lowering::pattern_uses_result_macros(
+                &pattern.enum_name,
+                &pattern.variant_name,
+            ) {
+                self.ins(&format!(
+                    "EXPAND RESULT_IS_OK {branch_flag}, {value_reg}"
+                ));
+            } else {
+                self.ins(&format!(
+                    "EXPAND OPTION_IS_SOME {branch_flag}, {value_reg}"
+                ));
+            }
+            if success_on_true {
+                self.w(&format!(
+                    "    br {branch_flag} -> {success_label}, {fail_label}\n\n"
+                ));
+            } else {
+                self.w(&format!(
+                    "    br {branch_flag} -> {fail_label}, {success_label}\n\n"
+                ));
+            }
+            // Fail block: the consumed-state snapshot is taken
+            // before the label prints (the fail path must see the
+            // pre-test state) and restored after the jump, so the
+            // success path continues from the same state.
+            let snapshot = self.snapshot_consumed();
+            self.wl(&format!("{fail_label}:"));
+            self.w(&format!("    !{branch_flag}\n"));
+            if call_arg_needs_release(&cond.value) {
+                self.emit_release(&value_reg)?;
+            }
+            for name in &acquired {
+                self.emit_release(name)?;
+            }
+            self.w(&format!("    jmp {else_label}\n\n"));
+            self.restore_consumed(&snapshot);
+            // Success block: bind the pattern payload.
+            self.wl(&format!("{success_label}:"));
+            self.w(&format!("    !{branch_flag}\n"));
+            if let Some(decl) = &enum_decl {
+                self.gen_enum_pattern_bindings(&value_reg, decl, pattern)?;
+                acquired.extend(pattern.bindings.iter().cloned());
+            } else if pattern.bindings.len() == 1 {
+                let macro_name = match pattern.variant_name.as_str() {
+                    "Some" => Some("OPTION_GET"),
+                    "Ok" => Some("RESULT_GET_OK"),
+                    "Err" => Some("RESULT_GET_ERR"),
+                    _ => None,
+                };
+                if let Some(macro_name) = macro_name {
+                    let target = self.push_binding_alias(&pattern.bindings[0]);
+                    self.ins(&format!(
+                        "EXPAND {macro_name} {target}, {value_reg}"
+                    ));
+                    self.transfer_guard_metadata(&target, &value_reg);
+                    acquired.push(pattern.bindings[0].clone());
+                }
+            }
+            if call_arg_needs_release(&cond.value) {
+                self.emit_release(&value_reg)?;
+            }
+        }
+
+        // Then block.
+        match (&result_slot, then_terminates) {
+            (Some(slot), false) => {
+                self.gen_block_tail_value_store(&ife.then_block, slot, &expr_ty)?;
+            }
+            _ => {
+                self.gen_block(&ife.then_block)?;
+            }
+        }
+        for name in &acquired {
+            if !block_consumes_identifier(&ife.then_block, name) {
+                self.emit_release(name)?;
+            }
+        }
+        for name in &acquired {
+            self.pop_binding_alias(name);
+        }
+        self.emit_phi_cleanups(ife.then_block.last())?;
+        if needs_merge && !then_terminates {
+            self.w(&format!("    jmp {merge_label}\n"));
+        }
+        self.w("\n");
+
+        // Else block.
+        self.wl(&format!("{else_label}:"));
+        match (&result_slot, else_terminates) {
+            (Some(slot), false) => {
+                self.gen_block_tail_value_store(else_body, slot, &expr_ty)?;
+            }
+            _ => {
+                self.gen_block(else_body)?;
+            }
+        }
+        self.emit_phi_cleanups(else_body.last())?;
+        if needs_merge && !else_terminates {
+            self.w(&format!("    jmp {merge_label}\n"));
+        }
+        self.w("\n");
+
+        if needs_merge {
+            self.wl(&format!("{merge_label}:"));
+        }
+        match result_slot {
+            Some(slot) => {
+                let result = self.new_tmp();
+                self.ins(&format!(
+                    "{result} = load {slot}+0 as {}",
+                    type_string(&expr_ty)
+                ));
+                self.emit_release(&slot)?;
+                Ok(result)
+            }
+            None => Ok(self.new_tmp()),
+        }
+    }
+
+    /// codegen.zig:7169 `enumDeclForPatternValue`: the enum
+    /// declaration a pattern tests, resolved from the pattern
+    /// value's checked type; Option/Result are macro-tested and
+    /// yield None, as does any non-enum type. A pattern naming a
+    /// different enum than the value's type is a loud error.
+    fn enum_decl_for_pattern_value(
+        &self,
+        value: &Node,
+        pattern: &EnumPattern,
+    ) -> Result<Option<EnumDecl>> {
+        let value_ty = self
+            .expr_type(value)
+            .ok_or_else(|| crate::TextError::MissingType {
+                context: "if-let pattern value type".to_string(),
+            })?;
+        let type_name = match sla_lowering::concrete_type_name(&value_ty) {
+            Some(n) => n.to_string(),
+            None => return Ok(None),
+        };
+        if type_name == "Option" || type_name == "Result" {
+            return Ok(None);
+        }
+        let decl = match self.enum_decl(&type_name) {
+            Some(d) => d.clone(),
+            None => return Ok(None),
+        };
+        if !sla_lowering::enum_name_matches_decl(&pattern.enum_name, &decl.name) {
+            return Err(crate::TextError::Unsupported {
+                feature: format!(
+                    "if-let pattern enum `{}` does not match value enum `{}`",
+                    pattern.enum_name, decl.name
+                ),
+                zig_ref: "codegen.zig:7169 (enumDeclForPatternValue)",
+            });
+        }
+        Ok(Some(decl))
+    }
+
+    /// codegen.zig:6384 `genEnumPatternCheck`: compare the
+    /// value's tag word against the variant's discriminant into
+    /// `flag_reg`.
+    fn gen_enum_pattern_check(
+        &mut self,
+        value_reg: &str,
+        decl: &EnumDecl,
+        variant_name: &str,
+        flag_reg: &str,
+    ) -> Result<()> {
+        let tag = layout::enum_variant_value(decl, variant_name).ok_or_else(|| {
+            crate::TextError::Unsupported {
+                feature: format!("enum pattern variant {variant_name}"),
+                zig_ref: "codegen.zig:6384 (genEnumPatternCheck)",
+            }
+        })?;
+        let tag_reg = self.new_tmp();
+        self.ins(&format!("{tag_reg} = load {value_reg}+0 as i64"));
+        let tag_const = self.new_tmp();
+        self.emit_int_const(&tag_const, tag);
+        self.ins(&format!("{flag_reg} = eq {tag_reg}, {tag_const}"));
+        self.w(&format!("    !{tag_reg}\n"));
+        self.w(&format!("    !{tag_const}\n"));
+        Ok(())
+    }
+
+    /// codegen.zig:6395 `genEnumPatternBindings`: load each
+    /// variant field into its pattern binding's fresh alias, in
+    /// declaration order; the binding count must equal the
+    /// variant's field count. Guard metadata transfers only for
+    /// single-field variants (the Zig's own condition).
+    fn gen_enum_pattern_bindings(
+        &mut self,
+        value_reg: &str,
+        decl: &EnumDecl,
+        pattern: &EnumPattern,
+    ) -> Result<()> {
+        let variant = decl
+            .variants
+            .iter()
+            .find(|v| v.name == pattern.variant_name)
+            .ok_or_else(|| crate::TextError::Unsupported {
+                feature: format!("enum pattern variant {}", pattern.variant_name),
+                zig_ref: "codegen.zig:6395 (genEnumPatternBindings)",
+            })?;
+        if pattern.bindings.len() != variant.fields.len() {
+            return Err(crate::TextError::Unsupported {
+                feature: format!(
+                    "enum pattern {}::{} binds {} names for {} fields",
+                    decl.name,
+                    pattern.variant_name,
+                    pattern.bindings.len(),
+                    variant.fields.len()
+                ),
+                zig_ref: "codegen.zig:6395 (genEnumPatternBindings)",
+            });
+        }
+        for (binding, field) in pattern.bindings.iter().zip(variant.fields.iter()) {
+            let target = self.push_binding_alias(binding);
+            let (offset, field_ty) =
+                layout::enum_field_layout(variant, &field.name).ok_or_else(|| {
+                    crate::TextError::Unsupported {
+                        feature: format!("enum pattern field layout {}", field.name),
+                        zig_ref: "codegen.zig:6395 (genEnumPatternBindings)",
+                    }
+                })?;
+            self.ins(&format!(
+                "{target} = load {value_reg}+{offset} as {}",
+                type_string(&field_ty)
+            ));
+            if variant.fields.len() == 1 {
+                self.transfer_guard_metadata(&target, value_reg);
+            }
+        }
+        Ok(())
+    }
+
+    /// codegen.zig:1978 `transferGuardMetadata`: a payload load
+    /// inherits the source register's guard bookkeeping (RefCell
+    /// borrow handles, mutex guard handles, mutex lock results)
+    /// so later releases settle the right handles.
+    fn transfer_guard_metadata(&mut self, dst: &str, src: &str) {
+        if dst == src {
+            return;
+        }
+        if let Some(handle) = self.refcell_borrow_handles.remove(src) {
+            self.refcell_borrow_handles.insert(dst.to_string(), handle);
+        }
+        if let Some(handle) = self.mutex_guard_handles.remove(src) {
+            self.mutex_guard_handles.insert(dst.to_string(), handle);
+        }
+        if let Some(result) = self.mutex_lock_results.remove(src) {
+            self.mutex_lock_results.insert(dst.to_string(), result);
+        }
+    }
+}
+
+/// codegen.zig:15557 `blockConsumesIdentifier`: whether any
+/// statement in the block consumes the named binding (a move of
+/// it, per `exprConsumesIdentifier`).
+fn block_consumes_identifier(block: &[Node], name: &str) -> bool {
+    block.iter().any(|stmt| stmt_consumes_identifier(stmt, name))
+}
+
+/// codegen.zig `stmtConsumesIdentifier`.
+fn stmt_consumes_identifier(stmt: &Node, name: &str) -> bool {
+    match stmt {
+        Node::LetStmt(s) => expr_consumes_identifier(&s.value, name),
+        Node::LetDestructureStmt(s) => expr_consumes_identifier(&s.value, name),
+        Node::ConstStmt(s) => expr_consumes_identifier(&s.value, name),
+        Node::LetElseStmt(s) => {
+            expr_consumes_identifier(&s.value, name)
+                || block_consumes_identifier(&s.else_block, name)
+        }
+        Node::AssignStmt(s) => {
+            expr_consumes_identifier(&s.target, name)
+                || expr_consumes_identifier(&s.value, name)
+        }
+        Node::ExprStmt(e) => expr_consumes_identifier(e, name),
+        Node::ReturnStmt(s) => s
+            .value
+            .as_ref()
+            .map(|v| expr_consumes_identifier(v, name))
+            .unwrap_or(false),
+        Node::ForStmt(s) => {
+            expr_consumes_identifier(&s.start, name)
+                || s.end
+                    .as_ref()
+                    .map(|e| expr_consumes_identifier(e, name))
+                    .unwrap_or(false)
+                || block_consumes_identifier(&s.body, name)
+        }
+        Node::WhileStmt(s) => {
+            expr_consumes_identifier(&s.cond, name)
+                || block_consumes_identifier(&s.body, name)
+        }
+        Node::BlockStmt(s) => block_consumes_identifier(&s.body, name),
+        _ => false,
+    }
+}
+
+/// codegen.zig `exprConsumesIdentifier`: only a move (`^name`,
+/// possibly nested inside composite expressions) consumes; a
+/// plain identifier read does not.
+fn expr_consumes_identifier(expr: &Node, name: &str) -> bool {
+    match expr {
+        Node::MoveExpr(m) => match &*m.expr {
+            Node::Identifier(id) => id == name,
+            _ => expr_consumes_identifier(&m.expr, name),
+        },
+        Node::AwaitExpr(a) => match &*a.expr {
+            Node::Identifier(id) => id == name,
+            _ => expr_consumes_identifier(&a.expr, name),
+        },
+        Node::BorrowExpr(b) => expr_consumes_identifier(&b.expr, name),
+        Node::DerefExpr(d) => expr_consumes_identifier(&d.expr, name),
+        Node::CastExpr(c) => expr_consumes_identifier(&c.expr, name),
+        Node::FieldExpr(f) => expr_consumes_identifier(&f.expr, name),
+        Node::IndexExpr(x) => {
+            expr_consumes_identifier(&x.target, name)
+                || expr_consumes_identifier(&x.index, name)
+        }
+        Node::SliceExpr(s) => {
+            expr_consumes_identifier(&s.target, name)
+                || expr_consumes_identifier(&s.start, name)
+                || expr_consumes_identifier(&s.end, name)
+        }
+        Node::BinaryExpr(b) => {
+            expr_consumes_identifier(&b.left, name)
+                || expr_consumes_identifier(&b.right, name)
+        }
+        Node::CallExpr(c) => c
+            .args
+            .iter()
+            .any(|a| expr_consumes_identifier(a, name)),
+        Node::ClosureLiteral(c) => expr_consumes_identifier(&c.body, name),
+        Node::TryExpr(t) => expr_consumes_identifier(&t.expr, name),
+        Node::IfExpr(i) => {
+            expr_consumes_identifier(&i.cond, name)
+                || i.let_chain
+                    .as_ref()
+                    .map(|chain| {
+                        chain
+                            .iter()
+                            .any(|c| expr_consumes_identifier(&c.value, name))
+                    })
+                    .unwrap_or(false)
+                || block_consumes_identifier(&i.then_block, name)
+                || i.else_block
+                    .as_ref()
+                    .map(|b| block_consumes_identifier(b, name))
+                    .unwrap_or(false)
+        }
+        Node::SwitchExpr(s) => {
+            expr_consumes_identifier(&s.val, name)
+                || s.cases.iter().any(|case| {
+                    expr_consumes_identifier(&case.pattern, name)
+                        || block_consumes_identifier(&case.body, name)
+                })
+        }
+        Node::MatchExpr(m) => {
+            expr_consumes_identifier(&m.val, name)
+                || m.cases.iter().any(|case| {
+                    case.pattern.bindings.iter().any(|b| b == name)
+                        || case
+                            .guard
+                            .as_ref()
+                            .map(|g| expr_consumes_identifier(g, name))
+                            .unwrap_or(false)
+                        || block_consumes_identifier(&case.body, name)
+                })
+        }
+        Node::StructLiteral(s) => {
+            s.fields
+                .iter()
+                .any(|f| expr_consumes_identifier(&f.value, name))
+                || s.update_expr
+                    .as_ref()
+                    .map(|u| expr_consumes_identifier(u, name))
+                    .unwrap_or(false)
+        }
+        Node::EnumLiteral(e) => e
+            .fields
+            .iter()
+            .any(|f| expr_consumes_identifier(&f.value, name)),
+        Node::TupleLiteral(t) => t
+            .elements
+            .iter()
+            .any(|e| expr_consumes_identifier(e, name)),
+        Node::ArrayLiteral(a) => a
+            .elements
+            .iter()
+            .any(|e| expr_consumes_identifier(e, name)),
+        Node::RepeatArrayLiteral(r) => expr_consumes_identifier(&r.value, name),
+        _ => false,
     }
 }
