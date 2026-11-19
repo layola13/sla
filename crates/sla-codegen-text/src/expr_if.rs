@@ -59,6 +59,13 @@ impl<'c> Codegen<'c> {
         let needs_merge = !then_terminates || !else_terminates;
 
         let consumed_snapshot = self.snapshot_consumed();
+        // The RefCell handle table is branch state too (the
+        // loop emitters snapshot/restore it the same way): a
+        // handle released by a terminating side's return cleanup
+        // must not vanish from the surviving side's table, or
+        // that side's later cleanup degrades to a plain release
+        // and the shared borrow count leaks.
+        let handles_snapshot = self.refcell_borrow_handles.clone();
         // Branch-compensation candidates (codegen.zig
         // `emitBranchConsumptionCompensation`, the β fix): the
         // pre-branch live owned bindings — named locals/params
@@ -93,10 +100,12 @@ impl<'c> Codegen<'c> {
         // inserts them at this offset.
         let then_text_end = self.out.len();
         let then_end_snapshot = self.snapshot_consumed();
+        let then_end_handles = self.refcell_borrow_handles.clone();
         // The Zig restores the pre-branch state before generating
         // the else side unconditionally (consumed / store-moved /
         // borrow / RefCell books).
         self.restore_consumed(&consumed_snapshot);
+        self.refcell_borrow_handles = handles_snapshot;
 
         self.wl(&format!("{else_label}:"));
         self.w(&format!("    !{cond_reg}\n"));
@@ -137,6 +146,7 @@ impl<'c> Codegen<'c> {
                 self.consumed_bindings = union;
             } else if else_terminates {
                 self.restore_consumed(&then_end_snapshot);
+                self.refcell_borrow_handles = then_end_handles.clone();
             }
             self.wl(&format!("{merge_label}:"));
         } else {
@@ -147,6 +157,7 @@ impl<'c> Codegen<'c> {
             self.w("\n");
             if else_terminates {
                 self.restore_consumed(&then_end_snapshot);
+                self.refcell_borrow_handles = then_end_handles.clone();
             }
         }
         match result_slot {
