@@ -1,0 +1,45 @@
+// LINE-TEXT-GAPS regression minim: a by-value struct local
+// with Vec fields moved whole into a returned tuple (the
+// sa_std slot_pool_alloc shape: `return (q, idx)`). The
+// function's exit cleanup must retire only the local's husk
+// register; freeing its Vec fields there leaves the caller
+// holding a pool whose buffers were already freed (the
+// reg4_slot_pool segfault on the pre-fix candidate).
+
+struct TupleMovePool {
+    data: Vec<u64>,
+    spare: Vec<u64>,
+    elem: u64,
+}
+
+fn tuple_move_grow(p: TupleMovePool, v: u64) -> (TupleMovePool, u64) {
+    p.data.push(v);
+    let n: u64 = p.data.len();
+    return (p, n);
+}
+
+fn tuple_move_probe(p: &TupleMovePool) -> u64 {
+    let first: u64 = p.data[0];
+    return p.data.len() * 100 + first;
+}
+
+@test "text tuple move of struct keeps fields alive"() {
+    let pool = TupleMovePool { data: Vec::new(), spare: Vec::new(), elem: 8 };
+    let r = tuple_move_grow(pool, 41);
+    if r.1 != 1 {
+        panic(97401);
+    };
+    // A second pool recycles any buffers the first pool's
+    // return cleanup wrongly freed.
+    let other = TupleMovePool { data: Vec::new(), spare: Vec::new(), elem: 1 };
+    other.data.push(7);
+    other.data.push(8);
+    other.data.push(9);
+    let seen: u64 = tuple_move_probe(&r.0);
+    if seen != 141 {
+        panic(97402);
+    };
+    if r.0.elem != 8 {
+        panic(97403);
+    }
+}
