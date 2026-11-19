@@ -37,7 +37,7 @@ pub const DEFERRED_FAMILIES: &[DeferredFamily] = &[
     DeferredFamily {
         name: "refcell handle plans (value-state transfer / loop-state merge)",
         zig_ref: "lowering_rules.zig (planRefCellValueStateTransfer, planRefCellLoopStateMerge, ...)",
-        note: "The borrow-call, borrow-result, runtime-guard, handle-registration and handle-release plans ARE ported (refcell.rs), as are the small call-arg lifecycle and borrow-address-temp plans (call_args.rs); the text emitter tracks live borrow handles and result-slot companions. Still deferred: the value-state transfer cascade for non-let value flow and planRefCellLoopStateMerge, whose restoresPreLoop fact is consumed by the loop emitters as a no-op restore in the slice.",
+        note: "The borrow-call, borrow-result, runtime-guard, handle-registration and handle-release plans ARE ported (refcell.rs), as are the small call-arg lifecycle and borrow-address-temp plans (call_args.rs); the text emitter tracks live borrow handles and result-slot companions, and planRefCellLoopStateMerge IS ported (refcell.rs) with the loop emitters restoring the pre-loop snapshot for real. Still deferred: the value-state transfer cascade for non-let value flow.",
     },
     DeferredFamily {
         name: "while-let / let-pattern plans",

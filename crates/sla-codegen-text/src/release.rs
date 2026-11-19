@@ -25,7 +25,7 @@ use sla_lowering::{
     FunctionTailCleanupAction,
 };
 
-use crate::codegen::Codegen;
+use crate::codegen::{Codegen, RefCellBorrowHandle};
 use crate::Result;
 
 impl<'c> Codegen<'c> {
@@ -46,6 +46,24 @@ impl<'c> Codegen<'c> {
     ) {
         self.consumed_bindings = snapshot.0.clone();
         self.borrow_source_temps = snapshot.1.clone();
+    }
+
+    /// codegen.zig:1404 `restoreRefCellBranchState`: rebuild
+    /// the RefCell borrow-handle table and the borrow-source
+    /// table from a snapshot pair (Zig `restoreRefCellBorrowHandles`
+    /// codegen.zig:1336 + `restoreBorrowSourceTemps` :1328 —
+    /// clear, then copy the snapshot in; here clone-assign,
+    /// the same contents). Consumed by the loop emitters under
+    /// the loop-state merge plan (lowering_rules.zig:3776):
+    /// state after a loop body is the pre-loop state.
+    pub(crate) fn restore_refcell_branch_state(
+        &mut self,
+        handles: &HashMap<String, RefCellBorrowHandle>,
+        borrow_sources: &HashMap<String, String>,
+    ) -> Result<()> {
+        self.refcell_borrow_handles = handles.clone();
+        self.borrow_source_temps = borrow_sources.clone();
+        Ok(())
     }
 
     /// codegen.zig:14942 (the borrow arm of transferValueState):

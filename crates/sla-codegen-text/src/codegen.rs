@@ -934,6 +934,9 @@ pub(crate) fn ret_type_string(ty: &Type) -> &'static str {
     abi_return_type_string(ty)
 }
 
+/// lowering_rules.zig:3776 `planRefCellLoopStateMerge` fact path.
+pub(crate) use sla_lowering::refcell::plan_refcell_loop_state_merge_restores_pre_loop;
+
 impl<'c> Codegen<'c> {
     // -- const emitters (codegen.zig:792-841) --------------------------
 

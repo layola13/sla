@@ -200,3 +200,35 @@ pub fn plan_refcell_handle_cell_release(
     }
     !handle_is_release_target
 }
+
+/// lowering_rules.zig:3562 `RefCellLoopStateMergeAction`: how
+/// the emitter state is merged when a loop body finishes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefCellLoopStateMergeAction {
+    RestorePreLoop,
+}
+
+impl RefCellLoopStateMergeAction {
+    /// lowering_rules.zig:3565 `restoresPreLoop`.
+    pub fn restores_pre_loop(self) -> bool {
+        matches!(self, RefCellLoopStateMergeAction::RestorePreLoop)
+    }
+}
+
+/// lowering_rules.zig:3776 `planRefCellLoopStateMerge`: the
+/// merge is unconditional — a loop body may take or settle
+/// borrows the pre-loop state did not have (and drop ones it
+/// did), so after the body the RefCell handle table and the
+/// borrow-source table are rebuilt from the pre-loop snapshot;
+/// the back-edge re-enters the head with exactly the borrow
+/// facts the first iteration started from.
+pub fn plan_refcell_loop_state_merge() -> RefCellLoopStateMergeAction {
+    RefCellLoopStateMergeAction::RestorePreLoop
+}
+
+/// Flattened fact accessor for the loop-state merge plan
+/// (lowering_rules.zig:3776 plan + :3565 fact, combined the
+/// way the loop emitters consume them).
+pub fn plan_refcell_loop_state_merge_restores_pre_loop() -> bool {
+    plan_refcell_loop_state_merge().restores_pre_loop()
+}
