@@ -161,6 +161,43 @@ pub fn call_arg_uses_raw_pointer_string_literal_value(arg: &Node, param: &Param)
     raw_pointer_value_type(&param.ty)
 }
 
+/// lowering_rules.zig:7002 `callArgIsExternFnPtrAddress`.
+///
+/// Fn-typed argument bound for a by-value raw-pointer parameter. An
+/// SLA fn value's bits are the address of its `SLA_FNPTR_VT_<fn>`
+/// vtable, whose slot 0 holds the callable machine address — the
+/// vtable bits themselves are data, not code, so passing them to a
+/// native callee that invokes the pointer crashes. The only
+/// checker-legal pairing of an fn-typed argument with a raw-pointer
+/// parameter is an extern (FFI) call: the checker bypasses signature
+/// checks for externs, while SLA callees reject the fn-vs-ptr
+/// mismatch, so this shape needs no separate "callee is extern"
+/// fact. Closure literals are excluded — a closure has no callable
+/// trampoline address (its invocation needs the capture pointer),
+/// and the checker rejects them for extern pointer parameters
+/// explicitly.
+pub fn call_arg_is_extern_fn_ptr_address(
+    arg: &Node,
+    param: Option<&Param>,
+    arg_ty_is_fn_ptr: bool,
+) -> bool {
+    let target = match param {
+        None => return false,
+        Some(p) => p,
+    };
+    if !by_value_raw_pointer_param(target) {
+        return false;
+    }
+    if !arg_ty_is_fn_ptr {
+        return false;
+    }
+    let root = match arg {
+        Node::MoveExpr(mv) => &*mv.expr,
+        other => other,
+    };
+    !matches!(root, Node::ClosureLiteral(_))
+}
+
 /// lowering_rules.zig:6252 `callArgIsCopyStructValue`.
 pub fn call_arg_is_copy_struct_value(
     arg: &Node,
@@ -258,6 +295,7 @@ pub enum CallArgTarget {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CallArgMaterializationKind {
     RawPointerStringLiteral,
+    ExternFnPtrAddress,
     ArrayToSliceBorrow,
     DynBorrow,
     AutoBorrow,
@@ -280,6 +318,9 @@ pub struct CallArgMaterializationPlan {
 impl CallArgMaterializationPlan {
     pub fn is_raw_pointer_string_literal(&self) -> bool {
         self.kind == CallArgMaterializationKind::RawPointerStringLiteral
+    }
+    pub fn is_extern_fn_ptr_address(&self) -> bool {
+        self.kind == CallArgMaterializationKind::ExternFnPtrAddress
     }
     pub fn is_array_to_slice_borrow(&self) -> bool {
         self.kind == CallArgMaterializationKind::ArrayToSliceBorrow
@@ -346,6 +387,13 @@ pub fn plan_call_arg_materialization(
     if let Some(param) = &input.param {
         if call_arg_uses_raw_pointer_string_literal_value(arg, param) {
             return plan(CallArgMaterializationKind::RawPointerStringLiteral, true);
+        }
+        if call_arg_is_extern_fn_ptr_address(
+            arg,
+            Some(param),
+            matches!(&input.arg_ty, Some(Type::FnPtr(_))),
+        ) {
+            return plan(CallArgMaterializationKind::ExternFnPtrAddress, false);
         }
     }
     if input.array_to_slice_borrow {

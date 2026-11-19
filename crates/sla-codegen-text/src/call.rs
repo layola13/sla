@@ -138,9 +138,9 @@ impl<'c> Codegen<'c> {
 
 
     /// codegen.zig:9860 `genCallArgFromMaterializationPlan`. The
-    /// Value, AutoBorrow and ArrayToSliceBorrow arms are ported;
-    /// every other plan kind belongs to a deferred family and
-    /// fails loudly.
+    /// Value, AutoBorrow, ArrayToSliceBorrow and ExternFnPtrAddress
+    /// arms are ported; every other plan kind belongs to a deferred
+    /// family and fails loudly.
     pub(crate) fn gen_call_arg_from_materialization_plan(
         &mut self,
         arg: &Node,
@@ -464,6 +464,33 @@ impl<'c> Codegen<'c> {
                 Ok(LoweredCallArg {
                     reg: format!("^{copied}"),
                     release_after_call: false,
+                    release_reg: None,
+                    consume_reg: None,
+                })
+            }
+            CallArgMaterializationKind::ExternFnPtrAddress => {
+                // codegen.zig:13830: extern by-value raw-pointer
+                // parameter receiving an fn value: the fn value's
+                // bits are a vtable address (data), while the native
+                // callee invokes the pointer as code. The callable
+                // machine address lives in vtable slot 0 — load it
+                // and pass the loaded address as a plain temporary.
+                // The `as ptr` cast detaches the loaded value from
+                // the vtable's interior-pointer state (a load
+                // through the vtable borrow is InteriorPtr, which
+                // may not cross an FFI boundary).
+                let vt_reg = self.gen_expr(arg)?;
+                let loaded_reg = self.new_tmp();
+                self.ins(&format!("{loaded_reg} = load {vt_reg}+0 as ptr"));
+                if self.call_arg_result_temp_needs_release(arg, &vt_reg) {
+                    self.emit_release(&vt_reg)?;
+                }
+                let addr_reg = self.new_tmp();
+                self.ins(&format!("{addr_reg} = {loaded_reg} as ptr"));
+                self.emit_release(&loaded_reg)?;
+                Ok(LoweredCallArg {
+                    reg: addr_reg,
+                    release_after_call: true,
                     release_reg: None,
                     consume_reg: None,
                 })
