@@ -927,6 +927,16 @@ impl<'c> Codegen<'c> {
     /// prototypes are decl-only FuncDecls in `func_index`, so a
     /// singleton extern pair (prototype + one definition) must not
     /// be counted as a set.
+    /// R539 form A: an extern set member whose ABI spellings do
+    /// not convert back to Types is never recorded by the checker
+    /// (`extern_member_symbol` returns None), so calls to it bind
+    /// the bare name — the definition must stay bare too, or the
+    /// call has no declaration to bind to. The gate uses the same
+    /// registration condition as `check_program.rs`
+    /// (`is_extern && (abi.is_some() || is_variadic)`): a plain
+    /// function that merely carries `is_extern` goes through the
+    /// plain path, whose checker arm records from Types directly
+    /// and always succeeds, so it still mangles.
     pub(crate) fn decl_symbol(&self, f: &FuncDecl) -> String {
         let base = self.lowered_func_symbol(&f.name);
         if is_main_name(&f.name) {
@@ -938,6 +948,15 @@ impl<'c> Codegen<'c> {
             .filter(|(n, d)| n == &f.name && !d.is_decl_only)
             .count()
             <= 1
+        {
+            return base;
+        }
+        if f.is_extern
+            && (f.abi.is_some() || f.is_variadic)
+            && !f
+                .params
+                .iter()
+                .all(|p| sla_ast::extern_spelling_convertible(&p.ty))
         {
             return base;
         }
