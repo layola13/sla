@@ -672,6 +672,74 @@ impl<'c> Codegen<'c> {
                 self.surface_finish_value(&planned, true)?;
                 Ok(Some(SurfaceCall::Void))
             }
+            ("Vec", "pop") => {
+                // codegen.zig isPopCall arm: try_pop into a
+                // one-word slot, then wrap the word in an Option
+                // (an inline-POD element's word is its packed
+                // record image and is materialized into a record
+                // cell first, materializeInlinePodRecord).
+                if call.args.len() != 1 {
+                    return Err(missing_fact());
+                }
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let elem = generics
+                    .first()
+                    .ok_or_else(|| missing_fact())?
+                    .clone();
+                let ok_reg = self.new_tmp();
+                let value_reg = self.new_tmp();
+                let value_slot = self.new_tmp();
+                let option_reg = self.new_tmp();
+                let some_label = self.new_label("L_VEC_POP_SOME");
+                let none_label = self.new_label("L_VEC_POP_NONE");
+                let end_label = self.new_label("L_VEC_POP_END");
+                self.ins(&format!("{value_slot} = alloc 8"));
+                self.ins(&format!(
+                    "{ok_reg} = call @sa_vec_try_pop(&{recv}, &{value_slot})"
+                ));
+                self.ins(&format!("{value_reg} = load {value_slot}+0 as u64"));
+                self.emit_release(&value_slot)?;
+                self.w(&format!(
+                    "    br {ok_reg} -> {some_label}, {none_label}\n\n"
+                ));
+                self.wl(&format!("{some_label}:"));
+                self.w(&format!("    !{ok_reg}\n"));
+                if crate::place::inline_pod_element(self.check, &elem) {
+                    let elem_name = match &elem {
+                        Type::UserDefined(u) => u.name.clone(),
+                        _ => return Err(missing_fact()),
+                    };
+                    let decl = self
+                        .struct_decl_for_name(&elem_name)
+                        .ok_or_else(|| missing_fact())?;
+                    let rec = self.new_tmp();
+                    self.ins(&format!(
+                        "{rec} = alloc {}",
+                        crate::layout::struct_size(&decl)
+                    ));
+                    self.ins(&format!("store {rec}+0, {value_reg} as u64"));
+                    self.ins(&format!(
+                        "EXPAND OPTION_NEW_SOME {option_reg}, {rec}"
+                    ));
+                    self.emit_forget_moved_value(&rec)?;
+                } else {
+                    self.ins(&format!(
+                        "EXPAND OPTION_NEW_SOME {option_reg}, {value_reg}"
+                    ));
+                }
+                self.w(&format!("    !{value_reg}\n"));
+                self.w(&format!("    jmp {end_label}\n\n"));
+                self.wl(&format!("{none_label}:"));
+                self.w(&format!("    !{ok_reg}\n"));
+                self.w(&format!("    !{value_reg}\n"));
+                self.ins(&format!("EXPAND OPTION_NEW_NONE {option_reg}"));
+                self.w(&format!("    jmp {end_label}\n\n"));
+                self.wl(&format!("{end_label}:"));
+                if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                    self.emit_release(&recv)?;
+                }
+                Ok(Some(SurfaceCall::Value(option_reg)))
+            }
             ("HashSet", "insert")
             | ("BTreeSet", "insert")
             | ("HashSet", "contains")
