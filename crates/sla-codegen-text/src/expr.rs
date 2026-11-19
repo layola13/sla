@@ -695,13 +695,24 @@ impl<'c> Codegen<'c> {
         }
         let left_ty = self.expr_type(&bin.left);
         let right_ty = self.expr_type(&bin.right);
-        if matches!(
-            left_ty.as_ref().map(sla_lowering::peel_borrow_pointer_type),
-            Some(Type::UserDefined(_))
-        ) || matches!(
-            right_ty.as_ref().map(sla_lowering::peel_borrow_pointer_type),
-            Some(Type::UserDefined(_))
-        ) {
+        // The struct-op family applies to struct VALUES (and
+        // borrows of them). A raw-pointer operand is an address:
+        // its ==/!= and arithmetic are scalar ops even when the
+        // pointee is a user-defined type — routing `*Opaque !=
+        // *Opaque` here made gen_struct_binary_expr decline
+        // (opaque decl) and the caller error out
+        // (test_unit_ptr_out_param regression).
+        let struct_family_operand = |ty: &Option<Type>| -> bool {
+            match ty {
+                Some(Type::Pointer(_)) => false,
+                Some(t) => matches!(
+                    sla_lowering::peel_borrow_pointer_type(t),
+                    Type::UserDefined(_)
+                ),
+                None => false,
+            }
+        };
+        if struct_family_operand(&left_ty) || struct_family_operand(&right_ty) {
             if let Some(reg) = self.gen_struct_binary_expr(bin, &left_ty, &right_ty)? {
                 return Ok(reg);
             }
