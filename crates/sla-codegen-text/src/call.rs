@@ -343,7 +343,16 @@ impl<'c> Codegen<'c> {
                     || param
                         .map(|p| p.is_borrow || matches!(&*p.ty, sla_ast::Type::Borrow(_)))
                         .unwrap_or(false);
-                if needs_borrow && !raw_reg.starts_with('&') {
+                // A BorrowExpr argument already yields the borrow
+                // operand itself (gen_borrow_expr returns the slot
+                // address for index/field places, `&name` for
+                // identifiers): prefixing another `&` addresses
+                // the address register (CapabilityMismatch on
+                // Vec<&T> pushes of &g[i]).
+                if needs_borrow
+                    && !raw_reg.starts_with('&')
+                    && !matches!(arg, Node::BorrowExpr(_))
+                {
                     let release = self.call_arg_result_temp_needs_release_for_param(
                         arg,
                         &raw_reg,
@@ -1452,9 +1461,19 @@ impl<'c> Codegen<'c> {
                 let label = self.new_string_const();
                 self.ins(&format!("@const {label} = utf8:\"{text}\""));
                 let len = crate::codegen::escaped_string_byte_len(text);
-                let result = self.new_tmp();
-                self.ins(&format!("EXPAND PANIC_MSG {result}, &{label}, {len}"));
-                return Ok(result);
+                let len_reg = self.new_tmp();
+                self.emit_int_const(&len_reg, len as i64);
+                // codegen.zig:15514: a string panic lowers to
+                // `EXPAND PANIC_MSG 103, *label, len_reg` — the
+                // code is the literal 103 and the message is the
+                // dereferenced label. The port emitted an
+                // unassigned fresh temp as the code and `&label`
+                // as the message; the host rejected the expanded
+                // call with CapabilityMismatch
+                // (test_unit_option_match, after the `!_` fix).
+                self.ins(&format!("EXPAND PANIC_MSG 103, *{label}, {len_reg}"));
+                self.emit_release(&len_reg)?;
+                return Ok(self.new_tmp());
             }
             _ => {
                 let reg = self.gen_expr(arg)?;

@@ -42,10 +42,21 @@ impl<'c> Codegen<'c> {
                 None
             }
         });
-        let arg_is_copy = arg_ty
-            .as_ref()
-            .map(|t| self.type_is_copy_value(t))
-            .unwrap_or(false);
+        // A macro-call argument (PTR_BYTE_AT et al.) carries no
+        // recorded type (or an Infer one), and the planner then
+        // assumes an ownership transfer and emits `^reg` for a
+        // by-value parameter — rejected for a Copy scalar
+        // (CapabilityMismatch on proxy_lower_byte / url_hex_val).
+        // The checker already proved the argument assignable to
+        // the parameter, so when the argument type is missing or
+        // unknown, the parameter's declared type decides
+        // Copy-ness.
+        let arg_is_copy = match arg_ty.as_ref() {
+            Some(t) if !matches!(t, Type::Infer) => self.type_is_copy_value(t),
+            _ => param
+                .map(|p| self.type_is_copy_value(&p.ty))
+                .unwrap_or(false),
+        };
         // A parameter whose TYPE is a borrow (`v: &Vec<T>`)
         // carries the borrow capability in the callee contract
         // (the declaration emitter renders it `&v: ptr`), so for

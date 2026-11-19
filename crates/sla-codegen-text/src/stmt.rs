@@ -427,6 +427,9 @@ impl<'c> Codegen<'c> {
         // genLetStmt handle cascade): the binding's own cleanup
         // settles the dynamic borrow.
         self.transfer_refcell_borrow_handle(&val, &resolved_name);
+        // A MutexGuard / lock-Result handle moves with it too:
+        // the binding's own cleanup unlocks the mutex.
+        self.transfer_mutex_guard_handle(&val, &resolved_name);
         // Async state maps move with the value too
         // (codegen.zig:11232 transferResultSlotValueState).
         self.transfer_future_state(&val, &resolved_name);

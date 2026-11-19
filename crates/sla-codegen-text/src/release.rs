@@ -59,6 +59,26 @@ impl<'c> Codegen<'c> {
     }
 
     /// codegen.zig genLetStmt handle cascade (16100-16133): a
+    /// binding that takes over a MutexGuard register inherits its
+    /// guard handle (and a lock Result inherits its lock-result
+    /// entry), so the binding's own cleanup unlocks the mutex.
+    /// Without the transfer the guard released as a plain `!reg`
+    /// and the second lock() deadlocked
+    /// (test_unit_p1_mutex_helper / test_unit_reg2d3_mutex_test_body).
+    pub(crate) fn transfer_mutex_guard_handle(&mut self, value_reg: &str, binding: &str) {
+        if let Some(mutex_reg) = self.mutex_guard_handles.remove(value_reg) {
+            self.mutex_guard_handles
+                .insert(binding.to_string(), mutex_reg);
+            self.consumed_bindings.insert(value_reg.to_string());
+        }
+        if let Some(mutex_reg) = self.mutex_lock_results.remove(value_reg) {
+            self.mutex_lock_results
+                .insert(binding.to_string(), mutex_reg);
+            self.consumed_bindings.insert(value_reg.to_string());
+        }
+    }
+
+    /// codegen.zig genLetStmt handle cascade (16100-16133): a
     /// binding that takes over a RefCell borrow register inherits
     /// its handle, and the source register is consumed by the
     /// takeover (the binding's own release settles the borrow).
