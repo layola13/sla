@@ -1,0 +1,29 @@
+// Regression (LINE-PTR, mirrors Zig ZOZI-1): typed-pointer eq/ne
+// was rejected by the checker. Two stacked roots on the plain-call
+// path: (1) a borrow expression passed to a pointer parameter
+// (`id_eq(&a)` for `p: *EqBox`) matched on the method path only —
+// the plain-call signature check never consulted
+// plainCallArgMatches' borrow-expression arm; (2) `*S == *S` was
+// routed into the struct-value comparison via structDeclForType
+// (which unwraps pointers) and judged by typeIsEq of the pointer
+// type (always false) instead of the pointer-identity fast path.
+// On the base both shapes are TypeMismatch; with the fix the test
+// passes and identity (not pointee value) decides the comparisons.
+
+struct EqBox { tag: i32 }
+
+fn id_eq(p: *EqBox) -> *EqBox { return p; }
+
+@test "ptr eq fastpath minim"() {
+    let a = EqBox { tag: 1 };
+    let b = EqBox { tag: 2 };
+    let ha = id_eq(&a);
+    let hb = id_eq(&b);
+    if !(ha == ha) { panic(11); };
+    if ha == hb { panic(12); };
+    if !(ha != hb) { panic(13); };
+    let a2 = EqBox { tag: 1 };
+    let ha2 = id_eq(&a2);
+    if ha == ha2 { panic(14); };
+    if !(ha != ha2) { panic(15); };
+}

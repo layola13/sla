@@ -559,7 +559,14 @@ impl<'c> Codegen<'c> {
         if let Some(name) =
             sla_lowering::release_facts::assignment_moves_identifier(target, value, &val_ty, is_copy)
         {
-            self.mark_consumed_binding(name);
+            // Zig genAssignStmt: a source the store MOVES is
+            // retired at the store site with the forget marker
+            // (the `^value` after `store pp+0, value` in
+            // @zozi_set_pp). Marking it consumed without the
+            // marker left the register Active at function exit —
+            // a host MemoryLeak (test_unit_ptr_out_param).
+            // emit_forget_moved_value also marks it consumed.
+            let _ = self.emit_forget_moved_value(name);
         }
     }
 
@@ -1563,7 +1570,20 @@ impl<'c> Codegen<'c> {
             }
             _ => {
                 let reg = self.gen_expr(expr)?;
-                self.emit_release(&reg)
+                // Zig genStmt: a void-typed expression statement
+                // has no result register to release — codegen
+                // returns an undeclared placeholder for void forms
+                // (a void unsafe block), and releasing it is a host
+                // UnknownRegister (same class as the R-2 void-call
+                // fix documented in is_void_call below).
+                if matches!(
+                    self.expr_type(expr),
+                    Some(sla_ast::Type::Primitive(sla_ast::Primitive::VoidType))
+                ) {
+                    Ok(())
+                } else {
+                    self.emit_release(&reg)
+                }
             }
         }
     }
@@ -1605,6 +1625,17 @@ impl<'c> Codegen<'c> {
                 return is_void_type(&decl.ret_ty);
             }
             return false;
+        }
+        // An extern-sig callee's voidness comes from its ABI
+        // return spelling (gen_call_stmt dispatches extern sigs
+        // ahead of the plain known-function arm for the same
+        // reason): the func_decl lookup can miss a dual-declared
+        // extern fn, and a missed void here routes the call
+        // through the value route in gen_expr_stmt, which binds
+        // and releases a result register for a void callee
+        // (host LLVMBackend rejection, test_unit_ptr_out_param).
+        if let Some(sig) = self.check.extern_sig(&call.func_name) {
+            return crate::extern_macro::extern_ret_is_void(&sig.ret_abi);
         }
         match self.func_decl(&call.func_name) {
             Some(f) => is_void_type(&f.ret_ty),

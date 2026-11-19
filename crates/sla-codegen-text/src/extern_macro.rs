@@ -25,6 +25,23 @@ enum AggregateOutputWriteback {
     CopyIntoSlot(String),
 }
 
+/// Whether an extern signature's return spelling is void. The
+/// spelling depends on the registration source: `.sai`
+/// contracts spell it `void`, while source-declared externs go
+/// through `param_spelling`/`type_desc` and spell it
+/// `void_type` — the checker's `extern_ret_type` accepts both
+/// (checker_util.rs). The earlier `ret == "void"`-only tests
+/// missed every source-declared void extern
+/// (test_unit_ptr_out_param's zozi_set_pp).
+pub(crate) fn extern_ret_is_void(ret_abi: &str) -> bool {
+    let ret = ret_abi
+        .trim()
+        .trim_start_matches(['&', '^', '*'])
+        .trim_end_matches('!')
+        .trim();
+    ret.is_empty() || ret == "void" || ret == "void_type"
+}
+
 impl<'c> Codegen<'c> {
     /// Prefix a display register with a capability marker unless
     /// it already carries one (Zig `abiPrefixedArg`).
@@ -121,9 +138,22 @@ impl<'c> Codegen<'c> {
         if sig.fallible {
             return self.gen_fallible_extern_result_call(call, sig);
         }
+        // A void extern in expression position (the tail of a
+        // value-routed block, e.g. test_unit_ptr_out_param's
+        // unsafe tail) emits the bare call, exactly as the
+        // statement variant below does for the DEF-10 shape:
+        // binding a result register for a void callee makes the
+        // host's LLVM backend reject the program ("Instruction
+        // has a name, but provides a void value"). The fresh
+        // placeholder follows the other void-call precedents.
         let (display, planned_args) = self.plan_extern_call_args(call, sig)?;
-        let result = self.new_tmp();
         let lowered = self.lowered_func_symbol(&call.func_name);
+        if extern_ret_is_void(&sig.ret_abi) {
+            self.ins(&format!("call @{lowered}({})", display.join(", ")));
+            self.emit_lowered_call_arg_cleanups(&planned_args, Some(&call.func_name))?;
+            return Ok(self.new_tmp());
+        }
+        let result = self.new_tmp();
         self.ins(&format!(
             "{result} = call @{lowered}({})",
             display.join(", ")
@@ -223,13 +253,7 @@ impl<'c> Codegen<'c> {
             }
             return Ok(());
         }
-        let ret = sig
-            .ret_abi
-            .trim()
-            .trim_start_matches(['&', '^', '*'])
-            .trim_end_matches('!')
-            .trim();
-        if ret.is_empty() || ret == "void" {
+        if extern_ret_is_void(&sig.ret_abi) {
             let (display, planned_args) = self.plan_extern_call_args(call, sig)?;
             let lowered = self.lowered_func_symbol(&call.func_name);
             self.ins(&format!("call @{lowered}({})", display.join(", ")));

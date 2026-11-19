@@ -284,6 +284,28 @@ impl Checker {
         left: &Type,
         right: &Type,
     ) -> CheckResult<Type> {
+        // ZOZI-1 (Zig type_checker.zig binary_expr): pointer-like
+        // operands compare by identity, never by pointee value.
+        // struct_decl_for_type unwraps pointers, so without this
+        // fast path `*S == *S` (and the FFI staple
+        // `handle == ptr::null::<S>()`) is misrouted into the
+        // struct-value comparison below and rejected, because
+        // type_is_eq of a pointer type is always false. Only eq/ne
+        // are identity comparisons; relational ops keep the
+        // existing dispatch.
+        if matches!(op, BinaryOp::Eq | BinaryOp::Ne)
+            && matches!(left, Type::Pointer(_) | Type::Borrow(_))
+            && matches!(right, Type::Pointer(_) | Type::Borrow(_))
+        {
+            if !types_equal(left, right) {
+                return Err(mismatch(format!(
+                    "TypeMismatch: comparison requires matching operand types, actual {} and {}",
+                    type_desc(left),
+                    type_desc(right)
+                )));
+            }
+            return Ok(crate::types_util::bool_ty());
+        }
         let left_decl = self.struct_decl_for_type(left);
         let right_decl = self.struct_decl_for_type(right);
         if left_decl.is_some() || right_decl.is_some() {

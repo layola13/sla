@@ -193,16 +193,19 @@ impl<'c> Codegen<'c> {
         }
 
         // Function-pointer vtables for every non-decl-only function,
-        // all before any function body (codegen.zig:7234-7245).
+        // all before any function body (codegen.zig:7234-7245). A
+        // decl-only (extern) function emits its @extern declaration
+        // in this same pass, unless a concrete function with the
+        // same lowered symbol exists (codegen.zig:10023).
         for decl in decls {
             if let Node::FuncDecl(f) = decl {
                 if f.is_decl_only {
-                    return unsupported(
-                        "extern (decl-only) function declaration",
-                        "codegen.zig:emitExternDecl",
-                    );
+                    if !self.has_concrete_function_symbol(decls, f) {
+                        self.emit_extern_decl(f);
+                    }
+                } else {
+                    self.emit_function_pointer_vtable_decl_for_decl(f);
                 }
-                self.emit_function_pointer_vtable_decl_for_decl(f);
             }
         }
 

@@ -383,12 +383,36 @@ pub struct BorrowedBindingStoragePlan {
     pub materialize_stack_slot: bool,
 }
 
-/// lowering_rules.zig:683 `planBorrowedBindingStorage`.
+/// lowering_rules.zig:763 `planBorrowedBindingStorage`.
 pub fn plan_borrowed_binding_storage(
     binding_is_borrowed: bool,
     ty: &Type,
 ) -> BorrowedBindingStoragePlan {
+    // Value-register scalar bindings need a stack home when
+    // their address is taken, so `&local` yields the address OF
+    // the local. That is primitives, and (ZOZI-5) also pointer /
+    // borrow / fn_ptr bindings: their registers hold an address
+    // VALUE, and without a home the borrow lowering degenerates
+    // to a copy of that value — an extern out-param (`**T`) then
+    // writes through the pointee address itself (or null)
+    // instead of the local's cell (test_unit_ptr_out_param
+    // segfaulted at runtime). Aggregate bindings already live
+    // at an address, so they need no slot. The earlier port kept
+    // only the Primitive arm and dropped ZOZI-5.
+    //
+    // LINE-PTR scope note: the Borrow arm of ZOZI-5 is NOT
+    // enabled here. With it, test_unit_borrow_return_views
+    // regresses to runtime panics across the returned-view
+    // tests — this port's slot read/write paths do not yet
+    // carry fat borrow views (ptr+len) through an 8-byte slot
+    // the way Zig's do. Pointer and FnPtr arms are enabled
+    // (both verified against the family + neighbour sets);
+    // the Borrow arm needs its own line.
+    let value_register_scalar = matches!(
+        ty,
+        Type::Primitive(_) | Type::Pointer(_) | Type::FnPtr(_)
+    );
     BorrowedBindingStoragePlan {
-        materialize_stack_slot: binding_is_borrowed && matches!(ty, Type::Primitive(_)),
+        materialize_stack_slot: binding_is_borrowed && value_register_scalar,
     }
 }

@@ -1049,6 +1049,26 @@ impl<'c> Codegen<'c> {
         if func_name == "str_eq" && call.args.len() == 2 {
             return self.gen_str_eq_call(call);
         }
+        if func_name == "ptr__null" || func_name == "std__ptr__null" {
+            // codegen.zig:20853 (`isPtrNullCall` arm, the shared
+            // fact is lowering_rules `isPtrNullBuiltinName`):
+            // `ptr::null::<T>()` is a builtin, not a macro — it
+            // emits `EXPAND PTR_NULL <reg>`. Without this arm the
+            // call fell into the EXPAND catch-all under its mangled
+            // name and the host rejected the program with
+            // error[UndefinedMacro] (test_unit_ptr_typed_eq,
+            // test_unit_ptr_int_casts). The checker has already
+            // enforced 0 arguments / 1 generic (check_ptr_null_call).
+            if !call.args.is_empty() {
+                return unsupported(
+                    "ptr::null with arguments",
+                    "codegen.zig:20853 (isPtrNullCall arm)",
+                );
+            }
+            let result = self.new_tmp();
+            self.ins(&format!("EXPAND PTR_NULL {result}"));
+            return Ok(result);
+        }
         if let Some(view) = self.check.imported_macro(&func_name) {
             return self.gen_imported_macro_call_expr(call, &view);
         }
@@ -1118,9 +1138,23 @@ impl<'c> Codegen<'c> {
             });
         if let Some((callee_name, decl)) = known {
             let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;
-            let result = self.new_tmp();
             let lowered = symbol_override
                 .unwrap_or_else(|| self.lowered_func_symbol(&callee_name));
+            // codegen.zig genCallExpr: a void callee emits the
+            // bare call — binding its "result" to a register
+            // makes the host's LLVM backend reject the program
+            // ("Instruction has a name, but provides a void
+            // value"). Statement-position void calls never reach
+            // here (gen_call_stmt), but a void call in tail
+            // position of a value-routed block does
+            // (test_unit_ptr_out_param's unsafe tail). The fresh
+            // placeholder follows the fn-pointer void arm above.
+            if sla_lowering::is_void_type(&decl.ret_ty) {
+                self.ins(&format!("call @{lowered}({})", display.join(", ")));
+                self.emit_lowered_call_arg_cleanups(&planned_args, Some(&callee_name))?;
+                return Ok(self.new_tmp());
+            }
+            let result = self.new_tmp();
             self.ins(&format!(
                 "{result} = call @{lowered}({})",
                 display.join(", ")

@@ -324,6 +324,19 @@ impl Checker {
                     )
             } else if let Type::Borrow(inner) = &arg_ty {
                 types_equal(&param.ty, inner)
+                    // A borrow EXPRESSION passed to a pointer
+                    // parameter (`&a` for `p: *Handle`): Zig's
+                    // shared plainCallArgMatches accepts it when
+                    // the pointees match (type_checker.zig
+                    // callMatchTypesEqual pointer/borrow arm); the
+                    // method path (check_method.rs
+                    // plain_call_arg_matches) has always had the
+                    // case, but the plain-call path never consulted
+                    // it, so the call was a TypeMismatch here only
+                    // (test_unit_ptr_typed_eq).
+                    || crate::check_method::plain_call_arg_matches_pub(
+                        self, &param.ty, arg, &arg_ty,
+                    )
             } else if let (Type::Array(a), Type::Array(b)) = (&param.ty, &arg_ty) {
                 // Width-strict for array elements (Zig comment: reject
                 // silent integer-width array mismatches).

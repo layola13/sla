@@ -5,7 +5,7 @@
 
 use sla_ast::{Literal, Node, Primitive, Type};
 use sla_lowering::{
-    is_option_none_name, plan_scalar_binary_op, scalar_binary_op_name,
+    is_option_none_name, is_void_type, plan_scalar_binary_op, scalar_binary_op_name,
 };
 
 use crate::codegen::Codegen;
@@ -350,7 +350,24 @@ impl<'c> Codegen<'c> {
                         return self.gen_user_macro_unsafe_value_inline(&decl, &ue.body);
                     }
                 }
-                self.gen_block_tail_value_into_fresh(&ue.body)
+                // codegen.zig genExpr unsafe arm: a VOID-typed
+                // unsafe block is generated as a plain block — its
+                // tail need not be an expression (the out-param
+                // writer shape `unsafe { *pp = value; }`). Only a
+                // value-typed unsafe block goes through the
+                // tail-value-into form. The previous unconditional
+                // tail-value routing rejected every void unsafe
+                // block whose tail was an assignment or a call
+                // statement (test_unit_ptr_out_param). The dummy
+                // register follows the surface Void precedent
+                // (gen_mem_forget_call).
+                let expr_ty = self.require_expr_type(expr, "unsafe block result")?;
+                if is_void_type(&expr_ty) {
+                    self.gen_block(&ue.body)?;
+                    Ok(self.new_tmp())
+                } else {
+                    self.gen_block_tail_value_into_fresh(&ue.body)
+                }
             }
             Node::TryExpr(t) => self.gen_try_expr(expr, t),
             // F-G2: a supervised spawn in expression position

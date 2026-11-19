@@ -173,6 +173,20 @@ impl<'a> Scanner<'a> {
     /// argument walk (literals reached here flag
     /// `string_format` for SLICE_NEW).
     pub(super) fn walk_call(&mut self, call: &CallExpr) {
+        // Smart-pointer drop site: releasing a Box / Rc / Arc
+        // binding emits `call @sa_mem_free` (drop.rs
+        // emit_smart_pointer_drop_text), and @sa_mem_free is
+        // declared in sa_std/fmt.sai (automatch index:
+        // `sa_mem_free extern sa_std/fmt.sai`). Any smart-pointer
+        // associated call puts such a value in play; the scan
+        // cannot prove the drop unreachable, so fmt stays —
+        // without it the host rejects the free call as an
+        // undeclared callee (test_unit_ptr_int_casts).
+        if let Some(target) = &call.associated_target {
+            if matches!(target.as_str(), "Box" | "Rc" | "Arc") {
+                self.flags.fmt = true;
+            }
+        }
         // Imported SA-text macros: the EXPAND names the macro, so
         // its home file must be imported. (Explicit and automatch
         // imports cover the common cases; this is the backstop

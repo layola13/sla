@@ -1,0 +1,27 @@
+// Regression (LINE-PTR, mirrors Zig ZOZI-2): the checker's
+// cast table admitted only numeric <-> numeric casts, so the
+// pointer -> integer and integer -> pointer address
+// reinterpretations used by every C FFI surface were
+// TypeMismatch ("cannot cast pointer to u64"). Zig's cast arm
+// (type_checker.zig) admits pointer-carrier <-> integer in
+// both directions via isPointerCarrierCastType. On the base
+// this file fails type checking; with the fix it passes and
+// the round trip preserves the address and the pointee.
+// (Heap form, mirroring test_unit_ptr_int_casts test 1: the
+// stack form's &local identity round trip hits a separate
+// borrow-temp lifetime defect in address materialization,
+// documented in the line's RESULT.)
+
+struct CastBox { tag: i32 }
+
+@test "ptr cast int roundtrip minim"() {
+    let raw = Box::into_raw(Box::new(CastBox { tag: 5 }));
+    let bits = raw as u64;
+    if bits == 0 { panic(21); };
+    let back = bits as *CastBox;
+    if back != raw { panic(22); };
+    if (*back).tag != 5 { panic(23); };
+    let addr = raw as usize;
+    if addr as u64 != bits { panic(24); };
+    let _reclaim = unsafe { Box::from_raw(raw) };
+}

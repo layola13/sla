@@ -32,6 +32,14 @@ impl<'a> Scanner<'a> {
                 }
             }
             Node::FuncDecl(f) => {
+                // A by-value smart-pointer parameter (or return
+                // type) is dropped with @sa_mem_free at the exit
+                // sweep — no Box:: call need appear in the body.
+                if f.params.iter().any(|p| ty_has_mem_free_value(p.ty.as_ref()))
+                    || ty_has_mem_free_value(f.ret_ty.as_ref())
+                {
+                    self.flags.fmt = true;
+                }
                 for s in &f.body {
                     self.walk(s);
                 }
@@ -62,6 +70,9 @@ impl<'a> Scanner<'a> {
                         && matches!(&*l.value, Node::Literal(Literal::StringVal(_)))
                     {
                         self.flags.string = true;
+                    }
+                    if ty_has_mem_free_value(ty.as_ref()) {
+                        self.flags.fmt = true;
                     }
                 }
                 self.walk(&l.value);
