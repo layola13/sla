@@ -97,7 +97,7 @@ use sla_ast::{
 };
 use sla_lowering::{mangle_method_name, peel_borrow_pointer_type, CheckInfo};
 
-/// The five conditional imports, in emission order.
+/// The conditional imports, in emission order.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct MinImports {
     pub string: bool,
@@ -105,6 +105,13 @@ pub struct MinImports {
     pub print: bool,
     pub fmt: bool,
     pub panic: bool,
+    /// `sa_std/core/mem.sa`: a repeat array literal with a scalar
+    /// non-u8 element type and length above the bulk threshold
+    /// emits `call @sa_mem_copy_nonoverlapping` (agg_literal.rs's
+    /// doubling bulk copy); that callee is defined in
+    /// `core/mem.sa`. Without the import the host rejects the
+    /// call as an undeclared callee (test_unit_def_r8pin_slot_transfer).
+    pub mem: bool,
 }
 
 /// Scan the (import-expanded) program for the five modules the

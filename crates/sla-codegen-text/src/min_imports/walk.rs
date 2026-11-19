@@ -258,6 +258,14 @@ impl<'a> Scanner<'a> {
                                 ) {
                                     self.flags.string_format = true;
                                 }
+                                // The bulk-copy route keys on the
+                                // declared length (agg_literal.rs's
+                                // BULK_ARRAY_THRESHOLD = 32).
+                                if arr.len > 32
+                                    && Self::repeat_elem_is_bulk_scalar(&arr.elem)
+                                {
+                                    self.flags.mem = true;
+                                }
                             }
                         }
                     }
@@ -309,6 +317,9 @@ impl<'a> Scanner<'a> {
             Node::RepeatArrayLiteral(r) => {
                 if self.repeat_fill_needs_string_format(node, r) {
                     self.flags.string_format = true;
+                }
+                if self.repeat_fill_needs_mem(node, r) {
+                    self.flags.mem = true;
                 }
                 self.walk(&r.value);
             }
@@ -376,6 +387,42 @@ impl<'a> Scanner<'a> {
     /// stays imported for such a site. The element type is read
     /// from the literal's recorded array type, or from the
     /// repeated value's recorded type (a suffixed `0u8`).
+    /// agg_literal.rs's doubling bulk copy: a repeat literal with
+    /// a scalar non-u8 element type and length above
+    /// BULK_ARRAY_THRESHOLD (32) emits
+    /// `call @sa_mem_copy_nonoverlapping`, whose definition lives
+    /// in `sa_std/core/mem.sa`. The element type is read from the
+    /// literal's recorded array type, else from the repeated
+    /// value's recorded type; when neither is recorded the typed
+    /// emission routes supply the type contextually, so the scan
+    /// keeps the import (the standing conservative rule).
+    fn repeat_fill_needs_mem(
+        &self,
+        node: &Node,
+        r: &sla_ast::RepeatArrayLiteral,
+    ) -> bool {
+        if r.len <= 32 {
+            return false;
+        }
+        if let Some(Type::Array(arr)) = self.check.expr_type(node) {
+            return Self::repeat_elem_is_bulk_scalar(&arr.elem);
+        }
+        match self.check.expr_type(&r.value) {
+            Some(t) => Self::repeat_elem_is_bulk_scalar(t),
+            None => true,
+        }
+    }
+
+    /// The bulk-copy element test, mirroring agg_literal.rs's
+    /// `elem_is_scalar` minus the u8 macro route.
+    fn repeat_elem_is_bulk_scalar(ty: &Type) -> bool {
+        match ty {
+            Type::Primitive(sla_ast::Primitive::U8) => false,
+            Type::Primitive(_) | Type::Pointer(_) | Type::Borrow(_) => true,
+            _ => false,
+        }
+    }
+
     fn repeat_fill_needs_string_format(
         &self,
         node: &Node,

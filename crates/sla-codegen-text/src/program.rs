@@ -127,6 +127,9 @@ impl<'c> Codegen<'c> {
         if min_imports.panic {
             self.wl("@import \"sa_std/core/panic.sa\"");
         }
+        if min_imports.mem {
+            self.wl("@import \"sa_std/core/mem.sa\"");
+        }
 
         self.emit_array_fill_macros();
 
