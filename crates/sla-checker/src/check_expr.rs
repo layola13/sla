@@ -459,6 +459,7 @@ impl Checker {
                 abi: None,
                 params: vec![Type::Infer; ext.move_params.len()],
                 ret: Box::new(ret),
+                is_variadic: ext.is_variadic,
             }));
         }
         // A member symbol (`pick__ov_i32`) names one member of
@@ -709,10 +710,25 @@ fn consumed_use_after_move_message(
 
 /// The fn-ptr type of a signature (identifier arm for function names).
 pub fn fn_ptr_of(sig: &crate::checker::FuncSig) -> Type {
+    // Extern variadic batch (LINE-CENSUS-VARIADIC): a variadic
+    // signature's fn-pointer type carries only the fixed prefix —
+    // the VaList slot is the `...` marker, not a parameter — so
+    // the value type can equal the spelled
+    // `extern "C" fn(T, ...) -> R` annotation it is assigned to.
+    let params = sig
+        .params
+        .iter()
+        .filter(|p| {
+            !(sig.is_variadic
+                && matches!(p.ty, Type::Primitive(sla_ast::types::Primitive::VaList)))
+        })
+        .map(|p| p.ty.clone())
+        .collect();
     Type::FnPtr(sla_ast::types::FnPtrType {
         abi: None,
-        params: sig.params.iter().map(|p| p.ty.clone()).collect(),
+        params,
         ret: Box::new(sig.ret_ty.clone()),
+        is_variadic: sig.is_variadic,
     })
 }
 

@@ -117,8 +117,25 @@ impl<'a> Parser<'a> {
     pub fn parse_function_type(&mut self, abi: Option<String>) -> Result<Type, ParseError> {
         self.expect(Tag::LParen)?;
         let mut params: Vec<Type> = Vec::new();
+        let mut is_variadic = false;
         if !self.eat(Tag::RParen) {
             loop {
+                // Extern variadic batch (LINE-CENSUS-VARIADIC):
+                // a trailing `...` in a C-ABI function-pointer
+                // type (parser.zig parseFunctionType; the Zig
+                // lexer reads `..` + `.` where this lexer hands
+                // over one DotDotDot token). A variadic function
+                // type needs the extern "C" ABI and at least one
+                // fixed parameter before the marker.
+                if self.peek() == Tag::DotDotDot {
+                    if abi.as_deref() != Some("C") || params.is_empty() {
+                        return Err(self.err_here(ParseErrorKind::SyntaxError));
+                    }
+                    self.advance();
+                    is_variadic = true;
+                    self.expect(Tag::RParen)?;
+                    break;
+                }
                 params.push(self.parse_type()?);
                 if !self.eat(Tag::Comma) {
                     self.expect(Tag::RParen)?;
@@ -134,7 +151,12 @@ impl<'a> Parser<'a> {
         } else {
             Type::Primitive(Primitive::VoidType)
         };
-        Ok(Type::FnPtr(FnPtrType { abi, params, ret: Box::new(ret) }))
+        Ok(Type::FnPtr(FnPtrType {
+            abi,
+            params,
+            ret: Box::new(ret),
+            is_variadic,
+        }))
     }
 
     /// Optional `extern "abi"`: the string literal after `extern`, if any.

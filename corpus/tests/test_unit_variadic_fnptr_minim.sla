@@ -1,0 +1,24 @@
+// LINE-CENSUS-VARIADIC regression minim (root 2: variadic
+// function-pointer type). The smallest form of
+// test_unit_variadic_fnptr: a variadic fn-pointer TYPE in a
+// let annotation, assigned from a variadic definition and
+// called with trailing arguments. At sla head 42e1d893 the
+// parser rejected the `...` in the type with
+// error.UnexpectedTypeToken at the marker column.
+
+fn va_min2(fixed: i32, args:...) -> i64 {
+    let a: i32 = va_next_i32(args);
+    return (fixed + a) as i64;
+}
+
+@test "variadic fnptr minim"() {
+    let f: extern "C" fn(i32, ...) -> i64 = va_min2;
+    let r1: i64 = f(1, 2);
+    if r1 != 3 {
+        panic(4261);
+    }
+    let r2: i64 = f(10, 20, 30);
+    if r2 != 30 {
+        panic(4262);
+    }
+}

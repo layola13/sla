@@ -1006,6 +1006,14 @@ impl<'c> Codegen<'c> {
         for ty in &fp.params {
             params.push(Self::fn_ptr_sig_param_name(ty)?);
         }
+        // Extern variadic batch (LINE-CENSUS-VARIADIC): the
+        // carried record of a variadic fn-pointer type ends in
+        // `...`, exactly as Zig `fnPtrSig` renders it — the host
+        // resolves the indirect call's trailing operands against
+        // the marker, as it does for a direct variadic call.
+        if fp.is_variadic {
+            params.push("...");
+        }
         let ret = if matches!(*fp.ret, Type::Primitive(Primitive::Boolean)) {
             "u8"
         } else {

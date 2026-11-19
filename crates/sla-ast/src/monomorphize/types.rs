@@ -44,6 +44,7 @@ impl Monomorphizer {
                 abi: fn_ptr.abi,
                 params: self.specialize_types(fn_ptr.params)?,
                 ret: Box::new(self.specialize_type(*fn_ptr.ret)?),
+                is_variadic: fn_ptr.is_variadic,
             }),
             Type::UserDefined(ud) => {
                 if ud.generics.is_empty() {
@@ -149,6 +150,7 @@ impl Monomorphizer {
                     .iter()
                     .map(|p| self.substitute_type(p, params, args))
                     .collect(),
+                is_variadic: fn_ptr.is_variadic,
                 ret: Box::new(self.substitute_type(&fn_ptr.ret, params, args)),
             }),
             Type::Infer | Type::Primitive(_) => ty.clone(),

@@ -234,6 +234,7 @@ fn substitute_ty(ty: &Type, params: &[String], args: &[Type]) -> Type {
                 .map(|p| substitute_ty(p, params, args))
                 .collect(),
             ret: Box::new(substitute_ty(sig.ret.as_ref(), params, args)),
+            is_variadic: sig.is_variadic,
         }),
         _ => ty.clone(),
     }

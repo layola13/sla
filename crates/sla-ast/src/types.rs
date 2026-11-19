@@ -139,4 +139,9 @@ pub struct FnPtrType {
     pub abi: Option<String>,
     pub params: Vec<Type>,
     pub ret: Box<Type>,
+    /// Extern variadic batch (LINE-CENSUS-VARIADIC): the type was
+    /// spelled with a trailing `...` (`extern "C" fn(i32, ...)`);
+    /// `params` holds only the fixed prefix. Mirrors Zig
+    /// ast.zig `FnPtrType.is_variadic` (default false).
+    pub is_variadic: bool,
 }

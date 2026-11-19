@@ -42,9 +42,9 @@ impl Checker {
             // closure; arity and argument types are checked against
             // its parameter list (Zig call arm, callee path).
             let callee_ty = self.check_expr(callee)?;
-            let (params, ret) = match &callee_ty {
-                Type::Closure(c) => (c.params.clone(), (*c.ret).clone()),
-                Type::FnPtr(f) => (f.params.clone(), (*f.ret).clone()),
+            let (params, ret, is_variadic) = match &callee_ty {
+                Type::Closure(c) => (c.params.clone(), (*c.ret).clone(), false),
+                Type::FnPtr(f) => (f.params.clone(), (*f.ret).clone(), f.is_variadic),
                 other => {
                     return Err(Diagnostic::new(
                         ErrorKind::TypeMismatch,
@@ -55,7 +55,15 @@ impl Checker {
                     ))
                 }
             };
-            if call.args.len() != params.len() {
+            // Extern variadic batch (LINE-CENSUS-VARIADIC): a
+            // variadic fn-pointer callee accepts any argument
+            // count at or above its fixed prefix; trailing
+            // arguments are checked as expressions only, exactly
+            // as on the named-variadic paths (check_extern /
+            // check_overload2 match over the fixed prefix only).
+            if call.args.len() < params.len()
+                || (!is_variadic && call.args.len() != params.len())
+            {
                 return Err(Diagnostic::new(
                     ErrorKind::InvalidArgsCount,
                     format!(
@@ -77,6 +85,9 @@ impl Checker {
                         ),
                     ));
                 }
+            }
+            for arg in call.args.iter().skip(params.len()) {
+                self.check_expr(arg)?;
             }
             return Ok(ret);
         }
@@ -315,13 +326,22 @@ impl Checker {
         if let Some(binding_ty) = self.lookup_ty(name) {
             let callable = match &binding_ty {
                 Type::Closure(c) => {
-                    Some((c.params.clone(), (*c.ret).clone()))
+                    Some((c.params.clone(), (*c.ret).clone(), false))
                 }
-                Type::FnPtr(f) => Some((f.params.clone(), (*f.ret).clone())),
+                Type::FnPtr(f) => {
+                    Some((f.params.clone(), (*f.ret).clone(), f.is_variadic))
+                }
                 _ => None,
             };
-            if let Some((params, ret)) = callable {
-                if call.args.len() != params.len() {
+            if let Some((params, ret, is_variadic)) = callable {
+                // Extern variadic batch (LINE-CENSUS-VARIADIC):
+                // a variadic fn-pointer binding accepts any
+                // argument count at or above its fixed prefix;
+                // trailing arguments are checked as expressions
+                // only (the named-variadic rule).
+                if call.args.len() < params.len()
+                    || (!is_variadic && call.args.len() != params.len())
+                {
                     return Err(Diagnostic::new(
                         ErrorKind::InvalidArgsCount,
                         format!(
@@ -343,6 +363,9 @@ impl Checker {
                             ),
                         ));
                     }
+                }
+                for arg in call.args.iter().skip(params.len()) {
+                    self.check_expr(arg)?;
                 }
                 return Ok(ret);
             }
@@ -396,7 +419,11 @@ impl Checker {
 
         // 6b. Fn-ptr valued local binding.
         if let Some(Type::FnPtr(f)) = self.lookup_ty(name) {
-            if f.params.len() != call.args.len() {
+            // Extern variadic batch (LINE-CENSUS-VARIADIC): the
+            // fixed prefix is a floor for a variadic fn-pointer.
+            if call.args.len() < f.params.len()
+                || (!f.is_variadic && f.params.len() != call.args.len())
+            {
                 return Err(Diagnostic::new(
                     ErrorKind::InvalidArgsCount,
                     "fn_ptr call arity mismatch",
@@ -410,6 +437,9 @@ impl Checker {
                         "fn_ptr call argument type mismatch",
                     ));
                 }
+            }
+            for arg in call.args.iter().skip(f.params.len()) {
+                self.check_expr(arg)?;
             }
             return Ok((*f.ret).clone());
         }
