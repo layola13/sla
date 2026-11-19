@@ -460,6 +460,10 @@ impl<'c> Codegen<'c> {
         // Async state maps move with the value too
         // (codegen.zig:11232 transferResultSlotValueState).
         self.transfer_future_state(&val, &resolved_name);
+        // A guard handle moves with it too (F1, RWLOCK
+        // panic-17): the binding's own cleanup releases the lock.
+        self.transfer_rwlock_guard_handle(&val, &resolved_name);
+        self.transfer_mutex_guard_handle(&val, &resolved_name);
         if let Some(moved) = stored_value_moves_identifier(
             &let_stmt.value,
             &ty_or_err,

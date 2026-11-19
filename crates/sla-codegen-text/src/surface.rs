@@ -1491,6 +1491,65 @@ impl<'c> Codegen<'c> {
                 }
                 Ok(Some(SurfaceCall::Value(result_reg)))
             }
+            ("RwLock", "read") | ("RwLock", "write") => {
+                // codegen.zig:17263-17295: a try-acquire with an
+                // ok flag — the Err arm builds
+                // `RESULT_NEW_ERR result, 1`, the Ok arm wraps
+                // the `RwLock_data` pointer in `RESULT_NEW_OK`.
+                // The Result register is recorded in
+                // `rwlock_lock_results` so `unwrap` can transfer
+                // it to the guard map and `emitRelease` can
+                // release the lock (codegen.zig:1084). Without
+                // this arm the call fell to the EXPAND catch-all
+                // (`EXPAND read`, host UndefinedMacro:
+                // test_unit_p1_rwlock_new).
+                if call.args.len() != 1 {
+                    return Err(missing_fact());
+                }
+                let is_write = name == "write";
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let ok_reg = self.new_tmp();
+                let lock_guard_reg = self.new_tmp();
+                let guard_reg = self.new_tmp();
+                let result_reg = self.new_tmp();
+                let err_label = self.new_label("L_RWLOCK_RESULT_ERR");
+                let ok_label = self.new_label("L_RWLOCK_RESULT_OK");
+                let end_label = self.new_label("L_RWLOCK_RESULT_END");
+                let try_macro = if is_write {
+                    "RWLOCK_TRY_WRITE_NOERR"
+                } else {
+                    "RWLOCK_TRY_READ_NOERR"
+                };
+                self.ins(&format!(
+                    "EXPAND {try_macro} {ok_reg}, {lock_guard_reg}, {recv}"
+                ));
+                self.ins(&format!("br {ok_reg} -> {ok_label}, {err_label}"));
+                self.wl(&format!("{err_label}:"));
+                self.ins(&format!("EXPAND RESULT_NEW_ERR {result_reg}, 1"));
+                self.ins(&format!("jmp {end_label}"));
+                self.wl(&format!("{ok_label}:"));
+                self.ins(&format!("{guard_reg} = ptr_add {recv}, RwLock_data"));
+                self.ins(&format!(
+                    "EXPAND RESULT_NEW_OK {result_reg}, {guard_reg}"
+                ));
+                self.emit_release(&guard_reg)?;
+                self.ins(&format!("jmp {end_label}"));
+                self.wl(&format!("{end_label}:"));
+                self.rwlock_lock_results.insert(
+                    result_reg.clone(),
+                    crate::codegen::RwLockGuardHandle {
+                        lock_reg: recv.clone(),
+                        is_write,
+                    },
+                );
+                self.emit_release(&ok_reg)?;
+                self.emit_release(&lock_guard_reg)?;
+                if let Node::Identifier(name) = &call.args[0] {
+                    let resolved = self.resolve_binding_name(name);
+                    self.consumed_bindings.insert(resolved);
+                }
+                Ok(Some(SurfaceCall::Value(result_reg)))
+            }
             ("JoinHandle", "join") => {
                 // codegen.zig:21030-21180: inline handles read the
                 // slot directly; the general path branches on the
@@ -1656,6 +1715,11 @@ impl<'c> Codegen<'c> {
                 // (codegen.zig:21373).
                 if let Some(mutex_reg) = self.mutex_lock_results.remove(&recv) {
                     self.mutex_guard_handles.insert(reg.clone(), mutex_reg);
+                }
+                // Same transfer for an `RwLock::read` / `write`
+                // Result (codegen.zig:21373 family).
+                if let Some(handle) = self.rwlock_lock_results.remove(&recv) {
+                    self.rwlock_guard_handles.insert(reg.clone(), handle);
                 }
                 if sla_lowering::call_arg_needs_release(&call.args[0]) {
                     self.emit_release(&recv)?;

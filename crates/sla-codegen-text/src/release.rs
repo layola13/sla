@@ -124,6 +124,26 @@ impl<'c> Codegen<'c> {
         }
     }
 
+    /// F1 (RWLOCK panic-17): a binding that takes over a guard
+    /// register inherits its RwLock guard handle (and a lock
+    /// Result dropped without `unwrap` the same way), so the
+    /// binding's own cleanup releases the lock. Without this
+    /// the handle stays keyed on the unwrapped temp register
+    /// while block-exit cleanup looks it up by binding name —
+    /// the probe misses and the lock is never released.
+    pub(crate) fn transfer_rwlock_guard_handle(&mut self, value_reg: &str, binding: &str) {
+        if let Some(handle) = self.rwlock_guard_handles.remove(value_reg) {
+            self.rwlock_guard_handles
+                .insert(binding.to_string(), handle);
+            self.consumed_bindings.insert(value_reg.to_string());
+        }
+        if let Some(handle) = self.rwlock_lock_results.remove(value_reg) {
+            self.rwlock_lock_results
+                .insert(binding.to_string(), handle);
+            self.consumed_bindings.insert(value_reg.to_string());
+        }
+    }
+
     /// codegen.zig:2258 `ensureResultSlotRefCellSlot`: the
     /// companion slot for a stack slot, allocated on first use.
     pub(crate) fn ensure_result_slot_refcell_slot(&mut self, slot: &str) -> String {
@@ -227,6 +247,51 @@ impl<'c> Codegen<'c> {
         Ok(())
     }
 
+    /// codegen.zig:1136 family, RwLock side: when the lock
+    /// receiver's release is requested while guards taken from
+    /// it are still live, release those guards first.
+    pub(crate) fn flush_rwlock_guards_for_receiver(&mut self, lock_reg: &str) -> Result<()> {
+        if !self.consumed_bindings.contains(lock_reg) {
+            return Ok(());
+        }
+        let mut guard_names: Vec<String> = Vec::new();
+        for (name, handle) in &self.rwlock_guard_handles {
+            if handle.lock_reg == lock_reg {
+                guard_names.push(name.clone());
+            }
+        }
+        for (name, handle) in &self.rwlock_lock_results {
+            if handle.lock_reg == lock_reg {
+                guard_names.push(name.clone());
+            }
+        }
+        for name in guard_names {
+            self.emit_release(&name)?;
+        }
+        Ok(())
+    }
+
+    /// codegen.zig:2222 family, RwLock side: once no guard or
+    /// lock Result references the lock any more, the receiver is
+    /// consumable again.
+    pub(crate) fn restore_rwlock_receiver_after_guard_release(&mut self, lock_reg: &str) {
+        if self
+            .rwlock_guard_handles
+            .values()
+            .any(|h| h.lock_reg == lock_reg)
+        {
+            return;
+        }
+        if self
+            .rwlock_lock_results
+            .values()
+            .any(|h| h.lock_reg == lock_reg)
+        {
+            return;
+        }
+        self.consumed_bindings.remove(lock_reg);
+    }
+
     /// codegen.zig:2253 `releaseTemporaryHandleRegister`: a
     /// temporary handle register (a `tmp_N` name) is retired with
     /// a plain `!`; a live binding is left for its own release.
@@ -302,6 +367,9 @@ impl<'c> Codegen<'c> {
         // state, release its live guards first so the
         // receiver's own release is not suppressed.
         self.flush_mutex_guards_for_receiver(&resolved)?;
+        // Same flush for RwLock receivers (codegen.zig:1136
+        // family).
+        self.flush_rwlock_guards_for_receiver(&resolved)?;
         // codegen.zig:1143: the borrow-address-temp release plan
         // (lowering_rules.planBorrowAddressTempRelease): releasing
         // a recorded borrow address settles the borrow register
@@ -372,8 +440,40 @@ impl<'c> Codegen<'c> {
             self.restore_mutex_receiver_after_guard_release(&mutex_reg);
             return Ok(());
         }
-        // (Zig: rwlock/file/metadata handle families — no such
-        // bindings exist in the slice.)
+        // codegen.zig:1064 `rwlock_guard_handles` probe:
+        // releasing a live read/write guard releases the lock
+        // (READ or WRITE spelling by guard kind), retires the
+        // guard register, and restores the receiver.
+        if let Some(handle) = self.rwlock_guard_handles.remove(&resolved) {
+            let macro_name = if handle.is_write {
+                "RWLOCK_RELEASE_WRITE"
+            } else {
+                "RWLOCK_RELEASE_READ"
+            };
+            self.ins(&format!("EXPAND {macro_name} {}", handle.lock_reg));
+            self.release_temporary_handle_register(&handle.lock_reg)?;
+            self.consumed_bindings.insert(resolved.clone());
+            self.ins(&format!("!{resolved}"));
+            self.restore_rwlock_receiver_after_guard_release(&handle.lock_reg);
+            return Ok(());
+        }
+        // codegen.zig:1084 `rwlock_lock_results` probe: a lock
+        // Result dropped without `unwrap` releases the same way.
+        if let Some(handle) = self.rwlock_lock_results.remove(&resolved) {
+            let macro_name = if handle.is_write {
+                "RWLOCK_RELEASE_WRITE"
+            } else {
+                "RWLOCK_RELEASE_READ"
+            };
+            self.ins(&format!("EXPAND {macro_name} {}", handle.lock_reg));
+            self.release_temporary_handle_register(&handle.lock_reg)?;
+            self.consumed_bindings.insert(resolved.clone());
+            self.ins(&format!("!{resolved}"));
+            self.restore_rwlock_receiver_after_guard_release(&handle.lock_reg);
+            return Ok(());
+        }
+        // (Zig: file/metadata handle families — no such bindings
+        // exist in the slice.)
         // codegen.zig:1342: releasing a cell register first
         // settles every live borrow handle taken from it (the
         // borrow must end before the cell's own release retires

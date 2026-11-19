@@ -40,6 +40,15 @@ pub(crate) struct ResultSlotRefCellHandle {
     pub(crate) kind: sla_lowering::refcell::RefCellBorrowKind,
 }
 
+/// codegen.zig:127 `RwLockGuardHandle`: the lock register a
+/// read/write guard was taken from, and whether it is a write
+/// guard (release spells RWLOCK_RELEASE_WRITE vs _READ).
+#[derive(Debug, Clone)]
+pub(crate) struct RwLockGuardHandle {
+    pub(crate) lock_reg: String,
+    pub(crate) is_write: bool,
+}
+
 pub struct Codegen<'c> {
     pub(crate) check: &'c dyn CheckInfo,
     pub(crate) out: String,
@@ -195,6 +204,16 @@ pub struct Codegen<'c> {
     /// emits `EXPAND MUTEX_UNLOCK` for the mutex and retires
     /// the guard register (codegen.zig:1186).
     pub(crate) mutex_guard_handles: HashMap<String, String>,
+    /// codegen.zig `rwlock_lock_results`: a `RwLock::read` /
+    /// `write` call's Result register -> the lock handle it
+    /// took. `Result::unwrap` transfers the entry to
+    /// `rwlock_guard_handles`; `emitRelease` releases the lock
+    /// from either map (codegen.zig:1084).
+    pub(crate) rwlock_lock_results: HashMap<String, RwLockGuardHandle>,
+    /// codegen.zig `rwlock_guard_handles`: a live
+    /// `RwLockReadGuard` / `RwLockWriteGuard` register -> the
+    /// lock handle it guards (codegen.zig:1064).
+    pub(crate) rwlock_guard_handles: HashMap<String, RwLockGuardHandle>,
     /// codegen.zig `refcell_borrow_handles`: a live RefCell
     /// borrow register -> the handle recorded when its
     /// `borrow` / `borrow_mut` expansion ran. `emitRelease`
@@ -331,6 +350,8 @@ impl<'c> Codegen<'c> {
             inline_thread_handles: HashSet::new(),
             mutex_lock_results: HashMap::new(),
             mutex_guard_handles: HashMap::new(),
+            rwlock_lock_results: HashMap::new(),
+            rwlock_guard_handles: HashMap::new(),
             refcell_borrow_handles: HashMap::new(),
             result_slot_refcell_handles: HashMap::new(),
             result_slot_refcell_slots: HashMap::new(),
@@ -483,6 +504,8 @@ impl<'c> Codegen<'c> {
         self.executor_task_counts.clear();
         self.mutex_lock_results.clear();
         self.mutex_guard_handles.clear();
+        self.rwlock_lock_results.clear();
+        self.rwlock_guard_handles.clear();
         self.refcell_borrow_handles.clear();
         self.result_slot_refcell_handles.clear();
         self.result_slot_refcell_slots.clear();
