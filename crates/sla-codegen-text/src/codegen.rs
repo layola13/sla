@@ -92,6 +92,16 @@ pub struct Codegen<'c> {
     /// clone-bumped them, and the source's plan drop is exactly
     /// the compensation for that bump.
     pub(crate) update_moved_fields: HashSet<(String, String)>,
+    /// Bindings whose whole value was moved into an aggregate
+    /// literal (a tuple / struct / array / enum-payload element
+    /// that is a bare identifier or an explicit move of one, of
+    /// a non-Copy, non-borrow-like type). Their fields belong to
+    /// the aggregate now: a later release of the binding retires
+    /// only the husk register, never the field drop cascade
+    /// (the Zig cell model's release of a moved-out local is
+    /// trivial for the same reason). Cleared per function with
+    /// `update_moved_fields`.
+    pub(crate) whole_moved_bindings: HashSet<String>,
     /// RUST-STAGE10-DROP-TAINT (B1): emitter-side borrow/taint
     /// (the Rust checker exposes no taint surface, and the
     /// emitter has no clone-on-extract, so a shallow copy of a
@@ -285,6 +295,7 @@ impl<'c> Codegen<'c> {
             borrow_param_bindings: HashSet::new(),
             plan_drop_suppressed: false,
             update_moved_fields: HashSet::new(),
+            whole_moved_bindings: HashSet::new(),
             tainted_bindings: HashMap::new(),
             param_bindings: HashSet::new(),
             macro_arg_exprs: HashMap::new(),
@@ -430,6 +441,7 @@ impl<'c> Codegen<'c> {
         self.borrow_param_bindings.clear();
         self.plan_drop_suppressed = false;
         self.update_moved_fields.clear();
+        self.whole_moved_bindings.clear();
         self.tainted_bindings.clear();
         self.param_bindings.clear();
         self.macro_arg_exprs.clear();

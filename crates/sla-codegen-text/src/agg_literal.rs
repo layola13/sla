@@ -281,6 +281,12 @@ impl<'c> Codegen<'c> {
             if root_identifier(elem).is_none() && is_heap_handle_type(&elem_ty) {
                 self.emit_forget_moved_value(&val_reg)?;
             }
+            // A bare/Move identifier element of a non-Copy type
+            // was consumed into the tuple by the checker; record
+            // the whole-binding move so a later cleanup retires
+            // only the husk (slot_pool's `return (q, idx)` freed
+            // the returned pool's fields without it).
+            self.mark_binding_moved_into_aggregate(elem, &elem_ty);
         }
         self.pop_expr_later_frame();
         elem_result?;

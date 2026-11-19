@@ -119,6 +119,7 @@ impl<'c> Codegen<'c> {
             return Ok(());
         }
         self.ins(&format!("store {target}+{offset}, {val_reg} as {ty_str}"));
+        self.mark_binding_moved_into_aggregate(elem_node, elem_ty);
         if is_heap_handle_type(elem_ty) && !is_ident {
             self.mark_consumed_binding(val_reg);
         } else if call_arg_needs_release(elem_node) {
@@ -444,6 +445,7 @@ impl<'c> Codegen<'c> {
                 self.ins(&format!(
                     "store {target}+{offset}, {val_reg} as {ty_str}"
                 ));
+                self.mark_binding_moved_into_aggregate(value, &field_ty);
             } else {
                 // RUST-STAGE10-CLONE-EXTRACT (shape D): a place-read
                 // field value (field/index out of a live parent)
@@ -480,6 +482,7 @@ impl<'c> Codegen<'c> {
                 self.ins(&format!(
                     "store {target}+{offset}, ^{val_reg} as {ty_str}"
                 ));
+                self.mark_binding_moved_into_aggregate(value, &field_ty);
             }
         }
         self.pop_expr_later_frame();
@@ -544,6 +547,7 @@ impl<'c> Codegen<'c> {
                 "store {target}+{offset}, {val_reg} as {}",
                 type_string(&field_ty)
             ));
+            self.mark_binding_moved_into_aggregate(value, &field_ty);
         }
         Ok(())
     }

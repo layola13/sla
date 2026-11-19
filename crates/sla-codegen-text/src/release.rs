@@ -19,7 +19,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use sla_ast::Node;
+use sla_ast::{Node, Type};
 use sla_lowering::{
     is_borrow_like_type, is_internal_symbol, plan_function_tail_cleanup, root_identifier,
     FunctionTailCleanupAction,
@@ -352,6 +352,19 @@ impl<'c> Codegen<'c> {
         if self.consumed_bindings.contains(&resolved) {
             return Ok(());
         }
+        if self.whole_moved_bindings.contains(&resolved) {
+            // The binding's whole value was moved into an
+            // aggregate literal (see `whole_moved_bindings`):
+            // its fields are the aggregate's now, so the drop
+            // cascade must not run — retire only the husk
+            // register. Without this, `return (q, idx)` in
+            // sa_std/slot_pool.sla freed the returned pool's
+            // Vec fields at the return cleanups (use-after-free
+            // in every later pool operation).
+            self.consumed_bindings.insert(resolved.clone());
+            self.ins(&format!("!{resolved}"));
+            return Ok(());
+        }
         // (Zig: mpsc sender/receiver, string-buffer and collection
         // binding families emit EXPAND *_FREE — unpopulated here.)
         // DEF-ARC-DROP (F1) plan dispatch (codegen.zig emitRelease's
@@ -550,6 +563,35 @@ impl<'c> Codegen<'c> {
             }
         }
         Ok(base_plan)
+    }
+
+    /// Record a whole-binding move into an aggregate literal:
+    /// the element/field value is a bare identifier (or an
+    /// explicit move of one) of a non-Copy, non-borrow-like
+    /// type, so the checker consumed the binding into the
+    /// aggregate. Mirrors the ownership fact behind Zig's
+    /// `markMovedExprBinding` / cell model (a moved-out local's
+    /// own release is trivial); this backend has no cell, so
+    /// the transfer is recorded on the binding itself and
+    /// `emit_release` retires only the husk.
+    pub(crate) fn mark_binding_moved_into_aggregate(
+        &mut self,
+        expr: &Node,
+        ty: &Type,
+    ) {
+        let name = match expr {
+            Node::Identifier(n) => n.as_str(),
+            Node::MoveExpr(m) => match &*m.expr {
+                Node::Identifier(n) => n.as_str(),
+                _ => return,
+            },
+            _ => return,
+        };
+        if self.type_is_copy_value(ty) || is_borrow_like_type(ty) {
+            return;
+        }
+        let resolved = self.resolve_binding_name(name);
+        self.whole_moved_bindings.insert(resolved);
     }
 
     /// codegen.zig `emitBranchScopedCleanupList`: emit a cleanup list,
