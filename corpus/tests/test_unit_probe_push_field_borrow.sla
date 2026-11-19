@@ -1,0 +1,13 @@
+// Regression probe for DEF-RUST-CAPABILITY-PREFIX-REGRESSION:
+// Vec<&T> push of a field-place borrow. The EXPAND operand must
+// stay the plain slot-address register (no capability marker),
+// which the surface layer now guarantees by stripping the marker
+// the shared call planner emits for borrow parameters.
+struct PItem { key: i32, val: i32 }
+struct PHolder { item: PItem }
+@test "probe vec borrow push of field"() {
+    let holder = PHolder { item: PItem { key: 5, val: 6 } };
+    let marks: Vec<&PItem> = Vec::new();
+    marks.push(&holder.item);
+    if marks[0].key != 5 { panic(603); };
+}

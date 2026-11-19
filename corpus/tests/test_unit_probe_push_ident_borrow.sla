@@ -1,0 +1,11 @@
+// Regression probe for DEF-RUST-CAPABILITY-PREFIX-REGRESSION:
+// Vec<&T> push of an identifier borrow (fused &name form) must
+// verify and read back. Red at head 10c4221d (CapabilityMismatch),
+// green with the capability-marker fix.
+struct PItem { key: i32, val: i32 }
+@test "probe vec borrow push of identifier"() {
+    let item = PItem { key: 3, val: 4 };
+    let marks: Vec<&PItem> = Vec::new();
+    marks.push(&item);
+    if marks[0].key != 3 { panic(602); };
+}

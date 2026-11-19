@@ -218,18 +218,25 @@ impl<'c> Codegen<'c> {
             planned.reg = raw.clone();
             planned.consume_reg = Some(raw);
         }
-        // A BorrowExpr argument's register already IS the borrow
-        // value (the place address, or the loaded handle word for
-        // a Vec field): Zig's surface operands are the plain
-        // genExpr result (`EXPAND VEC_PUSH marks, tmp_35, 8` for
-        // `marks.push(&g[i])`). The Value plan arm's `&` prefix
-        // serves a real callee's address-of contract only; left
-        // on an EXPAND operand it makes the macro store a pointer
-        // to the operand instead of the operand (and the expanded
-        // call traps CapabilityMismatch).
-        if matches!(arg, Node::BorrowExpr(_)) {
-            if let Some(raw) = planned.reg.strip_prefix('&') {
-                planned.reg = raw.to_string();
+        // Same for the `&` capability marker: a BorrowExpr value
+        // (e.g. `&g[i]`) planned against a borrow-typed parameter
+        // comes back as `&tmp` from the shared call planner, where
+        // the marker is required for declared borrow callees. As
+        // an EXPAND operand the marker is rejected
+        // (CapabilityMismatch on Vec<&T> pushes of &g[i]), so
+        // strip it here: the operand is the slot-address value
+        // itself, and the address temp is forgotten in
+        // surface_finish_value like the plain-operand path
+        // forgets it. Only a temporary register is stripped —
+        // a `&name` operand is the fused marker form for an
+        // identifier borrow and is left as planned.
+        if let Some(raw) = planned.reg.strip_prefix('&') {
+            if sla_lowering::is_temporary_register_name(raw) {
+                let raw = raw.to_string();
+                planned.reg = raw.clone();
+                if planned.release_reg.take().is_some() {
+                    planned.consume_reg = Some(raw);
+                }
             }
         }
         Ok(planned)
