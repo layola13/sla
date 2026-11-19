@@ -1,0 +1,7 @@
+@test "for loop with trailing semicolon parses"() {
+    let sum: i32 = 0;
+    for i in 0..3 {
+        sum = sum + i;
+    };
+    if sum != 3 { panic(102); };
+}

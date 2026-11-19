@@ -1,0 +1,12 @@
+fn let_else_value(fail: bool) -> int {
+    let maybe: Option<int> = if fail { None } else { Some(42) };
+    let Some(value) = maybe else {
+        return 0;
+    };
+    return value;
+}
+
+@test "let else binds on match and diverges otherwise"() {
+    if let_else_value(true) != 0 { panic(104); };
+    if let_else_value(false) != 42 { panic(105); };
+}

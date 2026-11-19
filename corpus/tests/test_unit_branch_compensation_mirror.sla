@@ -1,0 +1,18 @@
+// Mirror of the reg3 branch-compensation shape: the binding is
+// consumed on the THEN path and stays live on a non-empty ELSE
+// path. The checker phi cleanup and the emitter compensation
+// must release it exactly once on the else path.
+fn mirror_take_string(s: String) -> u64 {
+    return len(s);
+}
+
+@test "branch compensation then consumes else live"() {
+    let s: String = format("abc");
+    let n: u64 = 0;
+    if len(s) > 2 {
+        n = mirror_take_string(s);
+    } else {
+        n = 1;
+    };
+    if n == 0 { panic(103); };
+}
