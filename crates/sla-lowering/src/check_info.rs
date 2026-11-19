@@ -254,6 +254,51 @@ pub trait CheckInfo {
     fn struct_decl(&self, _name: &str) -> Option<&StructDecl> {
         None
     }
+
+    /// `tc.traits`: a trait's declaration shape as the backends
+    /// need it — supertrait names and declared method signatures
+    /// in declaration order (drives trait vtable emission and
+    /// dyn-method slot resolution).
+    fn trait_decl(&self, _name: &str) -> Option<TraitDeclView> {
+        None
+    }
+
+    /// The checker's trait-implementation oracle
+    /// (`typeImplementsTrait`): whether the concrete type was
+    /// registered as implementing the trait (directly or through
+    /// a supertrait chain). Drives dyn-borrow coercion decisions
+    /// in the text emitter, which recompute the checker's own
+    /// acceptance predicate (the Rust checker keeps no
+    /// `dyn_borrow_args` side table, D-C21).
+    fn type_implements_trait(&self, _ty: &Type, _trait_name: &str) -> bool {
+        false
+    }
+
+    /// The checker's supertrait oracle (`traitExtendsTrait`):
+    /// whether the first trait extends the second, directly or
+    /// transitively (a trait extends itself).
+    fn trait_extends_trait(&self, _sub: &str, _super_trait: &str) -> bool {
+        false
+    }
+}
+
+/// One trait's declaration as a backend needs it (Zig `tc.traits`
+/// values): supertrait names in declaration order and the trait's
+/// own method signatures in declaration order.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraitDeclView {
+    pub supertraits: Vec<String>,
+    pub methods: Vec<TraitMethodView>,
+}
+
+/// One trait method signature (Zig `ast.TraitMethod` projected to
+/// what emission needs): the method name, its declared parameters
+/// (the receiver parameter first) and the return type.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraitMethodView {
+    pub name: String,
+    pub params: Vec<sla_ast::Param>,
+    pub ret_ty: Type,
 }
 
 /// Map-backed [`CheckInfo`] for harnesses and tests. The production

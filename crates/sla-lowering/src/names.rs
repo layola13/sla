@@ -2,7 +2,7 @@
 //! predicate block of lowering_rules.zig. Each function cites its Zig
 //! definition line; bodies are line-for-line ports.
 
-use sla_ast::{CallExpr, Node};
+use sla_ast::{CallExpr, EnumPattern, Node};
 
 /// lowering_rules.zig:3999 `isDiscardName`.
 pub fn is_discard_name(name: &str) -> bool {
@@ -158,4 +158,32 @@ pub fn is_excluded_aggregate_home_name(name: &str) -> bool {
             | "Mutex"
             | "RwLock"
     )
+}
+
+/// lowering_rules.zig:4157 `patternUsesResultMacros`: a pattern
+/// over the `Result` enum (or an `Ok` / `Err` variant of any enum
+/// spelling) dispatches through the RESULT_* macros.
+pub fn pattern_uses_result_macros(enum_name: &str, variant_name: &str) -> bool {
+    enum_name == "Result" || variant_name == "Ok" || variant_name == "Err"
+}
+
+/// lowering_rules.zig:4161 `patternUsesOptionMacros`: a pattern
+/// over the `Option` enum (or a `Some` / `None` variant) dispatches
+/// through the OPTION_* macros.
+pub fn pattern_uses_option_macros(enum_name: &str, variant_name: &str) -> bool {
+    enum_name == "Option" || variant_name == "Some" || variant_name == "None"
+}
+
+/// lowering_rules.zig:4177 `enumNameMatchesDecl`: a pattern's enum
+/// name matches the declaration name exactly, or as a prefix
+/// ending at an underscore (generic-instantiation spellings).
+pub fn enum_name_matches_decl(pattern_name: &str, decl_name: &str) -> bool {
+    if pattern_name == decl_name {
+        return true;
+    }
+    if decl_name.len() <= pattern_name.len() {
+        return false;
+    }
+    decl_name.starts_with(pattern_name)
+        && decl_name.as_bytes()[pattern_name.len()] == b'_'
 }

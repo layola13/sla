@@ -270,6 +270,38 @@ pub fn concrete_type_name(ty: &Type) -> Option<&str> {
     }
 }
 
+/// lowering_rules.zig:6090 `dynTraitName`: the trait name of a
+/// `dyn Trait` type, spelled `__dyn_<Trait>` after peeling
+/// borrow/pointer layers, or None for any other shape.
+pub fn dyn_trait_name(ty: &Type) -> Option<&str> {
+    match peel_borrow_pointer_type(ty) {
+        Type::UserDefined(u) => u.name.strip_prefix("__dyn_"),
+        _ => None,
+    }
+}
+
+/// lowering_rules.zig `userDefinedGenericInner`: the single
+/// generic argument of a named user-defined type (`Box<T>` ->
+/// `T`), after peeling borrow/pointer layers.
+pub fn user_defined_generic_inner<'t>(ty: &'t Type, name: &str) -> Option<&'t Type> {
+    match peel_borrow_pointer_type(ty) {
+        Type::UserDefined(u) if u.name == name && u.generics.len() == 1 => {
+            Some(&u.generics[0])
+        }
+        _ => None,
+    }
+}
+
+/// lowering_rules.zig:4942 `boxInnerType` (`Box<T>` -> `T`).
+pub fn box_inner_type(ty: &Type) -> Option<&Type> {
+    user_defined_generic_inner(ty, "Box")
+}
+
+/// lowering_rules.zig:4946 `rcInnerType` (`Rc<T>` -> `T`).
+pub fn rc_inner_type(ty: &Type) -> Option<&Type> {
+    user_defined_generic_inner(ty, "Rc")
+}
+
 /// codegen.zig:15328 `forInArrayElemBindsAddress` (CLOSING-F):
 /// fixed-array element types whose value register denotes the
 /// element's storage address (plain structs, tuples, nested
