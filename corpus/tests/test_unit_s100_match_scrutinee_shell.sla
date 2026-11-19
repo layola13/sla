@@ -1,0 +1,20 @@
+// SPRINT-100 L4 minim (root: match temporary scrutinee shell):
+// a match whose scrutinee is a call-result temporary must retire
+// the scrutinee shell at the match merge even when an arm binds a
+// non-Copy payload out of it. Distilled from
+// test_unit_reg2d3_match_temp_scrutinee.
+
+fn s100_make_vec() -> Result<Vec<u8>, i32> {
+    let v: Vec<u8> = Vec::new();
+    v.push(1u8);
+    return Result::Ok(v);
+}
+
+@test "s100 match temp scrutinee shell retired"() {
+    match s100_make_vec() {
+        Ok(v) => {
+            if v.len() != 1 { panic(8103); };
+        },
+        Err(e) => { panic(8104); },
+    }
+}

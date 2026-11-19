@@ -1,0 +1,46 @@
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+// SPRINT-100 L4 minim (root: match merge consumption
+// compensation): a local consumed on exactly one match arm must
+// be released on the other arm and on the final test's miss path
+// before the merge, or the merge traps PhiStateConflict.
+// Distilled from test_unit_match_merge_balance.
+
+fn s100_take_string(s: String) -> u64 {
+    return len(s);
+}
+
+@test "s100 match merge string consumed in one arm"() {
+    let s: String = format("hello world hello!");
+    let n: u64 = 0;
+    let r: Result<u64, i32> = Ok(7);
+    match r {
+        Ok(v) => {
+            n = s100_take_string(s);
+        },
+        Err(e) => {
+            n = 0;
+        },
+    };
+    if n != 18 {
+        panic(8111);
+    };
+}
+
+@test "s100 match merge string consumed in second arm"() {
+    let s: String = format("hello world hello!");
+    let n: u64 = 0;
+    let r: Result<u64, i32> = Err(3);
+    match r {
+        Ok(v) => {
+            n = 0;
+        },
+        Err(e) => {
+            n = s100_take_string(s);
+        },
+    };
+    if n != 18 {
+        panic(8112);
+    };
+}

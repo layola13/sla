@@ -1,0 +1,22 @@
+@import "sa_std/core/arc.sa"
+
+// SPRINT-100 L4 minim (root: return-point field extraction of a
+// handle value): returning a field read of an Arc must bump the
+// strong count (clone semantics) because the holder's exit
+// cleanup still drops the field. Distilled from
+// test_unit_arc_drop_counts ("arc field extraction bumps count").
+
+struct S100Counter { n: i32 }
+
+struct S100ArcHolder { data: Arc<S100Counter> }
+
+fn s100_extract_from_holder() -> Arc<S100Counter> {
+    let h = S100ArcHolder { data: Arc::new(S100Counter { n: 11 }) };
+    return h.data;
+}
+
+@test "s100 arc field extraction bumps count"() {
+    let x = s100_extract_from_holder();
+    if x.strong_count() != 1 { panic(8151); };
+    if (*x).n != 11 { panic(8152); };
+}

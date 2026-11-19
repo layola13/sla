@@ -1,0 +1,47 @@
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+// SPRINT-100 L4 minim (root: switch merge consumption
+// compensation): a local consumed on exactly one switch case
+// must be released on the other cases and on the no-default
+// skip path before the merge, or the merge traps
+// PhiStateConflict. Distilled from
+// test_unit_match_merge_balance.
+
+fn s100_take_string_sw(s: String) -> u64 {
+    return len(s);
+}
+
+@test "s100 switch merge string consumed in one case"() {
+    let s: String = format("hello world hello!");
+    let n: u64 = 0;
+    let tag: i64 = 1;
+    switch tag {
+        1 => {
+            n = s100_take_string_sw(s);
+        },
+        2 => {
+            n = 0;
+        },
+    };
+    if n != 18 {
+        panic(8121);
+    };
+}
+
+@test "s100 switch merge string consumed with default"() {
+    let s: String = format("hello world hello!");
+    let n: u64 = 0;
+    let tag: i64 = 9;
+    switch tag {
+        1 => {
+            n = s100_take_string_sw(s);
+        },
+        _ => {
+            n = 0;
+        },
+    };
+    if n != 0 {
+        panic(8122);
+    };
+}

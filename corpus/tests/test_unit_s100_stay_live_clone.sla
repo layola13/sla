@@ -1,0 +1,25 @@
+// SPRINT-100 L4 minim (root: stay-live by-value argument
+// clone): a struct argument whose source binding is read again
+// after the call must be deep-cloned at the call site so the
+// clone is what transfers; moving the source traps the later
+// read with UseAfterMove. Distilled from
+// test_unit_recursive_struct_clone.
+
+struct S100Node {
+    n: i64,
+    bulk: Vec<u8>,
+}
+
+fn s100_observe(x: S100Node) -> i64 {
+    return x.n + (len(x.bulk) as i64);
+}
+
+@test "s100 stay live by-value arg clones"() {
+    let bulk: Vec<u8> = Vec::new();
+    bulk.push(5);
+    let node = S100Node { n: 1, bulk: bulk };
+    if s100_observe(node) != 2 { panic(8131); };
+    if s100_observe(node) != 2 { panic(8132); };
+    if node.n != 1 { panic(8133); };
+    if (len(node.bulk) as u64) != 1 { panic(8134); };
+}
