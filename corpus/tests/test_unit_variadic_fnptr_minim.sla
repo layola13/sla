@@ -4,9 +4,12 @@
 // let annotation, assigned from a variadic definition and
 // called with trailing arguments. At sla head 42e1d893 the
 // parser rejected the `...` in the type with
-// error.UnexpectedTypeToken at the marker column.
+// error.UnexpectedTypeToken at the marker column. The
+// definition is extern "C" like every variadic definition in
+// the corpus (the Zig declaration parser requires it);
+// statement-position if-blocks take a trailing ';'.
 
-fn va_min2(fixed: i32, args:...) -> i64 {
+extern "C" fn va_min2(fixed: i32, args:...) -> i64 {
     let a: i32 = va_next_i32(args);
     return (fixed + a) as i64;
 }
@@ -16,9 +19,9 @@ fn va_min2(fixed: i32, args:...) -> i64 {
     let r1: i64 = f(1, 2);
     if r1 != 3 {
         panic(4261);
-    }
+    };
     let r2: i64 = f(10, 20, 30);
     if r2 != 30 {
         panic(4262);
-    }
+    };
 }

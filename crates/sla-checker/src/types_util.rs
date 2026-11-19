@@ -210,7 +210,16 @@ pub fn types_equal(a: &Type, b: &Type) -> bool {
                 && types_equal(&x.ret, &y.ret)
         }
         (Type::FnPtr(x), Type::FnPtr(y)) => {
-            x.abi == y.abi
+            // Extern variadic batch (LINE-CENSUS-VARIADIC):
+            // Zig typesEqual (type_checker.zig, fn_ptr arm)
+            // compares is_variadic, the fixed parameter list
+            // and the return type — never the ABI. A plain
+            // function's value type (abi None) must equal the
+            // spelled `extern "C" fn(...)` annotation it is
+            // assigned to (`let f: extern "C" fn(i32, ...) -> i64
+            // = va2;`), or every variadic fn-pointer binding
+            // fails with "expected fn_ptr, actual fn_ptr".
+            x.is_variadic == y.is_variadic
                 && x.params.len() == y.params.len()
                 && x.params
                     .iter()
