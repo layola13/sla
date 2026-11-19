@@ -27,5 +27,4 @@ struct S100CastBox { tag: i32 }
     if (nullp as u64) != 0 { panic(14); };
     let signed: i64 = 0;
     if (signed as ptr as u64) != 0 { panic(15); };
-    let _reclaim = unsafe { Box::from_raw(raw) };
 }
