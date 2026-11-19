@@ -635,7 +635,29 @@ impl<'c> Codegen<'c> {
                 return Some((key, d));
             }
         }
-        None
+        // Trait forms (the checker's check_associated_call): a
+        // trait target resolves through the receiver argument's
+        // concrete type; a concrete-type target falls back to
+        // the type's trait impls when no inherent method matches.
+        if self.trait_decl_view(target).is_some() {
+            if let Some(first) = call.args.first() {
+                if let Some(recv_ty) = self.expr_type(first) {
+                    if let Some(concrete) =
+                        sla_lowering::concrete_type_name(&recv_ty)
+                    {
+                        let concrete = concrete.to_string();
+                        return self.resolve_trait_method_decl(
+                            &concrete,
+                            Some(target),
+                            func,
+                            call.args.len(),
+                        );
+                    }
+                }
+            }
+            return None;
+        }
+        self.resolve_trait_method_decl(target, None, func, call.args.len())
     }
 
     /// Receiver-typed method resolution for ordinary method
@@ -663,7 +685,10 @@ impl<'c> Codegen<'c> {
                 return Some((key.clone(), d.clone()));
             }
         }
-        None
+        // Trait fallback (the checker's receiver cascade): a
+        // dot call the receiver type has no inherent method for
+        // resolves to its unique trait impl method.
+        self.resolve_trait_method_decl(name, None, &call.func_name, call.args.len())
     }
 
     /// codegen.zig `isMemForgetCall` arms (genCallStmt and the

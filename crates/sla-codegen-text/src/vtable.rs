@@ -12,7 +12,7 @@
 //! no function body is emitted for it, so a slot pointing at
 //! its symbol would reference an unknown register at the host.
 
-use sla_ast::ImplDecl;
+use sla_ast::{FuncDecl, ImplDecl};
 use sla_lowering::TraitDeclView;
 
 use crate::codegen::Codegen;
@@ -116,6 +116,88 @@ impl<'c> Codegen<'c> {
             entries.push(format!("{} = @{lowered}", method.name));
         }
         Ok(())
+    }
+
+    /// The checker's `findTraitDeclaringMethod`: the trait in
+    /// the hierarchy rooted at `trait_name` that declares the
+    /// method (the trait itself first, then supertraits).
+    pub(crate) fn find_trait_declaring_method(
+        &self,
+        trait_name: &str,
+        method_name: &str,
+    ) -> Option<String> {
+        let view = self.trait_decl_view(trait_name)?;
+        if view.methods.iter().any(|m| m.name == method_name) {
+            return Some(trait_name.to_string());
+        }
+        for supertrait in &view.supertraits {
+            if let Some(d) = self.find_trait_declaring_method(supertrait, method_name) {
+                return Some(d);
+            }
+        }
+        None
+    }
+
+    /// The checker's `resolveTraitMethodSymbol` (check_method.rs)
+    /// projected onto the codegen's assoc index: the unique
+    /// trait-impl method symbol for a receiver type, optionally
+    /// pinned to one trait (the `Trait::method(recv, ...)` form).
+    /// The declaring trait names the symbol, the impl registers
+    /// the body under it, and the declared parameter count must
+    /// equal the call's argument count. Ambiguity or absence
+    /// yields None (the checker has already rejected ambiguous
+    /// programs, so a miss here stays on the caller's loud path).
+    pub(crate) fn resolve_trait_method_decl(
+        &self,
+        type_name: &str,
+        target_trait: Option<&str>,
+        method_name: &str,
+        arg_count: usize,
+    ) -> Option<(String, FuncDecl)> {
+        if let Some(trait_name) = target_trait {
+            let declaring = self.find_trait_declaring_method(trait_name, method_name)?;
+            let symbol =
+                sla_lowering::mangle_trait_method_name(type_name, &declaring, method_name);
+            let (_, decl) = self
+                .assoc_index
+                .iter()
+                .find(|(n, _)| n == &symbol)?;
+            if decl.params.len() != arg_count {
+                return None;
+            }
+            return Some((symbol, decl.clone()));
+        }
+        let prefix = format!("{type_name}__");
+        let suffix = format!("_{method_name}");
+        let mut found: Vec<(String, FuncDecl)> = Vec::new();
+        for (key, decl) in &self.assoc_index {
+            let Some(rest) = key.strip_prefix(&prefix) else {
+                continue;
+            };
+            let Some(trait_name) = rest.strip_suffix(&suffix) else {
+                continue;
+            };
+            if trait_name.is_empty() || decl.params.len() != arg_count {
+                continue;
+            }
+            // The key's trait segment must actually declare the
+            // method (its own declaration, not an inherited slot
+            // the vtable re-exports under the supertrait's name).
+            let view = match self.trait_decl_view(trait_name) {
+                Some(v) => v,
+                None => continue,
+            };
+            if !view.methods.iter().any(|m| m.name == method_name) {
+                continue;
+            }
+            if !found.iter().any(|(k, _)| k == key) {
+                found.push((key.clone(), decl.clone()));
+            }
+        }
+        if found.len() == 1 {
+            return found.pop();
+        }
+        None
     }
 
     /// lowering_rules.zig:6106 `traitMethodCount`: the trait's
