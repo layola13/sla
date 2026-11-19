@@ -214,6 +214,16 @@ pub struct Codegen<'c> {
     pub(crate) current_stmt_index: usize,
     pub(crate) move_out_stmt: Option<usize>,
     pub(crate) move_out_name: Option<String>,
+    /// SPRINT-100 L2 (Zig `current_expr_later_nodes`): the stack
+    /// of sibling frames for the compound expressions currently
+    /// being generated — call arguments, struct-literal field
+    /// values, tuple elements. Each frame holds the child node
+    /// pointers in generation order plus the index of the child
+    /// being generated now; a call argument whose identifier is
+    /// read by a LATER sibling must stay live (the value is
+    /// cloned for the consuming position instead of moved). Raw
+    /// pointers like `current_block`: the AST outlives codegen.
+    pub(crate) expr_later_frames: Vec<(Vec<*const Node>, usize)>,
     /// The enclosing function's declared return type (R2b stage
     /// 6): the consuming context for a return statement's value,
     /// consulted by `gen_expr_in_context`. Set by
@@ -301,6 +311,7 @@ impl<'c> Codegen<'c> {
             current_stmt_index: 0,
             move_out_stmt: None,
             move_out_name: None,
+            expr_later_frames: Vec::new(),
             current_ret_ty: None,
             current_func_name: None,
             future_state_vtables: HashMap::new(),
@@ -427,6 +438,7 @@ impl<'c> Codegen<'c> {
         self.current_stmt_index = 0;
         self.move_out_stmt = None;
         self.move_out_name = None;
+        self.expr_later_frames.clear();
         self.current_ret_ty = None;
         self.future_state_vtables.clear();
         self.future_readiness.clear();

@@ -292,7 +292,29 @@ impl<'c> Codegen<'c> {
                 settle?;
             }
         }
-        for decl_field in &decl.fields {
+        // SPRINT-100 L2: sibling frame (Zig
+        // `current_expr_later_nodes`) over the field values in
+        // generation (decl) order — a field value whose call
+        // consumes a binding that a LATER field still reads
+        // (e.g. `Ref { value: get_values(world), tick:
+        // world.tick }`) must clone for the consuming position
+        // instead of moving the binding out from under the
+        // later fields.
+        let mut frame_index_of: Vec<Option<usize>> = Vec::new();
+        {
+            let mut children: Vec<*const Node> = Vec::new();
+            for decl_field in &decl.fields {
+                if let Some(f) = lit.fields.iter().find(|f| f.name == decl_field.name) {
+                    frame_index_of.push(Some(children.len()));
+                    children.push(&*f.value as *const Node);
+                } else {
+                    frame_index_of.push(None);
+                }
+            }
+            self.push_expr_later_frame(children);
+        }
+        let mut field_loop_result: Result<()> = Ok(());
+        for (decl_idx, decl_field) in decl.fields.iter().enumerate() {
             let value = lit
                 .fields
                 .iter()
@@ -302,15 +324,19 @@ impl<'c> Codegen<'c> {
                 Some(v) => v,
                 None if lit.update_expr.is_some() => continue,
                 None => {
-                    return Err(TextError::Unsupported {
+                    field_loop_result = Err(TextError::Unsupported {
                         feature: format!(
                             "struct literal missing field value `{}`",
                             decl_field.name
                         ),
                         zig_ref: "codegen.zig:16051 (genStructLiteralInto)",
-                    })
+                    });
+                    break;
                 }
             };
+            if let Some(fi) = frame_index_of[decl_idx] {
+                self.set_expr_later_frame_index(fi);
+            }
             let (offset, field_ty) =
                 layout::struct_field_layout(&decl, &decl_field.name).ok_or_else(|| {
                     TextError::Unsupported {
@@ -436,6 +462,8 @@ impl<'c> Codegen<'c> {
                 ));
             }
         }
+        self.pop_expr_later_frame();
+        field_loop_result?;
         Ok(())
     }
 

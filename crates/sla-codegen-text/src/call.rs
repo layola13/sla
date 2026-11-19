@@ -227,7 +227,9 @@ impl<'c> Codegen<'c> {
                     if let Node::Identifier(name) = arg {
                         if self.is_self_assign_move_out_arg(arg) {
                             self.claim_self_assign_move_out(arg);
-                        } else if self.identifier_must_stay_live_for_later_use(name) {
+                        } else if self.identifier_must_stay_live_for_later_use(name)
+                            || self.identifier_used_in_later_sibling(name)
+                        {
                             if let Some(ty) = self.expr_type(arg) {
                                 if let Some((is_grow, elem)) =
                                     crate::place::vec_like_element_type(&ty)
@@ -245,18 +247,19 @@ impl<'c> Codegen<'c> {
                                         consume_reg: Some(mv),
                                     });
                                 }
-                                // Same stay-live discipline for every
-                                // deep-cloneable value, not just
-                                // Vec/GrowVec: a struct argument whose
-                                // source binding is read again after
-                                // the call is deep-cloned and the
-                                // clone is what transfers (the
-                                // REG3-DEF-2 preserved-argument shape,
-                                // test_unit_recursive_struct_clone —
-                                // moving the source trapped the later
-                                // read with UseAfterMove).
-                                if self.deep_clone_needed(&ty, 0)
-                                    && self.uncloneable_type_name(&ty, 0).is_none()
+                                // Stay-live deep clone: fires for a
+                                // deep-cloneable value whose source
+                                // binding is read again after the call
+                                // (REG3-DEF-2 preserved-argument shape,
+                                // test_unit_recursive_struct_clone),
+                                // and for a deep-cloneable aggregate
+                                // read by a later sibling (SPRINT-100
+                                // L2: `merge(world, get_values(world))`
+                                // — the clone transfers, the source
+                                // binding stays live and owning).
+                                if self.identifier_used_in_later_sibling(name)
+                                    || (self.deep_clone_needed(&ty, 0)
+                                        && self.uncloneable_type_name(&ty, 0).is_none())
                                 {
                                     if let Some(cloned) =
                                         self.gen_deep_clone_value(&raw_reg, &ty)?
@@ -546,11 +549,27 @@ impl<'c> Codegen<'c> {
         params: &[Param],
     ) -> Result<(Vec<String>, Vec<LoweredCallArg>)> {
         let mut planned_args: Vec<LoweredCallArg> = Vec::new();
+        // SPRINT-100 L2: sibling frame (Zig
+        // `current_expr_later_nodes`) — while argument i is
+        // planned, arguments i+1.. are the later siblings a
+        // consuming argument must not move out from under.
+        self.push_expr_later_frame(
+            call.args.iter().map(|a| a as *const sla_ast::Node).collect(),
+        );
+        let mut plan_result: Result<()> = Ok(());
         for (i, arg) in call.args.iter().enumerate() {
+            self.set_expr_later_frame_index(i);
             let param = params.get(i);
-            let planned = self.gen_planned_call_arg(arg, param, i == 0)?;
-            planned_args.push(planned);
+            match self.gen_planned_call_arg(arg, param, i == 0) {
+                Ok(planned) => planned_args.push(planned),
+                Err(e) => {
+                    plan_result = Err(e);
+                    break;
+                }
+            }
         }
+        self.pop_expr_later_frame();
+        plan_result?;
         let display: Vec<String> = planned_args.iter().map(|p| p.reg.clone()).collect();
         Ok((display, planned_args))
     }

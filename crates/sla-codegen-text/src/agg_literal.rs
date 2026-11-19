@@ -249,13 +249,26 @@ impl<'c> Codegen<'c> {
             "{target} = alloc {}",
             sla_lowering::tuple_abi_size(&tuple)
         ));
+        // SPRINT-100 L2: sibling frame over the elements, as in
+        // gen_struct_literal_into (Zig `current_expr_later_nodes`).
+        self.push_expr_later_frame(
+            lit.elements.iter().map(|e| e as *const Node).collect(),
+        );
+        let mut elem_result: Result<()> = Ok(());
         for (i, elem) in lit.elements.iter().enumerate() {
+            self.set_expr_later_frame_index(i);
             let (offset, elem_ty) =
                 layout::tuple_field_layout(&elem_tys, i).ok_or_else(|| TextError::Unsupported {
                     feature: format!("tuple field layout {i}"),
                     zig_ref: "lowering_rules.zig (tupleFieldLayout)",
                 })?;
-            let val_reg = self.gen_expr(elem)?;
+            let val_reg = match self.gen_expr(elem) {
+                Ok(r) => r,
+                Err(e) => {
+                    elem_result = Err(e);
+                    break;
+                }
+            };
             self.ins(&format!(
                 "store {target}+{offset}, {val_reg} as {}",
                 type_string(&elem_ty)
@@ -269,6 +282,8 @@ impl<'c> Codegen<'c> {
                 self.emit_forget_moved_value(&val_reg)?;
             }
         }
+        self.pop_expr_later_frame();
+        elem_result?;
         Ok(())
     }
 }

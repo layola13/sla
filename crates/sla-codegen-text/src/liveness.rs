@@ -348,9 +348,8 @@ impl<'c> Codegen<'c> {
     /// statement is the only textual use in this pass. Loop-local
     /// bindings are owned by the iteration and may be consumed.
     /// (Zig also consults `current_expr_later_nodes` — sibling
-    /// arguments later in the enclosing call — which this lane does
-    /// not track: a same-call double use such as `f(x, x)` is a
-    /// known gap, left failing loudly rather than approximated.)
+    /// arguments later in the enclosing call; that half lives in
+    /// `identifier_used_in_later_sibling` below, SPRINT-100 L2.)
     pub(crate) fn identifier_must_stay_live_for_later_use(&self, name: &str) -> bool {
         if self.identifier_used_later_in_current_block(name) {
             return true;
@@ -362,6 +361,45 @@ impl<'c> Codegen<'c> {
             return false;
         }
         true
+    }
+
+    /// SPRINT-100 L2: push a sibling frame for a compound
+    /// expression whose children are generated in order (call
+    /// arguments, struct-literal field values, tuple elements) —
+    /// the Zig `current_expr_later_nodes` state this lane did not
+    /// track. The generator advances the frame index as each
+    /// child is produced and pops the frame when the compound is
+    /// done.
+    pub(crate) fn push_expr_later_frame(&mut self, children: Vec<*const Node>) {
+        self.expr_later_frames.push((children, 0));
+    }
+
+    pub(crate) fn set_expr_later_frame_index(&mut self, index: usize) {
+        if let Some(frame) = self.expr_later_frames.last_mut() {
+            frame.1 = index;
+        }
+    }
+
+    pub(crate) fn pop_expr_later_frame(&mut self) {
+        self.expr_later_frames.pop();
+    }
+
+    /// Whether identifier `name` is read by a sibling node that
+    /// will be generated AFTER the child currently being
+    /// generated, in any enclosing compound frame. A consuming
+    /// position (a by-value call argument) must not move a
+    /// binding a later sibling still reads: the caller clones
+    /// the value for the consuming position instead.
+    pub(crate) fn identifier_used_in_later_sibling(&self, name: &str) -> bool {
+        for (children, current) in &self.expr_later_frames {
+            for child in &children[current.saturating_add(1)..] {
+                let node = unsafe { &**child };
+                if node_uses_identifier(node, name) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// codegen.zig:12036 `isSelfAssignMoveOutArg` (REG-BR-6):
