@@ -140,6 +140,31 @@ impl Checker {
             return crate::check_assoc_helpers::check_sum_call(self, &target_ty);
         }
 
+        // 1a-member. Direct call to one overload member by its
+        // member symbol (`pick__ov_f64(2.5)`): the symbol names a
+        // set member, not a declared function, so no other stage
+        // can resolve it. Resolve against the member signature
+        // and record the member symbol so the text emitter binds
+        // the call to the mangled member definition. A local
+        // binding or a plain function of the same spelling keeps
+        // priority (falls through to the usual stages).
+        if self.lookup_ty(name).is_none() && !self.funcs.contains_key(name) {
+            if let Some((base, sig)) = self.overload_member_by_symbol(name) {
+                let tys: Vec<Type> =
+                    sig.params.iter().map(|p| p.ty.clone()).collect();
+                self.overload_call_symbols.insert(
+                    crate::types_util::node_key_of(node),
+                    sla_ast::overload_member_symbol(&base, &tys),
+                );
+                return self.check_call_args_against_sig(
+                    name,
+                    &sig,
+                    &call.args,
+                    &call.generics,
+                );
+            }
+        }
+
         // 1b. Overload unification (check_overload2.rs): when a
         // set exists for this name in ANY source (func / imported /
         // extern contract), candidates from every source compete
@@ -147,7 +172,11 @@ impl Checker {
         // signature FFI bypass below: a promoted extern name no
         // longer lives in `extern_funcs`, and a singleton extern
         // must still join the pool when another source has a set.
-        if let Some(result) = self.try_resolve_unified_call(name, call) {
+        if let Some(result) = self.try_resolve_unified_call(
+            name,
+            call,
+            crate::types_util::node_key_of(node),
+        ) {
             return result;
         }
 

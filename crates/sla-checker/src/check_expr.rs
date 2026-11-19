@@ -461,6 +461,12 @@ impl Checker {
                 ret: Box::new(ret),
             }));
         }
+        // A member symbol (`pick__ov_i32`) names one member of
+        // an overload set: as a value it is that member's
+        // function pointer.
+        if let Some((_base, sig)) = self.overload_member_by_symbol(name) {
+            return Ok(fn_ptr_of(&sig));
+        }
         Err(Diagnostic::new(
             ErrorKind::UndefinedVariable,
             format!("UndefinedVariable: `{name}`"),

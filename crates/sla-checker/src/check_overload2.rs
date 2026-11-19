@@ -278,6 +278,39 @@ fn contract_param_matches(spelling_raw: &str, arg: &Node, arg_ty: &Type) -> bool
     }
 }
 
+/// Find the member of one overload set denoted by a source-level
+/// member symbol (`<name>__ov_<tags>`). Both member-key spellings
+/// are accepted: this crate's `overload_member_key_for_params`
+/// and the emitter's `sla_ast::overload_member_symbol` minus its
+/// `sla__` prefix (the two tag schemes differ for a few types).
+fn member_in_set(
+    name: &str,
+    set: &[FuncSig],
+    symbol: &str,
+) -> Option<(String, FuncSig)> {
+    for sig in set {
+        let params: Vec<crate::checker::ParamSig> = sig
+            .params
+            .iter()
+            .map(|p| crate::checker::ParamSig {
+                name: p.name.clone(),
+                ty: p.ty.clone(),
+                is_borrow: p.is_borrow,
+                is_move: p.is_move,
+                is_var: p.is_var,
+            })
+            .collect();
+        if overload_member_key_for_params(name, &params) == symbol {
+            return Some((name.to_string(), sig.clone()));
+        }
+        let tys: Vec<Type> = sig.params.iter().map(|p| p.ty.clone()).collect();
+        if sla_ast::overload_member_symbol(name, &tys) == format!("sla__{symbol}") {
+            return Some((name.to_string(), sig.clone()));
+        }
+    }
+    None
+}
+
 impl Checker {
     /// Zig `registerExternContract` for a SOURCE-level `extern "C"`
     /// declaration (prototype or `@no_mangle` definition): the
@@ -350,6 +383,27 @@ impl Checker {
         self.imported_funcs.insert(name.to_string(), sig);
     }
 
+    /// Resolve a source-level overload member symbol
+    /// (`<name>__ov_<tags>`, the spelling user code writes to
+    /// name one member of an overload set) to the set member it
+    /// denotes, across the func and imported sets. Returns the
+    /// set's base name and the member signature. Extern contract
+    /// members are not resolved here (their direct member-symbol
+    /// references keep the pre-existing UndefinedVariable).
+    pub fn overload_member_by_symbol(&self, symbol: &str) -> Option<(String, FuncSig)> {
+        for (name, set) in &self.func_overload_sets {
+            if let Some(hit) = member_in_set(name, set, symbol) {
+                return Some(hit);
+            }
+        }
+        for (name, set) in &self.imported_overload_sets {
+            if let Some(hit) = member_in_set(name, set, symbol) {
+                return Some(hit);
+            }
+        }
+        None
+    }
+
     /// The unified plain-call resolution (Zig
     /// `tryResolveOverloadCall`): returns `None` when no overload
     /// set exists for the name in ANY source, leaving the legacy
@@ -360,6 +414,7 @@ impl Checker {
         &mut self,
         name: &str,
         call: &CallExpr,
+        expr_key: usize,
     ) -> Option<CheckResult<Type>> {
         // R-3: a mixed plain + singleton-extern name (no set
         // anywhere) also resolves here — collect_candidates pools
@@ -373,7 +428,7 @@ impl Checker {
         if !has_set {
             return None;
         }
-        Some(self.resolve_unified_call(name, call))
+        Some(self.resolve_unified_call(name, call, expr_key))
     }
 
     fn collect_candidates(&self, name: &str) -> Vec<(String, Candidate)> {
@@ -431,6 +486,30 @@ impl Checker {
         } else if let Some(sig) = self.extern_funcs.get(name) {
             push(name.to_string(), Candidate::Extern(sig.clone()), &mut out);
         }
+        // The same signature can enter the pool twice under
+        // different keys: once as an overload-set member (member
+        // key) and once as a bare-inserted singleton from another
+        // source (bare-name key) — e.g. an imported fixture whose
+        // members were also inlined as program declarations while
+        // `register_imported_signature` kept one bare entry.
+        // Identical Func/Imported signatures are ONE candidate,
+        // not two; without this the call is reported ambiguous
+        // against itself.
+        let mut seen: Vec<FuncSig> = Vec::new();
+        out.retain(|(_, cand)| match cand {
+            Candidate::Func(sig) | Candidate::Imported(sig) => {
+                if seen
+                    .iter()
+                    .any(|s| crate::check_overload::sigs_identical(s, sig))
+                {
+                    false
+                } else {
+                    seen.push(sig.clone());
+                    true
+                }
+            }
+            Candidate::Extern(_) => true,
+        });
         out
     }
 
@@ -438,6 +517,7 @@ impl Checker {
         &mut self,
         name: &str,
         call: &CallExpr,
+        expr_key: usize,
     ) -> CheckResult<Type> {
         let candidates = self.collect_candidates(name);
         // A generic template must stand alone (see check_overload.rs).
@@ -471,8 +551,8 @@ impl Checker {
         if let Some(e) = probe_error {
             return Err(e);
         }
-        let mut winners: Vec<&Candidate> = Vec::new();
-        for (_, cand) in &candidates {
+        let mut winners: Vec<(&String, &Candidate)> = Vec::new();
+        for (key, cand) in &candidates {
             let matched = match cand {
                 Candidate::Func(sig) | Candidate::Imported(sig) => {
                     // R-3: a variadic member matches at or above
@@ -513,7 +593,7 @@ impl Checker {
                 }
             };
             if matched {
-                winners.push(cand);
+                winners.push((key, cand));
             }
         }
         match winners.len() {
@@ -533,9 +613,25 @@ impl Checker {
                         .join("; ")
                 ),
             )),
-            1 => match winners[0] {
+            1 => match winners[0].1 {
                 Candidate::Func(sig) | Candidate::Imported(sig) => {
                     let sig = sig.clone();
+                    // Record the winning member's mangled symbol
+                    // so the text emitter binds this call to that
+                    // member's definition (mirrors
+                    // resolve_overload_set_call, check_overload.rs).
+                    // Set members carry a member key
+                    // (`<name>__ov_<tags>`); a singleton winner
+                    // keeps the bare-name key and its bare-name
+                    // binding, so it is not recorded.
+                    if winners[0].0 != name {
+                        let tys: Vec<Type> =
+                            sig.params.iter().map(|p| p.ty.clone()).collect();
+                        self.overload_call_symbols.insert(
+                            expr_key,
+                            sla_ast::overload_member_symbol(name, &tys),
+                        );
+                    }
                     self.check_call_args_against_sig(name, &sig, &call.args, &call.generics)
                 }
                 Candidate::Extern(sig) => {
@@ -549,7 +645,7 @@ impl Checker {
                     "AmbiguousCall: call to `{name}` matches multiple overloads: {}",
                     winners
                         .iter()
-                        .map(|c| c.render(name))
+                        .map(|(_, c)| c.render(name))
                         .collect::<Vec<_>>()
                         .join("; ")
                 ),

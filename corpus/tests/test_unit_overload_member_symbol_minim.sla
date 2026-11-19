@@ -1,0 +1,13 @@
+// Minim for member-symbol references (LINE-CENSUS-OVERLOAD
+// root 3): at head the checker had no member-symbol arm, so both
+// the fn-value use and the direct member call below failed with
+// UndefinedVariable: `ms_pick__ov_i32`.
+
+fn ms_pick(x: i32) -> i32 { return 31; }
+fn ms_pick(x: f64) -> i32 { return 32; }
+
+@test "overload member symbol minim"() {
+    let f = ms_pick__ov_i32;
+    if f(7) != 31 { panic(2301); };
+    if ms_pick__ov_f64(2.5) != 32 { panic(2302); };
+};

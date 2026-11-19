@@ -659,6 +659,26 @@ impl<'c> Codegen<'c> {
             }
         }
 
+        // Overload member symbol in fn-ptr position
+        // (`pick__ov_i32` as a value): the member's per-member
+        // vtable, emitted per declaration under its mangled
+        // member symbol (codegen.rs
+        // emit_function_pointer_vtable_decl_for_decl).
+        if let Some(Type::FnPtr(_)) = expr_ty {
+            let want = format!("sla__{name}");
+            let member_symbol = self
+                .func_index
+                .iter()
+                .map(|(_, decl)| self.decl_symbol(decl))
+                .find(|symbol| symbol == &want);
+            if let Some(symbol) = member_symbol {
+                let vt = format!("SLA_FNPTR_VT_{symbol}");
+                let result = self.new_tmp();
+                self.ins(&format!("{result} = &{vt}"));
+                return Ok(result);
+            }
+        }
+
         // Addressable primitive local: load from its slot.
         if self.addressable_bindings.contains(name) {
             let binding_ty = expr_ty.clone().or_else(|| self.local_binding_type_for_name(name));

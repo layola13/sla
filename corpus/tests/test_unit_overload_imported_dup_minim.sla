@@ -1,0 +1,14 @@
+@import "import_fixtures/overload_fixture.sla"
+
+// Minim for the cross-source duplicate candidate
+// (LINE-CENSUS-OVERLOAD root 2): the fixture's (i32, i32) member
+// enters the unified candidate pool twice -- once as an inlined
+// overload-set member (member key) and once as a bare-inserted
+// imported singleton (bare-name key) -- so at head this call was
+// rejected as AmbiguousCall against itself:
+// imp_pick(i32, i32) -> i32; imp_pick(i32, i32) -> i32.
+
+@test "overload imported duplicate minim"() {
+    let a: i32 = 41;
+    if imp_pick(a, a) != 3 { panic(2201); };
+};

@@ -1,0 +1,17 @@
+// Minim for the unified-resolver record gap (LINE-CENSUS-OVERLOAD
+// root 1): plain overload calls resolve through the unified
+// resolver (check_call stage 1b), which at head recorded no
+// member symbol, so the emitter bound the call to the bare name
+// (@sla__mv_pick) and the SA host rejected it with
+// UnknownRegister; the definitions are emitted per member
+// (@sla__mv_pick__ov_i32 / __ov_f64).
+
+fn mv_pick(x: i32) -> i32 { return 11; }
+fn mv_pick(x: f64) -> i32 { return 22; }
+
+@test "overload unified record minim"() {
+    let a: i32 = 5;
+    let b: f64 = 0.5;
+    if mv_pick(a) != 11 { panic(2101); };
+    if mv_pick(b) != 22 { panic(2102); };
+};

@@ -183,13 +183,13 @@ impl Checker {
         // across sources; the func-set-only path below cannot see
         // extern members and would misjudge their arity).
         if self.extern_overload_sets.contains_key(name) {
-            return self.try_resolve_unified_call(name, call);
+            return self.try_resolve_unified_call(name, call, expr_key);
         }
         if let Some(set) = self.func_overload_sets.get(name).cloned() {
             return Some(self.resolve_overload_set_call(name, &set, call, expr_key));
         }
         if self.imported_overload_sets.contains_key(name) {
-            return self.try_resolve_unified_call(name, call);
+            return self.try_resolve_unified_call(name, call, expr_key);
         }
         // R-3: a name claimed by BOTH a plain function and a
         // singleton extern contract (the mixed plain +
@@ -200,7 +200,7 @@ impl Checker {
             && (self.funcs.contains_key(name)
                 || self.func_overload_sets.contains_key(name))
         {
-            return self.try_resolve_unified_call(name, call);
+            return self.try_resolve_unified_call(name, call, expr_key);
         }
         let sig = self
             .funcs
