@@ -163,6 +163,7 @@ impl<'c> Codegen<'c> {
         &mut self,
         target: &str,
         lit: &StructLiteral,
+        node: &Node,
     ) -> Result<()> {
         let type_name = match &*lit.ty {
             Type::UserDefined(u) => u.name.clone(),
@@ -172,6 +173,25 @@ impl<'c> Codegen<'c> {
                     "codegen.zig:16051 (genStructLiteralInto)",
                 )
             }
+        };
+        // A `Self { ... }` literal inside an impl method: the
+        // parser keeps the spelled name `Self` in the AST and
+        // the checker resolves it against the impl target,
+        // recording the concrete type on the literal node (Zig's
+        // checker rewrites the type before codegen; the Rust
+        // checker records it in expr_types instead). Resolve
+        // through the recorded type so the decl lookup below
+        // sees the impl target's name.
+        let type_name = if type_name == "Self" {
+            match self.expr_type(node) {
+                Some(ty) => match sla_lowering::concrete_type_name(&ty) {
+                    Some(name) => name.to_string(),
+                    None => type_name,
+                },
+                None => type_name,
+            }
+        } else {
+            type_name
         };
         let decl = self.struct_decl_for_name(&type_name).ok_or_else(|| {
             TextError::Unsupported {

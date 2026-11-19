@@ -151,7 +151,7 @@ impl<'c> Codegen<'c> {
             Node::FieldExpr(_) => self.gen_field_expr(expr),
             Node::StructLiteral(lit) => {
                 let reg = self.new_tmp();
-                self.gen_struct_literal_into(&reg, lit)?;
+                self.gen_struct_literal_into(&reg, lit, expr)?;
                 Ok(reg)
             }
             Node::EnumLiteral(lit) => {

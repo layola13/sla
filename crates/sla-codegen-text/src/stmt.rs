@@ -288,7 +288,7 @@ impl<'c> Codegen<'c> {
 
         match &*let_stmt.value {
             Node::StructLiteral(lit) => {
-                self.gen_struct_literal_into(&resolved_name, lit)?;
+                self.gen_struct_literal_into(&resolved_name, lit, &let_stmt.value)?;
                 return Ok(());
             }
             Node::EnumLiteral(lit) => {
