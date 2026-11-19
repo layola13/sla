@@ -15,7 +15,7 @@
 use crate::checker::{Checker, StructInfo};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::rules::ValueState;
-use crate::types_util::{is_internal_symbol, node_key_of, value_assignable_to};
+use crate::types_util::{is_discard_name, is_internal_symbol, node_key_of, value_assignable_to};
 use sla_ast::decls::{FuncDecl, Program, TestDecl, TypeAliasComponent};
 use sla_ast::node::Node;
 use sla_ast::types::Type;
@@ -672,6 +672,16 @@ pub(crate) fn block_exit_cleanups(bindings: &[crate::scope::Binding]) -> Vec<Str
             continue;
         }
         if is_internal_symbol(&b.name) {
+            continue;
+        }
+        // A discard binding is never a real binding (types_util
+        // `isDiscardName`): the Option/Result match path defines
+        // the pattern binding unguarded, so an `Ok(_)` / `Err(_)`
+        // arm leaves `_` Active in the arm frame. Listing it here
+        // made the text emitter print `!_`, a release of a register
+        // that is never declared (host UnknownRegister on
+        // test_unit_option_match).
+        if is_discard_name(&b.name) {
             continue;
         }
         // issue013 skip, narrowed exactly as Zig's
