@@ -483,7 +483,7 @@ impl<'c> Codegen<'c> {
             // (`EXPAND len`, host UndefinedMacro:
             // test_unit_bend2_parity_array, test_unit_def2_ptr_len).
             if let Some(arg_ty) = self.expr_type(&call.args[0]) {
-                match peel_borrow_pointer(arg_ty) {
+                match peel_borrow_pointer(&arg_ty) {
                     Type::Array(arr) => {
                         let n = arr.len;
                         let reg = self.new_tmp();
@@ -548,7 +548,7 @@ impl<'c> Codegen<'c> {
             && call.callee.is_none()
         {
             let macro_name = match self.expr_type(&call.args[0]) {
-                Some(ty) => match peel_borrow_pointer(ty) {
+                Some(ty) => match peel_borrow_pointer(&ty) {
                     Type::UserDefined(u) if u.name == "String" => {
                         "STRING_BUF_AS_BYTES"
                     }
