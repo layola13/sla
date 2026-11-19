@@ -706,11 +706,17 @@ impl Checker {
                     // so the text emitter binds this call to that
                     // member's definition (mirrors
                     // resolve_overload_set_call, check_overload.rs).
-                    // Set members carry a member key
-                    // (`<name>__ov_<tags>`); a singleton winner
-                    // keeps the bare-name key and its bare-name
-                    // binding, so it is not recorded.
-                    if winners[0].0 != name {
+                    // Pool-size gate (R544): the pool holds every
+                    // distinct member across sources, so
+                    // `candidates.len() > 1` is exactly "this name
+                    // has more than one member", matching the
+                    // emitter's definition-count mangling in
+                    // `decl_symbol`. The old winner-key gate
+                    // (`winners[0].0 != name`) misread mixed
+                    // plain+extern sets, where the extern singleton
+                    // carries the bare-name key. A true singleton
+                    // (pool of one) keeps its bare-name binding.
+                    if candidates.len() > 1 {
                         let tys: Vec<Type> =
                             sig.params.iter().map(|p| p.ty.clone()).collect();
                         self.overload_call_symbols.insert(
@@ -727,13 +733,13 @@ impl Checker {
                     // the Func/Imported arm above): without it the
                     // text emitter binds the call to the bare set
                     // name, whose member definitions now carry
-                    // member symbols. A singleton winner keeps the
-                    // bare-name key and its bare-name binding, so
-                    // it is not recorded; an unconvertible parameter
-                    // spelling likewise skips recording (today's
-                    // behaviour) rather than recording a symbol
-                    // the emitter cannot match.
-                    if winners[0].0 != name {
+                    // member symbols. Pool-size gate (R544, as
+                    // above): a true singleton (pool of one) keeps
+                    // its bare-name binding; an unconvertible
+                    // parameter spelling likewise skips recording
+                    // (today's behaviour) rather than recording a
+                    // symbol the emitter cannot match.
+                    if candidates.len() > 1 {
                         if let Some(sym) = extern_member_symbol(name, &sig) {
                             self.overload_call_symbols.insert(expr_key, sym);
                         }
