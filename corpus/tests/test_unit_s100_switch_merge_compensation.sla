@@ -37,7 +37,7 @@ fn s100_take_string_sw(s: String) -> u64 {
         1 => {
             n = s100_take_string_sw(s);
         },
-        _ => {
+        default => {
             n = 0;
         },
     };

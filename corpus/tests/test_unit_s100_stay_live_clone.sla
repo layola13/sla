@@ -1,23 +1,27 @@
 // SPRINT-100 L4 minim (root: stay-live by-value argument
-// clone): a struct argument whose source binding is read again
-// after the call must be deep-cloned at the call site so the
-// clone is what transfers; moving the source traps the later
-// read with UseAfterMove. Distilled from
-// test_unit_recursive_struct_clone.
+// clone): a RECURSIVE struct argument whose source binding is
+// read again after the call must be deep-cloned at the call site
+// so the clone is what transfers; moving the source traps the
+// later read with UseAfterMove. The recursion is essential: a
+// flat struct arg already took a working clone path at base,
+// while the recursive type fell through to a plain move.
+// Distilled from test_unit_recursive_struct_clone.
 
-struct S100Node {
+struct S100RNode {
     n: i64,
     bulk: Vec<u8>,
+    items: Vec<S100RNode>,
 }
 
-fn s100_observe(x: S100Node) -> i64 {
-    return x.n + (len(x.bulk) as i64);
+fn s100_observe(x: S100RNode) -> i64 {
+    return x.n + (len(x.bulk) as i64) + (len(x.items) as i64);
 }
 
-@test "s100 stay live by-value arg clones"() {
+@test "s100 stay live recursive struct arg clones"() {
     let bulk: Vec<u8> = Vec::new();
     bulk.push(5);
-    let node = S100Node { n: 1, bulk: bulk };
+    let items: Vec<S100RNode> = Vec::new();
+    let node = S100RNode { n: 1, bulk: bulk, items: items };
     if s100_observe(node) != 2 { panic(8131); };
     if s100_observe(node) != 2 { panic(8132); };
     if node.n != 1 { panic(8133); };
