@@ -1,0 +1,25 @@
+@import "sa_std/io/print.sai"
+
+// S100 minim (LINE-SWEEP-90 test_unit_def_r8pin_slot_transfer): a
+// large struct literal returned by value is materialised through
+// `call @sa_mem_copy_nonoverlapping(...)` (agg_literal.rs). That
+// callee must be declared in the emitted program; on the baseline
+// it is not, and the host rejects the call with UnknownRegister
+// (callee is not declared).
+
+struct S100Book {
+    free_stack: [u64; 64],
+    free_top: u64,
+    events: u64,
+}
+
+fn s100_mk_book() -> S100Book {
+    return S100Book { free_stack: [0; 64], free_top: 0, events: 0 };
+}
+
+@test "s100 agg literal copy callee is declared"() {
+    let book = s100_mk_book();
+    if book.free_top != 0 { panic(101); };
+    if book.free_stack[0] != 0 { panic(102); };
+    if book.free_stack[63] != 0 { panic(103); };
+}

@@ -1,0 +1,29 @@
+// S100 minim (LINE-SWEEP-90 test_unit_overload_fn_by_arity /
+// test_unit_overload_fn_by_type / test_unit_diag_trio_overloads_ok /
+// test_unit_overload_literal_unique): plain same-name user functions
+// form an overload set; every call must reach the member the checker
+// resolved (by arity, then by exact argument type). On the baseline
+// the text emitter binds every call to the first declaration under
+// the shared unsuffixed symbol, so the host rejects the call with
+// CapabilityMismatch (or fails in the LLVM backend).
+
+fn s100_acc(x: i32) -> i32 { return x; }
+fn s100_acc(x: i32, y: i32) -> i32 { return x + y; }
+fn s100_acc(x: i32, y: i32, z: i32) -> i32 { return x + y + z; }
+
+fn s100_pick(x: i32) -> i32 { return 1; }
+fn s100_pick(x: u64) -> i32 { return 2; }
+fn s100_pick(x: f64) -> i32 { return 3; }
+
+@test "s100 overload dispatch by arity and type"() {
+    let a: i32 = 10;
+    let b: i32 = 20;
+    let c: i32 = 12;
+    if s100_acc(a) != 10 { panic(101); };
+    if s100_acc(a, b) != 30 { panic(102); };
+    if s100_acc(a, b, c) != 42 { panic(103); };
+    let u: u64 = 7;
+    if s100_pick(a) != 1 { panic(104); };
+    if s100_pick(u) != 2 { panic(105); };
+    if s100_pick(2.5) != 3 { panic(106); };
+}

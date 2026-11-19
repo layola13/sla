@@ -1,0 +1,23 @@
+@import "sa_std/core/result.sa"
+
+// S100 minim (LINE-SWEEP-90 test_unit_option_match): a Result match
+// whose arms bind the payload to the discard name `_` must not emit
+// a release for the discard register. The checker's arm-exit cleanup
+// list carried `_` (defined unguarded by the Option/Result match
+// path) and the text emitter printed `!_`, which the host rejects
+// with UnknownRegister (register `_` is never declared).
+
+@test "s100 match result wildcard arms emit no discard release"() {
+    let a: Result<i32, i32> = Result::Ok(100);
+    let r = match a {
+        Ok(_) => { 100 },
+        Err(_) => { panic("unreachable"); },
+    };
+    if r != 100 { panic(101); };
+    let b: Result<i32, i32> = Result::Err(8);
+    let s = match b {
+        Ok(_) => { 0 },
+        Err(_) => { -8 },
+    };
+    if s != -8 { panic(102); };
+}
