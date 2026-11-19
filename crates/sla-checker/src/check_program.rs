@@ -16,7 +16,7 @@ use crate::checker::{Checker, StructInfo};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::rules::ValueState;
 use crate::types_util::{is_discard_name, is_internal_symbol, node_key_of, value_assignable_to};
-use sla_ast::decls::{FuncDecl, Program, TestDecl, TypeAliasComponent};
+use sla_ast::decls::{FuncDecl, Program, TestDecl, TypeAliasComponent, TypeAliasDecl};
 use sla_ast::node::Node;
 use sla_ast::types::Type;
 use std::collections::HashSet;
@@ -146,6 +146,102 @@ impl Checker {
                         ));
                     }
                 }
+            }
+        }
+        // Flattened type aliases (Zig `syntheticStructDecl`,
+        // type_checker.zig:4268): an alias composed of several
+        // components — `type T = A & B & { f: Ty }` — denotes the
+        // struct whose fields are the components' fields in
+        // order. A Ty component naming a struct contributes that
+        // struct's fields; any other Ty component contributes
+        // one field named after the alias itself; an inline
+        // component contributes its fields. Pass 1 registered
+        // only single-Ty aliases, so a composed alias resolved
+        // nowhere and construction failed NotAStruct
+        // (test_unit_type_alias_flattening). The CheckerInfo
+        // adapter projects `structs` back to AST decls, so this
+        // one registration serves the checker and both codegen
+        // tails. Single-Ty aliases keep the plain alias path.
+        {
+            let candidates: Vec<&TypeAliasDecl> = program
+                .decls
+                .iter()
+                .filter_map(|d| match d {
+                    Node::TypeAliasDecl(a)
+                        if a.components.len() > 1
+                            || matches!(
+                                a.components.first(),
+                                Some(TypeAliasComponent::InlineStruct(_))
+                            ) =>
+                    {
+                        Some(a)
+                    }
+                    _ => None,
+                })
+                .collect();
+            let candidate_names: HashSet<&str> =
+                candidates.iter().map(|a| a.name.as_str()).collect();
+            // Fixpoint: an alias may compose another flattened
+            // alias; defer those until their component lands.
+            let mut pending = candidates;
+            loop {
+                let mut progressed = false;
+                let mut next: Vec<&TypeAliasDecl> = Vec::new();
+                for a in pending {
+                    if self.structs.contains_key(&a.name) {
+                        progressed = true;
+                        continue;
+                    }
+                    let mut fields: Vec<(String, Type)> = Vec::new();
+                    let mut ready = true;
+                    for comp in &a.components {
+                        match comp {
+                            TypeAliasComponent::Ty(t) => {
+                                match crate::types_util::concrete_type_name(t) {
+                                    Some(cname)
+                                        if self.structs.contains_key(&cname) =>
+                                    {
+                                        let info =
+                                            self.structs.get(&cname).unwrap().clone();
+                                        fields.extend(info.fields.iter().cloned());
+                                    }
+                                    Some(cname)
+                                        if candidate_names.contains(cname.as_str()) =>
+                                    {
+                                        ready = false;
+                                        break;
+                                    }
+                                    _ => fields.push((a.name.clone(), (**t).clone())),
+                                }
+                            }
+                            TypeAliasComponent::InlineStruct(fs) => {
+                                fields.extend(
+                                    fs.iter()
+                                        .map(|f| (f.name.clone(), (*f.ty).clone())),
+                                );
+                            }
+                        }
+                    }
+                    if ready {
+                        self.register_struct(
+                            &a.name,
+                            StructInfo {
+                                fields,
+                                derives: Vec::new(),
+                                is_union: false,
+                                is_opaque: false,
+                                generics: Vec::new(),
+                            },
+                        );
+                        progressed = true;
+                    } else {
+                        next.push(a);
+                    }
+                }
+                if next.is_empty() || !progressed {
+                    break;
+                }
+                pending = next;
             }
         }
         // Pass 2: functions, macros, impls, overloads — registered
