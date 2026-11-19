@@ -1,0 +1,27 @@
+// LINE-CENSUS-MEMLEAK R2 minim: a nested struct literal payload
+// temp stored into an enum variant record was never retired.
+struct MlPod3 {
+    a: u64,
+    b: u64,
+    c: u64,
+}
+
+enum MlWrap {
+    Val(MlPod3),
+    Empty,
+}
+
+fn ml_mk_wrap() -> MlWrap {
+    return MlWrap::Val(MlPod3 { a: 11, b: 22, c: 33 });
+}
+
+@test "enum literal struct payload temp retires"() {
+    match ml_mk_wrap() {
+        MlWrap::Val(p) => {
+            if p.a != 11 { panic(9711); };
+            if p.b != 22 { panic(9712); };
+            if p.c != 33 { panic(9713); };
+        },
+        MlWrap::Empty => { panic(9710); },
+    };
+}

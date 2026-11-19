@@ -501,6 +501,20 @@ impl<'c> Codegen<'c> {
                         AsyncLoopAwaitContinuationPlan::local_offset(i),
                         local.name
                     ));
+                    // LINE-CENSUS-MEMLEAK: a scalar head local's
+                    // register is dead once its value lives in
+                    // the state slot (the poll helper's
+                    // store-locals-adopt arm pairs the same store
+                    // with `!name`). Without this, prefix locals
+                    // of a loop-await async fn stayed Active in
+                    // the constructor (MemoryLeak 1012,
+                    // `deadline` in @sla__delay_ms via
+                    // test_unit_async_await_loop_future). Params
+                    // are exempt: finish_async_state releases
+                    // them.
+                    if !f.params.iter().any(|p| p.name == local.name) {
+                        self.ins(&format!("!{}", local.name));
+                    }
                 }
             } else {
                 self.ins(&format!(

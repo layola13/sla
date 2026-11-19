@@ -1,0 +1,14 @@
+// LINE-CENSUS-MEMLEAK R1 minim: cast source/guard-copy temps
+// stranded after the cast consumed them (let-bound carrier
+// cast view temp + chained cast in a comparison).
+struct MlWord { lo: u64 }
+
+@test "cast temps retire after use"() {
+    let raw = Box::into_raw(Box::new(MlWord { lo: 0 }));
+    let g: ptr = raw as ptr;
+    PTR_WRITE_U64(g, 111);
+    if PTR_READ_U64(g) != 111 { panic(9701); };
+    let signed: i64 = 0;
+    if (signed as ptr as u64) != 0 { panic(9702); };
+    let _reclaim = unsafe { Box::from_raw(raw) };
+}

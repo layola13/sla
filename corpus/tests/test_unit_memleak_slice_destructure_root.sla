@@ -1,0 +1,10 @@
+// LINE-CENSUS-MEMLEAK R3 minim: slice destructure consumed the
+// array root in the checker but never retired its register.
+@test "slice destructure retires root and rest"() {
+    let a: [u64; 4] = [10, 20, 30, 40];
+    let [x, y, ..rest] = a;
+    if x != 10 { panic(9731); };
+    if y != 20 { panic(9732); };
+    if rest[0] != 30 { panic(9733); };
+    if rest[1] != 40 { panic(9734); };
+}

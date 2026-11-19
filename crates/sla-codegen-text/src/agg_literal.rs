@@ -293,6 +293,17 @@ impl<'c> Codegen<'c> {
             {
                 self.emit_forget_moved_value(&val_reg)?;
             }
+            // LINE-CENSUS-MEMLEAK: the forget gate above covers
+            // only non-Copy temps; a Copy element temp (a POD
+            // struct literal, a scalar literal/call result) is
+            // settled with the struct-field Copy arm's predicate
+            // once its value lives in the tuple record
+            // (acl_mk_tuple stranded both shapes).
+            if self.type_is_copy_value(&elem_ty)
+                && self.struct_field_temp_needs_release(elem, &val_reg)
+            {
+                self.emit_release(&val_reg)?;
+            }
             // A bare/Move identifier element of a non-Copy type
             // was consumed into the tuple by the checker; record
             // the whole-binding move so a later cleanup retires

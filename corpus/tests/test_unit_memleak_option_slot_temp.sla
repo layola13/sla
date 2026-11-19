@@ -1,0 +1,12 @@
+// LINE-CENSUS-MEMLEAK R2 minim: Option and_then / unwrap_or_else
+// result-slot stores never retired the stored temp.
+@test "option slot store temps retire"() {
+    let some: Option<i32> = Some(2);
+    let chained: Option<i32> = some.and_then(|value: i32| Some(value + 6));
+    if chained.unwrap() != 8 { panic(9721); };
+    let none: Option<i32> = None;
+    if none.unwrap_or_else(|| 9) != 9 { panic(9722); };
+    if some.unwrap_or_else(|| 9) != 2 { panic(9723); };
+    let skipped: Option<i32> = none.and_then(|value: i32| Some(value + 1));
+    if skipped.is_some() { panic(9724); };
+}

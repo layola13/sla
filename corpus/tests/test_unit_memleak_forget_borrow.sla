@@ -1,0 +1,9 @@
+// LINE-CENSUS-MEMLEAK R5 minim: mem::forget of a borrow marked
+// the root consumed, suppressing its exit drop with no retire.
+@import "sa_std/task.sai"
+
+@test "mem forget of borrow keeps root drop"() {
+    let s: String = format("borrowed");
+    mem::forget(&s);
+    if s.len() != 8 { panic(9751); };
+}

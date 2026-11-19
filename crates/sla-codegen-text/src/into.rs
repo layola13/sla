@@ -548,6 +548,17 @@ impl<'c> Codegen<'c> {
                 type_string(&field_ty)
             ));
             self.mark_binding_moved_into_aggregate(value, &field_ty);
+            // LINE-CENSUS-MEMLEAK: settle a fresh payload temp
+            // after the store, exactly like the struct-field
+            // Copy arm (struct_field_temp_needs_release): the
+            // payload value now lives in the variant record, and
+            // without this a nested literal payload temp stayed
+            // Active at function exit (MemoryLeak 1012,
+            // @sla__acl_mk_wrap in
+            // test_unit_def_acl_aggregate_payload).
+            if self.struct_field_temp_needs_release(value, &val_reg) {
+                self.emit_release(&val_reg)?;
+            }
         }
         Ok(())
     }

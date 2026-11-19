@@ -434,7 +434,19 @@ impl<'c> Codegen<'c> {
         // L4R2 Root U: an identity cast's register is the source
         // binding's own; renaming it into the binding would move
         // a value the checker keeps live (see the helper).
+        let val_pre_view = val.clone();
         let val = self.materialize_identity_cast_view(&let_stmt.value, val)?;
+        // LINE-CENSUS-MEMLEAK: the view materialisation creates
+        // a fresh temporary (`ptr_add src, 0`) that the cast
+        // gates deem non-materialising
+        // (cast_result_materializes_temp is false for
+        // carrier->carrier casts), so the stored-value retire
+        // gate in the primitive copy branch below never retires
+        // it and it stays Active at function exit (MemoryLeak
+        // 1012, test_unit_ptr_read_u64_kind /
+        // test_unit_s100_ptr_read_kind).
+        let view_temp =
+            val != val_pre_view && sla_lowering::is_temporary_register_name(&val);
         // The binding takes over the value register; a recorded
         // borrow source moves with it (codegen.zig:14942).
         self.transfer_borrow_source_to_binding(&val, &resolved_name);
@@ -470,7 +482,7 @@ impl<'c> Codegen<'c> {
                 self.ins(&format!("{resolved_name} = {val}"));
             } else {
                 self.emit_primitive_copy(&resolved_name, &val, &ty_or_err)?;
-                if self.stored_value_needs_release(&let_stmt.value) {
+                if view_temp || self.stored_value_needs_release(&let_stmt.value) {
                     self.emit_release(&val)?;
                 }
             }

@@ -71,13 +71,22 @@ impl<'c> Codegen<'c> {
     pub(crate) fn emit_lowered_call_arg_cleanups(
         &mut self,
         planned_args: &[LoweredCallArg],
-        skip_release_name: Option<&str>,
+        _skip_release_name: Option<&str>,
     ) -> Result<()> {
-        if skip_release_name != Some("sum") {
-            for planned in planned_args {
-                if let Some(reg) = self.planned_call_arg_release_reg(planned) {
-                    self.emit_release(&reg)?;
-                }
+        // LINE-CENSUS-MEMLEAK: the Zig `sum` release skip is
+        // NOT mirrored here anymore. In the Zig lane the skip
+        // is compensated by the std iterator-sum surface,
+        // which consumes the iterator register itself; this
+        // lane has no such surface arm, so a plain user
+        // function named `sum` (test_unit_arrays:
+        // `values.iter().sum()` over file-local `iter`/`sum`)
+        // stranded its call-result argument temp at function
+        // exit (MemoryLeak 1012). The release phase now runs
+        // for every callee; the forget phase below is
+        // unchanged.
+        for planned in planned_args {
+            if let Some(reg) = self.planned_call_arg_release_reg(planned) {
+                self.emit_release(&reg)?;
             }
         }
         for planned in planned_args {
@@ -748,7 +757,28 @@ impl<'c> Codegen<'c> {
         let value_reg = self.gen_expr(&call.args[0])?;
         self.ins(&format!("EXPAND MEM_FORGET_U64 {value_reg}"));
         self.ins(&format!("!{value_reg}"));
-        if let Some(name) = root_identifier(&call.args[0]) {
+        // LINE-CENSUS-MEMLEAK: only an owned root (a bare
+        // identifier or an explicit move of one) is consumed by
+        // the forget. A borrow argument (`mem::forget(&s)`)
+        // forgets the borrow temp alone; marking the root
+        // consumed suppressed the root's own exit drop while no
+        // retire replaced it, stranding the register at
+        // function exit (MemoryLeak 1012, forget_borrow in
+        // test_unit_mem_forget_forms). Field/index roots keep
+        // the historical marking (no in-lane evidence either
+        // way); borrow and deref roots do not consume the root.
+        let owned_root = match &call.args[0] {
+            Node::Identifier(_) => root_identifier(&call.args[0]),
+            Node::MoveExpr(mv) => match &*mv.expr {
+                Node::Identifier(_) => root_identifier(&call.args[0]),
+                _ => None,
+            },
+            Node::FieldExpr(_) | Node::IndexExpr(_) => {
+                root_identifier(&call.args[0])
+            }
+            _ => None,
+        };
+        if let Some(name) = owned_root {
             self.mark_consumed_binding(name);
         }
         Ok(self.new_tmp())

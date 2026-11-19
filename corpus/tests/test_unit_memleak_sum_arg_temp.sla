@@ -1,0 +1,14 @@
+// LINE-CENSUS-MEMLEAK R4 minim: the "sum" release skip stranded
+// a call-result argument temp passed to a plain user function.
+fn iter(values: [int; 4]) -> [int; 4] {
+    return values;
+}
+
+fn sum(values: [int; 4]) -> int {
+    return values[0] + values[1] + values[2] + values[3];
+}
+
+@test "iter sum arg temp retires"() {
+    let values: [int; 4] = [1, 2, 3, 4];
+    if values.iter().sum() != 10 { panic(9741); };
+}

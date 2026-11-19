@@ -49,6 +49,25 @@ impl<'c> Codegen<'c> {
             self.gen_destructure_slice(let_stmt, &value_reg, &value_ty)?;
             if call_arg_needs_release(&let_stmt.value) {
                 self.emit_release(&value_reg)?;
+            } else if matches!(
+                &*let_stmt.value,
+                Node::Identifier(_) | Node::MoveExpr(_)
+            ) && (matches!(&value_ty, Type::Array(_))
+                || !self.type_is_copy_value(&value_ty))
+                && !sla_lowering::is_borrow_like_type(&value_ty)
+            {
+                // LINE-CENSUS-MEMLEAK: mirror the tuple path's
+                // !copy_root release with the checker's caliber
+                // (check_let_destructure, FB-010): a non-Copy,
+                // non-borrow-like identifier root is CONSUMED
+                // by the destructure in the checker, so it
+                // leaves the exit cleanup list — but this arm
+                // never retired its register, stranding it at
+                // function exit (MemoryLeak 1012, `a` in
+                // test_unit_let_destructure; arrays are not
+                // Copy in the checker, so an array root always
+                // lands here).
+                self.emit_release(&value_reg)?;
             }
             return Ok(());
         }

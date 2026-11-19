@@ -1,0 +1,22 @@
+// LINE-CENSUS-MEMLEAK R6 minim: the loop-await async constructor
+// stored prefix scalar locals into the state slot without
+// retiring their registers (delay_ms deadline/done shape).
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+@import "sa_std/timer.sla"
+@import "sa_std/time.sla"
+
+fn ml_sleep_1ms() {
+    thread_sleep(Duration::from_millis(1));
+}
+
+@test "delay_ms constructor retires prefix locals"() {
+    let t = task::new(delay_ms(5));
+    let guard: i32 = 0;
+    while task::poll(t) == false {
+        guard = guard + 1;
+        if guard > 2000 { panic(9761); };
+        ml_sleep_1ms();
+    }
+    if task::result(t) != 0 { panic(9762); };
+}

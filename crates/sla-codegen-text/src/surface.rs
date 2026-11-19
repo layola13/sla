@@ -722,6 +722,20 @@ impl<'c> Codegen<'c> {
                         let chained = self.gen_inline_closure_unary(&lit, &value)?;
                         self.ins(&format!("store {slot}+0, {chained} as ptr"));
                         self.store_refcell_handle_companion_for_slot(&slot, &chained);
+                        // LINE-CENSUS-MEMLEAK: the closure result
+                        // temp now lives in the slot; retire it
+                        // (when it is the OPTION_GET value itself,
+                        // the release just below settles it).
+                        // Without this, `Some(..)` built inside
+                        // the closure stranded its temp at
+                        // function exit (MemoryLeak 1012,
+                        // test_unit_closure_forms_minim /
+                        // test_unit_option_methods).
+                        if chained != value
+                            && sla_lowering::is_temporary_register_name(&chained)
+                        {
+                            self.emit_release(&chained)?;
+                        }
                         self.emit_release(&value)?;
                         self.w(&format!("    jmp {end_label}\n\n"));
                         self.wl(&format!("{none_label}:"));
@@ -730,6 +744,9 @@ impl<'c> Codegen<'c> {
                         self.ins(&format!("EXPAND OPTION_NEW_NONE {none_reg}"));
                         self.ins(&format!("store {slot}+0, {none_reg} as ptr"));
                         self.store_refcell_handle_companion_for_slot(&slot, &none_reg);
+                        // LINE-CENSUS-MEMLEAK: same slot-store
+                        // settle for the None arm's fresh temp.
+                        self.emit_release(&none_reg)?;
                         self.w(&format!("    jmp {end_label}\n\n"));
                         self.wl(&format!("{end_label}:"));
                         let result = self.new_tmp();
@@ -743,12 +760,21 @@ impl<'c> Codegen<'c> {
                     let ty_str = crate::codegen::type_string(&inner_ty);
                     self.ins(&format!("store {slot}+0, {value} as {ty_str}"));
                     self.store_refcell_handle_companion_for_slot(&slot, &value);
+                    // LINE-CENSUS-MEMLEAK: the OPTION_GET temp
+                    // now lives in the slot; retire it (same
+                    // slot-store settle as the and_then arms).
+                    self.emit_release(&value)?;
                     self.w(&format!("    jmp {end_label}\n\n"));
                     self.wl(&format!("{none_label}:"));
                     self.ins(&format!("!{is_some}"));
                     let default = self.gen_inline_closure_nullary(&lit)?;
                     self.ins(&format!("store {slot}+0, {default} as {ty_str}"));
                     self.store_refcell_handle_companion_for_slot(&slot, &default);
+                    // LINE-CENSUS-MEMLEAK: same settle for the
+                    // default arm's closure result temp.
+                    if sla_lowering::is_temporary_register_name(&default) {
+                        self.emit_release(&default)?;
+                    }
                     self.w(&format!("    jmp {end_label}\n\n"));
                     self.wl(&format!("{end_label}:"));
                     let reg = self.new_tmp();

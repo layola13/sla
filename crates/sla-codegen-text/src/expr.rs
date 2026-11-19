@@ -333,12 +333,31 @@ impl<'c> Codegen<'c> {
                     let copied = self.new_tmp();
                     self.emit_primitive_copy(&copied, &inner, &src_ty)?;
                     src_reg = copied;
+                    // LINE-CENSUS-MEMLEAK: the guard copy
+                    // supersedes the inner cast's result temp;
+                    // retire the original (the FnPtr arm above
+                    // applies the same predicate to its load
+                    // source). Without this, chained casts
+                    // (`signed as ptr as u64`) stranded every
+                    // intermediate temp (MemoryLeak 1012,
+                    // test_unit_s100_cast_int_ptr).
+                    if self.call_arg_result_temp_needs_release(&cast.expr, &inner) {
+                        self.emit_release(&inner)?;
+                    }
                 }
                 let reg = self.new_tmp();
                 self.ins(&format!(
                     "{reg} = {src_reg} as {}",
                     crate::codegen::type_string(&cast.ty)
                 ));
+                // LINE-CENSUS-MEMLEAK (corrected model): no
+                // source settle here -- an `as` instruction
+                // consumes its source register outright (the
+                // vec-len cast at head leaves no retire and no
+                // leak). The one stranded register in this
+                // family, the chained-cast inner temp, is
+                // retired in the guard-copy arm above, because
+                // the copy reads it without consuming it.
                 Ok(reg)
             }
             Node::UnsafeExpr(ue) => {
