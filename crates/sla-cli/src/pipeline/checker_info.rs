@@ -172,4 +172,38 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
     fn struct_decl(&self, name: &str) -> Option<&sla_ast::StructDecl> {
         self.decls.get(name)
     }
+    fn trait_decl(&self, name: &str) -> Option<sla_lowering::TraitDeclView> {
+        // `tc.traits` projected to the backend view: supertrait
+        // names and method signatures in declaration order.
+        let info = self.checker.traits.get(name)?;
+        Some(sla_lowering::TraitDeclView {
+            supertraits: info.supertraits.clone(),
+            methods: info
+                .methods
+                .iter()
+                .map(|m| sla_lowering::TraitMethodView {
+                    name: m.name.clone(),
+                    params: m
+                        .params
+                        .iter()
+                        .map(|p| sla_ast::Param {
+                            name: p.name.clone(),
+                            ty: Box::new(p.ty.clone()),
+                            is_borrow: p.is_borrow,
+                            is_move: p.is_move,
+                            fallible_sugar: false,
+                            is_var: p.is_var,
+                        })
+                        .collect(),
+                    ret_ty: m.ret_ty.clone(),
+                })
+                .collect(),
+        })
+    }
+    fn type_implements_trait(&self, ty: &sla_ast::Type, trait_name: &str) -> bool {
+        self.checker.type_implements_trait(ty, trait_name)
+    }
+    fn trait_extends_trait(&self, sub: &str, super_trait: &str) -> bool {
+        self.checker.trait_extends_trait(sub, super_trait)
+    }
 }
