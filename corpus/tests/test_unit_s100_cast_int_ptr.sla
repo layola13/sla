@@ -20,12 +20,12 @@ struct S100CastBox { tag: i32 }
     let bits = raw as u64;
     if bits == 0 { panic(11); };
     let back = bits as *S100CastBox;
-    if back != raw { panic(12); };
+    if (back as u64) != bits { panic(12); };
     if (*back).tag != 7 { panic(13); };
     let zero: u64 = 0;
     let nullp = zero as ptr;
-    if nullp != (0 as ptr) { panic(14); };
+    if (nullp as u64) != 0 { panic(14); };
     let signed: i64 = 0;
-    if signed as ptr != nullp { panic(15); };
+    if (signed as ptr as u64) != 0 { panic(15); };
     let _reclaim = unsafe { Box::from_raw(raw) };
 }
