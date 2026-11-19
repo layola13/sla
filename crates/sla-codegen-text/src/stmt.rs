@@ -1440,7 +1440,17 @@ impl<'c> Codegen<'c> {
             // R2b (stage 6): a returned literal takes its layout
             // from the function's declared return type.
             let ret_ty = self.current_ret_ty.clone();
-            value_reg = Some(self.gen_expr_in_context(value, ret_ty.as_ref())?);
+            let raw_reg = self.gen_expr_in_context(value, ret_ty.as_ref())?;
+            // DEF-5 clone-on-extract, return arm: a returned field
+            // read of a handle-carrying type is a deep clone, not
+            // the aliasing load — the source binding's exit
+            // cleanups still drop the field, so an aliasing return
+            // hands the caller a handle whose last ref the callee
+            // is about to decrement away (test_unit_arc_drop_counts:
+            // `return h.data` read strong_count 0 after the holder's
+            // field drop freed the box). The identifier-assign path
+            // below already routes through the same helper.
+            value_reg = Some(self.clone_on_extract_value(value, raw_reg)?);
             // codegen.zig:11250: a pending await inside the value
             // already returned from this async function.
             if self.async_pending_return_emitted {
