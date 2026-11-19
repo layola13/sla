@@ -53,6 +53,12 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
     fn expr_type(&self, node: &Node) -> Option<&sla_ast::Type> {
         self.checker.expr_types.get(&sla_lowering::node_key(node))
     }
+    fn overload_call_symbol(&self, node: &Node) -> Option<&str> {
+        self.checker
+            .overload_call_symbols
+            .get(&sla_lowering::node_key(node))
+            .map(|s| s.as_str())
+    }
     fn cleanups(&self, stmt: &Node) -> Option<&[String]> {
         self.checker
             .cleanups

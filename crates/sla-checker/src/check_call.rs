@@ -320,7 +320,7 @@ impl Checker {
         }
 
         // 5. User functions / imported signatures / overload sets.
-        if let Some(result) = self.resolve_user_call(name, call) {
+        if let Some(result) = self.resolve_user_call(name, call, crate::types_util::node_key_of(node)) {
             // R-3: borrow-origin bookkeeping. The non-place gate
             // runs BEFORE the wrapped result is returned: a
             // BorrowOriginNotABinding fault replaces an otherwise

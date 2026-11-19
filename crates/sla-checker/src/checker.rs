@@ -237,6 +237,13 @@ pub struct Checker {
     /// signatures; resolved at the call site (check_overload.rs).
     /// Declaration order preserved (never hash order).
     pub func_overload_sets: HashMap<String, Vec<FuncSig>>,
+    /// SPRINT-100 capability: for each call node (node_key) that
+    /// the plain overload-set resolver resolved to exactly one
+    /// member, that member's mangled SA symbol
+    /// (`sla_ast::overload_member_symbol`). The text emitter
+    /// binds the call to this symbol and emits each member's
+    /// definition under the same scheme.
+    pub overload_call_symbols: HashMap<usize, String>,
     /// R-6: Zig `extern_overload_sets` (+ imported analogue);
     /// registration order preserved.
     pub extern_overload_sets: HashMap<String, Vec<ExternSig>>,
@@ -360,6 +367,7 @@ impl Checker {
             aliases: HashMap::new(),
             funcs: HashMap::new(),
             func_overload_sets: HashMap::new(),
+            overload_call_symbols: HashMap::new(),
             extern_overload_sets: HashMap::new(),
             imported_overload_sets: HashMap::new(),
             field_borrows: Vec::new(),

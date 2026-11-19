@@ -31,5 +31,6 @@ pub use stmts::{
     LetElseStmt, LetStmt, ReleaseStmt, ReturnStmt, VarStmt, WhileStmt,
 };
 pub use types::{
-    ArrayType, ClosureType, FnPtrType, Primitive, TupleType, Type, UserDefined,
+    overload_member_symbol, overload_type_tag, ArrayType, ClosureType, FnPtrType, Primitive,
+    TupleType, Type, UserDefined,
 };

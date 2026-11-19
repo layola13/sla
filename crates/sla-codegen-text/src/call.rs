@@ -1081,15 +1081,37 @@ impl<'c> Codegen<'c> {
         // site keeps the bare name, so fall back to the unique
         // tail-segment match (SAB driver tail) before the
         // EXPAND catch-all.
+        //
+        // Overload sets first: when the checker recorded the
+        // winning member's mangled symbol for this call, bind to
+        // that member's declaration (the first-match lookup below
+        // would bind every call to the first-declared member,
+        // whose contract then mismatches the actual arguments).
+        let mut symbol_override: Option<String> = None;
         let known = self
-            .func_decl(&func_name)
-            .map(|d| (func_name.clone(), d))
-            .or_else(|| self.resolve_receiver_method_decl(call))
-            .or_else(|| self.func_decl_tail_match(&func_name));
+            .check
+            .overload_call_symbol(expr)
+            .and_then(|sym| {
+                let decl = self
+                    .func_index
+                    .iter()
+                    .filter(|(n, _)| n == &func_name)
+                    .map(|(_, d)| d)
+                    .find(|d| self.decl_symbol(d) == sym)?;
+                symbol_override = Some(sym.to_string());
+                Some((func_name.clone(), decl.clone()))
+            })
+            .or_else(|| {
+                self.func_decl(&func_name)
+                    .map(|d| (func_name.clone(), d))
+                    .or_else(|| self.resolve_receiver_method_decl(call))
+                    .or_else(|| self.func_decl_tail_match(&func_name))
+            });
         if let Some((callee_name, decl)) = known {
             let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;
             let result = self.new_tmp();
-            let lowered = self.lowered_func_symbol(&callee_name);
+            let lowered = symbol_override
+                .unwrap_or_else(|| self.lowered_func_symbol(&callee_name));
             self.ins(&format!(
                 "{result} = call @{lowered}({})",
                 display.join(", ")

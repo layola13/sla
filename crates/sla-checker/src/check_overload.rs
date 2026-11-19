@@ -175,6 +175,7 @@ impl Checker {
         &mut self,
         name: &str,
         call: &CallExpr,
+        expr_key: usize,
     ) -> Option<CheckResult<Type>> {
         // R-3: an extern set for the name means the unified
         // resolver owns the call even when a plain-func set also
@@ -185,7 +186,7 @@ impl Checker {
             return self.try_resolve_unified_call(name, call);
         }
         if let Some(set) = self.func_overload_sets.get(name).cloned() {
-            return Some(self.resolve_overload_set_call(name, &set, call));
+            return Some(self.resolve_overload_set_call(name, &set, call, expr_key));
         }
         if self.imported_overload_sets.contains_key(name) {
             return self.try_resolve_unified_call(name, call);
@@ -214,6 +215,7 @@ impl Checker {
         name: &str,
         set: &[FuncSig],
         call: &CallExpr,
+        expr_key: usize,
     ) -> CheckResult<Type> {
         // A generic template must stand alone (the diagnostic is
         // produced by Zig's monomorphizer; this checker has none,
@@ -281,7 +283,18 @@ impl Checker {
                         .join("; ")
                 ),
             )),
-            1 => self.check_call_args_against_sig(name, winners[0], &call.args, &call.generics),
+            1 => {
+                // Record the winning member's mangled symbol so
+                // the text emitter binds this call to that member
+                // (and emits the member under the same symbol).
+                let tys: Vec<Type> =
+                    winners[0].params.iter().map(|p| p.ty.clone()).collect();
+                self.overload_call_symbols.insert(
+                    expr_key,
+                    sla_ast::overload_member_symbol(name, &tys),
+                );
+                self.check_call_args_against_sig(name, winners[0], &call.args, &call.generics)
+            }
             _ => Err(Diagnostic::new(
                 ErrorKind::AmbiguousCall,
                 format!(

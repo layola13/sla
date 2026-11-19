@@ -202,7 +202,7 @@ impl<'c> Codegen<'c> {
                         "codegen.zig:emitExternDecl",
                     );
                 }
-                self.emit_function_pointer_vtable_decl(&f.name);
+                self.emit_function_pointer_vtable_decl_for_decl(f);
             }
         }
 

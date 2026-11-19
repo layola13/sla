@@ -829,6 +829,38 @@ impl<'c> Codegen<'c> {
         let lowered = self.lowered_func_symbol(func_name);
         self.wl(&format!("@const {vt_name} = vtable {{ call = @{lowered} }}"));
     }
+
+    /// The SA symbol a function DEFINITION is emitted under.
+    /// Members of a plain-function overload set (2+ declarations
+    /// sharing a name in this program) are emitted under their
+    /// mangled member symbol (`sla_ast::overload_member_symbol`),
+    /// matching the symbol the checker recorded for each resolved
+    /// call; every other function keeps `lowered_func_symbol`.
+    pub(crate) fn decl_symbol(&self, f: &FuncDecl) -> String {
+        let base = self.lowered_func_symbol(&f.name);
+        if f.is_extern || f.no_mangle || is_main_name(&f.name) {
+            return base;
+        }
+        if self.func_index.iter().filter(|(n, _)| n == &f.name).count() <= 1 {
+            return base;
+        }
+        let tys: Vec<Type> = f.params.iter().map(|p| (*p.ty).clone()).collect();
+        sla_ast::overload_member_symbol(&f.name, &tys)
+    }
+
+    /// Decl-aware variant of `emit_function_pointer_vtable_decl`:
+    /// overload members get a per-member vtable keyed by the
+    /// member symbol (a bare-name reference to an overload set is
+    /// checker-rejected, so no use site looks these up by name).
+    pub(crate) fn emit_function_pointer_vtable_decl_for_decl(&mut self, f: &FuncDecl) {
+        let symbol = self.decl_symbol(f);
+        if symbol == self.lowered_func_symbol(&f.name) {
+            self.emit_function_pointer_vtable_decl(&f.name);
+        } else {
+            let vt_name = format!("SLA_FNPTR_VT_{symbol}");
+            self.wl(&format!("@const {vt_name} = vtable {{ call = @{symbol} }}"));
+        }
+    }
 }
 
 /// codegen.zig:2455 `typeSize` (thins to lowering `abiTypeSize`).

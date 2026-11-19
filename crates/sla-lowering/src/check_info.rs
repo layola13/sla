@@ -227,6 +227,15 @@ pub trait CheckInfo {
         None
     }
 
+    /// The mangled SA symbol of the overload-set member the
+    /// checker resolved this call to, when the call targets a
+    /// plain-function overload set (SPRINT-100 capability). The
+    /// text emitter emits every member under
+    /// `sla_ast::overload_member_symbol` and binds the call here.
+    fn overload_call_symbol(&self, _expr: &Node) -> Option<&str> {
+        None
+    }
+
     /// The checker's Copy oracle (`typeIsCopyValue`): primitives and
     /// fn-pointers are Copy; structs are Copy when every field is.
     fn type_is_copy_value(&self, ty: &Type) -> bool;

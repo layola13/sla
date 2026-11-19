@@ -80,8 +80,15 @@ impl<'c> Codegen<'c> {
         self.collect_assigned_bindings(&f.body);
         self.collect_addressable_bindings(&f.body);
 
-        // Signature.
-        let lowered_name = self.lowered_func_symbol(name);
+        // Signature. (Methods arrive under a pre-mangled `name`
+        // that differs from `f.name`; the overload member symbol
+        // applies only to plain program functions, where the two
+        // are the same.)
+        let lowered_name = if name == f.name {
+            self.decl_symbol(f)
+        } else {
+            self.lowered_func_symbol(name)
+        };
         let mut sig = format!("@{lowered_name}(");
         for (i, p) in f.params.iter().enumerate() {
             if i > 0 {
