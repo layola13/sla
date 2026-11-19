@@ -859,9 +859,27 @@ impl<'c> Codegen<'c> {
                 // borrow-source table, so releasing it settles
                 // the chain. An inline-POD element lives in the
                 // slot and keeps the slot address.
+                // SPRINT-100 L2R2: the same holds for EVERY
+                // pointer-represented aggregate element, not just
+                // the named heap handles — a Vec slot never holds
+                // a struct inline (the index READ path loads the
+                // stored record pointer for every non-primitive
+                // element), so `&v[i]` over a plain struct
+                // element must be the loaded record pointer;
+                // returning the slot address makes field reads
+                // through the borrow reinterpret the pointer word
+                // as the first field
+                // (test_unit_def_sab_borrow_write_null GUARD:
+                // BnRec{key, val} read back as pointer garbage).
                 let target_ty = self.require_expr_type(&idx.target, "borrow index target type")?;
                 if let Some((_, elem_ty)) = crate::place::vec_like_element_type(&target_ty) {
-                    if is_heap_handle_type(&elem_ty)
+                    if (is_heap_handle_type(&elem_ty)
+                        || matches!(
+                            elem_ty,
+                            Type::UserDefined(_)
+                                | Type::Tuple(_)
+                                | Type::Array(_)
+                        ))
                         && !crate::place::inline_pod_element(self.check, &elem_ty)
                     {
                         let rec = self.new_tmp();

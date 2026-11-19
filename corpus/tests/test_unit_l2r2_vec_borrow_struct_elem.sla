@@ -1,0 +1,28 @@
+@import "sa_std/vec.sa"
+
+// SPRINT-100 L2R2 regression minim (vec element borrow): a Vec
+// slot never holds a struct inline — the slot word is the
+// record pointer (the index read path loads it for every
+// non-primitive element). So `&v[i]` over a plain struct
+// element is the loaded record pointer, not the slot address;
+// with the slot address, field reads through the borrow
+// reinterpret the pointer word as the first field. Reduced
+// from test_unit_def_sab_borrow_write_null (the GUARD test:
+// BnRec { key, val } elements). The inline-POD counter-case
+// (an 8-byte all-primitive struct stored in the slot) is
+// covered by test_unit_classb_index_borrow.
+
+struct L2r2Rec {
+    key: u64,
+    val: u64,
+}
+
+@test "l2r2 vec element borrow reads record fields"() {
+    let v: Vec<L2r2Rec> = Vec::new();
+    v.push(L2r2Rec { key: 11, val: 22 });
+    v.push(L2r2Rec { key: 33, val: 44 });
+    let b = &v[1];
+    if b.key + b.val != 77 { panic(401); };
+    let c = &v[0];
+    if c.key + c.val != 33 { panic(402); };
+}
