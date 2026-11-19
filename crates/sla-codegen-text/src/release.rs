@@ -108,6 +108,22 @@ impl<'c> Codegen<'c> {
         }
     }
 
+    /// codegen.zig `prepareResultSlotRefCellCompanion`: a
+    /// borrow-typed result slot (planResultSlotTransfer:
+    /// needs_refcell_companion == type is a borrow) gets its
+    /// companion cell slot allocated up front — before the
+    /// branch — so both branch paths can store the borrowed
+    /// cell into it and the merged load can restore the handle.
+    pub(crate) fn prepare_result_slot_refcell_companion(
+        &mut self,
+        slot: &str,
+        ty: &Type,
+    ) {
+        if matches!(ty, Type::Borrow(_)) {
+            self.ensure_result_slot_refcell_slot(slot);
+        }
+    }
+
     /// codegen.zig:2258 `ensureResultSlotRefCellSlot`: the
     /// companion slot for a stack slot, allocated on first use.
     pub(crate) fn ensure_result_slot_refcell_slot(&mut self, slot: &str) -> String {

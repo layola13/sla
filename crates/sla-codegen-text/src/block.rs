@@ -160,10 +160,22 @@ impl<'c> Codegen<'c> {
                 type_string(target_ty)
             ));
         }
+        // The RefCell companion branch of
+        // `storeResultSlotTransferredValueState` (codegen.zig
+        // :1234): when the target slot pre-allocated a companion
+        // (borrow-typed if/match result slots do, before the
+        // branch), a handle-carrying stored value moves its
+        // handle into the companion slot, so the merged load can
+        // restore it onto a path-valid register instead of
+        // leaving branch-local guard registers in the merged
+        // handle table. Slots without a pre-allocated companion
+        // (let / assign targets, if-let chains) keep their own
+        // bookkeeping paths and are untouched here.
+        if self.result_slot_refcell_slots.contains_key(target_ptr) {
+            self.store_refcell_handle_companion_for_slot(target_ptr, &value_reg);
+        }
         // Zig `storeResultSlotTransferredValueState` (codegen.zig
-        // :2279), minus the RefCell companion branch (borrow-typed
-        // targets keep their companion bookkeeping in the let /
-        // assign paths): the store lifecycle is
+        // :2279) store lifecycle:
         // planResultSlotStoreLifecycle over
         // planResultSlotTransfer(target_ty), whose transfers_value
         // is exactly abiPassesAsPointer(target_ty). A transferred

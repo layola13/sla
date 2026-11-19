@@ -90,12 +90,7 @@ impl<'c> Codegen<'c> {
                 self.emit_release(&resolved)?;
             }
             Node::ForStmt(_) => self.gen_for_stmt(stmt)?,
-            Node::LetElseStmt(_) => {
-                return unsupported(
-                    "let-else statement (pattern family deferred)",
-                    "codegen.zig:10700 (let_else_stmt emission)",
-                )
-            }
+            Node::LetElseStmt(_) => self.gen_let_else_stmt(stmt)?,
             Node::LetDestructureStmt(_) => self.gen_let_destructure_stmt(stmt)?,
             other => {
                 return Err(TextError::Unsupported {

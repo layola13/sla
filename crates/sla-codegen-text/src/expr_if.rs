@@ -36,6 +36,11 @@ impl<'c> Codegen<'c> {
         let result_slot: Option<String> = if has_value {
             let slot = self.new_tmp();
             self.ins(&format!("{slot} = alloc {}", type_size(&expr_ty)));
+            // codegen.zig `prepareResultSlotRefCellCompanion`:
+            // a borrow-typed result slot's companion cell slot is
+            // allocated here, before the branch, so both branch
+            // paths can store the borrowed cell into it.
+            self.prepare_result_slot_refcell_companion(&slot, &expr_ty);
             Some(slot)
         } else {
             None
@@ -82,7 +87,7 @@ impl<'c> Codegen<'c> {
                 self.gen_block(&ife.then_block)?;
             }
         }
-        self.emit_phi_cleanups(ife.then_block.last())?;
+        let then_phi = self.emit_phi_cleanups(ife.then_block.last())?;
         // The then side's jump (and any compensation releases)
         // are deferred to the compensation step below, which
         // inserts them at this offset.
@@ -104,7 +109,7 @@ impl<'c> Codegen<'c> {
                 self.gen_block(else_body)?;
             }
         }
-        self.emit_phi_cleanups(else_body.last())?;
+        let else_phi = self.emit_phi_cleanups(else_body.last())?;
 
         if needs_merge {
             self.emit_branch_compensation(
@@ -115,6 +120,8 @@ impl<'c> Codegen<'c> {
                 &merge_label,
                 then_terminates,
                 else_terminates,
+                &then_phi,
+                &else_phi,
             )?;
             // Post-merge settle (codegen.zig, the call-site tail):
             // both sides reach the merge -> consumed is the union
@@ -149,6 +156,36 @@ impl<'c> Codegen<'c> {
                     "{result} = load {slot}+0 as {}",
                     type_string(&expr_ty)
                 ));
+                // codegen.zig `loadResultSlotTransferredValueState`
+                // (the companion restore): a RefCell handle a
+                // branch stored into the slot's companion becomes
+                // a fresh handle on the load result, keyed on
+                // registers declared here at the merge — never on
+                // the branch-local guard registers, which do not
+                // exist on the sibling path (UnknownRegister,
+                // corpus test_unit_refcell_struct_payload). An
+                // untouched companion slot is simply retired.
+                if let Some(entry) = self.result_slot_refcell_handles.remove(&slot) {
+                    self.result_slot_refcell_slots.remove(&slot);
+                    let cell_reg = self.new_tmp();
+                    self.ins(&format!(
+                        "{cell_reg} = load {}+0 as ptr",
+                        entry.cell_slot
+                    ));
+                    self.refcell_borrow_handles.insert(
+                        result.clone(),
+                        crate::codegen::RefCellBorrowHandle {
+                            cell_reg: cell_reg.clone(),
+                            kind: entry.kind,
+                            cell_release_temp: Some(cell_reg),
+                        },
+                    );
+                    self.emit_release(&entry.cell_slot)?;
+                } else if let Some(cell_slot) =
+                    self.result_slot_refcell_slots.remove(&slot)
+                {
+                    self.emit_release(&cell_slot)?;
+                }
                 self.emit_release(&slot)?;
                 Ok(result)
             }
@@ -178,7 +215,15 @@ impl<'c> Codegen<'c> {
         merge_label: &str,
         then_terminates: bool,
         else_terminates: bool,
+        then_phi: &[String],
+        else_phi: &[String],
     ) -> Result<()> {
+        // The checker's phi cleanups (merge_branch_states) are
+        // the same β-fix release recorded from the checker's side:
+        // a binding the phi list already released on a path must
+        // not be released again here — the double `!name` is a
+        // UseAfterMove at the SA verifier (corpus reg2_proxy /
+        // reg3_regression_branch_compensation).
         let else_consumed = self.consumed_bindings.clone();
         if !then_terminates && !else_terminates {
             // Consumed only on the then path: release at the end
@@ -187,6 +232,7 @@ impl<'c> Codegen<'c> {
                 if then_consumed.contains(name)
                     && !pre_consumed.contains(name)
                     && !else_consumed.contains(name)
+                    && !else_phi.contains(name)
                 {
                     self.emit_release(name)?;
                 }
@@ -207,6 +253,7 @@ impl<'c> Codegen<'c> {
                     if else_consumed.contains(name)
                         && !pre_consumed.contains(name)
                         && !then_consumed.contains(name)
+                        && !then_phi.contains(name)
                     {
                         self.consumed_bindings.remove(name);
                         self.emit_release(name)?;
@@ -223,16 +270,20 @@ impl<'c> Codegen<'c> {
 
     /// Phi cleanup registers attached to a block's last statement are
     /// printed raw (not via emitRelease), mirroring the Zig.
-    fn emit_phi_cleanups(&mut self, last_stmt: Option<&Node>) -> Result<()> {
+    /// Returns the names printed, so branch compensation can skip
+    /// the ones already released here.
+    fn emit_phi_cleanups(&mut self, last_stmt: Option<&Node>) -> Result<Vec<String>> {
+        let mut printed = Vec::new();
         if let Some(stmt) = last_stmt {
             if let Some(list) = self.check.phi_cleanups(stmt) {
                 let names: Vec<String> = list.to_vec();
                 for name in names {
                     self.w(&format!("    !{name}\n"));
+                    printed.push(name);
                 }
             }
         }
-        Ok(())
+        Ok(printed)
     }
 
     /// codegen.zig's if-let arm of the expression cascade: one
@@ -407,6 +458,139 @@ impl<'c> Codegen<'c> {
             }
             None => Ok(self.new_tmp()),
         }
+    }
+
+    /// codegen.zig `genLetElseStmt` (the let_else_stmt arm of
+    /// genStmt): evaluate the value, test the pattern; on match
+    /// bind the payload and fall through to the continuation, on
+    /// mismatch run the else block (which must diverge — the
+    /// checker enforces that; a non-terminating else still gets
+    /// its jump to the continuation, as in the Zig). The else
+    /// side is generated under a snapshot of the consumed /
+    /// borrow-source / RefCell-handle state, restored before the
+    /// success side, exactly as the Zig clones and restores the
+    /// three tables.
+    pub(crate) fn gen_let_else_stmt(&mut self, stmt: &Node) -> Result<()> {
+        let l = match stmt {
+            Node::LetElseStmt(l) => l,
+            _ => unreachable!(),
+        };
+        let value_reg = self.gen_expr(&l.value)?;
+        let branch_flag = self.new_tmp();
+        let success_label = self.new_label("L_LET_ELSE_OK");
+        let else_label = self.new_label("L_LET_ELSE_ELSE");
+        let cont_label = self.new_label("L_LET_ELSE_CONT");
+        let enum_decl = self.enum_decl_for_pattern_value(&l.value, &l.pattern)?;
+        let success_on_true = enum_decl.is_some()
+            || l.pattern.variant_name == "Some"
+            || l.pattern.variant_name == "Ok";
+        if let Some(decl) = &enum_decl {
+            self.gen_enum_pattern_check(
+                &value_reg,
+                decl,
+                &l.pattern.variant_name,
+                &branch_flag,
+            )?;
+        } else if sla_lowering::pattern_uses_result_macros(
+            &l.pattern.enum_name,
+            &l.pattern.variant_name,
+        ) {
+            self.ins(&format!(
+                "EXPAND RESULT_IS_OK {branch_flag}, {value_reg}"
+            ));
+        } else {
+            self.ins(&format!(
+                "EXPAND OPTION_IS_SOME {branch_flag}, {value_reg}"
+            ));
+        }
+        if success_on_true {
+            self.w(&format!(
+                "    br {branch_flag} -> {success_label}, {else_label}\n\n"
+            ));
+        } else {
+            self.w(&format!(
+                "    br {branch_flag} -> {else_label}, {success_label}\n\n"
+            ));
+        }
+
+        let snapshot = self.snapshot_consumed();
+        let saved_handles = self.refcell_borrow_handles.clone();
+
+        self.wl(&format!("{else_label}:"));
+        self.w(&format!("    !{branch_flag}\n"));
+        if sla_lowering::call_arg_needs_release(&l.value) {
+            self.emit_release(&value_reg)?;
+        }
+        self.gen_block(&l.else_block)?;
+        if !sla_lowering::block_terminates(&l.else_block) {
+            self.w(&format!("    jmp {cont_label}\n"));
+        }
+        self.w("\n");
+        self.restore_consumed(&snapshot);
+        self.refcell_borrow_handles = saved_handles;
+
+        self.wl(&format!("{success_label}:"));
+        self.w(&format!("    !{branch_flag}\n"));
+        if let Some(decl) = &enum_decl {
+            self.gen_enum_pattern_bindings(&value_reg, decl, &l.pattern)?;
+            if let Some(variant) = decl
+                .variants
+                .iter()
+                .find(|v| v.name == l.pattern.variant_name)
+            {
+                for (binding, field) in
+                    l.pattern.bindings.iter().zip(variant.fields.iter())
+                {
+                    if let Some((_, field_ty)) =
+                        layout::enum_field_layout(variant, &field.name)
+                    {
+                        self.remember_local_binding_type(binding, &field_ty);
+                    }
+                }
+            }
+        } else if l.pattern.bindings.len() == 1 {
+            let macro_name = match l.pattern.variant_name.as_str() {
+                "Some" => Some("OPTION_GET"),
+                "Ok" => Some("RESULT_GET_OK"),
+                "Err" => Some("RESULT_GET_ERR"),
+                _ => None,
+            };
+            if let Some(macro_name) = macro_name {
+                let target = self.push_binding_alias(&l.pattern.bindings[0]);
+                self.ins(&format!(
+                    "EXPAND {macro_name} {target}, {value_reg}"
+                ));
+                self.transfer_guard_metadata(&target, &value_reg);
+                if let Some(value_ty) = self.expr_type(&l.value) {
+                    let payload_ty = match &value_ty {
+                        Type::UserDefined(u) if u.generics.len() == 2 => {
+                            Some(u.generics[if l.pattern.variant_name == "Err" {
+                                1
+                            } else {
+                                0
+                            }]
+                            .clone())
+                        }
+                        Type::UserDefined(u) if u.generics.len() == 1 => {
+                            Some(u.generics[0].clone())
+                        }
+                        _ => None,
+                    };
+                    if let Some(payload_ty) = payload_ty {
+                        self.remember_local_binding_type(
+                            &l.pattern.bindings[0],
+                            &payload_ty,
+                        );
+                    }
+                }
+            }
+        }
+        if sla_lowering::call_arg_needs_release(&l.value) {
+            self.emit_release(&value_reg)?;
+        }
+        self.w(&format!("    jmp {cont_label}\n\n"));
+        self.wl(&format!("{cont_label}:"));
+        Ok(())
     }
 
     /// codegen.zig:7169 `enumDeclForPatternValue`: the enum
