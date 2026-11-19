@@ -145,7 +145,7 @@ impl<'c> Codegen<'c> {
         if matches!(ty, Type::Primitive(Primitive::RawPtr)) {
             let ptr_reg = self.gen_expr(arg)?;
             let len_reg = self.new_tmp();
-            self.ins(&format!("EXPAND CSTR_LEN {len_reg}, {ptr_reg}"));
+            self.emit_cstr_len_inline(&len_reg, &ptr_reg);
             self.ins(&format!(
                 "EXPAND FORMAT_PUSH_BYTES {tag}, {out_reg}, {ptr_reg}, {len_reg}"
             ));
@@ -163,6 +163,58 @@ impl<'c> Codegen<'c> {
             self.emit_release(&slice_reg)?;
         }
         Ok(())
+    }
+
+    /// CLOSING-D mirror (Zig codegen.zig `emitCstrLenInline`,
+    /// DEF-DEMOS-CSTR-LEN-TEXT, Jev R196 form A_text_inline):
+    /// write the CSTR_LEN scan inline instead of a bare
+    /// `EXPAND CSTR_LEN`. The EXPAND form relies on
+    /// sa_std/ffi.sa being among the emitted imports, but the
+    /// macro-family scan (program.rs) has no trigger for the
+    /// ffi family — the need arises here, inside codegen's own
+    /// format emission, invisible to the AST scan — so the host
+    /// flattener traps error[UndefinedMacro] (host trap 1060;
+    /// test_unit_template_string). The body below is the ffi.sa
+    /// CSTR_LEN macro body verbatim with `%out_len` / `%ptr_reg`
+    /// substituted; label/temp names are suffixed by the out
+    /// register (always a fresh tmp), so each call site's copy
+    /// is unique.
+    fn emit_cstr_len_inline(&mut self, out_reg: &str, ptr_reg: &str) {
+        let slot = format!("__cstr_len_slot_{out_reg}");
+        let i = format!("__cstr_len_i_{out_reg}");
+        let p = format!("__cstr_len_p_{out_reg}");
+        let b = format!("__cstr_len_b_{out_reg}");
+        let done = format!("__cstr_len_done_{out_reg}");
+        let next = format!("__cstr_len_next_{out_reg}");
+        let head = format!("L_CSTR_LEN_HEAD_{out_reg}");
+        let next_label = format!("L_CSTR_LEN_NEXT_{out_reg}");
+        let done_label = format!("L_CSTR_LEN_DONE_{out_reg}");
+        self.ins(&format!("{slot} = stack_alloc 8"));
+        self.ins(&format!("store {slot}+0, 0 as u64"));
+        self.w(&format!("    jmp {head}\n\n"));
+        self.wl(&format!("{head}:"));
+        self.ins(&format!("{i} = load {slot}+0 as u64"));
+        self.ins(&format!("{p} = ptr_add {ptr_reg}, {i}"));
+        self.ins(&format!("{b} = load {p}+0 as u8"));
+        self.ins(&format!("{done} = eq {b}, 0"));
+        self.w(&format!(
+            "    br {done} -> {done_label}, {next_label}\n\n"
+        ));
+        self.wl(&format!("{next_label}:"));
+        self.ins(&format!("{next} = add {i}, 1"));
+        self.ins(&format!("store {slot}+0, {next} as u64"));
+        self.ins(&format!("!{next}"));
+        self.ins(&format!("!{done}"));
+        self.ins(&format!("!{b}"));
+        self.ins(&format!("!{p}"));
+        self.ins(&format!("!{i}"));
+        self.w(&format!("    jmp {head}\n\n"));
+        self.wl(&format!("{done_label}:"));
+        self.ins(&format!("{out_reg} = load {slot}+0 as u64"));
+        self.ins(&format!("!{done}"));
+        self.ins(&format!("!{b}"));
+        self.ins(&format!("!{p}"));
+        self.ins(&format!("!{i}"));
     }
 
     /// codegen.zig:4747 `emitFormatPushValue` over
