@@ -245,6 +245,31 @@ impl<'c> Codegen<'c> {
                                         consume_reg: Some(mv),
                                     });
                                 }
+                                // Same stay-live discipline for every
+                                // deep-cloneable value, not just
+                                // Vec/GrowVec: a struct argument whose
+                                // source binding is read again after
+                                // the call is deep-cloned and the
+                                // clone is what transfers (the
+                                // REG3-DEF-2 preserved-argument shape,
+                                // test_unit_recursive_struct_clone —
+                                // moving the source trapped the later
+                                // read with UseAfterMove).
+                                if self.deep_clone_needed(&ty, 0)
+                                    && self.uncloneable_type_name(&ty, 0).is_none()
+                                {
+                                    if let Some(cloned) =
+                                        self.gen_deep_clone_value(&raw_reg, &ty)?
+                                    {
+                                        let mv = format!("^{cloned}");
+                                        return Ok(LoweredCallArg {
+                                            reg: mv.clone(),
+                                            release_after_call: false,
+                                            release_reg: None,
+                                            consume_reg: Some(mv),
+                                        });
+                                    }
+                                }
                             }
                         }
                     }
