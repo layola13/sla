@@ -1253,7 +1253,17 @@ impl<'c> Codegen<'c> {
                     .iter()
                     .filter(|(n, _)| n == &func_name)
                     .map(|(_, d)| d)
-                    .find(|d| self.decl_symbol(d) == sym)?;
+                    .find(|d| self.decl_symbol(d) == sym)
+                    .or_else(|| {
+                        // Direct member-symbol call
+                        // (`pick__ov_f64(...)`): no declaration is
+                        // named by the member symbol, so match on
+                        // the mangled member symbol alone.
+                        self.func_index
+                            .iter()
+                            .map(|(_, d)| d)
+                            .find(|d| self.decl_symbol(d) == sym)
+                    })?;
                 symbol_override = Some(sym.to_string());
                 Some((func_name.clone(), decl.clone()))
             })
