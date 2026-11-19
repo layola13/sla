@@ -709,8 +709,7 @@ impl<'c> Codegen<'c> {
                         Type::UserDefined(u) => u.name.clone(),
                         _ => return Err(missing_fact()),
                     };
-                    let decl = self
-                        .struct_decl_for_name(&elem_name)
+                    let decl = crate::place::struct_decl_lookup(self.check, &elem_name)
                         .ok_or_else(|| missing_fact())?;
                     let rec = self.new_tmp();
                     self.ins(&format!(
