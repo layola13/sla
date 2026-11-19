@@ -694,6 +694,13 @@ impl Checker {
         };
         // DEF-RUST-STRPTR-CHECKER: tail-site refinement (Zig :7239).
         let ty = self.refine_string_literal_for_slot(inner, ty, ret_ty);
+        // Element-borrow return gate, tail form (see
+        // check_return): the body frame is already popped here,
+        // so the root's type comes from the recorded type of the
+        // place's root identifier node.
+        let root_ty = crate::check_field_borrow::place_root_node(inner)
+            .and_then(|n| self.expr_types.get(&node_key_of(n)).cloned());
+        self.check_return_borrow_escape(inner, &ty, root_ty.as_ref())?;
         if value_assignable_to(ret_ty, &ty) {
             Ok(())
         } else {

@@ -295,4 +295,57 @@ impl Checker {
             self.register_field_borrow(place, name);
         }
     }
+
+    /// Return gate (the element-borrow discipline the corpus
+    /// negative `test_error_growvec_ref_escape` pins, mirroring
+    /// the Vec form): a borrow whose place roots at a
+    /// function-local OWNED binding must not be returned — the
+    /// root's storage is dropped when the function returns, so
+    /// the borrow would dangle. A root that is itself borrow-like
+    /// (a borrow parameter, or a binding aliasing one) points
+    /// into the caller's frame and passes. `root_ty` is the root
+    /// binding's type as resolved by the caller (the live scope
+    /// table at a `return` statement; the recorded root-identifier
+    /// type at a tail expression, where the body frame is already
+    /// popped); `None` means the root is not a visible local
+    /// (e.g. a global), which cannot be proven local and passes.
+    pub fn check_return_borrow_escape(
+        &self,
+        value: &Node,
+        value_ty: &Type,
+        root_ty: Option<&Type>,
+    ) -> CheckResult<()> {
+        if !crate::types_util::is_borrow_like_type(value_ty) {
+            return Ok(());
+        }
+        let place = match value {
+            Node::MoveExpr(m) => self.borrow_place_of_value(&m.expr),
+            _ => self.borrow_place_of_value(value),
+        };
+        let Some(place) = place else { return Ok(()) };
+        let Some(root_ty) = root_ty else { return Ok(()) };
+        if crate::types_util::is_borrow_like_type(root_ty) {
+            return Ok(());
+        }
+        Err(Self::borrow_conflict(format!(
+            "BorrowConflict: cannot return `{}`: it borrows from `{}`, a function-local value that is dropped when the function returns",
+            place_desc(&place),
+            place.root
+        )))
+    }
+}
+
+/// The root identifier node of a place chain (field / index /
+/// deref / borrow / move wrappers), for type lookups keyed by
+/// node identity.
+pub fn place_root_node(node: &Node) -> Option<&Node> {
+    match node {
+        Node::Identifier(_) => Some(node),
+        Node::BorrowExpr(b) => place_root_node(&b.expr),
+        Node::MoveExpr(m) => place_root_node(&m.expr),
+        Node::FieldExpr(f) => place_root_node(&f.expr),
+        Node::IndexExpr(i) => place_root_node(&i.target),
+        Node::DerefExpr(d) => place_root_node(&d.expr),
+        _ => None,
+    }
 }

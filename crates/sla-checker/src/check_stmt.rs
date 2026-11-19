@@ -533,6 +533,14 @@ impl Checker {
         }
         if let Some(v) = value {
             let val_ty = self.check_expr(v)?;
+            // Element-borrow return gate: a borrow whose place
+            // roots at a function-local owned binding must not
+            // escape through the return — the root is dropped
+            // at exit (corpus test_error_growvec_ref_escape).
+            let root_ty = self.borrow_place_of_value(v).and_then(|place| {
+                self.scopes.lookup(&place.root).map(|b| b.ty.clone())
+            });
+            self.check_return_borrow_escape(v, &val_ty, root_ty.as_ref())?;
             // DEF-RUST-STRPTR-CHECKER: return-site refinement (Zig :7807).
             let val_ty = self.refine_string_literal_for_slot(v, val_ty, &ret_ty);
             let ret_is_void = matches!(ret_ty, Type::Primitive(Primitive::VoidType));
