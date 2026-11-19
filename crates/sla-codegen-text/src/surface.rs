@@ -218,6 +218,20 @@ impl<'c> Codegen<'c> {
             planned.reg = raw.clone();
             planned.consume_reg = Some(raw);
         }
+        // A BorrowExpr argument's register already IS the borrow
+        // value (the place address, or the loaded handle word for
+        // a Vec field): Zig's surface operands are the plain
+        // genExpr result (`EXPAND VEC_PUSH marks, tmp_35, 8` for
+        // `marks.push(&g[i])`). The Value plan arm's `&` prefix
+        // serves a real callee's address-of contract only; left
+        // on an EXPAND operand it makes the macro store a pointer
+        // to the operand instead of the operand (and the expanded
+        // call traps CapabilityMismatch).
+        if matches!(arg, Node::BorrowExpr(_)) {
+            if let Some(raw) = planned.reg.strip_prefix('&') {
+                planned.reg = raw.to_string();
+            }
+        }
         Ok(planned)
     }
 
