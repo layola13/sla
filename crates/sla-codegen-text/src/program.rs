@@ -60,6 +60,9 @@ impl<'c> Codegen<'c> {
             if let Node::EnumDecl(e) = decl {
                 self.enum_index.push((e.name.clone(), e.clone()));
             }
+            if let Node::TraitDecl(t) = decl {
+                self.trait_index.push((t.name.clone(), t.clone()));
+            }
             // Impl / overload methods under their mangled names,
             // for associated-call resolution (the bodies are
             // emitted under the same names in step 4 below).
@@ -183,11 +186,13 @@ impl<'c> Codegen<'c> {
             }
         }
 
-        // Trait impl vtables: outside the slice.
+        // Trait impl vtables (codegen.zig:7228, the
+        // `emitTraitVTableDecl` pass): one `@const VT_*` per
+        // trait impl, before every function-pointer vtable.
         for decl in decls {
             if let Node::ImplDecl(impl_decl) = decl {
                 if impl_decl.trait_name.is_some() {
-                    return unsupported("trait impl vtable declaration", "codegen.zig:7228");
+                    self.emit_trait_vtable_decl(impl_decl)?;
                 }
             }
         }

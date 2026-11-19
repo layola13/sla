@@ -42,6 +42,7 @@ mod thread_spawn;
 mod thread_spawn_emit;
 mod collect;
 mod destructure;
+mod dyn_coercion;
 mod expr;
 mod expr_if;
 mod expr_match;
@@ -64,6 +65,7 @@ mod release;
 mod stmt;
 mod stmt_while;
 mod user_macro;
+mod vtable;
 
 pub use codegen::Codegen;
 pub use sla_lowering::LoweringError;

@@ -140,6 +140,12 @@ pub struct Codegen<'c> {
     /// index; the checker's own enum table keeps only variant
     /// names, not fields/discriminants).
     pub(crate) enum_index: Vec<(String, sla_ast::EnumDecl)>,
+    /// Trait declarations by name, collected from the program's
+    /// decls in `generate_program`; the fallback source for trait
+    /// shapes when the checker adapter supplies none (the
+    /// production path reads `CheckInfo::trait_decl`, the
+    /// projection of the checker's trait table).
+    pub(crate) trait_index: Vec<(String, sla_ast::TraitDecl)>,
     /// thread::spawn helper table (thread_spawn.rs), keyed by
     /// the spawn call node's key; filled by the collection
     /// pre-pass in `generate_program` and never cleared per
@@ -292,6 +298,7 @@ impl<'c> Codegen<'c> {
             func_index: Vec::new(),
             assoc_index: Vec::new(),
             enum_index: Vec::new(),
+            trait_index: Vec::new(),
             thread_spawn_helpers: Vec::new(),
             thread_helper_idx: 0,
             clone_helpers: Vec::new(),

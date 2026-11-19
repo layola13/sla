@@ -89,7 +89,7 @@ impl<'c> Codegen<'c> {
             // structural macro-inline fallback below.
             array_to_slice_borrow: self.check.call_arg_array_to_slice_borrow(arg)
                 || self.macro_array_to_slice_borrow_arg(arg, param),
-            dyn_borrow_trait_name: None,
+            dyn_borrow_trait_name: self.dyn_borrow_trait_name_for(param, arg_ty.as_ref()),
             copy_struct_value: call_arg_is_copy_struct_value(
                 arg,
                 param,
@@ -192,5 +192,40 @@ impl<'c> Codegen<'c> {
             return false;
         };
         matches!(inner_ty, Type::Array(_))
+    }
+
+    /// The dyn-borrow coercion fact for one call argument
+    /// (codegen.zig reads it from the checker's `dyn_borrow_args`
+    /// side table at :14092). The Rust checker keeps no such
+    /// table (D-C21) but accepts a dyn-borrow argument by a pure
+    /// type predicate (check_call_sig.rs / check_method.rs):
+    /// the parameter is a borrow of a `dyn Trait` type and the
+    /// argument is either a dyn value of a trait extending it,
+    /// or a borrow of a concrete type implementing it. Recompute
+    /// exactly that predicate from the ORIGINAL declared
+    /// parameter (before the plan_param borrow adjustment).
+    pub(crate) fn dyn_borrow_trait_name_for(
+        &self,
+        param: Option<&Param>,
+        arg_ty: Option<&Type>,
+    ) -> Option<String> {
+        let param = param?;
+        if !param.is_borrow {
+            return None;
+        }
+        let trait_name = sla_lowering::dyn_trait_name(&param.ty)?;
+        let arg_ty = arg_ty?;
+        if let Some(arg_trait) = sla_lowering::dyn_trait_name(arg_ty) {
+            if self.check.trait_extends_trait(arg_trait, trait_name) {
+                return Some(trait_name.to_string());
+            }
+            return None;
+        }
+        if let Type::Borrow(inner) = arg_ty {
+            if self.check.type_implements_trait(inner, trait_name) {
+                return Some(trait_name.to_string());
+            }
+        }
+        None
     }
 }

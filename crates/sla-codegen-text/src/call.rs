@@ -465,6 +465,25 @@ impl<'c> Codegen<'c> {
             CallArgMaterializationKind::ArrayToSliceBorrow => {
                 self.gen_array_borrow_to_slice_arg(arg)
             }
+            CallArgMaterializationKind::DynBorrow => {
+                // Zig dyn-borrow arm: build the trait-object fat
+                // cell and pass a borrow of it; the cell itself is
+                // released after the call (release_reg), the
+                // borrowed view is not.
+                let trait_name = plan.dyn_borrow_trait_name.as_deref().ok_or_else(|| {
+                    crate::TextError::Unsupported {
+                        feature: "dyn borrow plan without a trait name".to_string(),
+                        zig_ref: "codegen.zig:9860 (genCallArgFromMaterializationPlan)",
+                    }
+                })?;
+                let fat_reg = self.gen_dyn_borrow_coercion_arg(arg, trait_name)?;
+                Ok(LoweredCallArg {
+                    reg: format!("&{fat_reg}"),
+                    release_after_call: false,
+                    release_reg: Some(fat_reg),
+                    consume_reg: None,
+                })
+            }
             kind => Err(crate::TextError::Unsupported {
                 feature: format!("call arg materialization kind {kind:?}"),
                 zig_ref: "codegen.zig:9860 (genCallArgFromMaterializationPlan)",
@@ -1104,6 +1123,15 @@ impl<'c> Codegen<'c> {
         // UndefinedMacro at the host).
         if let Some(source) = Self::string_collect_source(call) {
             return self.gen_string_collect(source);
+        }
+
+        // Dyn trait-object dispatch (codegen.zig:23158): a
+        // receiver call whose receiver is a `dyn Trait` value
+        // goes through the vtable, never through the assoc
+        // index (its peeled receiver name is `__dyn_<Trait>`,
+        // which no inherent or trait impl registers).
+        if let Some(dyn_trait) = self.dyn_call_trait(call) {
+            return self.gen_dyn_dispatch_call(expr, call, &dyn_trait);
         }
 
         // Plain known-function call; a `using` extension call
