@@ -1,0 +1,42 @@
+// DEF-RUST-TEXT-VEC-ELEMENT-BORROW-ARG regression: selection
+// sort over a Vec of INLINE-POD elements, comparing through
+// element borrows `&vec[i]` passed as call arguments. With the
+// slot address handed over as the borrow, the callee compared
+// pointer bits and the sort order came out wrong (panic 1715).
+@import "sa_std/vec.sa"
+
+struct PhiAtom {
+    z: i32, charge: i32,
+}
+
+fn phi_atom_less(left: &PhiAtom, right: &PhiAtom) -> bool {
+    if left.z < right.z { return true; };
+    return left.charge < right.charge;
+}
+
+@test "vec elem borrow sort"() {
+    let values: Vec<PhiAtom> = Vec::new();
+    values.push(PhiAtom { z: 9, charge: 0 });
+    values.push(PhiAtom { z: 4, charge: 1 });
+    values.push(PhiAtom { z: 7, charge: 2 });
+    let i: u64 = 0;
+    while i < len(values) {
+        let best = i;
+        let j = i + 1;
+        while j < len(values) {
+            if phi_atom_less(&values[j], &values[best]) == true {
+                best = j;
+            };
+            j = j + 1;
+        }
+        if best != i {
+            let tmp = values[i];
+            values[i] = values[best];
+            values[best] = tmp;
+        };
+        i = i + 1;
+    }
+    if values[0].z != 4 { panic(1715); };
+    if values[1].z != 7 { panic(1716); };
+    if values[2].z != 9 { panic(1717); };
+}

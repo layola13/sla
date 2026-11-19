@@ -1,0 +1,34 @@
+// DEF-RUST-TEXT-VEC-ELEMENT-BORROW-ARG regression: an element
+// borrow `&vec[i]` passed as a call argument over an INLINE-POD
+// element (single-word packed struct). The Vec slot holds the
+// element's record pointer (push stores it, the index read loads
+// it), so the borrow must hand the callee that loaded pointer;
+// the slot address makes the callee read pointer bits as fields
+// and the argmin itself comes out wrong (panic 1721).
+@import "sa_std/vec.sa"
+
+struct PhiAtom {
+    z: i32, charge: i32,
+}
+
+fn phi_atom_less(left: &PhiAtom, right: &PhiAtom) -> bool {
+    if left.z < right.z { return true; };
+    return left.charge < right.charge;
+}
+
+@test "vec elem borrow argmin"() {
+    let values: Vec<PhiAtom> = Vec::new();
+    values.push(PhiAtom { z: 9, charge: 0 });
+    values.push(PhiAtom { z: 4, charge: 1 });
+    values.push(PhiAtom { z: 7, charge: 2 });
+    let best: u64 = 0;
+    let j: u64 = 1;
+    while j < len(values) {
+        if phi_atom_less(&values[j], &values[best]) == true {
+            best = j;
+        };
+        j = j + 1;
+    }
+    if best != 1 { panic(1721); };
+    if values[best].z != 4 { panic(1722); };
+}

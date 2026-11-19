@@ -857,8 +857,7 @@ impl<'c> Codegen<'c> {
                 // handle, not the slot address. The loaded
                 // register chains to the slot address in the
                 // borrow-source table, so releasing it settles
-                // the chain. An inline-POD element lives in the
-                // slot and keeps the slot address.
+                // the chain.
                 // SPRINT-100 L2R2: the same holds for EVERY
                 // pointer-represented aggregate element, not just
                 // the named heap handles — a Vec slot never holds
@@ -871,16 +870,34 @@ impl<'c> Codegen<'c> {
                 // as the first field
                 // (test_unit_def_sab_borrow_write_null GUARD:
                 // BnRec{key, val} read back as pointer garbage).
+                // DEF-RUST-TEXT-VEC-ELEMENT-BORROW-ARG: an
+                // inline-POD element is no exception. Inline POD
+                // describes the element's single-word packed
+                // LAYOUT, not its Vec storage: VEC_PUSH stores
+                // the record pointer the value materialises as
+                // (struct literals included) and the index READ
+                // path loads that pointer back, so the slot
+                // holds a pointer for a PhiAtom{z, charge} just
+                // as it does for a wider struct. Keeping the
+                // slot address for inline-POD elements handed
+                // the callee the address OF the pointer word;
+                // its field reads consumed pointer bits as
+                // record data — a silent wrong result, no crash
+                // (test_unit_vec_elem_borrow_argmin: the argmin
+                // itself came out wrong). The slot-address form
+                // stays correct for ARRAY and SLICE targets,
+                // whose slots genuinely hold the packed image;
+                // this branch is Vec-gated, so they never reach
+                // the load.
                 let target_ty = self.require_expr_type(&idx.target, "borrow index target type")?;
                 if let Some((_, elem_ty)) = crate::place::vec_like_element_type(&target_ty) {
-                    if (is_heap_handle_type(&elem_ty)
+                    if is_heap_handle_type(&elem_ty)
                         || matches!(
                             elem_ty,
                             Type::UserDefined(_)
                                 | Type::Tuple(_)
                                 | Type::Array(_)
-                        ))
-                        && !crate::place::inline_pod_element(self.check, &elem_ty)
+                        )
                     {
                         let rec = self.new_tmp();
                         self.ins(&format!("{rec} = load {}+0 as ptr", address.ptr));
