@@ -1,0 +1,30 @@
+// LINE-TEXT-GAPS probe minim: a borrow of a Vec field of a
+// borrow parameter, passed to a free function taking the field
+// by borrow (the sa_std slot_pool_get shape:
+// slot_pool_arena_ptr(&p.data) with d: &Vec<u64>). On the
+// pinned base this shape trips a host CapabilityMismatch in
+// the emitted text even though every operand prints bare.
+
+struct BorrowFieldHolder {
+    data: Vec<u64>,
+    tag: u64,
+}
+
+fn borrow_field_len(d: &Vec<u64>) -> u64 {
+    return d.len();
+}
+
+fn borrow_field_sum(p: &BorrowFieldHolder) -> u64 {
+    let n: u64 = borrow_field_len(&p.data);
+    return n + p.tag;
+}
+
+@test "text borrow-of-field argument"() {
+    let h = BorrowFieldHolder { data: Vec::new(), tag: 5 };
+    h.data.push(10);
+    h.data.push(20);
+    let total: u64 = borrow_field_sum(&h);
+    if total != 7 {
+        panic(97301);
+    }
+}
