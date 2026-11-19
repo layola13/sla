@@ -1,0 +1,17 @@
+// S100-CAPABILITY minim for the classb borrow-arg root: pushing a
+// borrow of an indexed element into a Vec<&T>. Before the fix the
+// emitter wrapped the already-borrowed slot address with a second
+// `&` and the host rejected the VEC_PUSH with CapabilityMismatch.
+struct S100Item { key: i32, val: i32 }
+
+fn s100_make_item(key: i32, val: i32) -> S100Item {
+    return S100Item { key: key, val: val };
+}
+
+@test "s100 vec borrow push of indexed element"() {
+    let g: GrowVec<S100Item> = GrowVec::with_max(16);
+    g.push(s100_make_item(1, 2));
+    let marks: Vec<&S100Item> = Vec::new();
+    marks.push(&g[0]);
+    if marks[0].key != 1 { panic(401); };
+}

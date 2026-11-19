@@ -1,0 +1,17 @@
+// S100-CAPABILITY minim for Root 4 (proxy/url byte-arg): a u8 callee
+// called with a PTR_BYTE_AT macro-call argument. Before the fix the
+// planner emitted `call @sla__s100_lower_byte(^tmp)` — an ownership
+// transfer of a Copy byte — and the host rejected it with
+// CapabilityMismatch. After the fix the argument is passed by value.
+fn s100_lower_byte(b: u8) -> u8 {
+    if b >= 65 && b <= 90 { return b + 32; }
+    return b;
+}
+
+fn s100_first_lowered(s: String) -> u8 {
+    return s100_lower_byte(PTR_BYTE_AT(STR_PTR(s), 0));
+}
+
+@test "s100 ptr byte at macro call arg"() {
+    if s100_first_lowered("ABCD") != 97 { panic(301); };
+}
