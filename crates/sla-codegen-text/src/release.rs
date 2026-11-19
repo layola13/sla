@@ -265,8 +265,33 @@ impl<'c> Codegen<'c> {
     }
 
     /// codegen.zig:841 `emitRelease`.
+    /// Extern variadic batch (LINE-CENSUS-VARIADIC): Zig
+    /// `emitVaEndIfVariadic` — retire the va_start handle
+    /// immediately before a return from a variadic definition.
+    pub(crate) fn emit_va_end_if_variadic(&mut self) {
+        if let Some(list_name) = self.current_variadic_list.clone() {
+            self.ins(&format!("va_end {list_name}"));
+        }
+    }
+
     pub(crate) fn emit_release(&mut self, name: &str) -> Result<()> {
+        // Extern variadic batch (LINE-CENSUS-VARIADIC): the
+        // VaList parameter of a variadic definition is not an SA
+        // parameter — it is bound by `va_start` and retired by
+        // `va_end` — so a checker cleanup list naming it must
+        // not release it (the Zig prologue never registers it
+        // as a releasable parameter binding).
+        if let Some(list_name) = &self.current_variadic_list {
+            if name == list_name {
+                return Ok(());
+            }
+        }
         let resolved = self.resolve_binding_name(name);
+        if let Some(list_name) = &self.current_variadic_list {
+            if resolved == *list_name {
+                return Ok(());
+            }
+        }
         if is_internal_symbol(&resolved) {
             return Ok(());
         }

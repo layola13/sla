@@ -1,0 +1,25 @@
+// LINE-CENSUS-VARIADIC regression minim (root 1: variadic
+// definition contract). A variadic DEFINITION's SA contract
+// is `(fixed, ...)`; the VaList name is bound by va_start and
+// retired by va_end on every exit — the tail path, an explicit
+// early return, and the void fall-off. At sla head 42e1d893
+// the definition was emitted as `(fixed: i32, args: ptr)` and
+// every call failed host verification with
+// error[CapabilityMismatch] (see test_unit_s100_va_next_minim
+// for the value-returning form).
+
+fn va_sink(fixed: i32, args:...) {
+    if fixed < 0 {
+        return;
+    }
+    let a: i32 = va_next_i32(args);
+    if a == 999 {
+        return;
+    }
+}
+
+@test "variadic definition void minim"() {
+    va_sink(1, 41);
+    va_sink(-1);
+    va_sink(2, 999);
+}

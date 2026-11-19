@@ -76,6 +76,14 @@ impl<'c> Codegen<'c> {
             }
         }
         self.current_ret_ty = Some((*f.ret_ty).clone());
+        // Extern variadic batch (LINE-CENSUS-VARIADIC): record
+        // the VaList parameter name for the va_start / va_end
+        // bookkeeping below (Zig `current_variadic_list`).
+        self.current_variadic_list = f
+            .params
+            .iter()
+            .find(|p| matches!(&*p.ty, Type::Primitive(sla_ast::types::Primitive::VaList)))
+            .map(|p| p.name.clone());
         self.repeated_let_bindings = sla_lowering::collect_repeated_let_bindings(&f.body);
         self.collect_assigned_bindings(&f.body);
         self.collect_addressable_bindings(&f.body);
@@ -90,10 +98,23 @@ impl<'c> Codegen<'c> {
             self.lowered_func_symbol(name)
         };
         let mut sig = format!("@{lowered_name}(");
-        for (i, p) in f.params.iter().enumerate() {
-            if i > 0 {
+        let mut printed_params = 0usize;
+        for p in f.params.iter() {
+            // Extern variadic batch (LINE-CENSUS-VARIADIC,
+            // codegen.zig genFuncDeclNamed): the VaList
+            // parameter of a variadic definition is not an SA
+            // parameter — the SA header carries the trailing
+            // `...` marker and the body binds the name via
+            // va_start. Emitting it as a plain `args: ptr`
+            // parameter made every call with trailing arguments
+            // mismatch the callee contract (CapabilityMismatch).
+            if matches!(&*p.ty, Type::Primitive(sla_ast::types::Primitive::VaList)) {
+                continue;
+            }
+            if printed_params > 0 {
                 sig.push_str(", ");
             }
+            printed_params += 1;
             let prefix = shared_abi_param_prefix(
                 p.is_borrow,
                 p.is_move,
@@ -107,6 +128,9 @@ impl<'c> Codegen<'c> {
                 p.name,
                 abi_param_type_string(p.is_borrow, p.is_move, &p.ty)
             ));
+        }
+        if f.is_variadic {
+            sig.push_str(", ...");
         }
         // codegen.zig:7506: planAsyncFunctionReturn — an async
         // function's ABI return is a raw pointer (the future state).
@@ -124,6 +148,14 @@ impl<'c> Codegen<'c> {
         self.wl(&sig);
         self.wl("L_ENTRY:");
 
+        // Extern variadic batch (LINE-CENSUS-VARIADIC): bind
+        // the VaList name before anything else in the body
+        // (codegen.zig emits `{list} = va_start` immediately
+        // after L_ENTRY, ahead of the hoisted allocations).
+        if let Some(list_name) = self.current_variadic_list.clone() {
+            self.ins(&format!("{list_name} = va_start"));
+        }
+
         // Hoisted loop allocations + for-loop counter slots.
         self.emit_hoisted_and_counter_slots(&f.body)?;
 
@@ -136,6 +168,14 @@ impl<'c> Codegen<'c> {
             // borrow (the `&[T; N]` / `&T` annotation form).
             if p.is_borrow || matches!(&*p.ty, Type::Borrow(_)) {
                 self.borrow_param_bindings.insert(p.name.clone());
+            }
+            // Extern variadic batch (LINE-CENSUS-VARIADIC): the
+            // VaList parameter is bound by va_start above; it
+            // takes no addressable storage or assigned-value
+            // slot (the Zig prologue `continue` for the va_list
+            // parameter).
+            if matches!(&*p.ty, Type::Primitive(sla_ast::types::Primitive::VaList)) {
+                continue;
             }
             // A borrowed ARRAY parameter needs no prologue at all:
             // Zig's slice materialization (codegen.zig:10453) fires
@@ -212,6 +252,7 @@ impl<'c> Codegen<'c> {
                         tail_reg = self.gen_ready_future_i64(&tail_reg)?;
                     }
                     self.emit_function_tail_cleanups(last, tail_expr)?;
+                    self.emit_va_end_if_variadic();
                     self.ins(&format!("return {tail_reg}"));
                 }
             }
@@ -247,6 +288,7 @@ impl<'c> Codegen<'c> {
                     self.emit_lexical_cleanup_release(&p.name)?;
                 }
             }
+            self.emit_va_end_if_variadic();
             self.ins("return");
         }
         self.w("\n");

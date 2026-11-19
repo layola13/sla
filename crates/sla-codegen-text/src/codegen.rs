@@ -254,6 +254,12 @@ pub struct Codegen<'c> {
     /// `gen_func_decl_named`; cleared on every reset (test decls
     /// and nested emission see None).
     pub(crate) current_ret_ty: Option<Type>,
+    /// Extern variadic batch (LINE-CENSUS-VARIADIC): the VaList
+    /// parameter name of the variadic definition currently being
+    /// generated (Zig `current_variadic_list`). The name is bound
+    /// by `va_start` after L_ENTRY and retired by `va_end` at
+    /// every return; it is never released as a parameter.
+    pub(crate) current_variadic_list: Option<String>,
     /// RUST-STAGE10-CLONE-EXTRACT: the enclosing function's
     /// declared name (`FuncDecl.name`, not the lowered/mangled
     /// emission name), for the M2 refinement set
@@ -341,6 +347,7 @@ impl<'c> Codegen<'c> {
             move_out_name: None,
             expr_later_frames: Vec::new(),
             current_ret_ty: None,
+            current_variadic_list: None,
             current_func_name: None,
             future_state_vtables: HashMap::new(),
             future_readiness: HashMap::new(),
@@ -469,6 +476,7 @@ impl<'c> Codegen<'c> {
         self.move_out_name = None;
         self.expr_later_frames.clear();
         self.current_ret_ty = None;
+        self.current_variadic_list = None;
         self.future_state_vtables.clear();
         self.future_readiness.clear();
         self.task_future_objects.clear();

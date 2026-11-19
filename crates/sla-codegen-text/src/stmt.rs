@@ -1576,6 +1576,11 @@ impl<'c> Codegen<'c> {
                 }
             }
         }
+        // Extern variadic batch (LINE-CENSUS-VARIADIC): the
+        // va_start handle is retired after the return cleanups,
+        // immediately before the return (Zig's return-statement
+        // arm calls emitVaEndIfVariadic at the same point).
+        self.emit_va_end_if_variadic();
         match &value_reg {
             Some(reg) => self.ins(&format!("return {reg}")),
             None => self.ins("return"),
