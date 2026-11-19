@@ -319,6 +319,20 @@ impl<'c> Codegen<'c> {
             let future_obj = self.gen_future_object_for_state(&state_reg)?;
             self.ins(&format!("{ctx} = 0"));
             self.ins(&format!("EXPAND TASK_NEW {task}, {future_obj}, {ctx}"));
+            // L4R2 Root A: TASK_NEW adopts the future object, so
+            // its register is retired with the forget form at wrap
+            // time — the same discipline gen_join2_future /
+            // gen_select2_future apply to their FUTURE_*_NEW
+            // operands, and gen_future_object_for_state applies to
+            // the state operand. Without it the object register
+            // stayed Active whenever the task itself was consumed
+            // by a move (e.g. VEC_PUSH into an executor's queue),
+            // because the task-release companion path in
+            // emit_release only fires on a freeing release of the
+            // task register. The consumed-bindings guard there
+            // keeps this forget from double-retiring on the
+            // release path.
+            self.emit_forget_moved_value(&future_obj)?;
             self.emit_release(&ctx)?;
             if call_arg_needs_release(&call.args[0]) {
                 self.emit_release(&state_reg)?;

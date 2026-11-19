@@ -1,0 +1,33 @@
+// LINE-L4-ROUND2 Root U minim: a pointer-carrier identity cast
+// in a let (`p as *L4R2Blk`) returned the source register
+// itself, and the generic let path renamed it into the binding
+// -- an SA-level move -- while the checker models the cast as a
+// non-consuming view and keeps BOTH names in the fn-exit cleanup
+// list. The emitted release of the source then trapped
+// UseAfterMove. The let path now materializes a ptr_add view
+// copy for the binding when an identity cast returns a live
+// binding's own register. Distilled from
+// test_unit_def_db_assign_store (db_blk_check).
+@import "sa_std/ptr.sa"
+@import "sa_std/core/box.sa"
+
+struct L4R2Blk {
+    a: u64,
+    b: u64,
+}
+
+fn l4r2_blk_new(a: u64, b: u64) -> ptr {
+    return Box::into_raw(Box::new(L4R2Blk { a: a, b: b })) as ptr;
+}
+
+fn l4r2_blk_check(p: ptr, a: u64, b: u64) {
+    let t: *L4R2Blk = p as *L4R2Blk;
+    if (*t).a != a { panic(1631); };
+    if (*t).b != b { panic(1632); };
+}
+
+@test "l4r2 cast view let"() {
+    let p = l4r2_blk_new(7, 8);
+    l4r2_blk_check(p, 7, 8);
+    l4r2_blk_check(p, 7, 8);
+}

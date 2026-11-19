@@ -116,6 +116,59 @@ impl<'c> Codegen<'c> {
         Some((name.to_string(), generics.to_vec()))
     }
 
+    /// L4R2 Root S helper: does a user function shadow the
+    /// surface method this call would dispatch to? True when a
+    /// declaration with the call's name exists, with the call's
+    /// arity, whose first parameter peels to the receiver's type
+    /// NAME. Generics are deliberately NOT compared: the
+    /// checker-recorded type of the argument at the call site
+    /// can carry an untyped-literal inference artifact (the
+    /// shadow corpus: the binding is Arc<i32> from the
+    /// constructor, the recorded arg type is Arc<i64>), while
+    /// the checker's own stage-5 resolution matched the call to
+    /// the user decl regardless. Every declaration source is
+    /// consulted (the program's own func_index AND the checker's
+    /// registered funcs): the first-match func_decl lookup can
+    /// return a same-named std wrapper whose signature does not
+    /// match this call, and stopping there would miss the
+    /// program's own shadowing declaration.
+    fn user_fn_shadows_surface(
+        &self,
+        call: &CallExpr,
+        tname: &str,
+        _generics: &[Type],
+    ) -> bool {
+        if call.associated_target.is_some() {
+            return false;
+        }
+        let matches = |decl: &sla_ast::FuncDecl| -> bool {
+            if decl.params.len() != call.args.len() {
+                return false;
+            }
+            let Some(first) = decl.params.first() else {
+                return false;
+            };
+            let Some((pname, _)) = peel_name(&first.ty) else {
+                return false;
+            };
+            pname == tname
+        };
+        if self
+            .func_index
+            .iter()
+            .filter(|(n, _)| n == &call.func_name)
+            .any(|(_, d)| matches(d))
+        {
+            return true;
+        }
+        if let Some(decl) = self.check.func(&call.func_name) {
+            if matches(decl) {
+                return true;
+            }
+        }
+        false
+    }
+
     /// lowering_rules.zig:4287 `isNonOwningPointerCarrierCastArg`:
     /// a cast of an identifier to a pointer-carrier type lowers
     /// to the identifier's own register, so releasing the
@@ -593,6 +646,22 @@ impl<'c> Codegen<'c> {
             Some(pair) => pair,
             None => return Ok(None),
         };
+        // L4R2 Root S: user-function shadowing. The checker's
+        // bare-name cascade resolves user functions (stage 5)
+        // BEFORE the std receiver leaves, so a user function
+        // whose name matches a surface method and whose first
+        // parameter is the receiver type wins the call
+        // (test_unit_def_sab_surface_get_shadow: `get(a)` on an
+        // Arc<i32> is the user's `fn get(a: Arc<i32>)`, not the
+        // ARC_GET projection). This dispatch keyed on (receiver
+        // type, name) only and silently substituted the
+        // projection; the argument binding was then never
+        // consumed and leaked at the caller's exit. Decline the
+        // surface claim when such a user function exists — the
+        // plain-call path binds exactly the decl consulted here.
+        if self.user_fn_shadows_surface(call, &tname, &generics) {
+            return Ok(None);
+        }
         let name = call.func_name.as_str();
         let unary_value: Option<&str> = match (tname.as_str(), name) {
             ("Option", "is_some") => Some("OPTION_IS_SOME"),

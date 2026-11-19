@@ -231,6 +231,22 @@ impl<'c> Codegen<'c> {
             let future = self.gen_ready_future_i64(&zero)?;
             self.ins(&format!("return {future}"));
         } else if is_void_type(&f.ret_ty) && !last_stmt_is_return(&f.body) {
+            if f.body.is_empty() {
+                // L4R2 Root V: an empty body has no last statement
+                // for the checker to hang the fn-exit parameter
+                // cleanups on (append_fn_exit_param_cleanups
+                // early-returns), and gen_stmt's per-statement
+                // cleanup emission never runs, so the parameters
+                // were left Active at the bare return (MemoryLeak).
+                // With no statements, no parameter can have been
+                // consumed or borrowed from, so the fn-exit list is
+                // exactly the parameter list; emit it through the
+                // same lexical-cleanup primitive the recorded lists
+                // use.
+                for p in &f.params {
+                    self.emit_lexical_cleanup_release(&p.name)?;
+                }
+            }
             self.ins("return");
         }
         self.w("\n");

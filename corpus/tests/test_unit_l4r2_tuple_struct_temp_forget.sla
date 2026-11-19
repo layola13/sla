@@ -1,0 +1,20 @@
+// LINE-L4-ROUND2 Root T minim: a tuple literal whose element is
+// a fresh struct-literal temp. The tuple emitter retired element
+// temps only for a fixed list of std heap-handle type names, so
+// a plain user struct temp stored into the tuple stayed Active
+// and leaked at the owner's return (MemoryLeak). The forget gate
+// is now the array path's predicate: non-identifier root,
+// non-Copy, pointer-ABI, non-borrow. Distilled from
+// test_unit_tuples (tuple_chain_value).
+struct L4R2Inner {
+    x: int,
+}
+
+fn l4r2_chain() -> int {
+    let pair = (L4R2Inner { x: 5 }, 1);
+    return pair.0.x;
+}
+
+@test "l4r2 tuple struct temp forget"() {
+    if l4r2_chain() != 5 { panic(1611); };
+}

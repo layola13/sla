@@ -1,0 +1,28 @@
+// LINE-L4-ROUND2 Root V minim: a void function with an EMPTY
+// body never emitted its fn-exit parameter cleanups (the checker
+// hangs them on the last statement, which does not exist), so
+// every parameter register was still Active at the bare return
+// and the host trapped MemoryLeak. Two tests in one file: a
+// single test can mask this leak family. Distilled from
+// test_unit_empty_void_exit_cleanup_direct.
+struct L4R2Payload {
+    value: i64,
+}
+
+fn l4r2_empty_borrow(value: &L4R2Payload) -> void {
+}
+
+fn l4r2_empty_owned(value: L4R2Payload) -> void {
+}
+
+@test "l4r2 empty void param cleanup a"() {
+    let borrowed = L4R2Payload { value: 139 };
+    l4r2_empty_borrow(&borrowed);
+    l4r2_empty_owned(L4R2Payload { value: 149 });
+}
+
+@test "l4r2 empty void param cleanup b"() {
+    let borrowed = L4R2Payload { value: 151 };
+    l4r2_empty_borrow(&borrowed);
+    l4r2_empty_owned(L4R2Payload { value: 157 });
+}

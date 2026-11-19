@@ -12,7 +12,6 @@ use sla_ast::{ArrayLiteral, Node, RepeatArrayLiteral, TupleLiteral, Type};
 use sla_lowering::{call_arg_needs_release, root_identifier};
 
 use crate::codegen::{type_size, type_string, Codegen};
-use crate::into::is_heap_handle_type;
 use crate::layout;
 use crate::{unsupported, Result, TextError};
 
@@ -278,7 +277,20 @@ impl<'c> Codegen<'c> {
             // identifier elements keep their binding bookkeeping
             // to the checker cleanup lists, as in the Zig port's
             // markMovedExprBinding discipline.
-            if root_identifier(elem).is_none() && is_heap_handle_type(&elem_ty) {
+            // L4R2 Root T: the forget gate was the fixed std-name
+            // list is_heap_handle_type, so a fresh temp of a plain
+            // user struct (or a nested tuple) stored into the
+            // aggregate was never retired and leaked at the
+            // owner's return. The array path's store discipline
+            // (store_aggregate_element) consumes every non-Copy
+            // non-identifier temp; the tuple gate is the same
+            // predicate in forget form: non-identifier root,
+            // non-Copy, pointer-ABI (owning), non-borrow.
+            if root_identifier(elem).is_none()
+                && !self.type_is_copy_value(&elem_ty)
+                && sla_lowering::abi_passes_as_pointer(&elem_ty)
+                && !sla_lowering::is_borrow_like_type(&elem_ty)
+            {
                 self.emit_forget_moved_value(&val_reg)?;
             }
             // A bare/Move identifier element of a non-Copy type

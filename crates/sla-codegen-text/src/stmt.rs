@@ -420,6 +420,10 @@ impl<'c> Codegen<'c> {
         // (and drops) the field, so an aliasing binding would drop
         // the same buffers a second time.
         let val = self.clone_on_extract_value(&let_stmt.value, val)?;
+        // L4R2 Root U: an identity cast's register is the source
+        // binding's own; renaming it into the binding would move
+        // a value the checker keeps live (see the helper).
+        let val = self.materialize_identity_cast_view(&let_stmt.value, val)?;
         // The binding takes over the value register; a recorded
         // borrow source moves with it (codegen.zig:14942).
         self.transfer_borrow_source_to_binding(&val, &resolved_name);
@@ -467,6 +471,51 @@ impl<'c> Codegen<'c> {
         // M2-call). No-op for plan-None values.
         self.record_value_taint(&resolved_name, &let_stmt.value, &ty_or_err);
         Ok(())
+    }
+
+    /// L4R2 Root U: a pointer-carrier identity cast
+    /// (`p as *DbBlk`) returns the source register itself, and
+    /// the generic let path renames it into the binding
+    /// (`t = p`) — an SA-level move. The checker models the cast
+    /// as a non-consuming view, so its fn-exit cleanup list keeps
+    /// BOTH names and the emitted `!p` then traps UseAfterMove on
+    /// the already-consumed source. When the cast's root is an
+    /// identifier whose own register came back unchanged,
+    /// materialize a `ptr_add +0` view copy for the binding
+    /// instead (the same copy idiom the cast arm itself uses for
+    /// pointer-to-integer identifier casts), leaving the source
+    /// binding live for its own cleanup.
+    fn materialize_identity_cast_view(
+        &mut self,
+        value: &Node,
+        val: String,
+    ) -> Result<String> {
+        let Node::CastExpr(cast) = value else {
+            return Ok(val);
+        };
+        let carrier = |t: &Type| {
+            matches!(
+                t,
+                Type::Pointer(_)
+                    | Type::Borrow(_)
+                    | Type::Primitive(sla_ast::Primitive::RawPtr)
+            )
+        };
+        let Some(src_ty) = self.expr_type(&cast.expr) else {
+            return Ok(val);
+        };
+        if !(carrier(&src_ty) && carrier(&cast.ty)) {
+            return Ok(val);
+        }
+        let Some(root) = root_identifier(&cast.expr) else {
+            return Ok(val);
+        };
+        if val != self.resolve_binding_name(root) {
+            return Ok(val);
+        }
+        let copied = self.new_tmp();
+        self.ins(&format!("{copied} = ptr_add {val}, 0"));
+        Ok(copied)
     }
 
     /// R1 (stage-5a resume): Zig `genLetStmt` materializes a string
@@ -1231,6 +1280,17 @@ impl<'c> Codegen<'c> {
                 self.emit_release(&len_reg)?;
                 if sla_lowering::call_arg_needs_release(&idx.index) {
                     self.emit_release(&index_reg)?;
+                }
+                // L4R2 Root C: the scalar arm never retired the
+                // container register itself, so an index-assign
+                // through a temporary Vec (a field load, a deref, a
+                // call result) left it Active on this edge only and
+                // the merge join trapped PhiStateConflict
+                // (Composite vs Uninitialized). The owned-element
+                // arm (gen_vec_index_assign_owned) ends with exactly
+                // this conditional release; mirror it.
+                if self.expr_result_reg_needs_release(&idx.target) {
+                    self.emit_release(&vec_reg)?;
                 }
                 return Ok(());
             }

@@ -1,0 +1,24 @@
+// LINE-L4-ROUND2 Root A minim: task::new wraps a future object
+// with TASK_NEW, which adopts the object; the emitter never
+// retired the object register (the join2/select2 wrap paths
+// forget theirs at wrap time). When the task itself is then
+// consumed by a move (pushed into the executor's Vec), the
+// task-release companion path never fires and the object
+// register leaks at the return (MemoryLeak). Distilled from
+// test_unit_async_executor_vec_runtime.
+@import "sa_std/future.sa"
+@import "sa_std/core/task.sa"
+@import "sa_std/vec.sa"
+
+fn l4r2_count() -> u64 {
+    let f1 = future::ready(1);
+    let t1 = task::new(f1);
+    let tasks: Vec<Task<i32>> = Vec::new();
+    tasks.push(t1);
+    let executor = executor::new(tasks);
+    return executor::poll_ready_count(executor);
+}
+
+@test "l4r2 task future obj forget"() {
+    if l4r2_count() != 1 { panic(1621); };
+}

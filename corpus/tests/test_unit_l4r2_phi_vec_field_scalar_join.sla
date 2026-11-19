@@ -1,0 +1,33 @@
+// LINE-L4-ROUND2 Root C minim: a scalar index assignment into a
+// Vec FIELD inside one branch of an if/else. The field load
+// produces a temporary Vec register; the scalar index-assign arm
+// retired every helper temp except the container register
+// itself, so the register was Composite on the taken edge and
+// Uninitialized on the other, and the merge join trapped
+// PhiStateConflict. The owned-element arm already ended with the
+// conditional container release; the scalar arm now mirrors it.
+// Distilled from test_unit_defkb1_vec_field_index_join.
+@import "sa_std/vec.sa"
+
+struct L4R2Doc {
+    items: Vec<i64>,
+    other: Vec<i64>,
+}
+
+fn l4r2_write(doc: &L4R2Doc, flag: bool, val: i64) {
+    if flag {
+        doc.items[0] = val;
+    } else {
+        doc.other[0] = val;
+    }
+}
+
+@test "l4r2 phi vec field scalar join"() {
+    let doc = L4R2Doc { items: Vec::new(), other: Vec::new() };
+    doc.items.push(0);
+    doc.other.push(0);
+    l4r2_write(&doc, true, 41);
+    l4r2_write(&doc, false, 42);
+    if doc.items[0] != 41 { panic(1601); };
+    if doc.other[0] != 42 { panic(1602); };
+}
