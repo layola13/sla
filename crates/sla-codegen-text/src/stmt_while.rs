@@ -10,7 +10,7 @@
 //! loop variable per iteration — from the array image, or through
 //! the iterable protocol (`iter_len` once, `iter_at` per index).
 
-use sla_ast::{Node, Type};
+use sla_ast::{EnumPattern, Node, Type, WhileStmt};
 use sla_lowering::{block_terminates, node_key};
 
 use crate::codegen::{type_size, type_string, Codegen};
@@ -23,11 +23,8 @@ impl<'c> Codegen<'c> {
             Node::WhileStmt(w) => w,
             _ => unreachable!(),
         };
-        if while_stmt.let_pattern.is_some() {
-            return unsupported(
-                "while-let statement (pattern family deferred)",
-                "codegen.zig:11440 (while let_pattern path)",
-            );
+        if let Some(pattern) = &while_stmt.let_pattern {
+            return self.gen_while_let_stmt(while_stmt, pattern);
         }
         let head_label = self.new_label("L_WHILE_HEAD");
         let body_label = self.new_label("L_WHILE_BODY");
@@ -73,6 +70,126 @@ impl<'c> Codegen<'c> {
         flow?;
         self.wl(&format!("{cond_false_label}:"));
         self.w(&format!("    !{cond_reg}\n"));
+        self.w(&format!("    jmp {exit_label}\n\n"));
+        self.wl(&format!("{exit_label}:"));
+        Ok(())
+    }
+
+    /// codegen.zig:11440 `genWhileStmt` let_pattern path, the
+    /// Option/Result macro forms: the head evaluates the
+    /// condition value, tests it with OPTION_IS_SOME /
+    /// RESULT_IS_OK into a branch flag, and the body edge
+    /// extracts the single payload binding with OPTION_GET /
+    /// RESULT_GET_OK / RESULT_GET_ERR before retiring the
+    /// condition register. User-enum patterns (Zig's
+    /// genEnumPatternCheck arm) stay loudly unsupported.
+    pub(crate) fn gen_while_let_stmt(
+        &mut self,
+        while_stmt: &WhileStmt,
+        pattern: &EnumPattern,
+    ) -> Result<()> {
+        let variant = pattern.variant_name.as_str();
+        let (check_macro, get_macro, success_on_true, payload_index) = match variant {
+            "Some" => ("OPTION_IS_SOME", "OPTION_GET", true, 0usize),
+            "None" => ("OPTION_IS_SOME", "", false, 0usize),
+            "Ok" => ("RESULT_IS_OK", "RESULT_GET_OK", true, 0usize),
+            "Err" => ("RESULT_IS_OK", "RESULT_GET_ERR", false, 1usize),
+            _ => {
+                return unsupported(
+                    "while-let statement over a user-enum pattern",
+                    "codegen.zig:11440 (while let_pattern enum arm)",
+                )
+            }
+        };
+        if pattern.bindings.len() > 1 || (variant == "None" && !pattern.bindings.is_empty()) {
+            return unsupported(
+                "while-let statement with multiple pattern bindings",
+                "codegen.zig:11440 (while let_pattern bindings)",
+            );
+        }
+        let head_label = self.new_label("L_WHILE_HEAD");
+        let body_label = self.new_label("L_WHILE_BODY");
+        let cond_false_label = self.new_label("L_WHILE_COND_FALSE");
+        let exit_label = self.new_label("L_WHILE_EXIT");
+
+        self.w(&format!("    jmp {head_label}\n\n"));
+        self.wl(&format!("{head_label}:"));
+        let cond_reg = self.gen_branch_condition_reg(&while_stmt.cond)?;
+        let cond_ty = self.expr_type(&while_stmt.cond);
+        let branch_flag = self.new_tmp();
+        self.ins(&format!("EXPAND {check_macro} {branch_flag}, {cond_reg}"));
+        if success_on_true {
+            self.w(&format!(
+                "    br {branch_flag} -> {body_label}, {cond_false_label}\n\n"
+            ));
+        } else {
+            self.w(&format!(
+                "    br {branch_flag} -> {cond_false_label}, {body_label}\n\n"
+            ));
+        }
+        self.wl(&format!("{body_label}:"));
+        self.w(&format!("    !{branch_flag}\n"));
+        // Payload binding (Zig: pushBindingAlias + the GET
+        // macro), then the condition register retires.
+        let mut pushed: Vec<String> = Vec::new();
+        if let Some(binding) = pattern.bindings.first() {
+            let alias = self.push_binding_alias(binding);
+            self.ins(&format!("EXPAND {get_macro} {alias}, {cond_reg}"));
+            if let Some(Type::UserDefined(u)) = &cond_ty {
+                if let Some(payload_ty) = u.generics.get(payload_index) {
+                    let payload_ty = payload_ty.clone();
+                    self.remember_local_binding_type(&alias, &payload_ty);
+                }
+            }
+            pushed.push(binding.clone());
+        }
+        self.emit_release(&cond_reg)?;
+
+        self.loop_continue_labels.push(head_label.clone());
+        self.loop_break_labels.push(exit_label.clone());
+        self.push_loop_body_local_scope();
+        let pre_loop_borrow_sources = self.borrow_source_temps.clone();
+        let pre_loop_refcell_handles = self.refcell_borrow_handles.clone();
+        let mut flow = self.gen_block(&while_stmt.body);
+        self.loop_continue_labels.pop();
+        self.loop_break_labels.pop();
+        if flow.is_ok()
+            && crate::codegen::plan_refcell_loop_state_merge_restores_pre_loop()
+        {
+            flow = self.restore_refcell_branch_state(
+                &pre_loop_refcell_handles,
+                &pre_loop_borrow_sources,
+            );
+        }
+        if flow.is_ok() && !block_terminates(&while_stmt.body) {
+            // Zig releases each pattern binding the body did
+            // not consume; emit_release no-ops for consumed /
+            // stack / borrow registers, so printing it for
+            // every binding is the same set.
+            for binding in &pattern.bindings {
+                let alias = self.resolve_binding_name(binding);
+                if flow.is_ok() {
+                    flow = self.emit_release(&alias);
+                }
+            }
+            if flow.is_ok() {
+                flow = self.emit_active_loop_body_local_cleanups(None, false);
+            }
+            if flow.is_ok() {
+                flow = self.emit_loop_body_top_level_local_cleanups(&while_stmt.body);
+            }
+            if flow.is_ok() {
+                self.w(&format!("    jmp {head_label}\n\n"));
+            }
+        }
+        self.pop_loop_body_local_scope();
+        for binding in pushed.iter().rev() {
+            self.pop_binding_alias(binding);
+        }
+        flow?;
+        self.wl(&format!("{cond_false_label}:"));
+        self.w(&format!("    !{branch_flag}\n"));
+        self.emit_release(&cond_reg)?;
         self.w(&format!("    jmp {exit_label}\n\n"));
         self.wl(&format!("{exit_label}:"));
         Ok(())

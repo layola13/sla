@@ -1,0 +1,29 @@
+@derive(eq, ord)
+struct Ent {
+    id: i32,
+    gen: i32,
+}
+
+struct Vec2 {
+    x: i32,
+    y: i32,
+}
+
+@overload Vec2 {
+    fn +(self: Vec2, other: Vec2) -> Vec2 {
+        return Vec2 { x: self.x + other.x, y: self.y + other.y };
+    }
+}
+
+@test "struct eq ord and overload add"() {
+    let a = Ent { id: 7, gen: 3 };
+    let same = Ent { id: 7, gen: 3 };
+    let later = Ent { id: 7, gen: 4 };
+    if (a == same) != true { panic(301); };
+    if (a != later) != true { panic(302); };
+    if (a < later) != true { panic(303); };
+    if (later > a) != true { panic(304); };
+    let v = Vec2 { x: 2, y: 3 } + Vec2 { x: 5, y: 7 };
+    if v.x != 7 { panic(305); };
+    if v.y != 10 { panic(306); };
+}

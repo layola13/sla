@@ -638,6 +638,128 @@ impl<'c> Codegen<'c> {
             self.ins(&format!("EXPAND {macro_name} {reg}, {recv}"));
             return Ok(Some(SurfaceCall::Value(reg)));
         }
+        // ---- Option closure methods (codegen.zig:14400
+        // planOptionClosureCall arms): map / and_then /
+        // unwrap_or_else expand the closure argument inline
+        // under the Some branch; the None branch rebuilds the
+        // empty/default side. Placed ahead of the receiver
+        // match because the closure argument is not a value
+        // the generic arg planning can generate.
+        if matches!(call.func_name.as_str(), "map" | "and_then" | "unwrap_or_else")
+            && call.args.len() == 2
+        {
+            if let Some(lit) = Self::closure_literal_of(&call.args[1]).cloned() {
+                let recv_ty = self.expr_type(&call.args[0]);
+                let inner = recv_ty.as_ref().and_then(|ty| {
+                    match peel_name(ty) {
+                        Some((name, generics)) if name == "Option" && generics.len() == 1 => {
+                            Some(generics[0].clone())
+                        }
+                        _ => None,
+                    }
+                });
+                if let Some(inner_ty) = inner {
+                    let recv = self.gen_expr(&call.args[0])?;
+                    let is_some = self.new_tmp();
+                    self.ins(&format!("EXPAND OPTION_IS_SOME {is_some}, {recv}"));
+                    let kind = call.func_name.as_str();
+                    let (some_label, none_label, end_label) = match kind {
+                        "map" => (
+                            self.new_label("L_OPTION_MAP_SOME"),
+                            self.new_label("L_OPTION_MAP_NONE"),
+                            self.new_label("L_OPTION_MAP_END"),
+                        ),
+                        "and_then" => (
+                            self.new_label("L_OPTION_AND_THEN_SOME"),
+                            self.new_label("L_OPTION_AND_THEN_NONE"),
+                            self.new_label("L_OPTION_AND_THEN_END"),
+                        ),
+                        _ => (
+                            self.new_label("L_OPTION_UNWRAP_OR_ELSE_SOME"),
+                            self.new_label("L_OPTION_UNWRAP_OR_ELSE_NONE"),
+                            self.new_label("L_OPTION_UNWRAP_OR_ELSE_END"),
+                        ),
+                    };
+                    if kind == "map" {
+                        let result = self.new_tmp();
+                        self.w(&format!(
+                            "    br {is_some} -> {some_label}, {none_label}\n\n"
+                        ));
+                        self.wl(&format!("{some_label}:"));
+                        self.ins(&format!("!{is_some}"));
+                        let value = self.new_tmp();
+                        self.ins(&format!("EXPAND OPTION_GET {value}, {recv}"));
+                        let mapped = self.gen_inline_closure_unary(&lit, &value)?;
+                        self.ins(&format!("EXPAND OPTION_NEW_SOME {result}, {mapped}"));
+                        self.emit_release(&value)?;
+                        if mapped != value {
+                            self.emit_release(&mapped)?;
+                        }
+                        self.w(&format!("    jmp {end_label}\n\n"));
+                        self.wl(&format!("{none_label}:"));
+                        self.ins(&format!("!{is_some}"));
+                        self.ins(&format!("EXPAND OPTION_NEW_NONE {result}"));
+                        self.w(&format!("    jmp {end_label}\n\n"));
+                        self.wl(&format!("{end_label}:"));
+                        if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                            self.emit_release(&recv)?;
+                        }
+                        return Ok(Some(SurfaceCall::Value(result)));
+                    }
+                    // and_then / unwrap_or_else merge through a
+                    // result slot (the two arms produce values
+                    // of the same type from different shapes).
+                    let slot = self.new_tmp();
+                    self.ins(&format!("{slot} = stack_alloc 8"));
+                    self.w(&format!(
+                        "    br {is_some} -> {some_label}, {none_label}\n\n"
+                    ));
+                    self.wl(&format!("{some_label}:"));
+                    self.ins(&format!("!{is_some}"));
+                    let value = self.new_tmp();
+                    self.ins(&format!("EXPAND OPTION_GET {value}, {recv}"));
+                    if kind == "and_then" {
+                        let chained = self.gen_inline_closure_unary(&lit, &value)?;
+                        self.ins(&format!("store {slot}+0, {chained} as ptr"));
+                        self.store_refcell_handle_companion_for_slot(&slot, &chained);
+                        self.emit_release(&value)?;
+                        self.w(&format!("    jmp {end_label}\n\n"));
+                        self.wl(&format!("{none_label}:"));
+                        self.ins(&format!("!{is_some}"));
+                        let none_reg = self.new_tmp();
+                        self.ins(&format!("EXPAND OPTION_NEW_NONE {none_reg}"));
+                        self.ins(&format!("store {slot}+0, {none_reg} as ptr"));
+                        self.store_refcell_handle_companion_for_slot(&slot, &none_reg);
+                        self.w(&format!("    jmp {end_label}\n\n"));
+                        self.wl(&format!("{end_label}:"));
+                        let result = self.new_tmp();
+                        self.ins(&format!("{result} = load {slot}+0 as ptr"));
+                        if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                            self.emit_release(&recv)?;
+                        }
+                        return Ok(Some(SurfaceCall::Value(result)));
+                    }
+                    // unwrap_or_else
+                    let ty_str = crate::codegen::type_string(&inner_ty);
+                    self.ins(&format!("store {slot}+0, {value} as {ty_str}"));
+                    self.store_refcell_handle_companion_for_slot(&slot, &value);
+                    self.w(&format!("    jmp {end_label}\n\n"));
+                    self.wl(&format!("{none_label}:"));
+                    self.ins(&format!("!{is_some}"));
+                    let default = self.gen_inline_closure_nullary(&lit)?;
+                    self.ins(&format!("store {slot}+0, {default} as {ty_str}"));
+                    self.store_refcell_handle_companion_for_slot(&slot, &default);
+                    self.w(&format!("    jmp {end_label}\n\n"));
+                    self.wl(&format!("{end_label}:"));
+                    let reg = self.new_tmp();
+                    self.ins(&format!("{reg} = load {slot}+0 as {ty_str}"));
+                    if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                        self.emit_release(&recv)?;
+                    }
+                    return Ok(Some(SurfaceCall::Value(reg)));
+                }
+            }
+        }
         // ---- receiver methods ----
         if call.args.is_empty() || call.callee.is_some() {
             return Ok(None);

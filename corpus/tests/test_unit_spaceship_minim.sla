@@ -1,0 +1,17 @@
+@import "sla_std/cmp.sla"
+
+@derive(ord)
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+@test "spaceship scalar and struct"() {
+    if (3 <=> 5).is_lt() != true { panic(201); };
+    if (5 <=> 5).is_eq() != true { panic(202); };
+    if (7 <=> 5).is_gt() != true { panic(203); };
+    let p1 = Pair { a: 1, b: 9 };
+    let p2 = Pair { a: 2, b: 0 };
+    if (p1 <=> p2).is_lt() != true { panic(204); };
+    if (p2 <=> p1).is_gt() != true { panic(205); };
+}

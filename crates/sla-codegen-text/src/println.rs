@@ -21,15 +21,20 @@ impl<'c> Codegen<'c> {
         let fmt_text: &str = match &call.args[0] {
             Node::Literal(Literal::StringVal(text)) => text,
             _ => {
+                // codegen.zig:2128 (#4b): a single string-like /
+                // format-string argument (e.g. the
+                // `println(format(...))` shape templates desugar
+                // to) prints its value instead of a bare newline;
+                // every other arity keeps the historical behavior.
                 if call.args.len() == 1 {
                     if let Some(ty) = self.expr_type(&call.args[0]) {
-                        if crate::codegen::is_format_string_type(&ty)
-                            || crate::codegen::is_string_like_type(&ty)
-                        {
-                            return unsupported(
-                                "println of format-string/string value",
-                                "codegen.zig:2140 (emitPrintln value paths)",
-                            );
+                        if crate::codegen::is_format_string_type(&ty) {
+                            self.emit_print_string_value(&call.args[0], true)?;
+                            return self.emit_println_newline();
+                        }
+                        if crate::codegen::is_string_like_type(&ty) {
+                            self.emit_print_string_value(&call.args[0], false)?;
+                            return self.emit_println_newline();
                         }
                     }
                 }
@@ -115,14 +120,12 @@ impl<'c> Codegen<'c> {
                 }
                 Ok(())
             }
-            Some(ty) if crate::codegen::is_format_string_type(ty) => unsupported(
-                "println of String argument",
-                "codegen.zig:2250 (format-string arg path)",
-            ),
-            Some(ty) if crate::codegen::is_string_like_type(ty) => unsupported(
-                "println of string-like argument",
-                "codegen.zig:2300 (string-like arg path)",
-            ),
+            Some(ty) if crate::codegen::is_format_string_type(ty) => {
+                self.emit_print_string_value(arg, true)
+            }
+            Some(ty) if crate::codegen::is_string_like_type(ty) => {
+                self.emit_print_string_value(arg, false)
+            }
             Some(Type::Borrow(_)) => unsupported(
                 "println of borrowed argument",
                 "codegen.zig:2350 (borrow arg path)",
@@ -136,6 +139,39 @@ impl<'c> Codegen<'c> {
                 Ok(())
             }
         }
+    }
+
+    /// codegen.zig:2140/2250 string-value print sequence: the
+    /// format-string form first views the String buffer as a
+    /// string (`STRING_BUF_AS_STR`); both forms then print the
+    /// value's bytes through `STRING_PTR` / `STRING_LEN` and
+    /// `@sa_print_bytes`. No trailing newline here — the caller
+    /// owns it.
+    fn emit_print_string_value(&mut self, arg: &Node, format_string: bool) -> Result<()> {
+        let value_reg = self.gen_expr(arg)?;
+        let slice_reg = if format_string {
+            let slice_reg = self.new_tmp();
+            self.ins(&format!(
+                "EXPAND STRING_BUF_AS_STR {slice_reg}, {value_reg}"
+            ));
+            slice_reg
+        } else {
+            value_reg.clone()
+        };
+        let ptr_reg = self.new_tmp();
+        let len_reg = self.new_tmp();
+        self.ins(&format!("EXPAND STRING_PTR {ptr_reg}, {slice_reg}"));
+        self.ins(&format!("EXPAND STRING_LEN {len_reg}, {slice_reg}"));
+        self.ins(&format!("call @sa_print_bytes(&{ptr_reg}, {len_reg})"));
+        self.emit_release(&ptr_reg)?;
+        self.emit_release(&len_reg)?;
+        if format_string {
+            self.emit_release(&slice_reg)?;
+        }
+        if call_arg_needs_release(arg) {
+            self.emit_release(&value_reg)?;
+        }
+        Ok(())
     }
 
     /// codegen.zig `emitPrintlnNewline`.

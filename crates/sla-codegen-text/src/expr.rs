@@ -29,7 +29,7 @@ impl<'c> Codegen<'c> {
                 // Plain arrays and slices go through the
                 // genIndexAddress fallthrough (ptr arithmetic +
                 // slot load, no bounds check in the Zig arm).
-                let target_ty = self.expr_type(&idx.target).ok_or_else(|| {
+                let target_ty = self.place_type_of_expr(&idx.target).ok_or_else(|| {
                     TextError::MissingType {
                         context: "index target type".to_string(),
                     }
@@ -377,6 +377,15 @@ impl<'c> Codegen<'c> {
             // same way.
             Node::GoStmt(go) if go.supervised => self.gen_supervised_go_expr(go),
             Node::GoStmt(go) => self.gen_plain_go_expr(go),
+            Node::ClosureLiteral(_) => {
+                // codegen.zig:13333: a bare closure literal in
+                // value position is the zero placeholder; the
+                // literal only takes effect through a call
+                // (inline expansion) or a let/const binding.
+                let reg = self.new_tmp();
+                self.ins(&format!("{reg} = 0"));
+                Ok(reg)
+            }
             other => Err(TextError::Unsupported {
                 feature: format!("expression kind {:?}", expr_kind_name(other)),
                 zig_ref: "codegen.zig:12824 (genExpr)",
@@ -589,6 +598,17 @@ impl<'c> Codegen<'c> {
         if let Some(reg) = self.thread_capture_regs.get(name) {
             return Ok(reg.clone());
         }
+        // Inline closure expansion (codegen.zig
+        // `closure_param_regs`): a closure parameter name reads
+        // as the argument register bound at the call site.
+        if let Some((_, reg)) = self
+            .closure_param_regs
+            .iter()
+            .rev()
+            .find(|(n, _)| n == name)
+        {
+            return Ok(reg.clone());
+        }
         if is_option_none_name(name) {
             let result = self.new_tmp();
             self.ins(&format!("EXPAND OPTION_NEW_NONE {result}"));
@@ -670,11 +690,21 @@ impl<'c> Codegen<'c> {
                 "lowering_rules.zig:5819 (resolved static call plans)",
             );
         }
+        if bin.op == sla_ast::BinaryOp::Spaceship {
+            return self.gen_spaceship_expr(bin);
+        }
         let left_ty = self.expr_type(&bin.left);
         let right_ty = self.expr_type(&bin.right);
-        if matches!(left_ty, Some(Type::UserDefined(_)))
-            || matches!(right_ty, Some(Type::UserDefined(_)))
-        {
+        if matches!(
+            left_ty.as_ref().map(sla_lowering::peel_borrow_pointer_type),
+            Some(Type::UserDefined(_))
+        ) || matches!(
+            right_ty.as_ref().map(sla_lowering::peel_borrow_pointer_type),
+            Some(Type::UserDefined(_))
+        ) {
+            if let Some(reg) = self.gen_struct_binary_expr(bin, &left_ty, &right_ty)? {
+                return Ok(reg);
+            }
             return unsupported(
                 "binary expr over user-defined operands (struct op families)",
                 "codegen.zig:12930 (struct eq/ord/arith emitters)",
@@ -704,6 +734,558 @@ impl<'c> Codegen<'c> {
             self.emit_release(&r)?;
         }
         Ok(result)
+    }
+
+    /// codegen.zig:3849 `genSpaceshipExpr`: numeric operands
+    /// compare through CMP_COMPARE_I64/U64 (floats through an
+    /// fcmp branch chain) into a raw -1/0/1, then materialize
+    /// the Ordering struct (alloc 8, store raw at +0). A
+    /// same-struct pair compares field by field as scalars,
+    /// storing the first decisive field's ordering.
+    fn gen_spaceship_expr(&mut self, bin: &sla_ast::BinaryExpr) -> Result<String> {
+        let left_ty = self
+            .expr_type(&bin.left)
+            .ok_or_else(|| TextError::MissingType {
+                context: "spaceship left operand type".to_string(),
+            })?;
+        let right_ty = self
+            .expr_type(&bin.right)
+            .ok_or_else(|| TextError::MissingType {
+                context: "spaceship right operand type".to_string(),
+            })?;
+        let l = self.gen_expr(&bin.left)?;
+        let r = self.gen_expr(&bin.right)?;
+        let result = if matches!(left_ty, Type::Primitive(_))
+            && matches!(right_ty, Type::Primitive(_))
+        {
+            let raw = self.new_tmp();
+            if sla_lowering::is_float_type(&left_ty) {
+                let less = self.new_tmp();
+                let greater = self.new_tmp();
+                let less_label = self.new_label("L_SPACESHIP_FLOAT_LESS");
+                let check_label = self.new_label("L_SPACESHIP_FLOAT_CHECK_GREATER");
+                let greater_label = self.new_label("L_SPACESHIP_FLOAT_GREATER");
+                let equal_label = self.new_label("L_SPACESHIP_FLOAT_EQUAL");
+                let done_label = self.new_label("L_SPACESHIP_FLOAT_DONE");
+                self.ins(&format!("{less} = fcmp_lt {l}, {r}"));
+                self.w(&format!("    br {less} -> {less_label}, {check_label}\n\n"));
+                self.wl(&format!("{less_label}:"));
+                self.ins(&format!("{raw} = add 0, -1"));
+                self.w(&format!("    jmp {done_label}\n\n"));
+                self.wl(&format!("{check_label}:"));
+                self.ins(&format!("{greater} = fcmp_gt {l}, {r}"));
+                self.w(&format!(
+                    "    br {greater} -> {greater_label}, {equal_label}\n\n"
+                ));
+                self.wl(&format!("{greater_label}:"));
+                self.ins(&format!("{raw} = add 0, 1"));
+                self.w(&format!("    jmp {done_label}\n\n"));
+                self.wl(&format!("{equal_label}:"));
+                self.ins(&format!("{raw} = add 0, 0"));
+                self.wl(&format!("{done_label}:"));
+            } else {
+                let macro_name = if sla_lowering::is_unsigned_integer_type(&left_ty) {
+                    "CMP_COMPARE_U64"
+                } else {
+                    "CMP_COMPARE_I64"
+                };
+                self.ins(&format!("EXPAND {macro_name} {raw}, {l}, {r}"));
+            }
+            let ord = self.new_tmp();
+            self.ins(&format!("{ord} = alloc 8"));
+            self.ins(&format!("store {ord}+0, {raw} as i64"));
+            ord
+        } else if let (Type::UserDefined(lu), Type::UserDefined(ru)) =
+            (&left_ty, &right_ty)
+        {
+            if lu.name != ru.name {
+                return unsupported(
+                    "spaceship over different struct types",
+                    "codegen.zig:3849 (genSpaceshipExpr same-struct plan)",
+                );
+            }
+            let decl = self
+                .check
+                .struct_decl(&lu.name)
+                .cloned()
+                .ok_or_else(|| TextError::MissingType {
+                    context: format!("spaceship struct `{}` declaration", lu.name),
+                })?;
+            let ord = self.new_tmp();
+            self.ins(&format!("{ord} = alloc 8"));
+            self.ins(&format!("store {ord}+0, 0 as i64"));
+            let done_label = self.new_label("L_SPACESHIP_STRUCT_DONE");
+            for field in &decl.fields {
+                let (offset, field_ty) =
+                    crate::layout::struct_field_layout(&decl, &field.name).ok_or_else(
+                        || TextError::MissingType {
+                            context: format!("spaceship field `{}` layout", field.name),
+                        },
+                    )?;
+                if !matches!(field_ty, Type::Primitive(_)) {
+                    return unsupported(
+                        "spaceship over a struct with a non-scalar field",
+                        "codegen.zig:3849 (genSpaceshipExpr scalar field loads)",
+                    );
+                }
+                let lhs = self.new_tmp();
+                let rhs = self.new_tmp();
+                let less = self.new_tmp();
+                let greater = self.new_tmp();
+                let less_label = self.new_label("L_SPACESHIP_STRUCT_LESS");
+                let check_label = self.new_label("L_SPACESHIP_STRUCT_CHECK_GREATER");
+                let greater_label = self.new_label("L_SPACESHIP_STRUCT_GREATER");
+                let next_label = self.new_label("L_SPACESHIP_STRUCT_NEXT");
+                let unsigned = sla_lowering::is_unsigned_integer_type(&field_ty);
+                let float = sla_lowering::is_float_type(&field_ty);
+                let (less_op, greater_op) = if float {
+                    ("fcmp_lt", "fcmp_gt")
+                } else if unsigned {
+                    ("ult", "ugt")
+                } else {
+                    ("slt", "sgt")
+                };
+                let ty_str = crate::codegen::type_string(&field_ty);
+                self.ins(&format!("{lhs} = load {l}+{offset} as {ty_str}"));
+                self.ins(&format!("{rhs} = load {r}+{offset} as {ty_str}"));
+                self.ins(&format!("{less} = {less_op} {lhs}, {rhs}"));
+                self.w(&format!("    br {less} -> {less_label}, {check_label}\n\n"));
+                self.wl(&format!("{less_label}:"));
+                self.ins(&format!("store {ord}+0, -1 as i64"));
+                self.w(&format!("    jmp {done_label}\n\n"));
+                self.wl(&format!("{check_label}:"));
+                self.ins(&format!("{greater} = {greater_op} {lhs}, {rhs}"));
+                self.w(&format!(
+                    "    br {greater} -> {greater_label}, {next_label}\n\n"
+                ));
+                self.wl(&format!("{greater_label}:"));
+                self.ins(&format!("store {ord}+0, 1 as i64"));
+                self.w(&format!("    jmp {done_label}\n\n"));
+                self.wl(&format!("{next_label}:"));
+            }
+            self.wl(&format!("{done_label}:"));
+            ord
+        } else {
+            return unsupported(
+                "spaceship over mixed operand kinds",
+                "codegen.zig:3849 (genSpaceshipExpr plan)",
+            );
+        };
+        if sla_lowering::call_arg_needs_release(&bin.left) {
+            self.emit_release(&l)?;
+        }
+        if sla_lowering::call_arg_needs_release(&bin.right) {
+            self.emit_release(&r)?;
+        }
+        Ok(result)
+    }
+
+    /// codegen.zig:12918 binary_expr user-defined operand
+    /// families, in the Zig dispatch order: a checker-resolved
+    /// @overload operator becomes a direct call to the mangled
+    /// overload symbol; then field-wise struct equality
+    /// (genStructEqualityExpr), derived-ord comparison
+    /// (genStructOrdExpr) and field-wise struct arithmetic
+    /// (genStructArithmeticExpr). Returns Ok(None) when no
+    /// family applies (the caller keeps the loud unsupported).
+    fn gen_struct_binary_expr(
+        &mut self,
+        bin: &sla_ast::BinaryExpr,
+        left_ty: &Option<Type>,
+        right_ty: &Option<Type>,
+    ) -> Result<Option<String>> {
+        let peeled = |t: &Option<Type>| {
+            t.as_ref()
+                .map(|ty| sla_lowering::peel_borrow_pointer_type(ty).clone())
+        };
+        let left_ty = peeled(left_ty);
+        let right_ty = peeled(right_ty);
+        let struct_decl_of = |t: &Option<Type>| -> Option<(String, sla_ast::StructDecl)> {
+            match t {
+                Some(Type::UserDefined(u)) => self
+                    .check
+                    .struct_decl(&u.name)
+                    .map(|d| (u.name.clone(), d.clone())),
+                _ => None,
+            }
+        };
+        let left_struct = struct_decl_of(&left_ty);
+        let right_struct = struct_decl_of(&right_ty);
+
+        // @overload operator dispatch: the checker resolved the
+        // operator to the unique overload whose parameters match
+        // the operands exactly (check_binary.rs overload_symbol);
+        // the body lives in the program under the mangled name
+        // `{Type}_{op_name}` (program.rs OverloadDecl arm).
+        let op_name = match bin.op {
+            sla_ast::BinaryOp::Add => Some("op_add"),
+            sla_ast::BinaryOp::Sub => Some("op_sub"),
+            sla_ast::BinaryOp::Mul => Some("op_mul"),
+            sla_ast::BinaryOp::Div => Some("op_div"),
+            _ => None,
+        };
+        if let (Some(op_name), Some((lname, _))) = (op_name, &left_struct) {
+            let mangled = sla_lowering::mangle_method_name(lname, op_name);
+            let decl = self
+                .assoc_index
+                .iter()
+                .find(|(n, d)| {
+                    *n == mangled
+                        && d.params.len() == 2
+                        && left_ty.as_ref() == Some(&*d.params[0].ty)
+                        && right_ty.as_ref() == Some(&*d.params[1].ty)
+                })
+                .map(|(_, d)| d.clone());
+            if let Some(decl) = decl {
+                let call = sla_ast::CallExpr {
+                    func_name: mangled.clone(),
+                    associated_target: None,
+                    generics: Vec::new(),
+                    args: vec![(*bin.left).clone(), (*bin.right).clone()],
+                    callee: None,
+                };
+                let (display, planned_args) =
+                    self.plan_known_call_args(&call, &decl.params)?;
+                let result = self.new_tmp();
+                let lowered = self.lowered_func_symbol(&mangled);
+                self.ins(&format!(
+                    "{result} = call @{lowered}({})",
+                    display.join(", ")
+                ));
+                self.emit_lowered_call_arg_cleanups(&planned_args, Some(&mangled))?;
+                return Ok(Some(result));
+            }
+        }
+
+        let (Some((_, ldecl)), Some((_, rdecl))) = (&left_struct, &right_struct) else {
+            // Struct-scalar arithmetic (mul by a scalar, 0 - x)
+            // is part of the arithmetic family below.
+            return self.gen_struct_scalar_arith(bin, &left_struct, &right_struct);
+        };
+        if ldecl.name != rdecl.name || ldecl.is_opaque || ldecl.is_union {
+            return Ok(None);
+        }
+        let decl = ldecl;
+
+        // genStructEqualityExpr: field-wise `eq` AND-chained.
+        if matches!(bin.op, sla_ast::BinaryOp::Eq | sla_ast::BinaryOp::Ne) {
+            let l = self.gen_expr(&bin.left)?;
+            let r = self.gen_expr(&bin.right)?;
+            let mut acc: Option<String> = None;
+            for field in &decl.fields {
+                let (offset, field_ty) =
+                    crate::layout::struct_field_layout(decl, &field.name).ok_or_else(
+                        || TextError::MissingType {
+                            context: format!("struct eq field `{}` layout", field.name),
+                        },
+                    )?;
+                let ty_str = crate::codegen::type_string(&field_ty);
+                let lhs = self.new_tmp();
+                let rhs = self.new_tmp();
+                let eq_reg = self.new_tmp();
+                self.ins(&format!("{lhs} = load {l}+{offset} as {ty_str}"));
+                self.ins(&format!("{rhs} = load {r}+{offset} as {ty_str}"));
+                self.ins(&format!("{eq_reg} = eq {lhs}, {rhs}"));
+                acc = Some(match acc {
+                    Some(prev) => {
+                        let next = self.new_tmp();
+                        self.ins(&format!("{next} = and {prev}, {eq_reg}"));
+                        next
+                    }
+                    None => eq_reg,
+                });
+            }
+            let result = self.new_tmp();
+            match acc {
+                Some(eq_all) => {
+                    if bin.op == sla_ast::BinaryOp::Eq {
+                        self.ins(&format!("{result} = or {eq_all}, 0"));
+                    } else {
+                        self.ins(&format!("{result} = ne {eq_all}, 1"));
+                    }
+                }
+                None => {
+                    let empty = if bin.op == sla_ast::BinaryOp::Eq { 1 } else { 0 };
+                    self.ins(&format!("{result} = add 0, {empty}"));
+                }
+            }
+            if sla_lowering::call_arg_needs_release(&bin.left) {
+                self.emit_release(&l)?;
+            }
+            if sla_lowering::call_arg_needs_release(&bin.right) {
+                self.emit_release(&r)?;
+            }
+            return Ok(Some(result));
+        }
+
+        // genStructOrdExpr: derived `ord`, lexicographic over
+        // the fields with an equality-prefix chain.
+        if matches!(
+            bin.op,
+            sla_ast::BinaryOp::Lt
+                | sla_ast::BinaryOp::Le
+                | sla_ast::BinaryOp::Gt
+                | sla_ast::BinaryOp::Ge
+        ) && decl.derives.iter().any(|d| d == "ord")
+        {
+            let l = self.gen_expr(&bin.left)?;
+            let r = self.gen_expr(&bin.right)?;
+            let cmp_op = match bin.op {
+                sla_ast::BinaryOp::Lt | sla_ast::BinaryOp::Le => "slt",
+                _ => "sgt",
+            };
+            let mut order_acc: Option<String> = None;
+            let mut eq_prefix: Option<String> = None;
+            for field in &decl.fields {
+                let (offset, field_ty) =
+                    crate::layout::struct_field_layout(decl, &field.name).ok_or_else(
+                        || TextError::MissingType {
+                            context: format!("struct ord field `{}` layout", field.name),
+                        },
+                    )?;
+                let ty_str = crate::codegen::type_string(&field_ty);
+                let lhs = self.new_tmp();
+                let rhs = self.new_tmp();
+                let cmp = self.new_tmp();
+                let eq_reg = self.new_tmp();
+                self.ins(&format!("{lhs} = load {l}+{offset} as {ty_str}"));
+                self.ins(&format!("{rhs} = load {r}+{offset} as {ty_str}"));
+                self.ins(&format!("{cmp} = {cmp_op} {lhs}, {rhs}"));
+                self.ins(&format!("{eq_reg} = eq {lhs}, {rhs}"));
+                let term = match &eq_prefix {
+                    Some(prefix) => {
+                        let t = self.new_tmp();
+                        self.ins(&format!("{t} = and {prefix}, {cmp}"));
+                        t
+                    }
+                    None => cmp,
+                };
+                order_acc = Some(match order_acc {
+                    Some(prev) => {
+                        let next = self.new_tmp();
+                        self.ins(&format!("{next} = or {prev}, {term}"));
+                        next
+                    }
+                    None => term,
+                });
+                eq_prefix = Some(match eq_prefix {
+                    Some(prefix) => {
+                        let next = self.new_tmp();
+                        self.ins(&format!("{next} = and {prefix}, {eq_reg}"));
+                        next
+                    }
+                    None => eq_reg,
+                });
+            }
+            let result = self.new_tmp();
+            match order_acc {
+                Some(ordered) => {
+                    if matches!(bin.op, sla_ast::BinaryOp::Le | sla_ast::BinaryOp::Ge) {
+                        let eq_all = eq_prefix.ok_or_else(|| TextError::MissingType {
+                            context: "struct ord equality prefix".to_string(),
+                        })?;
+                        self.ins(&format!("{result} = or {ordered}, {eq_all}"));
+                    } else {
+                        self.ins(&format!("{result} = or {ordered}, 0"));
+                    }
+                }
+                None => {
+                    let empty = if matches!(
+                        bin.op,
+                        sla_ast::BinaryOp::Le | sla_ast::BinaryOp::Ge
+                    ) {
+                        1
+                    } else {
+                        0
+                    };
+                    self.ins(&format!("{result} = add 0, {empty}"));
+                }
+            }
+            if sla_lowering::call_arg_needs_release(&bin.left) {
+                self.emit_release(&l)?;
+            }
+            if sla_lowering::call_arg_needs_release(&bin.right) {
+                self.emit_release(&r)?;
+            }
+            return Ok(Some(result));
+        }
+
+        // genStructArithmeticExpr, same-struct add/sub arm:
+        // field-wise numeric op into a fresh struct image.
+        if matches!(bin.op, sla_ast::BinaryOp::Add | sla_ast::BinaryOp::Sub) {
+            let op = if bin.op == sla_ast::BinaryOp::Add {
+                "add"
+            } else {
+                "sub"
+            };
+            let l = self.gen_expr(&bin.left)?;
+            let r = self.gen_expr(&bin.right)?;
+            let result = self.new_tmp();
+            self.ins(&format!(
+                "{result} = alloc {}",
+                crate::layout::struct_size(decl)
+            ));
+            for field in &decl.fields {
+                if !sla_lowering::is_numeric_type(&field.ty) {
+                    return Err(TextError::Unsupported {
+                        feature: format!(
+                            "struct arithmetic over non-numeric field `{}`",
+                            field.name
+                        ),
+                        zig_ref: "codegen.zig:3590 (genStructArithmeticExpr)",
+                    });
+                }
+                let (offset, field_ty) =
+                    crate::layout::struct_field_layout(decl, &field.name).ok_or_else(
+                        || TextError::MissingType {
+                            context: format!(
+                                "struct arith field `{}` layout",
+                                field.name
+                            ),
+                        },
+                    )?;
+                let ty_str = crate::codegen::type_string(&field_ty);
+                let lhs = self.new_tmp();
+                let rhs = self.new_tmp();
+                let value = self.new_tmp();
+                self.ins(&format!("{lhs} = load {l}+{offset} as {ty_str}"));
+                self.ins(&format!("{rhs} = load {r}+{offset} as {ty_str}"));
+                self.ins(&format!("{value} = {op} {lhs}, {rhs}"));
+                self.ins(&format!("store {result}+{offset}, {value} as {ty_str}"));
+            }
+            if sla_lowering::call_arg_needs_release(&bin.left) {
+                self.emit_release(&l)?;
+            }
+            if sla_lowering::call_arg_needs_release(&bin.right) {
+                self.emit_release(&r)?;
+            }
+            return Ok(Some(result));
+        }
+
+        Ok(None)
+    }
+
+    /// genStructArithmeticExpr's mixed arms: struct * scalar,
+    /// scalar * struct, and `0 - struct` negation. Ok(None)
+    /// when neither operand is a struct with a numeric partner.
+    fn gen_struct_scalar_arith(
+        &mut self,
+        bin: &sla_ast::BinaryExpr,
+        left_struct: &Option<(String, sla_ast::StructDecl)>,
+        right_struct: &Option<(String, sla_ast::StructDecl)>,
+    ) -> Result<Option<String>> {
+        // struct * scalar / scalar * struct.
+        if bin.op == sla_ast::BinaryOp::Mul {
+            let (decl, struct_side_left) = match (left_struct, right_struct) {
+                (Some((_, d)), None) => (d, true),
+                (None, Some((_, d))) => (d, false),
+                _ => return Ok(None),
+            };
+            if decl.is_opaque || decl.is_union {
+                return Ok(None);
+            }
+            let (struct_node, scalar_node) = if struct_side_left {
+                (&bin.left, &bin.right)
+            } else {
+                (&bin.right, &bin.left)
+            };
+            let struct_reg = self.gen_expr(struct_node)?;
+            let scalar = self.gen_expr(scalar_node)?;
+            let result = self.new_tmp();
+            self.ins(&format!(
+                "{result} = alloc {}",
+                crate::layout::struct_size(decl)
+            ));
+            for field in &decl.fields {
+                if !sla_lowering::is_numeric_type(&field.ty) {
+                    return Err(TextError::Unsupported {
+                        feature: format!(
+                            "struct scalar-mul over non-numeric field `{}`",
+                            field.name
+                        ),
+                        zig_ref: "codegen.zig:3590 (genStructArithmeticExpr)",
+                    });
+                }
+                let (offset, field_ty) =
+                    crate::layout::struct_field_layout(decl, &field.name).ok_or_else(
+                        || TextError::MissingType {
+                            context: format!(
+                                "struct mul field `{}` layout",
+                                field.name
+                            ),
+                        },
+                    )?;
+                let ty_str = crate::codegen::type_string(&field_ty);
+                let lhs = self.new_tmp();
+                let value = self.new_tmp();
+                self.ins(&format!("{lhs} = load {struct_reg}+{offset} as {ty_str}"));
+                self.ins(&format!("{value} = mul {lhs}, {scalar}"));
+                self.ins(&format!("store {result}+{offset}, {value} as {ty_str}"));
+            }
+            if sla_lowering::call_arg_needs_release(&bin.left) {
+                let reg = if struct_side_left { &struct_reg } else { &scalar };
+                self.emit_release(reg)?;
+            }
+            if sla_lowering::call_arg_needs_release(&bin.right) {
+                let reg = if struct_side_left { &scalar } else { &struct_reg };
+                self.emit_release(reg)?;
+            }
+            return Ok(Some(result));
+        }
+        // 0 - struct negation.
+        if bin.op == sla_ast::BinaryOp::Sub {
+            if let (None, Some((_, decl))) = (left_struct, right_struct) {
+                if decl.is_opaque || decl.is_union {
+                    return Ok(None);
+                }
+                let is_zero = matches!(
+                    &*bin.left,
+                    Node::Literal(sla_ast::Literal::IntVal(v)) if *v == 0
+                );
+                if !is_zero {
+                    return Ok(None);
+                }
+                let zero_reg = self.gen_expr(&bin.left)?;
+                self.emit_release(&zero_reg)?;
+                let r = self.gen_expr(&bin.right)?;
+                let result = self.new_tmp();
+                self.ins(&format!(
+                    "{result} = alloc {}",
+                    crate::layout::struct_size(decl)
+                ));
+                for field in &decl.fields {
+                    if !sla_lowering::is_numeric_type(&field.ty) {
+                        return Err(TextError::Unsupported {
+                            feature: format!(
+                                "struct negation over non-numeric field `{}`",
+                                field.name
+                            ),
+                            zig_ref: "codegen.zig:3590 (genStructArithmeticExpr)",
+                        });
+                    }
+                    let (offset, field_ty) = crate::layout::struct_field_layout(
+                        decl,
+                        &field.name,
+                    )
+                    .ok_or_else(|| TextError::MissingType {
+                        context: format!("struct neg field `{}` layout", field.name),
+                    })?;
+                    let ty_str = crate::codegen::type_string(&field_ty);
+                    let rhs = self.new_tmp();
+                    let value = self.new_tmp();
+                    self.ins(&format!("{rhs} = load {r}+{offset} as {ty_str}"));
+                    self.ins(&format!("{value} = sub 0, {rhs}"));
+                    self.ins(&format!(
+                        "store {result}+{offset}, {value} as {ty_str}"
+                    ));
+                }
+                if sla_lowering::call_arg_needs_release(&bin.right) {
+                    self.emit_release(&r)?;
+                }
+                return Ok(Some(result));
+            }
+        }
+        Ok(None)
     }
 
     /// codegen.zig:24137 `try_expr`: postfix `?` unwrapper. The

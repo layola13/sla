@@ -214,6 +214,14 @@ pub struct Codegen<'c> {
     /// `thread_capture_regs`): identifier reads inside a
     /// generated worker resolve to the slot loads.
     pub(crate) thread_capture_regs: HashMap<String, String>,
+    /// codegen.zig `closure_bindings`: let/const-bound closure
+    /// literals by binding name; a call to the name expands the
+    /// literal inline (genClosureCall), it never materializes.
+    pub(crate) closure_bindings: Vec<(String, sla_ast::ClosureLiteral)>,
+    /// codegen.zig `closure_param_regs`: inline-expansion
+    /// parameter registers, innermost last (a stack so nested
+    /// expansions shadow and restore).
+    pub(crate) closure_param_regs: Vec<(String, String)>,
 
     // Loop state.
     pub(crate) loop_break_labels: Vec<String>,
@@ -321,6 +329,8 @@ impl<'c> Codegen<'c> {
             result_slot_refcell_handles: HashMap::new(),
             result_slot_refcell_slots: HashMap::new(),
             thread_capture_regs: HashMap::new(),
+            closure_bindings: Vec::new(),
+            closure_param_regs: Vec::new(),
             loop_break_labels: Vec::new(),
             loop_continue_labels: Vec::new(),
             loop_body_local_scopes: Vec::new(),
@@ -615,6 +625,33 @@ impl<'c> Codegen<'c> {
             .iter()
             .find(|(n, _)| n == name)
             .map(|(_, t)| t.clone())
+    }
+
+    /// Place-type fallback for index targets: the checker
+    /// records no expr type for some place occurrences (an
+    /// annotated let's identifier in index position, a field of
+    /// a join/call-result binding), but the place's type is
+    /// derivable — a binding's remembered type, or a field's
+    /// declared type off the base's place type. Returns None
+    /// when neither source knows it (the caller then fails
+    /// MissingType exactly as before).
+    pub(crate) fn place_type_of_expr(&self, node: &Node) -> Option<Type> {
+        if let Some(t) = self.expr_type(node) {
+            return Some(t);
+        }
+        match node {
+            Node::Identifier(name) => {
+                let resolved = self.resolve_binding_name(name);
+                self.local_binding_type_for_name(&resolved)
+            }
+            Node::FieldExpr(f) => {
+                let base_ty = self.place_type_of_expr(&f.expr)?;
+                self.field_address_layout(&base_ty, &f.field_name)
+                    .ok()
+                    .map(|(_, ty)| ty)
+            }
+            _ => None,
+        }
     }
 
     /// codegen.zig `macroArgTypeForName`: the recorded macro-arg

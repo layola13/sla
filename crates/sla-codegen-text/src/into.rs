@@ -873,10 +873,22 @@ impl<'c> Codegen<'c> {
                 }
                 Ok(address.ptr)
             }
-            _ => unsupported(
-                "borrow of field/index projection",
-                "codegen.zig:18676 (genExpr borrow_expr projections)",
-            ),
+            _ => {
+                // codegen.zig:13029 `value_temp` fallthrough
+                // (planAddressOf `else => .value_temp`): every
+                // other borrow shape — a call result, a cast, a
+                // literal — evaluates into a temp and takes the
+                // temp's address; the temp chains into the
+                // borrow-source table when its result needs
+                // release, so the borrow's release settles it.
+                let inner = self.gen_expr(&borrow.expr)?;
+                let reg = self.new_tmp();
+                self.ins(&format!("{reg} = &{inner}"));
+                if sla_lowering::expr_result_needs_release(&borrow.expr) {
+                    self.borrow_source_temps.insert(reg.clone(), inner);
+                }
+                Ok(reg)
+            }
         }
     }
 }

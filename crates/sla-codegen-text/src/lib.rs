@@ -31,6 +31,7 @@ mod call;
 mod chan;
 mod select;
 mod clone;
+mod closure;
 mod call_plan;
 mod codegen;
 mod copy;

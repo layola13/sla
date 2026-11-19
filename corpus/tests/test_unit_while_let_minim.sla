@@ -1,0 +1,10 @@
+@test "while let some pops until none"() {
+    let v: Vec<i32> = Vec::new();
+    v.push(1);
+    v.push(2);
+    let sum: i32 = 0;
+    while let Some(x) = v.pop() {
+        sum = sum + x;
+    };
+    if sum != 3 { panic(101); };
+}

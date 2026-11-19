@@ -22,6 +22,15 @@ impl<'c> Codegen<'c> {
             Node::VarStmt(v) => {
                 self.remember_local_binding_type(&v.name, &v.ty);
                 let slot = self.resolve_binding_name(&v.name);
+                // A `var` declared inside a scoped block lives
+                // under its scoped alias (gen_scoped_block pushes
+                // one per VarStmt); the assign path looks the
+                // target type up by the RESOLVED name, so remember
+                // it under the slot name too — without this, every
+                // assignment to a block-scoped `var` missed both
+                // type sources and failed MissingType (assign
+                // target type).
+                self.remember_local_binding_type(&slot, &v.ty);
                 self.stack_alloc_bindings.insert(slot.clone());
                 self.addressable_bindings.insert(v.name.clone());
                 self.ins(&format!("{slot} = stack_alloc {}", type_size(&v.ty)));
@@ -356,11 +365,18 @@ impl<'c> Codegen<'c> {
                 }
                 return Ok(());
             }
-            Node::ClosureLiteral(_) => {
-                return unsupported(
-                    "closure literal let materialization",
-                    "codegen.zig:10830 (gen*LiteralInto family)",
-                );
+            Node::ClosureLiteral(lit) => {
+                // codegen.zig:10768: a closure let records the
+                // literal in closure_bindings and materializes
+                // only the zero placeholder register; calls
+                // through the binding expand the body inline.
+                self.closure_bindings
+                    .push((let_stmt.name.clone(), lit.clone()));
+                self.ins(&format!("{resolved_name} = 0"));
+                if let Some(ty) = &let_ty {
+                    self.remember_local_binding_type(&resolved_name, ty);
+                }
+                return Ok(());
             }
             _ => {}
         }

@@ -1,0 +1,6 @@
+@test "rc clone associated form"() {
+    let rc1 = Rc::new(41);
+    let rc2 = Rc::clone(&rc1);
+    if rc1.strong_count() != 2 { panic(501); };
+    if *rc2 != 41 { panic(502); };
+}

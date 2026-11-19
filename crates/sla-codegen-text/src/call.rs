@@ -604,7 +604,7 @@ impl<'c> Codegen<'c> {
 
     /// Shared argument planning for expr/statement calls to a known
     /// function: returns the display registers and the planned args.
-    fn plan_known_call_args(
+    pub(crate) fn plan_known_call_args(
         &mut self,
         call: &sla_ast::CallExpr,
         params: &[Param],
@@ -857,6 +857,32 @@ impl<'c> Codegen<'c> {
             // StackEscape error.
             return Ok(Some(val));
         }
+        // Rc::clone / Arc::clone (codegen.zig:14880 receiver
+        // clone arm, associated spelling): the argument is the
+        // parameter borrow of the handle binding — the handle
+        // register is the borrow's inner value. Copy it, then
+        // the in-place count bump. The surface lane's receiver
+        // arm handles the `rc.clone()` spelling; the explicit
+        // `&rc` argument never reaches it (its receiver
+        // classification needs the arg's own recorded type).
+        if matches!(target, "Rc" | "Arc") && call.func_name == "clone" {
+            if call.args.len() != 1 {
+                return Err(crate::TextError::Unsupported {
+                    feature: format!("{target}::clone arity {}", call.args.len()),
+                    zig_ref: "codegen.zig:14880 (rc/arc clone arm)",
+                });
+            }
+            let recv_node = match &call.args[0] {
+                Node::BorrowExpr(b) => &*b.expr,
+                other => other,
+            };
+            let recv = self.gen_expr(recv_node)?;
+            let reg = self.new_tmp();
+            self.ins(&format!("{reg} = add {recv}, 0"));
+            let macro_name = if target == "Rc" { "RC_CLONE" } else { "ARC_CLONE" };
+            self.ins(&format!("EXPAND {macro_name} {reg}"));
+            return Ok(Some(reg));
+        }
         if let Some((key, decl)) = self.resolve_associated_decl(call) {
             let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;
             let result = self.new_tmp();
@@ -1030,7 +1056,14 @@ impl<'c> Codegen<'c> {
             Node::CallExpr(c) => c,
             _ => unreachable!(),
         };
-        if call.callee.is_some() {
+        if let Some(callee) = &call.callee {
+            // codegen.zig:13380 (#13): an immediately-invoked
+            // closure literal expands inline (genClosureCall);
+            // any other callee shape stays unsupported.
+            if let Node::ClosureLiteral(lit) = &**callee {
+                let lit = lit.clone();
+                return self.gen_closure_call(&lit, call);
+            }
             return unsupported(
                 "closure callee call",
                 "codegen.zig:14410 (closure callee dispatch)",
@@ -1154,6 +1187,14 @@ impl<'c> Codegen<'c> {
         }
         if let Some(sig) = self.check.extern_sig(&func_name) {
             return self.gen_extern_call(call, &sig);
+        }
+
+        // Let/const-bound closure call (codegen.zig:14103):
+        // the binding's literal expands inline over the
+        // argument registers (genClosureCall). Checked before
+        // the fn-pointer path, as in the Zig dispatch.
+        if let Some(lit) = self.closure_binding_for(&func_name) {
+            return self.gen_closure_call(&lit, call);
         }
 
         // Fn-pointer value call: a callee name that resolves to a

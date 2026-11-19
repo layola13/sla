@@ -1,0 +1,14 @@
+@test "closure let call iife and option methods"() {
+    let offset: i32 = 5;
+    let add_offset = |x: i32| x + offset;
+    if add_offset(10) != 15 { panic(601); };
+    if ((|x: i32| x * 2)(21)) != 42 { panic(602); };
+    let some: Option<i32> = Some(2);
+    let mapped: Option<i32> = some.map(|value: i32| value + 3);
+    if mapped.unwrap() != 5 { panic(603); };
+    let chained: Option<i32> = some.and_then(|value: i32| Some(value + 6));
+    if chained.unwrap() != 8 { panic(604); };
+    let none: Option<i32> = None;
+    if none.unwrap_or_else(|| 9) != 9 { panic(605); };
+    if some.unwrap_or_else(|| 9) != 2 { panic(606); };
+}

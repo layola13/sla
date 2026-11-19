@@ -138,7 +138,11 @@ impl<'c> Codegen<'c> {
 
     /// codegen.zig:16691 `genIndexAddress`.
     pub(crate) fn gen_index_address(&mut self, idx: &IndexExpr) -> Result<IndexAddress> {
-        let target_ty = self.require_expr_type(&idx.target, "index target type")?;
+        let target_ty = self
+            .place_type_of_expr(&idx.target)
+            .ok_or_else(|| TextError::MissingType {
+                context: "index target type".to_string(),
+            })?;
 
         if let Some((_, elem_ty)) = vec_like_element_type(&target_ty) {
             // CLASSB-DEF2: the element address is its slot in the
