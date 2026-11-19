@@ -918,17 +918,27 @@ impl<'c> Codegen<'c> {
     }
 
     /// The SA symbol a function DEFINITION is emitted under.
-    /// Members of a plain-function overload set (2+ declarations
-    /// sharing a name in this program) are emitted under their
+    /// Members of an overload set (2+ definitions sharing a name
+    /// in this program — plain or extern) are emitted under their
     /// mangled member symbol (`sla_ast::overload_member_symbol`),
     /// matching the symbol the checker recorded for each resolved
     /// call; every other function keeps `lowered_func_symbol`.
+    /// The count is over DEFINITIONS only: `extern "C" { ... }`
+    /// prototypes are decl-only FuncDecls in `func_index`, so a
+    /// singleton extern pair (prototype + one definition) must not
+    /// be counted as a set.
     pub(crate) fn decl_symbol(&self, f: &FuncDecl) -> String {
         let base = self.lowered_func_symbol(&f.name);
-        if f.is_extern || f.no_mangle || is_main_name(&f.name) {
+        if is_main_name(&f.name) {
             return base;
         }
-        if self.func_index.iter().filter(|(n, _)| n == &f.name).count() <= 1 {
+        if self
+            .func_index
+            .iter()
+            .filter(|(n, d)| n == &f.name && !d.is_decl_only)
+            .count()
+            <= 1
+        {
             return base;
         }
         let tys: Vec<Type> = f.params.iter().map(|p| (*p.ty).clone()).collect();

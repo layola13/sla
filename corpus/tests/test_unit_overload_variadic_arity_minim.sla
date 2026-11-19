@@ -1,0 +1,33 @@
+// LINE-VARIADIC-ROOT3 regression minim (root 3: overload-set call
+// routing for a variadic extern member). An extern overload set
+// mixing a fixed member and a variadic member must route each call
+// to the resolved member's mangled symbol; before the fix the
+// checker recorded no member symbol for Extern winners and the
+// emitter bound every call to the bare set name, so the call to
+// the variadic member failed host verification with
+// error[CapabilityMismatch] (see test_unit_overload_variadic_arity
+// for the five-set form). Statement-position if-blocks take a
+// trailing ';'.
+
+extern "C" {
+    fn emit(code: i32) -> i64;
+    fn emit(tag: ptr, ...) -> i64;
+}
+
+@no_mangle pub extern "C" fn emit(code: i32) -> i64 {
+    return 500 + code as i64;
+}
+
+extern "C" fn emit(tag: ptr, args: ...) -> i64 {
+    let a = va_next_i32(args);
+    return 900 + a as i64;
+}
+
+@test "extern set variadic member minim"() {
+    let p = stack_alloc(8);
+    let three: i32 = 3;
+    let r = unsafe { emit(p, 41) };
+    if r != 941 { panic(8811); };
+    let r2 = unsafe { emit(three) };
+    if r2 != 503 { panic(8812); };
+}

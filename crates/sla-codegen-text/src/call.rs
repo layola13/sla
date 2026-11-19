@@ -1917,6 +1917,38 @@ impl<'c> Codegen<'c> {
             }
             return Ok(());
         }
+        // Overload sets (Root-3 follow-up): when the checker recorded
+        // the winning member's mangled symbol for this call, bind to
+        // that member's declaration — the `func_decl` fallback below
+        // would bind every call to the first-declared member (whose
+        // contract then mismatches the actual arguments), and after
+        // extern members are emitted under their member symbols
+        // there is no bare-name declaration left at all. Activates
+        // only when a symbol was recorded, so non-set statement
+        // calls are untouched.
+        if let Some((sym, decl)) = self.check.overload_call_symbol(expr).and_then(|sym| {
+            self.func_index
+                .iter()
+                .filter(|(n, _)| n == &func_name)
+                .map(|(_, d)| d)
+                .find(|d| self.decl_symbol(d) == sym)
+                .or_else(|| {
+                    // Direct member-symbol call
+                    // (`pick__ov_f64(...)`): no declaration is
+                    // named by the member symbol, so match on
+                    // the mangled member symbol alone.
+                    self.func_index
+                        .iter()
+                        .map(|(_, d)| d)
+                        .find(|d| self.decl_symbol(d) == sym)
+                })
+                .map(|d| (sym.to_string(), d.clone()))
+        }) {
+            let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;
+            self.ins(&format!("call @{sym}({})", display.join(", ")));
+            self.emit_lowered_call_arg_cleanups(&planned_args, Some(&func_name))?;
+            return Ok(());
+        }
         if let Some(decl) = self.func_decl(&func_name) {
             let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;
             let lowered = self.lowered_func_symbol(&func_name);

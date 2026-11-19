@@ -176,6 +176,84 @@ pub fn extern_member_key(name: &str, sig: &ExternSig) -> String {
     format!("{name}__ov_{tag}")
 }
 
+/// Convert an extern contract parameter spelling to the AST type the
+/// member-symbol computation needs (Root-3 follow-up: an extern
+/// overload member must record the winning member's symbol exactly
+/// as `decl_symbol` (codegen-text) recomputes it from the
+/// definition's parameter types). The mapping is the IDENTITY of
+/// `sla_ast::overload_type_tag`'s arms, so the two sides agree by
+/// construction: `isize`/`usize` stay Isize/Usize (NOT the I64/U64
+/// collapse of `primitive_from_spelling`), `ptr`/`raw_ptr` map to
+/// RawPtr, `*T` to Pointer, `&T` to Borrow, other bare identifiers
+/// to UserDefined. Returns None for a spelling with no AST
+/// counterpart — the caller then skips recording (today's bare-name
+/// behaviour) rather than recording a symbol the emitter cannot
+/// match.
+fn extern_spelling_to_type(spelling_raw: &str) -> Option<Type> {
+    let spelling = spelling_raw.trim();
+    if let Some(inner) = spelling
+        .strip_prefix('*')
+        .or_else(|| spelling.strip_prefix('^'))
+    {
+        let inner_ty = extern_spelling_to_type(inner)?;
+        return Some(Type::Pointer(Box::new(inner_ty)));
+    }
+    if let Some(inner) = spelling.strip_prefix('&') {
+        let inner_ty = extern_spelling_to_type(inner)?;
+        return Some(Type::Borrow(Box::new(inner_ty)));
+    }
+    Some(match spelling {
+        "i8" => Type::Primitive(Primitive::I8),
+        "i16" => Type::Primitive(Primitive::I16),
+        "i32" => Type::Primitive(Primitive::I32),
+        "i64" => Type::Primitive(Primitive::I64),
+        "isize" => Type::Primitive(Primitive::Isize),
+        "u8" => Type::Primitive(Primitive::U8),
+        "u16" => Type::Primitive(Primitive::U16),
+        "u32" => Type::Primitive(Primitive::U32),
+        "u64" => Type::Primitive(Primitive::U64),
+        "usize" => Type::Primitive(Primitive::Usize),
+        "f32" => Type::Primitive(Primitive::F32),
+        "f64" => Type::Primitive(Primitive::F64),
+        "integer" => Type::Primitive(Primitive::Integer),
+        "float" => Type::Primitive(Primitive::Float),
+        "bool" | "boolean" => Type::Primitive(Primitive::Boolean),
+        "ptr" | "raw_ptr" => Type::Primitive(Primitive::RawPtr),
+        "void" | "void_type" => Type::Primitive(Primitive::VoidType),
+        other => {
+            if !other.is_empty()
+                && other.chars().all(|c| c.is_alphanumeric() || c == '_')
+            {
+                Type::UserDefined(sla_ast::types::UserDefined {
+                    name: other.to_string(),
+                    generics: Vec::new(),
+                })
+            } else {
+                return None;
+            }
+        }
+    })
+}
+
+/// The mangled member symbol of one extern overload-set member
+/// (Root-3 follow-up): the member's fixed parameter types, with a
+/// trailing VaList marker iff the contract is variadic. The marker
+/// is REQUIRED: a fixed/variadic pair with identical fixed
+/// parameters (e.g. `pick(x: ptr)` vs `pick(x: ptr, ...)`) would
+/// otherwise share one symbol and collide exactly as the bare name
+/// did. Returns None when a parameter spelling has no AST
+/// counterpart.
+fn extern_member_symbol(name: &str, sig: &ExternSig) -> Option<String> {
+    let mut tys: Vec<Type> = Vec::with_capacity(sig.params.len() + 1);
+    for p in &sig.params {
+        tys.push(extern_spelling_to_type(&p.ty)?);
+    }
+    if sig.is_variadic {
+        tys.push(Type::Primitive(Primitive::VaList));
+    }
+    Some(sla_ast::overload_member_symbol(name, &tys))
+}
+
 /// Convert a declared parameter type back to the ABI spelling the
 /// contract identity compares (Zig compares contract spellings;
 /// for a source-level prototype the parser's type IS the
@@ -644,6 +722,22 @@ impl Checker {
                 }
                 Candidate::Extern(sig) => {
                     let sig = sig.clone();
+                    // Record the winning member's mangled symbol
+                    // for a set member (Root-3 follow-up — mirrors
+                    // the Func/Imported arm above): without it the
+                    // text emitter binds the call to the bare set
+                    // name, whose member definitions now carry
+                    // member symbols. A singleton winner keeps the
+                    // bare-name key and its bare-name binding, so
+                    // it is not recorded; an unconvertible parameter
+                    // spelling likewise skips recording (today's
+                    // behaviour) rather than recording a symbol
+                    // the emitter cannot match.
+                    if winners[0].0 != name {
+                        if let Some(sym) = extern_member_symbol(name, &sig) {
+                            self.overload_call_symbols.insert(expr_key, sym);
+                        }
+                    }
                     self.check_extern_contract_call(name, &sig, call)
                 }
             },
