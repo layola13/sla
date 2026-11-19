@@ -343,16 +343,22 @@ impl<'c> Codegen<'c> {
                     || param
                         .map(|p| p.is_borrow || matches!(&*p.ty, sla_ast::Type::Borrow(_)))
                         .unwrap_or(false);
-                // A BorrowExpr argument already yields the borrow
-                // operand itself (gen_borrow_expr returns the slot
-                // address for index/field places, `&name` for
-                // identifiers): prefixing another `&` addresses
-                // the address register (CapabilityMismatch on
-                // Vec<&T> pushes of &g[i]).
-                if needs_borrow
-                    && !raw_reg.starts_with('&')
-                    && !matches!(arg, Node::BorrowExpr(_))
-                {
+                // Zig's Value arm has no BorrowExpr exception
+                // here (genCallArgFromMaterializationPlan): the
+                // `&` prefix is the borrow capability marker on
+                // whatever register genExpr produced, and for a
+                // field borrow of a Vec / pointer-backed field
+                // genExpr returns the LOADED field value (the
+                // borrow-of-field arm loads the handle word), so
+                // the bare register is a plain ptr value and the
+                // host rejects it (CapabilityMismatch on
+                // slot_pool_get's slot_pool_arena_ptr(&p.data),
+                // sa_std/slot_pool.sla). Address-shaped results
+                // (index places, projection pointers) take the
+                // same prefix in Zig. The Vec<&T>-push shape that
+                // motivated the exception travels the surface
+                // path, not this arm.
+                if needs_borrow && !raw_reg.starts_with('&') {
                     let release = self.call_arg_result_temp_needs_release_for_param(
                         arg,
                         &raw_reg,
