@@ -934,13 +934,28 @@ impl<'c> Codegen<'c> {
         // codegen.zig:2776: inside a user-macro inline, the
         // recorded macro-call try cleanup list replaces the
         // node's own branch-scoped list.
+        //
+        // DEF-RUST-REFCELL-TRYPROP-BORROW-LEAK (task 22): the
+        // try's None/Err arm is a terminating branch — its
+        // cleanup must not disturb the surviving (Some/Ok)
+        // path's state. `emit_release` destructively removes a
+        // released borrow handle from `refcell_borrow_handles`,
+        // and the cleanup list only snapshots/restores the
+        // consumed state, so without restoring the handle table
+        // the success path's later cleanup degrades to a plain
+        // `!handle` and the shared borrow count leaks
+        // (panic 30935). Snapshot and restore the handle table
+        // around the branch cleanup, exactly as `gen_if_expr` /
+        // `gen_let_else_stmt` restore the three tables around a
+        // branch side.
+        let saved_handles = self.refcell_borrow_handles.clone();
         if let Some(names) = self.active_macro_try_cleanup.clone() {
-            return self.emit_branch_scoped_cleanup_list(&names);
-        }
-        if let Some(list) = self.check.cleanups(node) {
+            self.emit_branch_scoped_cleanup_list(&names)?;
+        } else if let Some(list) = self.check.cleanups(node) {
             let names: Vec<String> = list.to_vec();
             self.emit_branch_scoped_cleanup_list(&names)?;
         }
+        self.refcell_borrow_handles = saved_handles;
         Ok(())
     }
 

@@ -1,0 +1,38 @@
+// Regression test for DEF-RUST-REFCELL-TRYPROP-BORROW-LEAK (task 22):
+// the `?` operator's None arm cleanup removed the live borrow handle
+// from the codegen's refcell_borrow_handles table without restoring it,
+// so the success path's return cleanup degraded to a plain release
+// and the shared borrow count leaked (corpus panic 30935).
+// Fail-before: panic 107 (borrow_mut after the success-path call).
+// Pass-after: 1/0.
+@import "sa_std/core/refcell.sa"
+
+struct TryPayload {
+    value: int,
+}
+
+fn try_value(cell: &RefCell<TryPayload>, fail: bool) -> Option<int> {
+    let borrowed: &TryPayload = cell.borrow();
+    let maybe: Option<int> = if fail { None } else { Some(borrowed.value) };
+    let value = maybe?;
+    return Some(value);
+}
+
+@test "refcell try propagation releases active borrow handle"() {
+    let cell = RefCell::new(TryPayload { value: 107 });
+    let failed = try_value(&cell, true);
+    !failed;
+    // After the failing (? early-return) call the borrow must be released:
+    // a mut borrow must succeed.
+    let check1 = cell.borrow_mut();
+    check1.value = 1;
+    !check1;
+    let succeeded = try_value(&cell, false);
+    !succeeded;
+    // After the succeeding (? success-path) call the borrow must be
+    // released too: a mut borrow must succeed. A leaked shared borrow
+    // makes borrow_mut panic 107 here.
+    let check2 = cell.borrow_mut();
+    check2.value = 2;
+    !check2;
+}
