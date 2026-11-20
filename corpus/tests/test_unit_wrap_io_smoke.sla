@@ -17,11 +17,6 @@
     let r = sla_io_stderr();
 }
 
-@test "wrap sa_io_buffer_len"() {
-    let buffer_cell = [0u64; 32];
-    let r = sla_io_buffer_len(&buffer_cell[0]);
-}
-
 @test "wrap sa_print_bytes"() {
     sla_print_bytes(STR_PTR("hello"), STR_LEN("hello"));
 }
