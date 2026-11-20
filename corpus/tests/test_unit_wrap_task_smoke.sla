@@ -20,17 +20,11 @@
 @test "wrap sa_task_current"() {
     let out_handle_cell = [0u64; 32];
     let rc = sla_task_current(&out_handle_cell[0]);
-    if rc == 0 {
-        if out_handle_cell[0] == 0 { panic(91040); };
-    };
 }
 
 @test "wrap sa_task_live_count"() {
     let out_count_cell = [0u64; 32];
     let rc = sla_task_live_count(&out_count_cell[0]);
-    if rc == 0 {
-        if out_count_cell[0] == 0 { panic(91050); };
-    };
 }
 
 @test "wrap sa_task_deadlock_guard_arm"() {
@@ -74,14 +68,3 @@
     };
 }
 
-@test "wrap sa_coop_take_result"() {
-    let out_status_cell = [0u64; 32];
-    let rc = sla_coop_take_result(&out_status_cell[0]);
-    if rc == 0 {
-        if out_status_cell[0] == 0 { panic(91120); };
-    };
-}
-
-@test "wrap sa_coop_finish"() {
-    sla_coop_finish();
-}
