@@ -457,10 +457,26 @@ impl<'c> Codegen<'c> {
                 self.consumed_bindings.insert(resolved.clone());
             }
             if plan.release_dynamic_borrow {
+                // DEF-RUST-REFCELL-BRANCH-HANDLE-MERGE (task 21):
+                // a cell-identical handle carries the live cell
+                // pointer in its own register, so release against
+                // the handle itself. The static cell_reg goes stale
+                // when the handle is reassigned in a branch and the
+                // if-merge keeps the else end state (the reassigned
+                // mut borrow is then left outstanding, panic 107);
+                // the handle value tracks the live cell on both
+                // paths. Pointer-payload handles keep the static
+                // cell (the handle is a loaded payload, not the
+                // cell).
+                let cell_arg = if handle.handle_is_cell {
+                    resolved.clone()
+                } else {
+                    handle.cell_reg.clone()
+                };
                 self.ins(&format!(
                     "EXPAND {} {}",
                     handle.kind.release_macro_name(),
-                    handle.cell_reg
+                    cell_arg
                 ));
             }
             if plan.consume_handle_value {

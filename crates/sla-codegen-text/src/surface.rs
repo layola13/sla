@@ -1616,6 +1616,16 @@ impl<'c> Codegen<'c> {
                         cell_reg: recv,
                         kind,
                         cell_release_temp: None,
+                        // DEF-RUST-REFCELL-BRANCH-HANDLE-MERGE
+                        // (task 21): a scalar-slot borrow returns
+                        // the slot register itself, which IS the
+                        // cell (`ptr_add cell, +0`); a pointer
+                        // payload loads the payload out of the
+                        // slot, so the handle is not the cell.
+                        handle_is_cell: matches!(
+                            action,
+                            sla_lowering::refcell::RefCellBorrowResultAction::UseBorrowSlot
+                        ),
                     },
                 );
                 Ok(Some(SurfaceCall::Value(borrow_reg)))

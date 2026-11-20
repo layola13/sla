@@ -189,6 +189,12 @@ impl<'c> Codegen<'c> {
                             cell_reg: cell_reg.clone(),
                             kind: entry.kind,
                             cell_release_temp: Some(cell_reg),
+                            // DEF-RUST-REFCELL-BRANCH-HANDLE-MERGE
+                            // (task 21): the handle is a fresh
+                            // result temp; the cell is a separate
+                            // register loaded from the companion
+                            // slot, so the handle is not the cell.
+                            handle_is_cell: false,
                         },
                     );
                     self.emit_release(&entry.cell_slot)?;

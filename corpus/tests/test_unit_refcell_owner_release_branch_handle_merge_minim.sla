@@ -1,0 +1,102 @@
+// Regression test for DEF-RUST-REFCELL-BRANCH-HANDLE-MERGE (task 21):
+// after a branch-dependent handle reassignment, the if-merge takes the
+// else end state, so the post-merge release targets the wrong cell and
+// the reassigned mut borrow is left outstanding (panic 107). Before the
+// fix both tests fail with panic 107; after the fix both pass.
+// The release now uses the handle register itself for cell-identical
+// (scalar-slot) borrows, which carries the live cell pointer on both
+// paths, instead of the merge's stale static cell.
+@import "sa_std/core/refcell.sa"
+
+fn owner_release_branch_reassign_handle(flag: bool) -> i64 {
+    let left = RefCell::new(1i64);
+    let right = RefCell::new(2i64);
+    let borrowed = left.borrow_mut();
+    if flag {
+        borrowed = right.borrow_mut();
+    };
+    if flag {
+        let left_checked: &i64 = left.borrow();
+        if *left_checked != 1 {
+            panic(30953);
+        };
+        !left_checked;
+        *borrowed = 42i64;
+        !borrowed;
+        let right_checked: &i64 = right.borrow();
+        if *right_checked != 42 {
+            panic(30954);
+        };
+        !right_checked;
+    } else {
+        let right_checked: &i64 = right.borrow();
+        if *right_checked != 2 {
+            panic(30955);
+        };
+        !right_checked;
+        *borrowed = 41i64;
+        !borrowed;
+        let left_checked: &i64 = left.borrow();
+        if *left_checked != 41 {
+            panic(30956);
+        };
+        !left_checked;
+    };
+    return 0i64;
+}
+
+fn owner_release_if_let_reassign_handle(flag: bool) -> i64 {
+    let left = RefCell::new(3i64);
+    let right = RefCell::new(4i64);
+    let borrowed = left.borrow_mut();
+    if let Some(_) = if flag { Some(1i64) } else { None } {
+        borrowed = right.borrow_mut();
+    } else {
+        let right_checked: &i64 = right.borrow();
+        if *right_checked != 4 {
+            panic(30959);
+        };
+        !right_checked;
+    };
+    if flag {
+        let left_checked: &i64 = left.borrow();
+        if *left_checked != 3 {
+            panic(30960);
+        };
+        !left_checked;
+        *borrowed = 44i64;
+        !borrowed;
+        let right_checked_after: &i64 = right.borrow();
+        if *right_checked_after != 44 {
+            panic(30961);
+        };
+        !right_checked_after;
+    } else {
+        *borrowed = 43i64;
+        !borrowed;
+        let left_checked_after: &i64 = left.borrow();
+        if *left_checked_after != 43 {
+            panic(30962);
+        };
+        !left_checked_after;
+    };
+    return 0i64;
+}
+
+@test "refcell branch-dependent handle reassignment merges owner"() {
+    if owner_release_branch_reassign_handle(true) != 0 {
+        panic(30957);
+    };
+    if owner_release_branch_reassign_handle(false) != 0 {
+        panic(30958);
+    };
+}
+
+@test "refcell if-let handle reassignment merges owner"() {
+    if owner_release_if_let_reassign_handle(true) != 0 {
+        panic(30963);
+    };
+    if owner_release_if_let_reassign_handle(false) != 0 {
+        panic(30964);
+    };
+}

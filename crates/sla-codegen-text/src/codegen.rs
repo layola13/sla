@@ -29,6 +29,17 @@ pub(crate) struct RefCellBorrowHandle {
     pub(crate) cell_reg: String,
     pub(crate) kind: sla_lowering::refcell::RefCellBorrowKind,
     pub(crate) cell_release_temp: Option<String>,
+    /// DEF-RUST-REFCELL-BRANCH-HANDLE-MERGE (task 21): whether
+    /// the borrow handle register itself holds the cell pointer.
+    /// True for scalar-slot payloads, where TRY_BORROW returns
+    /// `ptr_add cell, RefCellU64_value` with RefCellU64_value = +0,
+    /// so the handle IS the cell. Releasing against the handle
+    /// itself then stays correct after a branch-dependent handle
+    /// reassignment (the if-merge's static cell goes stale — it
+    /// keeps the else end state — but the handle value tracks the
+    /// live cell). False for pointer payloads, where the handle is
+    /// a loaded payload pointer, not the cell.
+    pub(crate) handle_is_cell: bool,
 }
 
 /// codegen.zig:119 `ResultSlotRefCellHandle`: the companion
