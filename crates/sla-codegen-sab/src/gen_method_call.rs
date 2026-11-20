@@ -4,6 +4,7 @@
 //! `genGrowVecLenCall` (15782), `genVecPushCall` (17094),
 //! `genGrowVecPushCall` (17163), `genVecRemoveCall` (17228),
 //! `genVecDequePushBackCall` (22639),
+//! `genVecDequePopFrontCall` (24049),
 //! `genResultOptionQueryCall` (17564), `genOptionUnwrapCall`
 //! (22576), `genUnwrapOrCall` (22721),
 //! `genOptionUnwrapOrDefaultCall` (22760),
@@ -21,7 +22,7 @@
 //! `Ok(None)` keeps the caller's loud stop. Arms whose support
 //! machinery is not yet ported stay loud, never approximated:
 //! Vec pop, map clear/remove/keys/values,
-//! VecDeque pop_front / rotate, atomic compare_exchange,
+//! VecDeque rotate, atomic compare_exchange,
 //! RefCell borrow, smart-pointer clone/count, and the raw_ptr
 //! `len` arm (string materialization plan) are NOT ported here.
 
@@ -74,6 +75,9 @@ impl<'c> Driver<'c> {
             return Ok(Some(reg));
         }
         if let Some(reg) = self.gen_vec_deque_push_back_call(call)? {
+            return Ok(Some(reg));
+        }
+        if let Some(reg) = self.gen_vec_deque_pop_front_call(call)? {
             return Ok(Some(reg));
         }
         if let Some(reg) = self.gen_result_option_query_call(call)? {

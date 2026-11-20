@@ -7,13 +7,15 @@
 //! the bare-call branches of `genStdSurfaceCall` (21345:
 //! function / fallible_method / method rules behind the
 //! DEF-SAB-SURFACE-GET-SHADOW known-callee guard), and
-//! `genVecDequePushBackCall` (22639). Emission helpers are
+//! `genVecDequePushBackCall` (22639),
+//! `genVecDequePopFrontCall` (24049). Emission helpers are
 //! shared from `gen_method_call.rs`. Split solely for the
 //! 700-line file discipline; the two files are one
 //! decomposition unit.
 
 use sla_ast::{CallExpr, Node, Type};
 
+use crate::branch_state::{clone_released, restore_released, set_merge_released};
 use crate::driver::{unsupported, Driver};
 use crate::error::{Error, Result};
 use crate::gen_method_call::{
@@ -612,10 +614,104 @@ impl<'c> Driver<'c> {
         self.release_non_local(deque_reg)?;
         if stored.1 {
             self.release_non_local(value_reg)?;
+        } else {
+            // DEF-TEXT31-VECDEQUE-STRUCT-TEMP (Zig 24012): ownership
+            // of the fresh record transferred into the deque (its
+            // address is the slot value), so the source temp retires
+            // with a forget, never a release; without it the temp
+            // stays Active at function exit (MemoryLeak 1012).
+            crate::release_emit::emit_forget_moved_value(&mut self.state, value_reg);
+        }
+        if stored.0 != value_reg {
+            // A record manufactured for the store (shallow copy /
+            // byte-copy box) transfers into the deque the same way;
+            // retire its temp too.
+            crate::release_emit::emit_forget_moved_value(&mut self.state, stored.0);
         }
         let sentinel = self.b().new_tmp();
         self.b().record_reg(sentinel);
         self.b().emit_assign_imm(sentinel, 0);
         Ok(Some(sentinel))
+    }
+
+    /// Zig `genVecDequePopFrontCall` (24049): `VEC_DEQUE_TRY_POP_FRONT`
+    /// plus an Option branch-merge (the map-insert merge idiom): the
+    /// deque slot holds the element's record address itself, so the
+    /// macro's out value is the Option payload as-is.
+    pub(crate) fn gen_vec_deque_pop_front_call(&mut self, call: &CallExpr) -> Result<Option<u32>> {
+        if call.func_name != "pop_front"
+            || call.associated_target.is_some()
+            || call.args.len() != 1
+        {
+            return Ok(None);
+        }
+        let receiver_ty = match self.check.expr_type(&call.args[0]).cloned() {
+            Some(ty) => ty,
+            None => return Ok(None),
+        };
+        if user_defined_generic_inner(&receiver_ty, "VecDeque").is_none() {
+            return Ok(None);
+        }
+        self.ensure_method_std_deps(
+            "sa_std/vec_deque.sa",
+            &["sa_vec_deque_try_pop_front"],
+        )?;
+        let deque_reg = self.gen_expr(&call.args[0])?;
+        let ok_reg = self.b().new_tmp();
+        self.b().record_reg(ok_reg);
+        let value_reg = self.b().new_tmp();
+        self.b().record_reg(value_reg);
+        let deque_name = self.b().symbol_name(deque_reg).to_string();
+        let ok_name = self.b().symbol_name(ok_reg).to_string();
+        let value_name = self.b().symbol_name(value_reg).to_string();
+        self.emit_method_macro_fragment(
+            "sa_std/vec_deque.sa",
+            "VEC_DEQUE_TRY_POP_FRONT",
+            &[ok_name, value_name.clone(), deque_name],
+        )?;
+        let option_reg = self.b().new_tmp();
+        self.b().record_reg(option_reg);
+        let some_label = self.b().new_label("L_DEQUE_POP_SOME");
+        let none_label = self.b().new_label("L_DEQUE_POP_NONE");
+        let end_label = self.b().new_label("L_DEQUE_POP_END");
+        self.b().emit_branch(ok_reg, &some_label, &none_label);
+        let branch_locals_len = self.state.frame.locals.len();
+        let pre_released = clone_released(&self.state);
+        self.b().emit_label(&some_label);
+        crate::release_emit::emit_branch_release(&mut self.state, ok_reg);
+        let option_name = self.b().symbol_name(option_reg).to_string();
+        self.emit_method_macro_fragment(
+            "sa_std/core/option.sa",
+            "OPTION_NEW_SOME",
+            &[option_name.clone(), value_name.clone()],
+        )?;
+        crate::release_emit::emit_branch_release(&mut self.state, value_reg);
+        self.b().emit_jmp(&end_label);
+        let then_released = clone_released(&self.state);
+        self.state.frame.pop_locals_to(branch_locals_len);
+        restore_released(&mut self.state, &pre_released);
+        self.b().emit_label(&none_label);
+        crate::release_emit::emit_branch_release(&mut self.state, ok_reg);
+        crate::release_emit::emit_branch_release(&mut self.state, value_reg);
+        self.emit_method_macro_fragment(
+            "sa_std/core/option.sa",
+            "OPTION_NEW_NONE",
+            &[option_name],
+        )?;
+        self.b().emit_jmp(&end_label);
+        let else_released = clone_released(&self.state);
+        self.state.frame.pop_locals_to(branch_locals_len);
+        restore_released(&mut self.state, &pre_released);
+        set_merge_released(
+            &mut self.state,
+            false,
+            &then_released,
+            false,
+            &else_released,
+            &pre_released,
+        );
+        self.b().emit_label(&end_label);
+        self.release_non_local(deque_reg)?;
+        Ok(Some(option_reg))
     }
 }

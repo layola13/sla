@@ -1,0 +1,10 @@
+fn f() -> i32 {
+    let q: VecDeque<i32> = VecDeque::new();
+    q.push_back(7);
+    let first = q.pop_front().unwrap();
+    return first;
+}
+
+@test "min push and pop_front"() {
+    if f() != 7 { panic(1); };
+}

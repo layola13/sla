@@ -1,0 +1,9 @@
+fn f() -> i32 {
+    let q: VecDeque<i32> = VecDeque::new();
+    q.push_back(7);
+    return 0;
+}
+
+@test "min push_back statement"() {
+    if f() != 0 { panic(1); };
+}

@@ -233,7 +233,6 @@ impl<'c> Driver<'c> {
                 "17615-17620",
             ));
         };
-        let elements = lit.elements.clone();
         self.ensure_surface_std_deps(
             "sa_std/vec_deque.sa",
             &["sa_vec_deque_new", "sa_vec_deque_push_back"],
@@ -246,14 +245,31 @@ impl<'c> Driver<'c> {
             "VEC_DEQUE_NEW",
             std::slice::from_ref(&dst_name),
         )?;
-        for elem in &elements {
+        // NOTE: iterate the ORIGINAL elements, never a clone: the
+        // checker's type table is keyed by node pointer, so a cloned
+        // element misses expr_type and the store helper is skipped
+        // (a struct-literal temp would be released instead of
+        // transferred, leaving a dangling slot).
+        for elem in &lit.elements {
             let elem_reg = self.gen_expr(elem)?;
             let mut store_reg = elem_reg;
             let mut release = !self.is_local_reg(elem_reg);
+            let mut transferred_reg: Option<u32> = None;
             if let Some(elem_ty) = self.check.expr_type(elem).cloned() {
                 let stored = self.gen_vec_deque_element_store_reg(elem, elem_reg, &elem_ty)?;
                 store_reg = stored.0;
                 release = stored.1 && release;
+                // DEF-TEXT31-VECDEQUE-STRUCT-TEMP (Zig 18086): the
+                // element record (the fresh source itself, or a copy
+                // / box manufactured for the store) transferred into
+                // the deque; its temp retires with a forget after
+                // the push, mirroring the SA-text emitter.
+                if !stored.1 {
+                    transferred_reg = Some(elem_reg);
+                }
+                if stored.0 != elem_reg {
+                    transferred_reg = Some(stored.0);
+                }
             }
             let store_name = self.b().symbol_name(store_reg).to_string();
             self.emit_surface_macro_fragment(
@@ -264,16 +280,20 @@ impl<'c> Driver<'c> {
             if release {
                 self.emit_release(elem_reg)?;
             }
+            if let Some(treg) = transferred_reg {
+                crate::release_emit::emit_forget_moved_value(&mut self.state, treg);
+            }
         }
         Ok(Some(dst))
     }
 
-    /// Zig `genVecDequeElementStoreReg` (22602), the arms the
-    /// driver can already serve: non-struct elements store
-    /// directly; fresh owned records (struct literals, call
-    /// results) transfer. The shallow-copy and byte-copy arms
-    /// for live struct sources stop loudly with the Zig
-    /// coordinate instead of being approximated.
+    /// Zig `genVecDequeElementStoreReg` (22602-22640): non-struct
+    /// elements store directly; fresh owned records (struct
+    /// literals, call results) transfer; a shallow-copyable live
+    /// struct source stores an independent shallow copy; any
+    /// other plain struct source stores a byte copy in a fresh
+    /// box. The deque slot holds the record address itself, so
+    /// the stored value is the copy's cell.
     pub(crate) fn gen_vec_deque_element_store_reg(
         &mut self,
         arg: &Node,
@@ -291,11 +311,35 @@ impl<'c> Driver<'c> {
         if matches!(arg, Node::StructLiteral(_) | Node::CallExpr(_)) {
             return Ok((value_reg, false));
         }
-        Err(unsupported(
-            "VecDeque::from element store for a live struct source (shallow/byte copy arms)",
-            "D surface (surface_call)",
-            "22602-22640",
-        ))
+        // Zig `genVecDequeElementStoreReg` (22602-22640): a
+        // shallow-copyable live struct source stores an independent
+        // shallow copy (its handle fields are deep-cloned, so the
+        // box never aliases the source's handles); any other plain
+        // struct source stores a byte copy in a fresh box.
+        if {
+            let mut facts = crate::copy_facts::CopyFacts::new(self.check);
+            facts.type_is_shallow_copy_call_arg_value(elem_ty, 0)
+        } {
+            let copied = self.gen_shallow_copy_call_arg_value(value_reg, elem_ty)?;
+            return Ok((copied, true));
+        }
+        let size = crate::layout::struct_size(&decl);
+        let boxed = self.b().new_tmp();
+        self.b().record_reg(boxed);
+        self.emit_alloc(boxed, size);
+        self.ensure_surface_std_deps("sa_std/core/mem.sa", &["sa_mem_copy"])?;
+        let boxed_name = self.b().symbol_name(boxed).to_string();
+        let value_name = self.b().symbol_name(value_reg).to_string();
+        let size_reg = self.b().new_tmp();
+        self.b().record_reg(size_reg);
+        self.b().emit_assign_imm(size_reg, size as i64);
+        let size_name = self.b().symbol_name(size_reg).to_string();
+        self.emit_surface_call_body(
+            None,
+            format!("@sa_mem_copy(&{boxed_name}, &{value_name}, {size_name})"),
+        )?;
+        self.emit_release(size_reg)?;
+        Ok((boxed, true))
     }
 
     /// Zig `genPtrBuiltinCall`, associated-target forms only

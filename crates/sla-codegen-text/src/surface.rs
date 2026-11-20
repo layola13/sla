@@ -348,6 +348,48 @@ impl<'c> Codegen<'c> {
                 return Ok(Some(SurfaceCall::Value(reg)));
             }
             match (target.as_str(), name) {
+                ("VecDeque", "from") => {
+                    // codegen.zig:21330 `genVecDequeFromCall`: NEW plus one
+                    // PUSH_BACK per element; each element is planned the
+                    // way the push_back receiver arm plans its value
+                    // (copy-materialization for live copy-like bindings,
+                    // ownership transfer otherwise) — the Rust text
+                    // backend has no transfer instruction, so the
+                    // transfer is the plain operand plus the post-EXPAND
+                    // forget in surface_finish_value, as in the push arm.
+                    if call.args.len() != 1 {
+                        return Err(missing_fact());
+                    }
+                    let Node::ArrayLiteral(lit) = &call.args[0] else {
+                        return Err(missing_fact());
+                    };
+                    let result_ty = self.expr_type(expr).ok_or(missing_fact())?;
+                    let (_, generics) = peel_name(&result_ty).ok_or(missing_fact())?;
+                    let elem = generics
+                        .first()
+                        .ok_or(missing_fact())?
+                        .clone();
+                    let reg = self.new_tmp();
+                    self.ins(&format!("EXPAND VEC_DEQUE_NEW {reg}"));
+                    for elem_node in &lit.elements {
+                        if let Some(copy_reg) =
+                            self.push_arg_copy_materialization_node(elem_node, &elem)?
+                        {
+                            self.ins(&format!(
+                                "EXPAND VEC_DEQUE_PUSH_BACK {reg}, {copy_reg}"
+                            ));
+                            self.emit_forget_moved_value(&copy_reg)?;
+                        } else {
+                            let planned = self.surface_value_consumed_node(elem_node)?;
+                            let value = planned.reg.clone();
+                            self.ins(&format!(
+                                "EXPAND VEC_DEQUE_PUSH_BACK {reg}, {value}"
+                            ));
+                            self.surface_finish_value(&planned, true)?;
+                        }
+                    }
+                    return Ok(Some(SurfaceCall::Value(reg)));
+                }
                 ("GrowVec", "new") | ("GrowVec", "with_max") => {
                     let result_ty = self
                         .expr_type(expr)
@@ -910,6 +952,40 @@ impl<'c> Codegen<'c> {
                 self.surface_finish_value(&planned, true)?;
                 Ok(Some(SurfaceCall::Void))
             }
+            ("VecDeque", "push_back") => {
+                // Mirror of the ("Vec", "push") arm: a copy-like element
+                // pushed from a live binding stores an independent copy;
+                // the source stays usable and owning. The deque slot
+                // holds the record address itself (the VEC_DEQUE_*
+                // slot contract, DEF-VECDEQUE-STRUCT-ELEM), so the macro
+                // takes no slot_size operand — `sa_vec_deque_push_back`
+                // stores the value word as the slot.
+                if call.args.len() != 2 {
+                    return Err(missing_fact());
+                }
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let elem = generics
+                    .first()
+                    .ok_or(missing_fact())?
+                    .clone();
+                if let Some(copy_reg) = self.push_arg_copy_materialization(call, &elem)? {
+                    self.ins(&format!(
+                        "EXPAND VEC_DEQUE_PUSH_BACK {recv}, {copy_reg}"
+                    ));
+                    // The copy's ownership moves into the deque:
+                    // forget it, never release (a release would
+                    // free the record the new slot references).
+                    self.emit_forget_moved_value(&copy_reg)?;
+                    return Ok(Some(SurfaceCall::Void));
+                }
+                let planned = self.surface_value_consumed(call, 1)?;
+                let value = planned.reg.clone();
+                self.ins(&format!(
+                    "EXPAND VEC_DEQUE_PUSH_BACK {recv}, {value}"
+                ));
+                self.surface_finish_value(&planned, true)?;
+                Ok(Some(SurfaceCall::Void))
+            }
             ("Vec", "pop") => {
                 // codegen.zig isPopCall arm: try_pop into a
                 // one-word slot, then wrap the word in an Option
@@ -964,6 +1040,50 @@ impl<'c> Codegen<'c> {
                         "EXPAND OPTION_NEW_SOME {option_reg}, {value_reg}"
                     ));
                 }
+                self.w(&format!("    !{value_reg}\n"));
+                self.w(&format!("    jmp {end_label}\n\n"));
+                self.wl(&format!("{none_label}:"));
+                self.w(&format!("    !{ok_reg}\n"));
+                self.w(&format!("    !{value_reg}\n"));
+                self.ins(&format!("EXPAND OPTION_NEW_NONE {option_reg}"));
+                self.w(&format!("    jmp {end_label}\n\n"));
+                self.wl(&format!("{end_label}:"));
+                if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                    self.emit_release(&recv)?;
+                }
+                Ok(Some(SurfaceCall::Value(option_reg)))
+            }
+            ("VecDeque", "pop_front") => {
+                // Zig codegen.zig `isPopFrontCall` arm: the
+                // VEC_DEQUE_TRY_POP_FRONT macro carries the slot
+                // alloc + try call + load internally, so the arm
+                // expands it directly (no slot/call of its own) and
+                // wraps the macro's out value — the deque slot holds
+                // the element's record address itself — in an Option
+                // as-is. No inline-POD materialization: the value
+                // word IS the record cell, not a packed image (that
+                // is the Vec pop arm's shape, not this one).
+                if call.args.len() != 1 {
+                    return Err(missing_fact());
+                }
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let ok_reg = self.new_tmp();
+                let value_reg = self.new_tmp();
+                let option_reg = self.new_tmp();
+                let some_label = self.new_label("L_VEC_DEQUE_POP_FRONT_SOME");
+                let none_label = self.new_label("L_VEC_DEQUE_POP_FRONT_NONE");
+                let end_label = self.new_label("L_VEC_DEQUE_POP_FRONT_END");
+                self.ins(&format!(
+                    "EXPAND VEC_DEQUE_TRY_POP_FRONT {ok_reg}, {value_reg}, {recv}"
+                ));
+                self.w(&format!(
+                    "    br {ok_reg} -> {some_label}, {none_label}\n\n"
+                ));
+                self.wl(&format!("{some_label}:"));
+                self.w(&format!("    !{ok_reg}\n"));
+                self.ins(&format!(
+                    "EXPAND OPTION_NEW_SOME {option_reg}, {value_reg}"
+                ));
                 self.w(&format!("    !{value_reg}\n"));
                 self.w(&format!("    jmp {end_label}\n\n"));
                 self.wl(&format!("{none_label}:"));
