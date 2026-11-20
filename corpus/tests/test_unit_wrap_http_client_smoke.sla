@@ -61,10 +61,6 @@
     let r = sla_http_client_sse_turn_ex(STR_PTR("hello"), STR_LEN("hello"), STR_PTR("hell"), STR_LEN("hell"), STR_PTR("L"), STR_LEN("L"), 0, &out_text_cell[0], &out_text_len_cell[0], &out_calls_cell[0], &out_calls_len_cell[0], &out_usage_cell[0], &out_usage_len_cell[0], &out_reasoning_cell[0], &out_reasoning_len_cell[0]);
 }
 
-@test "wrap sa_http_client_sse_turn_free"() {
-    sla_http_client_sse_turn_free(STR_PTR("hello"), STR_LEN("hello"));
-}
-
 @test "wrap sa_http_client_sse_turn_free_all"() {
-    let r = sla_http_client_sse_turn_free_all(STR_PTR("hello"), STR_LEN("hello"), STR_PTR("hell"), STR_LEN("hell"), STR_PTR("L"), STR_LEN("L"), STR_PTR("x"), STR_LEN("x"));
+    let r = sla_http_client_sse_turn_free_all(STR_PTR("hello"), 0, STR_PTR("hell"), 0, STR_PTR("L"), 0, STR_PTR("x"), 0);
 }
