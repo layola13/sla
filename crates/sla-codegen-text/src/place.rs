@@ -457,8 +457,19 @@ impl<'c> Codegen<'c> {
             && self.index_expr_is_inline_pod_element(&field.expr)
         {
             // CLASSB segment 3: a field projection on an inline-POD
-            // element addresses the element's slot itself (the
-            // packed image has the record layout).
+            // element. The base depends on the container's storage
+            // model. ARRAY and SLICE slots genuinely hold the packed
+            // record image, so the projection addresses the slot
+            // itself. A Vec/GrowVec slot instead holds the element's
+            // record pointer — VEC_PUSH stores the pointer the value
+            // materialises as and the index READ path loads it back
+            // (the DEF-RUST-TEXT-VEC-ELEMENT-BORROW-ARG settlement
+            // for &v[i]: inline POD describes the element's packed
+            // LAYOUT, not its Vec storage) — so a Vec/GrowVec
+            // projection loads the stored pointer and addresses
+            // through it. Addressing the Vec slot as a packed image
+            // overwrote the pointer's high bytes and corrupted the
+            // element (DEF-RUST-CLASSB-FIELDWRITE-STORAGE-MODEL).
             let idx = match &*field.expr {
                 Node::IndexExpr(i) => i,
                 _ => unreachable!(),
@@ -467,11 +478,24 @@ impl<'c> Codegen<'c> {
             if let Some(t) = &addr.base_tmp {
                 self.emit_release(t)?;
             }
+            let target_ty = self.place_type_of_expr(&idx.target);
+            let vec_like = target_ty
+                .as_ref()
+                .map(|t| vec_like_element_type(t).is_some())
+                .unwrap_or(false);
+            let base = if vec_like {
+                let rec = self.new_tmp();
+                self.ins(&format!("{rec} = load {}+0 as ptr", addr.ptr));
+                self.emit_release(&addr.ptr)?;
+                rec
+            } else {
+                addr.ptr.clone()
+            };
             self.release_index_slot_base(&addr)?;
             if addr.release_base_reg {
                 self.emit_release(&addr.base_reg)?;
             }
-            addr.ptr.clone()
+            base
         } else {
             self.gen_expr(&field.expr)?
         };

@@ -1036,15 +1036,24 @@ impl<'c> Codegen<'c> {
             }
             ("Vec", "pop") => {
                 // codegen.zig isPopCall arm: try_pop into a
-                // one-word slot, then wrap the word in an Option
-                // (an inline-POD element's word is its packed
-                // record image and is materialized into a record
-                // cell first, materializeInlinePodRecord).
+                // one-word slot, then wrap the word in an Option.
+                // The popped word is the element value as stored:
+                // for a struct element it is the record pointer
+                // itself (VEC_PUSH stored it, and the VEC_REMOVE
+                // arm likewise returns its word as the record
+                // pointer). The Zig arm materializes an inline-POD
+                // word into a fresh record cell
+                // (materializeInlinePodRecord) because Zig's
+                // VEC_PUSH stores the packed record image; under
+                // this compiler's storage model that would build a
+                // record whose first word is the pointer's own
+                // bits (DEF-RUST-CLASSB-FIELDWRITE-STORAGE-MODEL:
+                // popped elements read back as garbage).
                 if call.args.len() != 1 {
                     return Err(missing_fact());
                 }
                 let (recv, _, _) = self.surface_receiver(call)?;
-                let elem = generics
+                let _elem = generics
                     .first()
                     .ok_or_else(|| missing_fact())?
                     .clone();
@@ -1066,28 +1075,9 @@ impl<'c> Codegen<'c> {
                 ));
                 self.wl(&format!("{some_label}:"));
                 self.w(&format!("    !{ok_reg}\n"));
-                if crate::place::inline_pod_element(self.check, &elem) {
-                    let elem_name = match &elem {
-                        Type::UserDefined(u) => u.name.clone(),
-                        _ => return Err(missing_fact()),
-                    };
-                    let decl = crate::place::struct_decl_lookup(self.check, &elem_name)
-                        .ok_or_else(|| missing_fact())?;
-                    let rec = self.new_tmp();
-                    self.ins(&format!(
-                        "{rec} = alloc {}",
-                        crate::layout::struct_size(&decl)
-                    ));
-                    self.ins(&format!("store {rec}+0, {value_reg} as u64"));
-                    self.ins(&format!(
-                        "EXPAND OPTION_NEW_SOME {option_reg}, {rec}"
-                    ));
-                    self.emit_forget_moved_value(&rec)?;
-                } else {
-                    self.ins(&format!(
-                        "EXPAND OPTION_NEW_SOME {option_reg}, {value_reg}"
-                    ));
-                }
+                self.ins(&format!(
+                    "EXPAND OPTION_NEW_SOME {option_reg}, {value_reg}"
+                ));
                 self.w(&format!("    !{value_reg}\n"));
                 self.w(&format!("    jmp {end_label}\n\n"));
                 self.wl(&format!("{none_label}:"));

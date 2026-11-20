@@ -1,0 +1,48 @@
+// Regression test for DEF-RUST-CLASSB-FIELDWRITE-STORAGE-MODEL:
+// an index field write (v[0].val = 999) on a Vec of inline-POD
+// elements must go through the element pointer stored in the slot
+// (the storage model VEC_PUSH and the index read path use). Before
+// the fix, gen_field_address's CLASSB segment-3 arm addressed the
+// slot itself as a packed image, overwriting the stored pointer's
+// high 4 bytes; a same-element index field read afterwards
+// dereferenced the corrupted pointer (SIGSEGV). Write-only and
+// different-element reads passed; same-element write+read crashed.
+// Triage minim (Sunny task 18, LINE-CLASSB-FIX): bodies unchanged.
+@import "sa_std/vec.sa"
+
+struct CbItem { key: i32, val: i32 }
+
+fn cb_item(k: i32, v: i32) -> CbItem {
+    return CbItem { key: k, val: v };
+}
+
+@test "B5 small write only"() {
+    let v: Vec<CbItem> = Vec::new();
+    v.push(cb_item(100, 200));
+    v.push(cb_item(101, 201));
+    v[0].val = 999;
+}
+
+@test "B6 write idx0 read idx1"() {
+    let v: Vec<CbItem> = Vec::new();
+    v.push(cb_item(100, 200));
+    v.push(cb_item(101, 201));
+    v[0].val = 999;
+    if v[1].val != 201 { panic(1); };
+}
+
+@test "B7 write val read key same elem"() {
+    let v: Vec<CbItem> = Vec::new();
+    v.push(cb_item(100, 200));
+    v.push(cb_item(101, 201));
+    v[0].val = 999;
+    if v[0].key != 100 { panic(2); };
+}
+
+@test "B8 write key read val same elem"() {
+    let v: Vec<CbItem> = Vec::new();
+    v.push(cb_item(100, 200));
+    v.push(cb_item(101, 201));
+    v[0].key = 111;
+    if v[0].val != 200 { panic(3); };
+}

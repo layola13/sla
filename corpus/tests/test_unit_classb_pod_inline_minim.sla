@@ -1,0 +1,46 @@
+// Regression test for DEF-RUST-CLASSB-FIELDWRITE-STORAGE-MODEL
+// (pod_inline family): (a) a GrowVec index field write followed by
+// a same-element read must go through the stored element pointer —
+// before the fix the CLASSB segment-3 arm wrote into the slot as a
+// packed image and corrupted the pointer (SIGSEGV); (b) pop after
+// remove(0) must return the surviving elements in order — before
+// the fix a popped element's key was neither 3 nor 2 (panic 33157
+// in the full corpus file), a wrong-value symptom of the same
+// storage-model family in the pop/remove path.
+// Triage minim (Sunny task 18, LINE-CLASSB-FIX): bodies unchanged.
+@import "sa_std/vec.sa"
+@import "sa_std/growvec.sa"
+@import "sa_std/growvec.sai"
+
+struct CbPod { key: i32, val: i32 }
+
+@test "min pod pop remove"() {
+    let v: Vec<CbPod> = Vec::new();
+    v.push(CbPod { key: 1, val: 10 });
+    v.push(CbPod { key: 2, val: 20 });
+    v.push(CbPod { key: 3, val: 30 });
+    let removed = v.remove(0);
+    if removed.key != 1 { panic(1); };
+    if len(v) != 2 { panic(2); };
+    if v[0].key != 2 { panic(3); };
+    if v[1].key != 3 { panic(4); };
+    while let Some(x) = v.pop() {
+        if x.key == 3 {
+            if x.val != 30 { panic(5); };
+        } else {
+            if x.key != 2 { panic(6); };
+            if x.val != 20 { panic(7); };
+        }
+    }
+    if len(v) != 0 { panic(8); };
+}
+
+@test "min pod growvec field write"() {
+    let g: GrowVec<CbPod> = GrowVec::with_max(1024);
+    g.push(CbPod { key: 11, val: 12 });
+    let it = CbPod { key: 13, val: 14 };
+    g.push(it);
+    if g[0].key != 11 { panic(11); };
+    g[0].val = 120;
+    if g[0].val != 120 { panic(12); };
+}
