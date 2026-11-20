@@ -290,6 +290,20 @@ impl<'c> Codegen<'c> {
             return Ok(());
         }
 
+        // FS-9 closure-alias registration (codegen.zig:15836):
+        // `let g = f` where f is bound to a closure literal must
+        // register g for the same literal — call dispatch
+        // (genClosureCall) is keyed by the callee name, so an
+        // unregistered alias fell through to the imported-macro
+        // fallback and emitted invalid SA (EXPAND on the stub
+        // register). The value copy itself is emitted by the
+        // ordinary chain below.
+        if let Node::Identifier(id) = &*let_stmt.value {
+            if let Some(lit) = self.closure_binding_for(id) {
+                self.closure_bindings.push((let_stmt.name.clone(), lit));
+            }
+        }
+
         match &*let_stmt.value {
             Node::StructLiteral(lit) => {
                 self.gen_struct_literal_into(&resolved_name, lit, &let_stmt.value)?;
