@@ -72,7 +72,7 @@ impl<'c> Codegen<'c> {
     }
 
     /// codegen.zig:4574 `emitFormatPushConstBytes`.
-    fn emit_format_push_const_bytes(&mut self, out_reg: &str, bytes: &[u8]) -> Result<()> {
+    pub(crate) fn emit_format_push_const_bytes(&mut self, out_reg: &str, bytes: &[u8]) -> Result<()> {
         if bytes.is_empty() {
             return Ok(());
         }
@@ -219,7 +219,7 @@ impl<'c> Codegen<'c> {
 
     /// codegen.zig:4747 `emitFormatPushValue` over
     /// `lowering_rules.debugFormatSuffix` (primitives only).
-    fn emit_format_push_value(&mut self, out_reg: &str, val_reg: &str, ty: &Type) -> Result<()> {
+    pub(crate) fn emit_format_push_value(&mut self, out_reg: &str, val_reg: &str, ty: &Type) -> Result<()> {
         let suffix = match ty {
             Type::Primitive(p) => match p {
                 Primitive::I8

@@ -1191,6 +1191,23 @@ impl<'c> Codegen<'c> {
             _ => {}
         }
 
+        // hash(x) / debug(x) builtins (codegen.zig:20814 via
+        // lowering_rules isHashCall/isDebugCall, name-only):
+        // the derive-gated computation is synthesized inline
+        // (genHashCall/genDebugCall). Without these arms the
+        // calls fell into the imported-macro fallback and
+        // emitted EXPAND hash / EXPAND debug, which no std
+        // module defines (host UndefinedMacro). A user-declared
+        // function of the same name keeps the ordinary path.
+        if call.args.len() == 1 && self.func_decl(&func_name).is_none() {
+            if func_name == "hash" {
+                return self.gen_hash_call(call);
+            }
+            if func_name == "debug" {
+                return self.gen_debug_call(call);
+            }
+        }
+
         if is_panic_builtin_name(&func_name) {
             return self.gen_panic_call(call);
         }
@@ -1808,6 +1825,161 @@ impl<'c> Codegen<'c> {
         let planned_args = vec![ptr, len];
         self.emit_lowered_call_arg_cleanups(&planned_args, None)?;
         Ok(result)
+    }
+
+    /// codegen.zig:6292 `primitiveHashBits`: a u64 hashes as
+    /// itself; every other primitive widens with `as u64`.
+    fn primitive_hash_bits(&mut self, value_reg: &str, ty: &Type) -> String {
+        if crate::codegen::type_string(ty) == "u64" {
+            return value_reg.to_string();
+        }
+        let bits = self.new_tmp();
+        self.ins(&format!("{bits} = {value_reg} as u64"));
+        bits
+    }
+
+    /// codegen.zig:6300 `genHashValue`: FNV-style mix over
+    /// the fields of a hash-derive struct (seed
+    /// 1469598103934665603, prime 1099511628211), recursing
+    /// per field; primitives go through primitiveHashBits.
+    fn gen_hash_value(&mut self, value_reg: &str, ty: &Type) -> Result<String> {
+        if let Type::Primitive(_) = ty {
+            return Ok(self.primitive_hash_bits(value_reg, ty));
+        }
+        let peeled = sla_lowering::peel_borrow_pointer_type(ty);
+        let Type::UserDefined(u) = peeled else {
+            return unsupported(
+                "hash of non-struct type",
+                "codegen.zig:6300 (genHashValue)",
+            );
+        };
+        let decl = crate::place::struct_decl_lookup(self.check, &u.name).ok_or_else(|| {
+            crate::TextError::Unsupported {
+                feature: format!("hash of unknown struct {}", u.name),
+                zig_ref: "codegen.zig:6300 (genHashValue)",
+            }
+        })?;
+        if decl.is_opaque
+            || decl.is_union
+            || !decl.derives.iter().any(|d| d.eq_ignore_ascii_case("hash"))
+        {
+            return unsupported(
+                "hash of struct without hash derive",
+                "codegen.zig:6300 (genHashValue)",
+            );
+        }
+        let mut hash_reg = self.new_tmp();
+        self.emit_int_const(&hash_reg, 1469598103934665603);
+        for field in &decl.fields {
+            let (offset, field_ty) =
+                crate::layout::struct_field_layout(&decl, &field.name).ok_or_else(|| {
+                    crate::TextError::Unsupported {
+                        feature: format!("hash field layout {}", field.name),
+                        zig_ref: "codegen.zig:6300 (genHashValue)",
+                    }
+                })?;
+            let field_reg = self.new_tmp();
+            self.ins(&format!(
+                "{field_reg} = load {value_reg}+{offset} as {}",
+                crate::codegen::type_string(&field_ty)
+            ));
+            let field_hash = self.gen_hash_value(&field_reg, &field_ty)?;
+            let mixed = self.new_tmp();
+            let next = self.new_tmp();
+            self.ins(&format!("{mixed} = xor {hash_reg}, {field_hash}"));
+            self.ins(&format!("{next} = mul {mixed}, 1099511628211"));
+            hash_reg = next;
+        }
+        Ok(hash_reg)
+    }
+
+    /// codegen.zig:6321 `genHashCall`.
+    fn gen_hash_call(&mut self, call: &sla_ast::CallExpr) -> Result<String> {
+        let ty = self.expr_type(&call.args[0]).ok_or_else(|| {
+            crate::TextError::Unsupported {
+                feature: "hash argument type".to_string(),
+                zig_ref: "codegen.zig:6321 (genHashCall)",
+            }
+        })?;
+        let value_reg = self.gen_expr(&call.args[0])?;
+        let result = self.gen_hash_value(&value_reg, &ty)?;
+        if sla_lowering::call_arg_needs_release(&call.args[0]) {
+            self.emit_release(&value_reg)?;
+        }
+        Ok(result)
+    }
+
+    /// codegen.zig:6330 `genDebugValue`: push the derived
+    /// `Name { field: value, ... }` rendering into the
+    /// FORMAT buffer, recursing per field.
+    fn gen_debug_value(&mut self, out_reg: &str, value_reg: &str, ty: &Type) -> Result<()> {
+        if let Type::Primitive(_) = ty {
+            return self.emit_format_push_value(out_reg, value_reg, ty);
+        }
+        let peeled = sla_lowering::peel_borrow_pointer_type(ty);
+        let Type::UserDefined(u) = peeled else {
+            return unsupported(
+                "debug of non-struct type",
+                "codegen.zig:6330 (genDebugValue)",
+            );
+        };
+        let decl = crate::place::struct_decl_lookup(self.check, &u.name).ok_or_else(|| {
+            crate::TextError::Unsupported {
+                feature: format!("debug of unknown struct {}", u.name),
+                zig_ref: "codegen.zig:6330 (genDebugValue)",
+            }
+        })?;
+        if decl.is_opaque
+            || decl.is_union
+            || !decl.derives.iter().any(|d| d.eq_ignore_ascii_case("debug"))
+        {
+            return unsupported(
+                "debug of struct without debug derive",
+                "codegen.zig:6330 (genDebugValue)",
+            );
+        }
+        self.emit_format_push_const_bytes(out_reg, decl.name.as_bytes())?;
+        self.emit_format_push_const_bytes(out_reg, b" { ")?;
+        for (i, field) in decl.fields.iter().enumerate() {
+            if i > 0 {
+                self.emit_format_push_const_bytes(out_reg, b", ")?;
+            }
+            self.emit_format_push_const_bytes(out_reg, field.name.as_bytes())?;
+            self.emit_format_push_const_bytes(out_reg, b": ")?;
+            let (offset, field_ty) =
+                crate::layout::struct_field_layout(&decl, &field.name).ok_or_else(|| {
+                    crate::TextError::Unsupported {
+                        feature: format!("debug field layout {}", field.name),
+                        zig_ref: "codegen.zig:6330 (genDebugValue)",
+                    }
+                })?;
+            let field_reg = self.new_tmp();
+            self.ins(&format!(
+                "{field_reg} = load {value_reg}+{offset} as {}",
+                crate::codegen::type_string(&field_ty)
+            ));
+            self.gen_debug_value(out_reg, &field_reg, &field_ty)?;
+        }
+        self.emit_format_push_const_bytes(out_reg, b" }")?;
+        Ok(())
+    }
+
+    /// codegen.zig:6351 `genDebugCall`.
+    fn gen_debug_call(&mut self, call: &sla_ast::CallExpr) -> Result<String> {
+        let ty = self.expr_type(&call.args[0]).ok_or_else(|| {
+            crate::TextError::Unsupported {
+                feature: "debug argument type".to_string(),
+                zig_ref: "codegen.zig:6351 (genDebugCall)",
+            }
+        })?;
+        let out_reg = self.new_tmp();
+        self.ins(&format!("EXPAND FORMAT_BEGIN {out_reg}, 128"));
+        let value_reg = self.gen_expr(&call.args[0])?;
+        self.gen_debug_value(&out_reg, &value_reg, &ty)?;
+        if sla_lowering::call_arg_needs_release(&call.args[0]) {
+            self.emit_release(&value_reg)?;
+        }
+        Ok(out_reg)
     }
 
     /// codegen.zig:1868 `genCallStmt`.
