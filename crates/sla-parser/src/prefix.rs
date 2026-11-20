@@ -9,7 +9,11 @@
 //!     so `-a + b` is `(-a) + b`; `as` (9) and postfix (10) still fold
 //!     into the operand)
 //!   `!x`  -> `x == false` with the operand at precedence 8
-//!   `&x` / `^x` / `*x` / `await x` wrap the precedence-6 operand.
+//!   `&x` / `^x` / `*x` wrap the precedence-8 operand (binary +/-
+//!     (7) and */% (8) stay OUTSIDE, like `-`/`!` —
+//!     DEF-SLA-CHECKER-BINOP-DEREF-OPERAND); `await x` still wraps
+//!     the precedence-6 operand (same shape, different operator
+//!     family — deliberately untouched here, it needs its own ruling).
 
 use sla_ast::decls::Param;
 use sla_ast::exprs::{
@@ -68,21 +72,31 @@ impl<'a> Parser<'a> {
             Tag::Identifier => self.parse_identifier_prefix(),
             Tag::Ampersand => {
                 self.advance();
-                let inner = self.parse_expr(6)?;
+                // Operand at precedence 8, like `-`/`!` (DEF-SLA-
+                // CHECKER-BINOP-DEREF-OPERAND): binary +/- (7) and
+                // */% (8) stay OUTSIDE the borrow, so `&x + y` is
+                // `(&x) + y`; `as` (9) and postfix (10) still fold in.
+                let inner = self.parse_expr(8)?;
                 Ok(Node::BorrowExpr(sla_ast::exprs::BorrowExpr {
                     expr: Box::new(inner),
                 }))
             }
             Tag::Caret => {
                 self.advance();
-                let inner = self.parse_expr(6)?;
+                // Operand at precedence 8, like `-`/`!` (see the
+                // `&` arm): binary +/- (7) and */% (8) stay OUTSIDE
+                // the move, so `^x + y` is `(^x) + y`.
+                let inner = self.parse_expr(8)?;
                 Ok(Node::MoveExpr(sla_ast::exprs::MoveExpr {
                     expr: Box::new(inner),
                 }))
             }
             Tag::Asterisk => {
                 self.advance();
-                let inner = self.parse_expr(6)?;
+                // Operand at precedence 8, like `-`/`!` (see the
+                // `&` arm): binary +/- (7) and */% (8) stay OUTSIDE
+                // the deref, so `*value + 10` is `(*value) + 10`.
+                let inner = self.parse_expr(8)?;
                 Ok(Node::DerefExpr(sla_ast::exprs::DerefExpr {
                     expr: Box::new(inner),
                 }))

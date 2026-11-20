@@ -1,0 +1,68 @@
+// DEF-SLA-CHECKER-BINOP-DEREF-OPERAND: a deref in binary-operand position
+// must read `(*value) + 10`, never `*(value + 10)`. The parser used to
+// parse the operand of prefix `*` at precedence 6, folding every binary
+// operator into the deref, so the checker saw a borrow on the left of `+`
+// and rejected the program. Regression: this file must check and run
+// green; on the stock checker it fails check with "binary expression
+// type mismatch: op=add, left tag=borrow, right tag=primitive".
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn add_ten(value: &i32) -> i32 {
+    return *value + 10;
+}
+
+fn sub_three(value: &i32) -> i32 {
+    return *value - 3;
+}
+
+fn times_two(value: &i32) -> i32 {
+    return *value * 2;
+}
+
+fn half(value: &i32) -> i32 {
+    return *value / 2;
+}
+
+fn rem_three(value: &i32) -> i32 {
+    return *value % 3;
+}
+
+fn add_two_borrows(a: &i32, b: &i32) -> i32 {
+    return *a + *b;
+}
+
+fn modify(value: &i32) -> void {
+    *value = *value + 10;
+}
+
+@test "deref as binary left operand"() {
+    let value: i32 = 100;
+    let borrowed = &value;
+    if *borrowed + 10 != 110 { panic(30710); };
+    if *borrowed - 3 != 97 { panic(30711); };
+    if *borrowed * 2 != 200 { panic(30712); };
+    if *borrowed / 2 != 50 { panic(30713); };
+    if *borrowed % 3 != 1 { panic(30714); };
+    if *borrowed + *borrowed != 200 { panic(30715); };
+    if 10 + *borrowed != 110 { panic(30716); };
+    if (*borrowed) + 10 != 110 { panic(30717); };
+};
+
+@test "deref as binary operand through borrow params"() {
+    let value: i32 = 100;
+    if add_ten(&value) != 110 { panic(30718); };
+    if sub_three(&value) != 97 { panic(30719); };
+    if times_two(&value) != 200 { panic(30720); };
+    if half(&value) != 50 { panic(30721); };
+    if rem_three(&value) != 1 { panic(30722); };
+    let first: i32 = 100;
+    let second: i32 = 100;
+    if add_two_borrows(&first, &second) != 200 { panic(30723); };
+};
+
+@test "deref assign through binop"() {
+    let value: i32 = 100;
+    modify(&value);
+    if value != 110 { panic(30724); };
+};
