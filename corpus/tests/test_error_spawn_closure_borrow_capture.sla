@@ -1,0 +1,25 @@
+// expect: BorrowEscape
+// DEF-SLA-SPAWN-CLOSURE-BORROW-ESCAPE (capture form): a closure
+// handed to thread::spawn must not use a borrow-typed binding
+// from the enclosing scope. The pre-made borrow `r` aliases the
+// spawner's `number`, so the spawned thread's write through it
+// races with the spawner's own reads. Before the fix this file
+// checked clean.
+@import "sa_std/thread.sa"
+@import "sa_std/core/result.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn modify(value: &i32) -> void {
+    *value += 10;
+}
+
+fn main() -> i32 {
+    let number = 100;
+    let r = &number;
+    let h = thread::spawn(^|| modify(r));
+    println("{}", number);
+    let st = h.join().unwrap();
+    println("{}", number);
+    return 0;
+}

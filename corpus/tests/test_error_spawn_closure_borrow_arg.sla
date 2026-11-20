@@ -1,0 +1,26 @@
+// expect: BorrowEscape
+// DEF-SLA-SPAWN-CLOSURE-BORROW-ESCAPE: a closure handed to
+// thread::spawn must not create a borrow of an enclosing-scope
+// place inside its body. The borrow aliases the spawner frame
+// slot, so the spawned thread races with the spawner's own
+// accesses (here `number = 200`). The `go` boundary has always
+// rejected the equivalent borrowed spawn parameter; the closure
+// form must reject it too. Before the fix this file checked
+// clean and the program ran (printing 210).
+@import "sa_std/thread.sa"
+@import "sa_std/core/result.sa"
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+
+fn modify(value: &i32) -> void {
+    *value += 10;
+}
+
+fn main() -> i32 {
+    let number = 100;
+    let h = thread::spawn(^|| modify(&number));
+    number = 200;
+    let r = h.join().unwrap();
+    println("{}", number);
+    return 0;
+}

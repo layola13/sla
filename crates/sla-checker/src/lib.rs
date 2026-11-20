@@ -38,6 +38,7 @@ mod check_hook;
 mod check_shader;
 mod check_field_borrow;
 mod check_leaves;
+mod check_spawn_guard;
 mod check_preassoc;
 mod check_receiver_leaves;
 mod check_receiver_leaves2;

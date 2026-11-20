@@ -48,7 +48,13 @@ impl Checker {
     /// have to move across the boundary? Structs recurse through
     /// their registered fields; pointers do NOT stop the walk
     /// (the corpus passes `*Struct{ r: &u64 }`).
-    fn go_type_has_borrow(&self, ty: &Type, depth: usize) -> bool {
+    ///
+    /// `pub(crate)`: the `thread::spawn` closure guard
+    /// (check_spawn_guard.rs) reuses this exact predicate — the
+    /// borrow-only containment test, not the wider
+    /// `typeForbiddenAcrossBoundary` (closures/futures are legal
+    /// cargo for the async thread pool).
+    pub(crate) fn go_type_has_borrow(&self, ty: &Type, depth: usize) -> bool {
         if depth > 8 {
             return false;
         }

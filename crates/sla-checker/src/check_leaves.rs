@@ -255,6 +255,8 @@ impl Checker {
         if !c.params.is_empty() {
             return Err(type_mismatch());
         }
+        // FIX 2: audit the closure body for borrow escape (see check_spawn_guard.rs).
+        self.check_spawn_closure_borrow_escape(&call.args[0])?;
         // An integer-typed closure return is coerced to i32.
         let ret = if matches!(*c.ret, Type::Primitive(Primitive::Integer)) {
             i32_ty()
