@@ -1956,6 +1956,37 @@ impl<'c> Codegen<'c> {
             self.emit_lowered_call_arg_cleanups(&planned_args, Some(&func_name))?;
             return Ok(());
         }
+        // Receiver-method call in statement position
+        // (codegen.zig:1868 genCallStmt known-callee cascade):
+        // `recv.m(...)` keeps the bare name with the receiver
+        // as args[0]; gen_expr_call resolves it through
+        // resolve_receiver_method_decl after the bare-name
+        // lookup, but the statement cascade consulted that
+        // resolver only for associated targets, so inherent and
+        // trait method statements (c.set(41);) fell through to
+        // the unknown-call error. A void callee emits the bare
+        // call form; a value callee binds a result and releases
+        // it when the statement's result needs it, as the
+        // runtime-call branch above does.
+        if let Some((key, decl)) = self.resolve_receiver_method_decl(call) {
+            let (display, planned_args) = self.plan_known_call_args(call, &decl.params)?;
+            let lowered = self.lowered_func_symbol(&key);
+            if sla_lowering::is_void_type(&decl.ret_ty) {
+                self.ins(&format!("call @{lowered}({})", display.join(", ")));
+                self.emit_lowered_call_arg_cleanups(&planned_args, Some(&key))?;
+            } else {
+                let result = self.new_tmp();
+                self.ins(&format!(
+                    "{result} = call @{lowered}({})",
+                    display.join(", ")
+                ));
+                self.emit_lowered_call_arg_cleanups(&planned_args, Some(&key))?;
+                if self.expr_result_reg_needs_release(expr) {
+                    self.emit_release(&result)?;
+                }
+            }
+            return Ok(());
+        }
         unsupported(
             "unknown statement call",
             "codegen.zig:1868 (genCallStmt fallthrough)",
