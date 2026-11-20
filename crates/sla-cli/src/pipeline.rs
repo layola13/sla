@@ -922,8 +922,8 @@ pub fn compile_to_sab(
 /// The Zig probe expands @import'ed modules before scanning;
 /// this port scans the root program only — registered.
 pub fn test_filter_selects_no_tests(file: &str, filter: Option<&str>, stderr: &mut impl Write) -> Option<bool> {
-    let pattern = filter?;
-    if pattern.is_empty() {
+    let pattern = filter.unwrap_or("");
+    if filter.is_some() && pattern.is_empty() {
         return None;
     }
     let content = match std::fs::read(file) {
@@ -949,12 +949,24 @@ pub fn test_filter_selects_no_tests(file: &str, filter: Option<&str>, stderr: &m
     let sla_ast::node::Node::Program(program) = &root else {
         return None;
     };
+    let mut any_test = false;
     for decl in &program.decls {
         if let sla_ast::node::Node::TestDecl(test) = decl {
-            if test.name.contains(pattern) {
+            any_test = true;
+            if !pattern.is_empty() && test.name.contains(pattern) {
                 return Some(false);
             }
         }
+    }
+    if filter.is_none() {
+        // No filter: "selects no tests" only when the file
+        // declares no @test at all. The Zig frontend prints the
+        // 0-passed ok line for such files without building a
+        // test binary; building one would link every declared
+        // function, including wrappers over provider-less
+        // externs in contract fixtures (nested-contract /
+        // view-args shape), and fail at the host link step.
+        return Some(!any_test);
     }
     Some(true)
 }
