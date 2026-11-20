@@ -1279,6 +1279,18 @@ impl<'c> Codegen<'c> {
             return self.gen_string_collect(source);
         }
 
+        // Iterator-window terminals (codegen.zig:21773-21826,
+        // the P1 window dispatch): sum / count / max over a
+        // direct chain or a held chain binding reduce to a
+        // single indexed loop over the (start, count) window
+        // (iter_window.rs). Placed where the Zig cascade checks
+        // it — right after the collect arm above; without it the
+        // chain degrades into the EXPAND catch-all (`EXPAND iter`
+        // / `EXPAND sum`, UndefinedMacro at the host).
+        if let Some(result) = self.try_gen_iter_window_terminal(call) {
+            return result;
+        }
+
         // Dyn trait-object dispatch (codegen.zig:23158): a
         // receiver call whose receiver is a `dyn Trait` value
         // goes through the vtable, never through the assoc

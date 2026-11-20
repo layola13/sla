@@ -151,6 +151,45 @@ impl Checker {
             return crate::check_assoc_helpers::check_sum_call(self, &target_ty);
         }
 
+        // 1b. `count` / `max` specials (LINE-FITER-TEXT-PORT):
+        // the iterator-window terminals whose Zig arms sit in
+        // the same family as `sum` (type_checker.zig :10824
+        // count -> u64, :10848 max -> Option<elem> with the
+        // numeric element gate). Same order discipline as the
+        // `sum` arm above: receiver-inferred resolution runs
+        // first, so a user type's own `count` / `max` method
+        // wins over the builtin window terminal; the builtin
+        // arm keeps its verdicts otherwise. Before this arm,
+        // `count` resolved nowhere (UndefinedVariable at check
+        // time on both routes, LINE-BEND2-TRIAGE minim2) and
+        // `max` likewise.
+        //
+        // The funcs gate is load-bearing: a user-DECLARED
+        // function named `count` / `max` (e.g. the R-3 suite's
+        // `fn count(x: &Vec<String>) -> i32`, fixture_03's
+        // two-argument `fn max(a, b)`) is resolved by the plain
+        // function stages below and must never be pre-empted —
+        // the window arm claims a call only when no declared
+        // function owns the name (the overload-member stage at
+        // 1a uses the same `funcs.contains_key` probe).
+        if (name == "count" || name == "max") && !self.funcs.contains_key(name) {
+            if let Some(result) = self.check_receiver_call(call) {
+                return result;
+            }
+            if call.args.len() != 1 {
+                return Err(Diagnostic::new(
+                    ErrorKind::InvalidArgsCount,
+                    format!("{name} expects exactly 1 argument"),
+                ));
+            }
+            let target_ty = self.check_expr(&call.args[0])?;
+            return if name == "count" {
+                crate::check_assoc_helpers::check_count_call(self, &target_ty)
+            } else {
+                crate::check_assoc_helpers::check_max_call(self, &target_ty)
+            };
+        }
+
         // 1a-member. Direct call to one overload member by its
         // member symbol (`pick__ov_f64(2.5)`): the symbol names a
         // set member, not a declared function, so no other stage

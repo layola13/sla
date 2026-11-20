@@ -131,6 +131,23 @@ impl<'c> Codegen<'c> {
             self.remember_local_binding_type(&resolved_name, ty);
         }
 
+        // P1 (codegen.zig:15961): a held iterator chain
+        // (`let c = v.iter().rev();`) is a non-owning view of
+        // its source collection. It materializes no register,
+        // is not registered as an owned binding, and emits no
+        // consumption of the RHS; adapter terminal calls on the
+        // name resolve through the recorded window plan
+        // (iter_window.rs). The statement dispatcher above this
+        // function still runs the statement's checker cleanups;
+        // emit_lexical_cleanup_release skips this name (it owns
+        // nothing), mirroring codegen.zig:2082.
+        if let Node::CallExpr(_) = &*let_stmt.value {
+            if let Some(plan) = self.iter_chain_plan_for_let(&let_stmt.value) {
+                self.iter_chain_bindings.insert(resolved_name.clone(), plan);
+                return Ok(());
+            }
+        }
+
         if self.hoisted_allocs.iter().any(|h| h == &resolved_name) {
             self.ins(&format!("// stack-alloc hoisted for {resolved_name}"));
             self.stack_alloc_bindings.insert(resolved_name.clone());

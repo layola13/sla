@@ -1,0 +1,36 @@
+// DEF-RUST-FITER-WINDOW-MISSING regression (LINE-FITER-TEXT-PORT):
+// the iterator-window terminal `max`, returning Option<elem>:
+// Some(best) for a non-empty window, None for an empty one. Before
+// the port the Rust checker had no `max` special and the text
+// backend had no window machinery. Reference: Zig
+// type_checker.zig max arm (numeric element gate) and the
+// codegen.zig:19465 window emitter (has-flag + acc slot, Option
+// tail via OPTION_NEW_SOME / OPTION_NEW_NONE).
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+@test "iter window max array"() {
+    let a: [i64; 4] = [1, 9, 3, 4];
+    let m = a.iter().max();
+    if m.unwrap() != 9 { panic(75041); };
+}
+
+@test "iter window max vec"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(5);
+    v.push(12);
+    v.push(8);
+    let m = v.iter().max();
+    if m.unwrap() != 12 { panic(75042); };
+}
+
+@test "iter window max staged and empty"() {
+    let a: [i64; 4] = [1, 9, 3, 4];
+    let m = a.iter().take(2).max();
+    if m.unwrap() != 9 { panic(75043); };
+    let e = a.iter().skip(9).max();
+    match e {
+        Some(_) => { panic(75044); },
+        None => { },
+    };
+}

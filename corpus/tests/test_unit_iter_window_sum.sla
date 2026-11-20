@@ -1,0 +1,40 @@
+// DEF-RUST-FITER-WINDOW-MISSING regression (LINE-FITER-TEXT-PORT):
+// the iterator-window reduction terminal `sum` over Array and Vec
+// sources. Before the port the Rust text backend had no window
+// machinery at all: `a.iter().sum()` fell into the imported-macro
+// path and emitted `EXPAND iter` / `EXPAND sum`, which the host
+// rejects with UndefinedMacro (trap 1060). The Zig compiler's
+// IterChainPlan window machine (codegen.zig:19417/19465) is the
+// reference. Shapes: plain array sum (the bend2 parity shape),
+// plain Vec sum, staged rev/skip/take windows, and a held chain
+// binding (`let c = a.iter().rev();`).
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+@test "iter window sum array"() {
+    let a: [i64; 4] = [1, 2, 3, 4];
+    if a.iter().sum() != 10 { panic(75018); };
+}
+
+@test "iter window sum vec"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(5);
+    v.push(7);
+    v.push(8);
+    if v.iter().sum() != 20 { panic(75021); };
+}
+
+@test "iter window sum staged"() {
+    let a: [i64; 5] = [1, 2, 3, 4, 5];
+    if a.iter().rev().sum() != 15 { panic(75022); };
+    if a.iter().skip(2).sum() != 12 { panic(75023); };
+    if a.iter().take(2).sum() != 3 { panic(75024); };
+    if a.iter().skip(1).take(2).sum() != 5 { panic(75025); };
+    if a.iter().skip(9).sum() != 0 { panic(75026); };
+}
+
+@test "iter window sum held binding"() {
+    let a: [i64; 4] = [1, 2, 3, 4];
+    let c = a.iter().rev();
+    if c.sum() != 10 { panic(75027); };
+}

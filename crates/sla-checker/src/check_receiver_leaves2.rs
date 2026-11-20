@@ -495,6 +495,28 @@ impl Checker {
                 iterable_elem(recv_ty)?;
                 Some(arity(call, 1).map(|_| recv_ty.clone()))
             }
+            // P1 iter adapters (Zig type_checker.zig :10806 /
+            // :10813, LINE-FITER-TEXT-PORT): rev / skip / take
+            // are stage calls on an iterator receiver; the
+            // checked type stays the source collection type
+            // (the codegens reduce the chain to a (start, count)
+            // window over the source), so chained and held forms
+            // compose with sum / count / max and with each other.
+            "rev" => {
+                iterable_elem(recv_ty)?;
+                Some(arity(call, 1).map(|_| recv_ty.clone()))
+            }
+            "skip" | "take" => {
+                iterable_elem(recv_ty)?;
+                Some((|| {
+                    arity(call, 2)?;
+                    let count_ty = self.check_expr(&call.args[1])?;
+                    if !is_integer_type(&count_ty) {
+                        return Err(type_mismatch());
+                    }
+                    Ok(recv_ty.clone())
+                })())
+            }
             "copied" => {
                 iterable_elem(recv_ty)?;
                 Some(arity(call, 1).map(|_| recv_ty.clone()))

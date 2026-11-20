@@ -689,7 +689,19 @@ impl<'c> Codegen<'c> {
 
     /// codegen.zig:1050 `emitLexicalCleanupRelease`.
     pub(crate) fn emit_lexical_cleanup_release(&mut self, name: &str) -> Result<()> {
+        // DEF-P1-REV-TEXT-EMIT (codegen.zig:2082): a held
+        // iterator-chain binding owns nothing and materializes
+        // no register; releasing it would emit `!name` for a
+        // register that was never declared (trap 1007). Skip
+        // it — the underlying collection is released by its
+        // own cleanup (iter_window.rs, LINE-FITER-TEXT-PORT).
+        if self.iter_chain_bindings.contains_key(name) {
+            return Ok(());
+        }
         let resolved = self.resolve_binding_name(name);
+        if self.iter_chain_bindings.contains_key(&resolved) {
+            return Ok(());
+        }
         self.emit_release(&resolved)
     }
 

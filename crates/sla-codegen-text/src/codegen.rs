@@ -79,6 +79,14 @@ pub struct Codegen<'c> {
     /// function (identity-keyed map/set probes for the same
     /// literal must hit the same slot).
     pub(crate) hashmap_key_slots: HashMap<String, String>,
+    /// codegen.zig `iter_chain_bindings` (:243): held iterator
+    /// chains (`let c = v.iter().rev();`). A chain let is a
+    /// non-owning view of its source collection: it materializes
+    /// no register and registers no owned binding; adapter
+    /// terminal calls on the name resolve through this plan
+    /// instead (iter_window.rs, LINE-FITER-TEXT-PORT).
+    pub(crate) iter_chain_bindings:
+        HashMap<String, crate::iter_window::IterChainPlan>,
     pub(crate) let_binding_aliases: HashMap<usize, String>,
     pub(crate) local_binding_types: Vec<(String, Type)>,
     pub(crate) hoisted_allocs: Vec<String>,
@@ -322,6 +330,7 @@ impl<'c> Codegen<'c> {
             binding_aliases: Vec::new(),
             borrow_source_temps: HashMap::new(),
             hashmap_key_slots: HashMap::new(),
+            iter_chain_bindings: HashMap::new(),
             let_binding_aliases: HashMap::new(),
             local_binding_types: Vec::new(),
             hoisted_allocs: Vec::new(),
@@ -475,6 +484,7 @@ impl<'c> Codegen<'c> {
         self.consumed_bindings.clear();
         self.borrow_source_temps.clear();
         self.hashmap_key_slots.clear();
+        self.iter_chain_bindings.clear();
         self.local_binding_types.clear();
         self.borrow_param_bindings.clear();
         self.plan_drop_suppressed = false;

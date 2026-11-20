@@ -55,6 +55,7 @@ mod func;
 mod go_spawn;
 mod agg_literal;
 mod into;
+mod iter_window;
 mod layout;
 mod map;
 mod min_imports;

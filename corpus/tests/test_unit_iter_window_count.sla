@@ -1,0 +1,36 @@
+// DEF-RUST-FITER-WINDOW-MISSING regression (LINE-FITER-TEXT-PORT):
+// the iterator-window terminal `count`. Before the port the Rust
+// checker had no `count` special at all (UndefinedVariable at check
+// time, both routes) and the text backend had no window machinery.
+// Reference: Zig type_checker.zig count arm (returns u64) and the
+// codegen.zig:19465 window emitter (count = window length, computed
+// branch-free; no loop runs).
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+@test "iter window count array"() {
+    let a: [i64; 4] = [1, 2, 3, 4];
+    if a.iter().count() != 4 { panic(75019); };
+}
+
+@test "iter window count vec"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(5);
+    v.push(7);
+    v.push(8);
+    if v.iter().count() != 3 { panic(75031); };
+}
+
+@test "iter window count staged"() {
+    let a: [i64; 5] = [1, 2, 3, 4, 5];
+    if a.iter().take(2).count() != 2 { panic(75032); };
+    if a.iter().skip(3).count() != 2 { panic(75033); };
+    if a.iter().skip(9).count() != 0 { panic(75034); };
+    if a.iter().rev().count() != 5 { panic(75035); };
+}
+
+@test "iter window count held binding"() {
+    let a: [i64; 4] = [1, 2, 3, 4];
+    let c = a.iter().skip(1);
+    if c.count() != 3 { panic(75036); };
+}
