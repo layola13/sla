@@ -1,0 +1,23 @@
+// Regression (LINE-CENSUS-CODEGEN-RESIDUE family B): an inherent
+// method call in statement position fell through gen_call_stmt to
+// the unknown-statement-call error; expression position worked.
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn get(&self) -> i32 {
+        return self.n;
+    }
+    fn set(&self, v: i32) {
+        self.n = v;
+    }
+}
+
+@test "inherent method call as statement"() {
+    let c = Counter { n: 37 };
+    c.set(41);
+    if c.n != 41 {
+        panic(1);
+    };
+}
