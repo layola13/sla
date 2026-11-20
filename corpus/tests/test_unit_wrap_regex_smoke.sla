@@ -38,12 +38,14 @@
 }
 
 @test "wrap sa_regex_replace"() {
-    let r = sla_regex_replace(0, STR_PTR("hello"), STR_LEN("hello"), STR_PTR("hell"), STR_LEN("hell"));
+    let regex_h = sla_regex_compile(STR_PTR("hello"), STR_LEN("hello"), 0);
+    let r = sla_regex_replace(regex_h, STR_PTR("hello"), STR_LEN("hello"), STR_PTR("hell"), STR_LEN("hell"));
     if r == 0 { panic(91090); };
 }
 
 @test "wrap sa_regex_replace_all"() {
-    let r = sla_regex_replace_all(0, STR_PTR("hello"), STR_LEN("hello"), STR_PTR("hell"), STR_LEN("hell"));
+    let regex_h = sla_regex_compile(STR_PTR("hello"), STR_LEN("hello"), 0);
+    let r = sla_regex_replace_all(regex_h, STR_PTR("hello"), STR_LEN("hello"), STR_PTR("hell"), STR_LEN("hell"));
     if r == 0 { panic(91100); };
 }
 
