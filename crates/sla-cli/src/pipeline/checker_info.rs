@@ -144,6 +144,16 @@ impl sla_lowering::CheckInfo for CheckerInfo<'_> {
     fn call_arg_array_to_slice_borrow(&self, arg: &Node) -> bool {
         self.checker.is_array_to_slice_borrow_arg(arg)
     }
+    fn dyn_smart_coercion(&self, expr: &Node) -> Option<&str> {
+        // F-DYN L3: the checker keys both coercion tables by the
+        // let value node's address, the same keying as expr_types.
+        let key = sla_lowering::node_key(expr);
+        self.checker
+            .dyn_rc_coercions
+            .get(&key)
+            .or_else(|| self.checker.dyn_box_coercions.get(&key))
+            .map(|s| s.as_str())
+    }
     fn expr_type_by_key(&self, key: usize) -> Option<&sla_ast::Type> {
         self.checker.expr_types.get(&key)
     }

@@ -28,14 +28,20 @@ pub(crate) enum DynReceiverPlan {
     /// The receiver is an `Rc<dyn Trait>` handle: `RC_GET`
     /// extracts the fat cell first.
     RcGet,
+    /// The receiver is a `Box<dyn Trait>` handle: the fat cell
+    /// is the box's payload word (`load +Box_value`), the same
+    /// load the Box deref and drop paths use.
+    BoxGet,
 }
 
 impl<'c> Codegen<'c> {
     /// lowering_rules.zig `planDynDispatchReceiver` plus the
     /// trait name each arm dispatches on: `Rc<dyn T>` unwraps
-    /// through `RC_GET`; a direct dyn value (or a `Box<dyn T>`,
-    /// whose handle addresses the fat cell the box coercion
-    /// built) dispatches in place.
+    /// through `RC_GET`; a direct dyn value dispatches in place;
+    /// a `Box<dyn T>` handle holds the fat cell as its payload
+    /// word, so the dispatch loads it first (`BoxGet`) — treating
+    /// the handle itself as the fat cell read Dyn_vtable out of
+    /// the box cell's second word (signal 11, F-DYN L3).
     pub(crate) fn dyn_receiver_trait(
         &self,
         recv_ty: &Type,
@@ -50,7 +56,7 @@ impl<'c> Codegen<'c> {
         }
         if let Some(inner) = sla_lowering::box_inner_type(recv_ty) {
             if let Some(trait_name) = sla_lowering::dyn_trait_name(inner) {
-                return Some((trait_name.to_string(), DynReceiverPlan::Direct));
+                return Some((trait_name.to_string(), DynReceiverPlan::BoxGet));
             }
         }
         None
@@ -163,12 +169,18 @@ impl<'c> Codegen<'c> {
             .ok_or_else(|| crate::TextError::MissingType {
                 context: "dyn dispatch receiver plan".to_string(),
             })?;
-        let dyn_reg = if plan == DynReceiverPlan::RcGet {
-            let reg = self.new_tmp();
-            self.ins(&format!("EXPAND RC_GET {reg}, {recv_reg}"));
-            reg
-        } else {
-            recv_reg.clone()
+        let dyn_reg = match plan {
+            DynReceiverPlan::RcGet => {
+                let reg = self.new_tmp();
+                self.ins(&format!("EXPAND RC_GET {reg}, {recv_reg}"));
+                reg
+            }
+            DynReceiverPlan::BoxGet => {
+                let reg = self.new_tmp();
+                self.ins(&format!("{reg} = load {recv_reg}+Box_value as ptr"));
+                reg
+            }
+            DynReceiverPlan::Direct => recv_reg.clone(),
         };
 
         let mut arg_regs: Vec<String> = Vec::new();

@@ -1,0 +1,29 @@
+// Regression (LINE-RCDYN-FIX, F-DYN L3): let-bound &*box borrow
+// of a Box<dyn Trait> must yield the fat cell the box holds, and
+// Box::new must materialise the fat cell for a Box<dyn Trait>
+// binding. Fail-before: compiles, then signal 11 at dispatch.
+// Minim d5 of LINE-RCDYN-TRIAGE.
+@import "sa_std/core/box.sa"
+@import "sa_std/core/trait_object.sa"
+
+trait Identified {
+    fn get_id(&self) -> int;
+}
+
+struct TypeA {
+    id: int,
+}
+
+impl Identified for TypeA {
+    fn get_id(&self) -> int {
+        return self.id;
+    }
+}
+
+@test "box dyn borrowed dispatch"() {
+    let obj: Box<dyn Identified> = Box::new(TypeA { id: 7 });
+    let borrowed: &dyn Identified = &*obj;
+    if borrowed.get_id() != 7 {
+        panic(5);
+    };
+}

@@ -773,6 +773,24 @@ impl<'c> Codegen<'c> {
                 };
                 if smart_source {
                     let inner = self.gen_expr(&borrow.expr)?;
+                    // F-DYN L3: for a dyn pointee the deref result
+                    // IS the trait-object fat cell address (the
+                    // RC_GET result / the box payload), so `&*obj`
+                    // is that register itself — the Zig emission
+                    // is `borrowed = <RC_GET result>`. Taking
+                    // `&inner` instead addresses the temp slot
+                    // holding the cell pointer, and the dispatch
+                    // then loads Dyn_vtable out of unrelated
+                    // stack (signal 11).
+                    let dyn_pointee = self
+                        .expr_type(&borrow.expr)
+                        .map(|ty| {
+                            sla_lowering::dyn_trait_name(&ty).is_some()
+                        })
+                        .unwrap_or(false);
+                    if dyn_pointee {
+                        return Ok(inner);
+                    }
                     let reg = self.new_tmp();
                     self.ins(&format!("{reg} = &{inner}"));
                     if sla_lowering::expr_result_needs_release(&borrow.expr) {

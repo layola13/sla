@@ -41,10 +41,10 @@
 use crate::checker::{Checker, FuncSig, ParamSig};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::types_util::{
-    can_coerce_borrow_array_to_borrow_slice, concrete_type_name,
-    dyn_trait_name, is_numeric_type, is_string_type, node_key_of,
-    peel_borrow_pointer, type_desc, type_tag_name, types_equal,
-    types_structurally_equal,
+    box_inner_type, can_coerce_borrow_array_to_borrow_slice,
+    concrete_type_name, dyn_trait_name, is_numeric_type, is_string_type,
+    node_key_of, peel_borrow_pointer, rc_inner_type, type_desc,
+    type_tag_name, types_equal, types_structurally_equal,
 };
 use sla_ast::exprs::{CallExpr, Literal};
 use sla_ast::node::Node;
@@ -640,8 +640,28 @@ impl Checker {
         // 3. Dyn dispatch: a `__dyn_<Trait>` receiver; the trait's
         // declared method supplies the signature, the receiver
         // parameter itself is not re-checked (Zig zips [1..]).
-        if let Some(trait_name) = dyn_trait_name(&recv_ty).map(str::to_string)
-        {
+        // F-DYN L1: a smart-pointer receiver (`Rc<__dyn_T>` /
+        // `Box<__dyn_T>`) retries the dyn step against the
+        // wrapper's single generic argument — the same unwrap the
+        // text emitter's `dyn_receiver_trait` performs
+        // (dyn_coercion.rs). Without it the step stripped the
+        // `__dyn_` prefix from the wrapper's own name (`Rc` /
+        // `Box`) and missed, so every direct dyn call on a
+        // smart-pointer receiver fell through to `Undefined
+        // call`. Arc is deliberately not unwrapped: the emitter
+        // has no Arc dyn-dispatch plan, so accepting the receiver
+        // here would trade this checker verdict for a codegen
+        // failure.
+        let dyn_name = dyn_trait_name(&recv_ty)
+            .map(str::to_string)
+            .or_else(|| {
+                rc_inner_type(&recv_ty)
+                    .or_else(|| box_inner_type(&recv_ty))
+                    .and_then(|inner| {
+                        dyn_trait_name(&inner).map(str::to_string)
+                    })
+            });
+        if let Some(trait_name) = dyn_name {
             if let Some(method) = self.find_trait_method(&trait_name, name) {
                 if method.params.len() != call.args.len() {
                     return Some(Err(Diagnostic::new(

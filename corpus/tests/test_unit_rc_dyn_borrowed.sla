@@ -1,0 +1,29 @@
+// Regression (LINE-RCDYN-FIX, F-DYN L3): let-bound &*rc borrow of
+// an Rc<dyn Trait> must yield the fat cell RC_GET returns, and
+// Rc::new must materialise the fat cell for an Rc<dyn Trait>
+// binding. Fail-before: compiles, then signal 11 at dispatch.
+// Minim d3 of LINE-RCDYN-TRIAGE.
+@import "sa_std/core/rc.sa"
+@import "sa_std/core/trait_object.sa"
+
+trait Identified {
+    fn get_id(&self) -> int;
+}
+
+struct TypeA {
+    id: int,
+}
+
+impl Identified for TypeA {
+    fn get_id(&self) -> int {
+        return self.id;
+    }
+}
+
+@test "rc dyn borrowed dispatch"() {
+    let obj: Rc<dyn Identified> = Rc::new(TypeA { id: 42 });
+    let borrowed: &dyn Identified = &*obj;
+    if borrowed.get_id() != 42 {
+        panic(3);
+    };
+}

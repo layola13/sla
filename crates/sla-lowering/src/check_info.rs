@@ -198,6 +198,17 @@ pub trait CheckInfo {
         false
     }
 
+    /// `tc.dyn_rc_coercions` / `tc.dyn_box_coercions`: the checker
+    /// accepted this value node through a smart-pointer dyn
+    /// coercion at a let (declared `Rc<__dyn_T>` / `Box<__dyn_T>`
+    /// against an `Rc<X>` / `Box<X>` value with X: T), yielding
+    /// the trait name. The text emitter must materialise the
+    /// trait-object fat cell the wrapper holds instead of passing
+    /// the raw payload to the `*_NEW` macro (F-DYN L3).
+    fn dyn_smart_coercion(&self, _expr: &Node) -> Option<&str> {
+        None
+    }
+
     /// `tc.expr_types` by precomputed node key (the macro-arg
     /// table stores arg nodes by key, mirroring Zig's
     /// pointer-keyed `macro_arg_exprs`).

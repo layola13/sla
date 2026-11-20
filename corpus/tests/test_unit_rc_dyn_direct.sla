@@ -1,0 +1,27 @@
+// Regression (LINE-RCDYN-FIX, F-DYN L1): Rc<dyn Trait> direct
+// receiver dispatch. Fail-before: checker `Undefined call: get_id`
+// (the dyn step never unwrapped the Rc generic argument).
+// Minim d2 of LINE-RCDYN-TRIAGE.
+@import "sa_std/core/rc.sa"
+@import "sa_std/core/trait_object.sa"
+
+trait Identified {
+    fn get_id(&self) -> int;
+}
+
+struct TypeA {
+    id: int,
+}
+
+impl Identified for TypeA {
+    fn get_id(&self) -> int {
+        return self.id;
+    }
+}
+
+@test "rc dyn direct dispatch"() {
+    let obj: Rc<dyn Identified> = Rc::new(TypeA { id: 42 });
+    if obj.get_id() != 42 {
+        panic(2);
+    };
+}

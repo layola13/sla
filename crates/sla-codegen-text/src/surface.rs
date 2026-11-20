@@ -463,6 +463,54 @@ impl<'c> Codegen<'c> {
                         _ => "ARC_NEW",
                     };
                     let value = self.gen_expr(&call.args[0])?;
+                    // F-DYN L3: when the checker recorded a dyn
+                    // coercion for this call (a let declared
+                    // `Rc<__dyn_T>` / `Box<__dyn_T>`), the wrapper
+                    // must hold a trait-object fat cell, not the
+                    // raw payload — materialise it exactly as the
+                    // Zig emission does (alloc Dyn_SIZE, store the
+                    // data pointer and the impl vtable) and let
+                    // the *_NEW macro consume the cell. Without
+                    // this the RC_GET / box payload later feeds a
+                    // dispatch that loads Dyn_vtable out of the
+                    // payload's own bytes (signal 11).
+                    if let Some(trait_name) = self
+                        .check
+                        .dyn_smart_coercion(expr)
+                        .map(str::to_string)
+                    {
+                        let arg_ty = self
+                            .expr_type(&call.args[0])
+                            .ok_or_else(|| missing_fact())?;
+                        let type_name =
+                            sla_lowering::concrete_type_name(&arg_ty)
+                                .ok_or_else(|| missing_fact())?
+                                .to_string();
+                        let vt_name = Self::trait_vtable_name(
+                            &trait_name,
+                            &type_name,
+                        );
+                        let fat = self.new_tmp();
+                        self.ins(&format!("{fat} = alloc Dyn_SIZE"));
+                        self.ins(&format!(
+                            "store {fat}+Dyn_data, {value} as ptr"
+                        ));
+                        self.ins(&format!(
+                            "store {fat}+Dyn_vtable, &{vt_name} as ptr"
+                        ));
+                        if self.constructor_arg_needs_consume(
+                            &call.args[0],
+                            &value,
+                        ) {
+                            self.emit_forget_moved_value(&value)?;
+                        }
+                        let reg = self.new_tmp();
+                        self.ins(&format!(
+                            "EXPAND {macro_name} {reg}, {fat}"
+                        ));
+                        self.emit_forget_moved_value(&fat)?;
+                        return Ok(Some(SurfaceCall::Value(reg)));
+                    }
                     let reg = self.new_tmp();
                     self.ins(&format!("EXPAND {macro_name} {reg}, {value}"));
                     if self.constructor_arg_needs_consume(&call.args[0], &value) {

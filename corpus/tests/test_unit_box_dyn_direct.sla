@@ -1,0 +1,27 @@
+// Regression (LINE-RCDYN-FIX, F-DYN L1): Box<dyn Trait> direct
+// receiver dispatch — the checker dyn-step wrapper gap is
+// wrapper-general, not Rc-specific. Fail-before: checker
+// `Undefined call: get_id`. Minim d6 of LINE-RCDYN-TRIAGE.
+@import "sa_std/core/box.sa"
+@import "sa_std/core/trait_object.sa"
+
+trait Identified {
+    fn get_id(&self) -> int;
+}
+
+struct TypeA {
+    id: int,
+}
+
+impl Identified for TypeA {
+    fn get_id(&self) -> int {
+        return self.id;
+    }
+}
+
+@test "box dyn direct dispatch"() {
+    let obj: Box<dyn Identified> = Box::new(TypeA { id: 9 });
+    if obj.get_id() != 9 {
+        panic(6);
+    };
+}
