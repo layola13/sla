@@ -14,8 +14,8 @@
 
 use sla_ast::{FnPtrType, Literal, Node, Param, Primitive, Type, UserDefined};
 use sla_lowering::{
-    abi_call_arg_cap_kind, abi_param_needs_borrow_arg, by_value_raw_pointer_param,
-    call_arg_is_copy_struct_value, call_arg_needs_release, is_borrow_like_type,
+    abi_call_arg_cap_kind, abi_param_needs_borrow_arg,
+    call_arg_is_copy_struct_value, call_arg_needs_release,
     is_panic_builtin_name, is_println_call, is_temporary_register_name,
     plan_call_arg_materialization, plan_refcell_call_arg_lifecycle,
     plan_stack_slot_identifier_call_arg_temp, root_identifier,
@@ -971,26 +971,37 @@ impl<'c> Codegen<'c> {
 
     /// Synthetic `Param`s for a fn-pointer type's parameters,
     /// mirroring Zig's inline construction in the `fn_ptr_calls`
-    /// arm: borrow when the parameter type is a borrow; move when
-    /// it is neither a by-value raw pointer nor Copy nor
-    /// borrow-like — so a by-value owned argument is consumed by
-    /// the callee exactly once, as in a direct call.
+    /// arm: borrow when the parameter type is a borrow; a by-value
+    /// owned parameter is an ORDINARY by-value parameter
+    /// (`is_move = false`), exactly like a declared `fn f(p: T)`.
+    ///
+    /// DEF-RUST-FNVALUE-STRUCTARG-DOUBLE-RELEASE (task 23): do NOT
+    /// mark the synthetic param `is_move`. `is_move` on a `Param`
+    /// means "the caller supplies `^` at the call site" (a
+    /// source-declared move param; the checker enforces `^arg`) --
+    /// a fn-ptr call site has no such `MoveExpr`, so `is_move`
+    /// suppresses both the ownership transfer
+    /// (`plan_value_arg_transfers_ownership` returns false when
+    /// `param_is_move`) and the shallow-copy plan (which requires
+    /// `!is_move`). The argument then passes plain and is released
+    /// by the forwarding runner's exit cleanup AND by the callee
+    /// (`call_indirect` into `bump(p)` then `!p`, plus `bump`'s own
+    /// `!p`) -- a double free. With `is_move = false` the indirect
+    /// call plans exactly like a direct call: shallow copy for
+    /// identifier struct args (source stays live, callee owns the
+    /// copy), move for other owned args. Scalars, borrows and raw
+    /// pointers already computed `is_move = false`, so this changes
+    /// only the owned by-value non-copy non-borrow class.
     fn fn_ptr_call_params(&self, fp: &FnPtrType) -> Vec<Param> {
         fp.params
             .iter()
-            .map(|ty| {
-                let mut param = Param {
-                    name: String::new(),
-                    ty: Box::new(ty.clone()),
-                    is_borrow: matches!(ty, Type::Borrow(_)),
-                    is_move: false,
-                    fallible_sugar: false,
-                    is_var: false,
-                };
-                param.is_move = !by_value_raw_pointer_param(&param)
-                    && !self.type_is_copy_value(ty)
-                    && !is_borrow_like_type(ty);
-                param
+            .map(|ty| Param {
+                name: String::new(),
+                ty: Box::new(ty.clone()),
+                is_borrow: matches!(ty, Type::Borrow(_)),
+                is_move: false,
+                fallible_sugar: false,
+                is_var: false,
             })
             .collect()
     }

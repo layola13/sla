@@ -1,0 +1,42 @@
+// DEF-RUST-FNVALUE-STRUCTARG-DOUBLE-RELEASE (task 23): a struct argument
+// passed through a fn value was released twice -- once by the callee body
+// and once by the forwarding runner's exit cleanup (free(): double free
+// detected in tcache 2, SIGABRT). Root cause: `fn_ptr_call_params`
+// marked synthetic params `is_move = true`, which suppressed both the
+// ownership transfer and the shallow-copy plan, so the argument passed
+// plain and was released twice. Fix: the synthetic param is an ordinary
+// by-value param (`is_move = false`), so the indirect call plans exactly
+// like a direct call (shallow copy for identifier struct args).
+// Minimal repro of corpus/tests/test_unit_expand_tuple_paramset.sla
+// ("expand tuple paramset fn pointer runner").
+struct Pair {
+    a: i64,
+    b: i64,
+}
+
+fn bump(p: Pair) -> Pair {
+    return Pair { a: p.a + 1, b: p.b + 2 };
+}
+
+fn run(p: Pair, f: fn(Pair) -> Pair) -> Pair {
+    return f(p);
+}
+
+fn inc(n: i64) -> i64 {
+    return n + 1;
+}
+
+fn apply(f: fn(i64) -> i64, n: i64) -> i64 {
+    return f(n);
+}
+
+@test "min fn struct"() {
+    let out = run(Pair { a: 40, b: 50 }, bump);
+    if out.a != 41 { panic(1); };
+    if out.b != 52 { panic(2); };
+}
+
+@test "min fn value pass"() {
+    let out = apply(inc, 41);
+    if out != 42 { panic(3); };
+}
