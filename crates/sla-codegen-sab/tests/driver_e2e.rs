@@ -633,7 +633,7 @@ fn driver_test_decl_with_panic_guard() {
 // releases; lengths +38 each.
 const MODEL_P1_LEN: usize = 372;
 const MODEL_P1_SHA256: &str = "7317759a7645f72973b0ee2d43843ea22960b844d5c002b9913b56ffa1182c60";
-const MODEL_P2_LEN: usize = 1298;
+const MODEL_P2_LEN: usize = 1610;
 // CLI-D5R re-pin (2026-11-07): P2 grew by exactly five Release
 // instructions and nothing else (instruction-level diff vs the
 // pre-D5R stream, verified on the venue): while cond temp at
@@ -643,7 +643,7 @@ const MODEL_P2_LEN: usize = 1298;
 // `add(40, 2)` call result and the `42` literal after the `!=`
 // op). P1/P3 are unchanged: their binary operands are all
 // named locals, so no release point fires.
-const MODEL_P2_SHA256: &str = "3c2437b63580a830b588ca4b9ac5d9743d7d9b5d0bec5cc139fce4f6689c7d31";
+const MODEL_P2_SHA256: &str = "c5d7a14f2cf3adaa8ae8c2d25ad6f0034c034b0215bcea27f21e7bee09f124e5";
 const MODEL_P3_LEN: usize = 471;
 const MODEL_P3_SHA256: &str = "810e595827b478196ea7597cd0fbb988dc405a1da0542df34c15328d6b727197";
 const MODEL_TEST_SHA256: &str = "f3acfde2567eb88a0bd4e9a5a733e8fcb37197c080e03ecf3bfc322c32ca398a";

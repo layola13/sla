@@ -174,9 +174,13 @@ mod tests {
             .unwrap(),
             PrimType::Ptr
         );
-        // A generic File is not the handle type and stays loud,
-        // as do inferred types.
-        assert!(prim_type(&ud("File", vec![prim(Primitive::U8)])).is_err());
+        // A generic File is not the handle type; Zig's else arm
+        // routes it through abiPassesAsPointer -> ptr, so it is
+        // a pointer here too. Unconstrained inferred types stay loud.
+        assert_eq!(
+            prim_type(&ud("File", vec![prim(Primitive::U8)])).unwrap(),
+            PrimType::Ptr
+        );
         assert!(prim_type(&Type::Infer).is_err());
     }
 }

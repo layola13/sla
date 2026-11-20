@@ -180,11 +180,26 @@ fn program_for_range() -> Node {
 fn model_for_range() -> Vec<u8> {
     let mut b = ModuleBuilder::new();
     model_main(&mut b);
-    // let s = 0
-    let t0 = b.new_tmp();
-    b.emit_assign_int(t0, 0, false);
+    // let s = 0 — scalar locals live in stack slots
+    let s_val = b.new_tmp();
+    b.emit_assign_int(s_val, 0, false);
     let s = b.intern("s");
-    b.emit_assign_reg(s, t0);
+    b.record_reg(s);
+    push_inst(
+        &mut b,
+        InstKind::StackAlloc,
+        [Operand::Reg(s), Operand::ImmU64(4), Operand::None, Operand::None],
+    );
+    push_inst(
+        &mut b,
+        InstKind::Store,
+        [
+            Operand::Reg(s),
+            Operand::ImmU64(0),
+            Operand::Reg(s_val),
+            Operand::Ty(PrimType::I32 as u32),
+        ],
+    );
     // counter slot + start/end
     let counter = b.new_tmp();
     b.record_reg(counter);
@@ -233,10 +248,36 @@ fn model_for_range() -> Vec<u8> {
     b.emit_label(&body);
     let loop_value = b.new_tmp();
     b.emit_op(loop_value, OpKind::Add, Operand::Reg(index), Operand::ImmI64(0));
-    // s = s + i
+    // s = s + i: load slot, add, release the load temp, store back
+    let s_load = b.new_tmp();
+    b.record_reg(s_load);
+    push_inst(
+        &mut b,
+        InstKind::Load,
+        [
+            Operand::Reg(s_load),
+            Operand::Reg(s),
+            Operand::ImmU64(0),
+            Operand::Ty(PrimType::I32 as u32),
+        ],
+    );
     let sum = b.new_tmp();
-    b.emit_op(sum, OpKind::Add, Operand::Reg(s), Operand::Reg(loop_value));
-    b.emit_assign_reg(s, sum);
+    b.emit_op(sum, OpKind::Add, Operand::Reg(s_load), Operand::Reg(loop_value));
+    push_inst(
+        &mut b,
+        InstKind::Release,
+        [Operand::Reg(s_load), Operand::None, Operand::None, Operand::None],
+    );
+    push_inst(
+        &mut b,
+        InstKind::Store,
+        [
+            Operand::Reg(s),
+            Operand::ImmU64(0),
+            Operand::Reg(sum),
+            Operand::Ty(PrimType::I32 as u32),
+        ],
+    );
     b.emit_jmp(&cont);
     b.emit_label(&cont);
     let next = b.new_tmp();
@@ -255,7 +296,19 @@ fn model_for_range() -> Vec<u8> {
     b.emit_label(&cond_false);
     b.emit_jmp(&exit);
     b.emit_label(&exit);
-    b.emit_return(Some(s));
+    let ret_load = b.new_tmp();
+    b.record_reg(ret_load);
+    push_inst(
+        &mut b,
+        InstKind::Load,
+        [
+            Operand::Reg(ret_load),
+            Operand::Reg(s),
+            Operand::ImmU64(0),
+            Operand::Ty(PrimType::I32 as u32),
+        ],
+    );
+    b.emit_return(Some(ret_load));
     let module = b.finish();
     sla_codegen_sab::generate(&module).unwrap()
 }

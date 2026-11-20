@@ -244,36 +244,41 @@ fn while_sum_sab_releases_cond_literal_and_exit_cleanups() {
         );
     }
 
-    // Exit cleanups: the last three instructions are
-    // release(i), release(param limit), return(t) — in the
-    // checker list's order, immediately before the return.
+    // Exit shape after the stack-slot port: `t` lives in a
+    // stack slot, so `return t` first loads the slot into a
+    // fresh register, then releases the checker's remaining
+    // exit local (the `limit` param), then returns the loaded
+    // value. The returned binding itself is never released.
     let n = module.instructions.len();
     let ret_inst = &module.instructions[n - 1];
     assert_eq!(ret_inst.kind, InstKind::Return);
     let t_reg = reg_of(&module, "t");
-    assert_eq!(ret_inst.operands[0], Operand::Reg(t_reg));
-    let i_reg = reg_of(&module, "i");
+    let load_inst = &module.instructions[n - 3];
+    assert_eq!(load_inst.kind, InstKind::Load);
+    assert_eq!(load_inst.operands[1], Operand::Reg(t_reg));
+    let ret_val = match &load_inst.operands[0] {
+        Operand::Reg(r) => *r,
+        other => panic!("returned slot load target is a register, got {other:?}"),
+    };
+    assert_eq!(ret_inst.operands[0], Operand::Reg(ret_val));
     let limit_reg = module
         .symbols
         .iter()
         .position(|s| s == "sla__while_sum__param_0_limit")
         .map(|p| p as u32)
         .expect("scoped param symbol interned");
-    assert_eq!(module.instructions[n - 3].kind, InstKind::Release);
-    assert_eq!(module.instructions[n - 3].operands[0], Operand::Reg(i_reg));
     assert_eq!(module.instructions[n - 2].kind, InstKind::Release);
     assert_eq!(module.instructions[n - 2].operands[0], Operand::Reg(limit_reg));
 
-    // The returned binding is never released, and the literal
-    // operand temp of `i + 1` is released right after its op:
-    // total releases = 2 cond + 1 literal + 2 exit cleanups.
+    // Releases: 2 cond edges + 2 op operands + 1 literal temp
+    // + 1 exit param. Stack-slot locals need no release.
     assert!(release_positions(&module, t_reg).is_empty());
     let total_releases = module
         .instructions
         .iter()
         .filter(|inst| inst.kind == InstKind::Release)
         .count();
-    assert_eq!(total_releases, 5);
+    assert_eq!(total_releases, 8);
 }
 
 #[test]

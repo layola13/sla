@@ -220,15 +220,15 @@ fn bodies_mode_retains_module_contract_imports_decl_only_drops_them() {
 #[test]
 fn bodies_mode_falls_back_to_decl_only_for_unparseable_module_bodies() {
     // A module whose function BODIES use a parser surface the
-    // Rust parser has not ported (here a `go` statement, the
-    // sa_std/executor.sla shape) parses decl-only but not with
-    // bodies. Bodies-mode expansion must include it decl-only
-    // and RECORD the fallback instead of failing the whole
-    // expansion; other modules keep their bodies.
+    // Rust parser has not ported (here a `name!()` macro call;
+    // `go` is now supported and no longer triggers the fallback)
+    // parses decl-only but not with bodies. Bodies-mode expansion
+    // must include it decl-only and RECORD the fallback instead
+    // of failing the whole expansion; other modules keep bodies.
     let tree = TempTree::new("bodyfallback");
     tree.write(
         "gapped.sla",
-        "fn worker() { }\nfn lib_go() -> i32 { go worker(); return 1; }\n",
+        "fn worker() { }\nfn lib_go() -> i32 { worker!(); return 1; }\n",
     );
     tree.write("plain.sla", "fn lib_plain() -> i32 { return 3; }\n");
     let source = "@import \"gapped.sla\"\n@import \"plain.sla\"\nfn main() -> i32 { return 0; }\n";

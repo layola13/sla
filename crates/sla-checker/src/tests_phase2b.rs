@@ -353,12 +353,11 @@ fn generic_func_ref_rejected_compile_error() {
 
 #[test]
 fn generic_function_checked_against_unsubstituted_signature() {
-    // D-C11: instantiation is the monomorphizer's job; the checker
-    // sees the generic body with `T` as an opaque user type and
-    // checks calls against the RAW signature, so `id(5)` mismatches
-    // `T` against i64 at checker level (the real pipeline never
-    // feeds this shape to the checker — mono specializes first;
-    // venue probe p_generic passes through the full pipeline).
+    // R-3: explicit generic calls substitute the signature's
+    // type parameters from the call's generic arguments before
+    // checking (see check_call_sig.rs), so `id<i32>(5)` now checks
+    // cleanly. The old D-C11 raw-signature mismatch expectation
+    // predates that substitution port.
     let mut id_fn = match func("id", vec![param("x", generic_t())], generic_t(), vec![
         ret(ident("x")),
     ]) {
@@ -393,8 +392,10 @@ fn generic_function_checked_against_unsubstituted_signature() {
         id_fn2,
         func("g", vec![], i32_ty(), vec![expr_stmt(call), ret(int_lit(0))]),
     ]);
-    let err = result.expect_err("raw-signature call must mismatch");
-    assert_eq!(err.kind, ErrorKind::TypeMismatch);
+    assert!(
+        result.is_ok(),
+        "explicitly instantiated generic call must check: {result:?}"
+    );
 }
 
 fn generic_t() -> Type {

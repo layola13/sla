@@ -12,6 +12,12 @@
 //!
 //! On the pre-fix code this test panics; on the fixed code
 //! `generate` returns the body's error.
+//!
+//! R-3 port: nullary closure literals now lower inline to their
+//! body value, so this shape no longer produces an Unsupported
+//! error. The test still pins that a while body containing a
+//! closure emits cleanly (no leaked scope / panic) and that the
+//! loop text is produced.
 
 use sla_ast::{
     ClosureLiteral, FuncDecl, LetStmt, Literal, Node, Primitive, Program, Type, WhileStmt,
@@ -19,7 +25,7 @@ use sla_ast::{
 use sla_lowering::MapCheckInfo;
 
 #[test]
-fn erroring_while_body_returns_error_not_panic() {
+fn while_body_with_closure_literal_emits_without_panic() {
     let cond = Node::Literal(Literal::BoolVal(true));
     let closure = Node::ClosureLiteral(ClosureLiteral {
         params: Vec::new(),
@@ -74,14 +80,14 @@ fn erroring_while_body_returns_error_not_panic() {
         }
     }
 
-    let result = sla_codegen_text::generate(&program, &check);
-    match &result {
-        Err(sla_codegen_text::TextError::Unsupported { feature, .. }) => {
-            assert!(
-                feature.contains("closure"),
-                "expected the closure-literal error from the while body, got: {feature}"
-            );
-        }
-        other => panic!("expected the body's loud Unsupported error, got: {other:?}"),
-    }
+    let result = sla_codegen_text::generate(&program, &check)
+        .expect("closure literal lowers inline; while body must emit");
+    assert!(
+        result.contains("L_WHILE_HEAD"),
+        "the while loop must be emitted"
+    );
+    assert!(
+        result.contains("x = 0"),
+        "nullary closure lowers to its body value"
+    );
 }
