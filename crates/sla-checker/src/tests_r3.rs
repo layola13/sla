@@ -566,6 +566,55 @@ fn r3_mixed_plain_extern_variadic_resolves() {
 }
 
 #[test]
+fn r3_mixed_extern_first_variadic_resolves() {
+    // LINE-ROOT3-REGFIX: the extern-first declaration order of
+    // the same core shape. The standalone extern definition
+    // registers first and claims the name; the plain member must
+    // still join the overload set (post-walk mixed-name
+    // promotion) so each call selects its own member. (The
+    // resolves expectation alone does not discriminate: on
+    // pristine code the dropped plain member's call is silently
+    // accepted against the extern contract, whose per-parameter
+    // check does no type matching — the registration and
+    // recording assertions below are the discriminating part.)
+    let src = "extern \"C\" fn vsum2(tag: i32, args: ...) -> i64 { return 7; }\nfn vsum2(cell: ptr) -> i64 { return 3000; }\nfn main(p: ptr) -> i32 { let a = unsafe { vsum2(7) }; let b = unsafe { vsum2(p) }; return (a + b) as i32; }";
+    let mut parser =
+        sla_parser::Parser::with_options(src, sla_parser::ParserOptions::default());
+    let root = parser.parse_program().expect("parse must succeed");
+    let sla_ast::node::Node::Program(prog) = root else {
+        panic!("root not program");
+    };
+    let mut checker = Checker::new();
+    checker
+        .check_program(&prog)
+        .expect("extern-first mixed variadic set must resolve");
+    // Registration: both members promoted into their overload
+    // sets; neither singleton table keeps the name.
+    assert_eq!(
+        checker.extern_overload_sets.get("vsum2").map(|s| s.len()),
+        Some(1),
+        "extern member must be promoted into the extern overload set"
+    );
+    assert_eq!(
+        checker.func_overload_sets.get("vsum2").map(|s| s.len()),
+        Some(1),
+        "plain member must be registered in the func overload set"
+    );
+    assert!(!checker.extern_funcs.contains_key("vsum2"));
+    assert!(!checker.funcs.contains_key("vsum2"));
+    // Recording: the pointer call selected the plain member and
+    // recorded its mangled member symbol for the emitter.
+    assert!(
+        checker
+            .overload_call_symbols
+            .values()
+            .any(|s| s == "sla__vsum2__ov_rawptr"),
+        "plain member call must record its member symbol, got: {:?}",
+        checker.overload_call_symbols
+    );
+}
+
+#[test]
 fn r3_named_variadic_param_parses() {
     // The `args: ...` named va_list parameter (va_next_* body
     // surface is a std-call concern; the declaration must parse

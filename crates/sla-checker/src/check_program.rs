@@ -260,6 +260,12 @@ impl Checker {
         // name with `Redeclaration: const ... is already defined`).
         let mut fn_groups: std::collections::HashMap<String, Vec<&FuncDecl>> =
             std::collections::HashMap::new();
+        // Names of source-level `extern "C"` declarations in
+        // first-appearance order: a name present here AND in
+        // fn_groups is a mixed plain + extern name whose members
+        // form one overload set (promotion after the walk below).
+        let mut extern_group_order: Vec<String> = Vec::new();
+        let mut extern_names_seen: HashSet<String> = HashSet::new();
         for decl in &program.decls {
             if let Node::FuncDecl(f) = decl {
                 // Source-level `extern "C"` declarations are NOT
@@ -267,13 +273,28 @@ impl Checker {
                 // and promote into extern overload sets
                 // (check_overload2.rs), exactly as contract
                 // declarations do. They never enter fn_groups.
-                if !(f.is_extern && (f.abi.is_some() || f.is_variadic)) {
+                if f.is_extern && (f.abi.is_some() || f.is_variadic) {
+                    if extern_names_seen.insert(f.name.clone()) {
+                        extern_group_order.push(f.name.clone());
+                    }
+                } else {
                     fn_groups.entry(f.name.clone()).or_default().push(f);
                 }
             }
         }
         let mut handled_fn_names: HashSet<String> = HashSet::new();
         let mut top_names: HashSet<String> = HashSet::new();
+        // Names claimed by a source-level extern declaration in
+        // the walk, and plain groups the walk already registered.
+        // A plain declaration whose name an extern declaration
+        // claimed first is DEFERRED (not dropped): the post-walk
+        // mixed-name promotion registers it as a set member.
+        let mut extern_claimed: HashSet<String> = HashSet::new();
+        let mut plain_registered: HashSet<String> = HashSet::new();
+        let mut deferred_plain: std::collections::HashMap<
+            String,
+            Vec<&FuncDecl>,
+        > = std::collections::HashMap::new();
         for decl in &program.decls {
             match decl {
                 Node::FuncDecl(f) => {
@@ -287,8 +308,10 @@ impl Checker {
                             top_names.insert(f.name.clone());
                             handled_fn_names.insert(f.name.clone());
                         }
+                        extern_claimed.insert(f.name.clone());
                         self.register_source_extern(f)?;
                     } else if handled_fn_names.insert(f.name.clone()) {
+                        plain_registered.insert(f.name.clone());
                         if !top_names.insert(f.name.clone()) {
                             return Err(Diagnostic::new(
                                 ErrorKind::Redeclaration,
@@ -337,6 +360,20 @@ impl Checker {
                             self.func_overload_sets
                                 .insert(f.name.clone(), sigs);
                         }
+                    } else if extern_claimed.contains(&f.name)
+                        && !plain_registered.contains(&f.name)
+                    {
+                        // The name was claimed by a source-level
+                        // extern declaration earlier in the walk:
+                        // defer the plain members to the post-walk
+                        // mixed-name promotion instead of dropping
+                        // them (a standalone extern declaration and
+                        // a plain function sharing a name are two
+                        // members of one overload set).
+                        deferred_plain
+                            .entry(f.name.clone())
+                            .or_default()
+                            .push(f);
                     }
                 }
                 Node::MacroDecl(m) => {
@@ -462,6 +499,103 @@ impl Checker {
                     }
                 }
                 _ => {}
+            }
+        }
+        // Mixed plain + source-extern names (LINE-ROOT3-REGFIX):
+        // when a standalone `extern "C"` declaration and a plain
+        // function share a name, the two are distinct members of
+        // ONE overload set — exactly as the members of an
+        // `extern "C" { }` block promote into
+        // `extern_overload_sets`. Left as one singleton per table,
+        // the name has no set anywhere: unified resolution returns
+        // before candidate collection and every call falls back
+        // to the bare name, which at most one member's definition
+        // carries. Promote both sides into their sets here; a
+        // singleton moves OUT of its singleton table, the same
+        // move `register_extern_contract` makes for a second
+        // distinct contract declaration. A single extern member
+        // and a single plain member with the SAME signature are a
+        // prototype/definition pair, not a set: they keep the
+        // singleton legacy path.
+        for name in &extern_group_order {
+            if !fn_groups.contains_key(name) {
+                continue;
+            }
+            let has_extern = self.extern_funcs.contains_key(name)
+                || self.extern_overload_sets.contains_key(name);
+            if !has_extern {
+                continue;
+            }
+            let deferred = deferred_plain.remove(name);
+            let has_plain = deferred.is_some()
+                || self.funcs.contains_key(name)
+                || self.func_overload_sets.contains_key(name);
+            if !has_plain {
+                continue;
+            }
+            if !self.extern_overload_sets.contains_key(name)
+                && !self.func_overload_sets.contains_key(name)
+                && fn_groups[name].len() == 1
+            {
+                if let Some(ext_sig) = self.extern_funcs.get(name).cloned() {
+                    let plain_ext =
+                        crate::check_overload2::extern_sig_of_decl(
+                            fn_groups[name][0],
+                        );
+                    if crate::check_overload3::extern_params_equal(
+                        &ext_sig, &plain_ext,
+                    ) {
+                        if ext_sig.ret_abi != plain_ext.ret_abi {
+                            return Err(Diagnostic::new(
+                                ErrorKind::Redeclaration,
+                                format!(
+                                    "Redeclaration: extern contract `{name}` is declared with the same parameters but a different return type"
+                                ),
+                            ));
+                        }
+                        // Prototype/definition pair: not a set.
+                        continue;
+                    }
+                }
+            }
+            if let Some(sig) = self.extern_funcs.remove(name) {
+                self.extern_overload_sets
+                    .insert(name.clone(), vec![sig]);
+            }
+            if let Some(group) = deferred {
+                let sigs: Vec<crate::checker::FuncSig> = group
+                    .iter()
+                    .map(|d| crate::check_overload::sig_of_decl(d))
+                    .collect();
+                for i in 1..sigs.len() {
+                    if sigs[..i].iter().any(|s| {
+                        crate::check_overload::sigs_identical(s, &sigs[i])
+                    }) {
+                        if let Some(diag) =
+                            Checker::check_return_only_redeclaration(
+                                name, &sigs,
+                            )
+                        {
+                            return Err(diag);
+                        }
+                        return Err(Diagnostic::new(
+                            ErrorKind::Redeclaration,
+                            format!(
+                                "Redeclaration: function `{name}` is already defined"
+                            ),
+                        ));
+                    }
+                }
+                if let Some(g) =
+                    group.iter().find(|d| !d.generics.is_empty())
+                {
+                    self.func_generics
+                        .insert(name.clone(), g.generics.clone());
+                }
+                self.func_overload_sets.insert(name.clone(), sigs);
+            } else if let Some(sig) = self.funcs.remove(name) {
+                self.func_overload_sets
+                    .insert(name.clone(), vec![sig]);
             }
         }
         // Pass 2.5 (R-4): register top-level consts into the global

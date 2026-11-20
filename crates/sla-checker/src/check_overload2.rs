@@ -311,6 +311,44 @@ fn member_in_set(
     None
 }
 
+/// The contract signature of one SOURCE-level function
+/// declaration (extern prototype / definition, or a plain
+/// declaration viewed under the contract discipline): the
+/// declared parameter types become contract spellings. R-3: the
+/// named `args: ...` va_list parameter is the variadic marker,
+/// not a fixed parameter — the contract's fixed list excludes
+/// it (a zero-fixed-parameter variadic routes to the header-less
+/// path, whose arity must then still honor the fixed floor:
+/// zero).
+pub(crate) fn extern_sig_of_decl(func: &FuncDecl) -> ExternSig {
+    let fixed_params: Vec<&sla_ast::decls::Param> = func
+        .params
+        .iter()
+        .filter(|p| {
+            !matches!(
+                &*p.ty,
+                Type::Primitive(sla_ast::types::Primitive::VaList)
+            )
+        })
+        .collect();
+    ExternSig {
+        move_params: fixed_params.iter().map(|p| p.is_move).collect(),
+        params: fixed_params
+            .iter()
+            .map(|p| ExternParam {
+                name: p.name.clone(),
+                ty: param_spelling(&p.ty),
+                is_borrow: p.is_borrow,
+                is_move: p.is_move,
+                is_raw: false,
+            })
+            .collect(),
+        is_variadic: func.is_variadic,
+        ret_abi: param_spelling(&func.ret_ty),
+        fallible: false,
+    }
+}
+
 impl Checker {
     /// Zig `registerExternContract` for a SOURCE-level `extern "C"`
     /// declaration (prototype or `@no_mangle` definition): the
@@ -321,37 +359,7 @@ impl Checker {
     /// Redeclaration, distinct parameters promote the name into
     /// the extern overload set.
     pub fn register_source_extern(&mut self, func: &FuncDecl) -> CheckResult<()> {
-        // R-3: the named `args: ...` va_list parameter is the
-        // variadic marker, not a fixed parameter — the contract's
-        // fixed list excludes it (a zero-fixed-parameter variadic
-        // routes to the header-less path, whose arity must then
-        // still honor the fixed floor: zero).
-        let fixed_params: Vec<&sla_ast::decls::Param> = func
-            .params
-            .iter()
-            .filter(|p| {
-                !matches!(
-                    &*p.ty,
-                    Type::Primitive(sla_ast::types::Primitive::VaList)
-                )
-            })
-            .collect();
-        let sig = ExternSig {
-            move_params: fixed_params.iter().map(|p| p.is_move).collect(),
-            params: fixed_params
-                .iter()
-                .map(|p| ExternParam {
-                    name: p.name.clone(),
-                    ty: param_spelling(&p.ty),
-                    is_borrow: p.is_borrow,
-                    is_move: p.is_move,
-                    is_raw: false,
-                })
-                .collect(),
-            is_variadic: func.is_variadic,
-            ret_abi: param_spelling(&func.ret_ty),
-            fallible: false,
-        };
+        let sig = extern_sig_of_decl(func);
         self.register_extern_contract(&func.name.clone(), sig)
     }
 

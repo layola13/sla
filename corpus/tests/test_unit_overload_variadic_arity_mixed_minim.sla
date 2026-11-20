@@ -1,0 +1,31 @@
+// LINE-ROOT3-REGFIX regression minim: a standalone `extern "C" fn`
+// definition (the variadic member) plus a plain `fn` definition
+// under one name are two members of ONE overload set. Before the
+// fix, no overload set was registered for the name — the extern
+// side sat as a singleton in `extern_funcs`, the plain side was
+// dropped at registration — so unified resolution returned before
+// candidate collection and every call fell back to the bare name:
+// the fixed member's call bound to the variadic definition and
+// the test failed at runtime. (The five-set form is
+// test_unit_overload_variadic_arity.) Statement-position
+// if-blocks take a trailing ';'.
+
+extern "C" fn msum(tag: ptr, args: ...) -> i64 {
+    let a = va_next_i32(args);
+    let b = va_next_i32(args);
+    return a as i64 + b as i64;
+}
+
+fn msum(code: i32, extra: i32) -> i64 {
+    return 1000 + (code + extra) as i64;
+}
+
+@test "mixed standalone extern and plain members"() {
+    let p = stack_alloc(8);
+    let a: i32 = 1;
+    let b: i32 = 2;
+    let r = unsafe { msum(p, 10, 20) };
+    if r != 30 { panic(8851); };
+    let r2 = unsafe { msum(a, b) };
+    if r2 != 1003 { panic(8852); };
+}
