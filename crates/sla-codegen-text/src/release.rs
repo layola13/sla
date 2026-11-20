@@ -147,6 +147,26 @@ impl<'c> Codegen<'c> {
         }
     }
 
+    /// DEF-SLA-REFCELL-USEAFTERMOVE (task 20): a binding that
+    /// takes over a RefCell CELL register inherits the live
+    /// borrow handles taken from that cell — their `cell_reg`
+    /// is re-keyed onto the new owner, so the handles are
+    /// settled through the live register when the new owner is
+    /// released. Without this, a move of a borrowed cell
+    /// (`let moved_cell = cell`) leaves the handles pointing
+    /// at the consumed source, and the first release that
+    /// settles one (the return cleanup in a terminating
+    /// branch, or the fallthrough `!cell`) loads `cell+8`
+    /// from the consumed register (UseAfterMove trap 1009,
+    /// test_unit_refcell_owner_release_direct).
+    pub(crate) fn transfer_refcell_cell_handles(&mut self, old_cell: &str, binding: &str) {
+        for handle in self.refcell_borrow_handles.values_mut() {
+            if handle.cell_reg == old_cell {
+                handle.cell_reg = binding.to_string();
+            }
+        }
+    }
+
     /// codegen.zig `prepareResultSlotRefCellCompanion`: a
     /// borrow-typed result slot (planResultSlotTransfer:
     /// needs_refcell_companion == type is a borrow) gets its

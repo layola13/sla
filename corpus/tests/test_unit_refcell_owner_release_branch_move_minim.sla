@@ -1,0 +1,30 @@
+// Regression test for DEF-SLA-REFCELL-USEAFTERMOVE (task 20):
+// after a terminating-branch move of an owned RefCell, the fallthrough
+// must not read the consumed register. Before the fix the sa route
+// trapped UseAfterMove 1009 (generated code loaded `cell+8` after
+// `cell` was consumed by `let moved_cell = cell` in the `if flag`
+// branch); the return cleanup settled the live borrow handle through
+// the consumed source instead of the live owner.
+@import "sa_std/core/refcell.sa"
+
+struct Payload {
+    value: int,
+}
+
+fn branch_move_value(flag: bool) -> int {
+    let cell = RefCell::new(Payload { value: 61 });
+    let first: &Payload = cell.borrow();
+    let value = first.value;
+    if flag {
+        let moved_cell = cell;
+        !moved_cell;
+        return value;
+    };
+    !cell;
+    value
+}
+
+@test "terminating branch move restores fallthrough"() {
+    if branch_move_value(true) != 61 { panic(1); };
+    if branch_move_value(false) != 61 { panic(2); };
+}

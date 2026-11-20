@@ -501,6 +501,12 @@ impl<'c> Codegen<'c> {
             self.type_is_copy_value(&ty_or_err),
         ) {
             self.mark_consumed_binding(moved);
+            // DEF-SLA-REFCELL-USEAFTERMOVE (task 20): the moved
+            // cell's live borrow handles move with it — re-key
+            // them onto the new owner (see
+            // transfer_refcell_cell_handles).
+            let old_cell = self.resolve_binding_name(moved);
+            self.transfer_refcell_cell_handles(&old_cell, &resolved_name);
         }
         if matches!(ty_or_err, Type::Primitive(_)) {
             if matches!(&*let_stmt.value, Node::CallExpr(_)) {
@@ -1549,6 +1555,16 @@ impl<'c> Codegen<'c> {
 
         if renamed_from_source {
             self.finish_assign_rename_source(&assign.value, &stored_val, &target_ty);
+            // DEF-SLA-REFCELL-USEAFTERMOVE follow-up (task 20,
+            // second form): a borrow handle carried by the renamed
+            // value moves with it — re-key it onto the target, so
+            // the handle is settled through the live target
+            // instead of the consumed source temp
+            // (`borrowed = right.borrow_mut()` leaves the handle
+            // keyed on tmp_335; the tail cleanup then emits
+            // `!tmp_335` for the consumed register, UseAfterMove
+            // trap 1009, owner_release_if_let_reassign_handle).
+            self.transfer_refcell_borrow_handle(&stored_val, &resolved_name);
         }
         if stored_identifier_needs_release(&assign.value, &stored_val) {
             if let Some(src) = root_identifier(&assign.value) {
