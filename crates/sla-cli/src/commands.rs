@@ -17,7 +17,7 @@
 //! metadata implementations in `skills_cmd` / `stability`.
 
 use crate::cli_help::{write_command_help, HELP_TEXT};
-use crate::delegate::{delegated_argv, run_child};
+use crate::delegate::{delegated_argv, fixture_dir_for_test_file, run_child, run_child_with_env};
 use crate::freshness::CompileOptions;
 use crate::init_cmd::run_init_command;
 use crate::options::{
@@ -354,7 +354,24 @@ pub fn run_test(args: &[Vec<u8>], stdout: &mut impl Write, stderr: &mut impl Wri
         }
     };
     let argv = delegated_argv("test", &test_path, &passthrough);
-    let code = run_child(&argv, "'sa test'", stderr);
+    // Corpus tests resolve their fixture files through SA_SLA_FIXTURE_DIR
+    // (e.g. test_unit_scatter3_alloc_clone_path panics 96201 when the
+    // variable is unset). The harness provides it from the test file's own
+    // import_fixtures sibling; an operator-set value always wins.
+    let fixture_env: Option<String> = if std::env::var_os("SA_SLA_FIXTURE_DIR").is_none() {
+        fixture_dir_for_test_file(&file)
+    } else {
+        None
+    };
+    let code = match fixture_env.as_deref() {
+        Some(dir) => run_child_with_env(
+            &argv,
+            "'sa test'",
+            stderr,
+            &[("SA_SLA_FIXTURE_DIR", dir)],
+        ),
+        None => run_child(&argv, "'sa test'", stderr),
+    };
     if delete_after {
         let _ = std::fs::remove_file(&test_path);
     }

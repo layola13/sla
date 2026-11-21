@@ -69,8 +69,25 @@ pub fn resolve_sa_executable() -> String {
 /// 1 — `what` is the caller's literal (e.g. `'sa build-exe'`,
 /// `'sa build-exe' for SAB workspace output`, `'sa test'`).
 pub fn run_child(argv: &[String], what: &str, stderr: &mut impl Write) -> u8 {
+    run_child_with_env(argv, what, stderr, &[])
+}
+
+/// Spawn `argv` with inherited stdio and wait, plus extra env vars set on the
+/// child only (inherited env otherwise unchanged; an extra var overrides a
+/// same-named inherited one).
+pub fn run_child_with_env(
+    argv: &[String],
+    what: &str,
+    stderr: &mut impl Write,
+    extra_env: &[(&str, &str)],
+) -> u8 {
     let (exe, rest) = argv.split_first().expect("delegated argv is non-empty");
-    match std::process::Command::new(exe).args(rest).status() {
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(rest);
+    for (key, value) in extra_env {
+        cmd.env(key, value);
+    }
+    match cmd.status() {
         Ok(status) => match status.code() {
             Some(code) => (code & 0xff) as u8,
             None => 1,
@@ -84,6 +101,32 @@ pub fn run_child(argv: &[String], what: &str, stderr: &mut impl Write) -> u8 {
             1
         }
     }
+}
+
+/// Fixture directory for `sla test`, derived from the test file's own
+/// location: `<parent-dir-of-test-file>/import_fixtures/` (canonicalized,
+/// with a trailing `/`), when that directory exists. Returns None when
+/// there is no `import_fixtures` sibling - the caller then leaves the
+/// environment untouched. The caller is responsible for not overriding an
+/// operator-set `SA_SLA_FIXTURE_DIR`.
+///
+/// Corpus tests resolve their fixture files through this variable (e.g.
+/// `test_unit_scatter3_alloc_clone_path` panics 96201 when it is unset);
+/// the census runner used to set it by hand, and a bare `sla test` left it
+/// unset, so the test failed for want of an environment variable even
+/// though the code under test was fine. The harness now provides it.
+pub fn fixture_dir_for_test_file(file: &str) -> Option<String> {
+    let parent = std::path::Path::new(file).parent()?;
+    let candidate = parent.join("import_fixtures");
+    if !candidate.is_dir() {
+        return None;
+    }
+    let abs = std::fs::canonicalize(&candidate).unwrap_or(candidate);
+    let mut out = abs.to_string_lossy().into_owned();
+    if !out.ends_with('/') {
+        out.push('/');
+    }
+    Some(out)
 }
 
 /// The delegated argv: [sa_exe, subcommand, input, extra...].
@@ -114,5 +157,27 @@ mod tests {
         assert_eq!(argv[1], "build-exe");
         assert_eq!(argv[2], "x.sab");
         assert_eq!(argv[3], "-o");
+    }
+
+    #[test]
+    fn fixture_dir_derives_from_test_file_sibling() {
+        let base = std::env::temp_dir().join("sla_fixture_dir_test");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("import_fixtures")).unwrap();
+        let test_file = base.join("test_unit_scatter3_alloc_clone_path.sla");
+        let got = fixture_dir_for_test_file(test_file.to_str().unwrap()).unwrap();
+        assert!(got.ends_with('/'), "fixture dir must end with '/': {got}");
+        assert!(got.contains("import_fixtures"), "got: {got}");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn fixture_dir_none_without_sibling() {
+        let base = std::env::temp_dir().join("sla_fixture_dir_test_no_sib");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let test_file = base.join("some_test.sla");
+        assert!(fixture_dir_for_test_file(test_file.to_str().unwrap()).is_none());
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
