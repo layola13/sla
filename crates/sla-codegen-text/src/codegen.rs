@@ -1005,6 +1005,34 @@ pub(crate) fn type_size(ty: &Type) -> usize {
     abi_type_size(ty)
 }
 
+/// VECFIX phase 1 (compact stride), mirroring Zig
+/// `lowering_rules.zig:4938 vecElementSlotSize` (plugin 41e8f15b,
+/// def8 diagnosis §7): primitive scalars narrower than a word store
+/// at their ABI width -- a Vec<u8> buffer is a packed byte buffer, not
+/// one word per byte. Every stride consumer (VEC_PUSH emission, index
+/// address arithmetic, clone/drop walks, iter-window terminals) takes
+/// this value as the byte stride, so the surface moves as one.
+/// Aggregates and pointers keep the historical word slot: their slot
+/// holds a single handle word. For every other type this is identical
+/// to `type_size(ty).max(8)`, so only the eight listed primitives
+/// change stride (8 -> 1/2/4).
+pub(crate) fn vec_element_slot_size(ty: &Type) -> usize {
+    match ty {
+        Type::Primitive(p) => match p {
+            Primitive::Boolean
+            | Primitive::U8
+            | Primitive::I8
+            | Primitive::U16
+            | Primitive::I16
+            | Primitive::U32
+            | Primitive::I32
+            | Primitive::F32 => type_size(ty),
+            _ => type_size(ty).max(8),
+        },
+        _ => type_size(ty).max(8),
+    }
+}
+
 /// codegen.zig:2467 `typeString` (thins to lowering `abiTypeString`).
 pub(crate) fn type_string(ty: &Type) -> &'static str {
     abi_type_string(ty)

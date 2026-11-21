@@ -11,7 +11,7 @@ use sla_lowering::{
     stmt_terminates, stored_value_moves_identifier,
 };
 
-use crate::codegen::{type_size, type_string, Codegen};
+use crate::codegen::{type_size, type_string, vec_element_slot_size, Codegen};
 use crate::{unsupported, Result, TextError};
 
 impl<'c> Codegen<'c> {
@@ -1071,7 +1071,7 @@ impl<'c> Codegen<'c> {
                     let reg = self.new_tmp();
                     self.ins(&format!(
                         "EXPAND GROWVEC_NEW {reg}, {}, 0",
-                        type_size(&elem).max(8)
+                        vec_element_slot_size(&elem)
                     ));
                     Ok(reg)
                 }
@@ -1261,7 +1261,7 @@ impl<'c> Codegen<'c> {
         self.ins(&format!("{data_reg} = load {vec_reg}+{ptr_def} as ptr"));
         self.ins(&format!(
             "{offset_reg} = mul {index_reg}, {}",
-            type_size(elem).max(8)
+            vec_element_slot_size(elem)
         ));
         self.ins(&format!("{ptr_reg} = ptr_add {data_reg}, {offset_reg}"));
         self.ins(&format!("store {ptr_reg}+0, {val_reg} as u64"));
@@ -1331,7 +1331,7 @@ impl<'c> Codegen<'c> {
                 self.ins(&format!("{data_reg} = load {vec_reg}+{ptr_def} as ptr"));
                 self.ins(&format!(
                     "{offset_reg} = mul {index_reg}, {}",
-                    type_size(&elem).max(8)
+                    vec_element_slot_size(&elem)
                 ));
                 self.ins(&format!("{ptr_reg} = ptr_add {data_reg}, {offset_reg}"));
                 self.ins(&format!(

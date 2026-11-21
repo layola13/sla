@@ -21,7 +21,7 @@
 use sla_ast::{CallExpr, Node, Param, Primitive, Type};
 
 use crate::call::LoweredCallArg;
-use crate::codegen::{type_size, Codegen};
+use crate::codegen::{type_size, vec_element_slot_size, Codegen};
 use crate::Result;
 
 pub(crate) enum SurfaceCall {
@@ -59,8 +59,10 @@ fn missing_fact() -> crate::TextError {
     }
 }
 
+/// VECFIX compact stride: the VEC_PUSH / GROWVEC_NEW / VEC_REMOVE
+/// stride is the shared rule in codegen.rs, not a word slot.
 fn slot_size(elem: &Type) -> usize {
-    type_size(elem).max(8)
+    vec_element_slot_size(elem)
 }
 
 /// codegen.zig:6686 `atomicOrderingToken` over
@@ -1053,7 +1055,7 @@ impl<'c> Codegen<'c> {
                     return Err(missing_fact());
                 }
                 let (recv, _, _) = self.surface_receiver(call)?;
-                let _elem = generics
+                let elem = generics
                     .first()
                     .ok_or_else(|| missing_fact())?
                     .clone();
@@ -1066,9 +1068,23 @@ impl<'c> Codegen<'c> {
                 let end_label = self.new_label("L_VEC_POP_END");
                 self.ins(&format!("{value_slot} = alloc 8"));
                 self.ins(&format!(
-                    "{ok_reg} = call @sa_vec_try_pop(&{recv}, &{value_slot})"
+                    "{ok_reg} = call @sa_vec_try_pop_sized(&{recv}, &{value_slot}, {})",
+                    vec_element_slot_size(&elem)
                 ));
-                self.ins(&format!("{value_reg} = load {value_slot}+0 as u64"));
+                // The sized entry zeroes the slot and moves the
+                // element at its own width, so the slot holds the
+                // width-exact value: load it as the element type,
+                // exactly like the Vec index-load path (expr.rs),
+                // so a narrow signed element comes back
+                // sign-extended instead of zero-extended.
+                let load_ty = if matches!(elem, Type::Primitive(_)) {
+                    crate::codegen::type_string(&elem)
+                } else {
+                    "ptr"
+                };
+                self.ins(&format!(
+                    "{value_reg} = load {value_slot}+0 as {load_ty}"
+                ));
                 self.emit_release(&value_slot)?;
                 self.w(&format!(
                     "    br {ok_reg} -> {some_label}, {none_label}\n\n"

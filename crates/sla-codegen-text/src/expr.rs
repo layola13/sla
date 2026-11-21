@@ -113,7 +113,7 @@ impl<'c> Codegen<'c> {
                 self.ins(&format!("{data_reg} = load {vec_reg}+{ptr_def} as ptr"));
                 self.ins(&format!(
                     "{offset_reg} = mul {index_reg}, {}",
-                    crate::codegen::type_size(&elem).max(8)
+                    crate::codegen::vec_element_slot_size(&elem)
                 ));
                 self.ins(&format!("{ptr_reg} = ptr_add {data_reg}, {offset_reg}"));
                 // Vec slots hold the element word: scalars load

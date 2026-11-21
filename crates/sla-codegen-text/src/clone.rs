@@ -28,7 +28,7 @@ use std::collections::HashSet;
 use sla_ast::Type;
 use sla_lowering::peel_borrow_pointer_type;
 
-use crate::codegen::{type_size, type_string, Codegen};
+use crate::codegen::{type_size, type_string, vec_element_slot_size, Codegen};
 use crate::layout;
 use crate::{Result, TextError};
 
@@ -305,7 +305,7 @@ impl<'c> Codegen<'c> {
         let out = self.new_tmp();
         self.ins(&format!(
             "EXPAND VEC_CLONE {out}, {source_reg}, {}",
-            type_size(elem).max(8)
+            vec_element_slot_size(elem)
         ));
         out
     }
@@ -315,7 +315,7 @@ impl<'c> Codegen<'c> {
         let out = self.new_tmp();
         self.ins(&format!(
             "EXPAND GROWVEC_CLONE {out}, {source_reg}, {}",
-            type_size(elem).max(8)
+            vec_element_slot_size(elem)
         ));
         out
     }
@@ -457,7 +457,7 @@ impl<'c> Codegen<'c> {
         let off_reg = self.new_tmp();
         self.ins(&format!(
             "{off_reg} = mul {idx_reg}, {}",
-            type_size(elem).max(8)
+            vec_element_slot_size(elem)
         ));
         let slot_reg = self.new_tmp();
         self.ins(&format!("{slot_reg} = ptr_add {data_reg}, {off_reg}"));

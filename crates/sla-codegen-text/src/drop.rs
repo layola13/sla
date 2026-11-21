@@ -28,7 +28,7 @@
 use sla_ast::{CallExpr, Node, Type, UserDefined};
 use sla_lowering::{is_borrow_like_type, peel_borrow_pointer_type, root_identifier};
 
-use crate::codegen::{type_size, type_string, Codegen};
+use crate::codegen::{type_string, vec_element_slot_size, Codegen};
 use crate::layout;
 use crate::place;
 use crate::Result;
@@ -107,12 +107,6 @@ fn drop_plan_substitute(ty: &Type, params: &[String], args: &[Type]) -> Type {
         }
         _ => ty.clone(),
     }
-}
-
-/// codegen.zig `vecElementSlotSize` as the TEXT crate's clone/copy
-/// paths spell it (`slot_size` in surface.rs).
-fn vec_element_slot_size(elem: &Type) -> usize {
-    type_size(elem).max(8)
 }
 
 impl<'c> Codegen<'c> {

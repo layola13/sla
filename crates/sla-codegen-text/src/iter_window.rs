@@ -49,7 +49,7 @@
 use sla_ast::{BinaryExpr, BinaryOp, Literal, Node, Type};
 use sla_lowering::{call_arg_needs_release, is_unsigned_integer_type};
 
-use crate::codegen::{type_size, type_string, Codegen};
+use crate::codegen::{type_size, type_string, vec_element_slot_size, Codegen};
 use crate::{unsupported, Result, TextError};
 
 /// codegen.zig:143 `IterChainPlan`, as stored for a HELD chain
@@ -371,7 +371,7 @@ fn compose_take_min(outer: Node, inner: Node) -> Option<Node> {
                 );
             }
             elem_ty = elem;
-            stride = type_size(&elem_ty).max(8);
+            stride = vec_element_slot_size(&elem_ty);
             let vreg = self.gen_expr(source)?;
             len_reg = self.new_tmp();
             self.ins(&format!("{len_reg} = call @sa_vec_len(&{vreg})"));

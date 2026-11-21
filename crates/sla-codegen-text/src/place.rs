@@ -17,7 +17,7 @@
 use sla_ast::{FieldExpr, IndexExpr, Node, StructDecl, Type};
 use sla_lowering::{call_arg_needs_release, is_temporary_register_name, peel_borrow_pointer_type};
 
-use crate::codegen::{type_size, Codegen};
+use crate::codegen::{type_size, vec_element_slot_size, Codegen};
 use crate::layout;
 use crate::{unsupported, Result, TextError};
 
@@ -158,7 +158,7 @@ impl<'c> Codegen<'c> {
             let offset_reg = self.new_tmp();
             self.ins(&format!(
                 "{offset_reg} = mul {index_reg}, {}",
-                type_size(&elem_ty).max(8)
+                vec_element_slot_size(&elem_ty)
             ));
             let ptr_reg = self.new_tmp();
             self.ins(&format!("{ptr_reg} = ptr_add {base_reg}, {offset_reg}"));

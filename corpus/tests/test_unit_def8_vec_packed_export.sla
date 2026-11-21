@@ -62,9 +62,11 @@ fn c_read_i32le(p: ptr, idx: u64) -> i32 {
     if buf[3] != 255 { panic(806); };
 }
 
-@test "def8 raw vec pointer is word strided not packed"() {
-    // The premise the helpers exist for, pinned as a contract: the
-    // second u8 element lives at raw byte 8, raw byte 1 is padding.
+@test "def8 raw vec pointer is packed not word strided"() {
+    // VECFIX phase 1 reversed this contract: primitive scalar
+    // elements are packed at their ABI width, so the second u8
+    // element lives at raw byte 1 (previously raw byte 8, with
+    // raw byte 1 as padding).
     let v: Vec<u8> = Vec::new();
     v.push(104);
     v.push(105);
@@ -72,8 +74,7 @@ fn c_read_i32le(p: ptr, idx: u64) -> i32 {
     let p: ptr = PTR_NULL();
     SLICE_AS_PTR(p, sl);
     if PTR_BYTE_AT(p, 0) != 104 { panic(810); };
-    if PTR_BYTE_AT(p, 1) == 105 { panic(811); };
-    if PTR_BYTE_AT(p, 8) != 105 { panic(812); };
+    if PTR_BYTE_AT(p, 1) != 105 { panic(811); };
 }
 
 @test "def8 packed export u16 bytes"() {
