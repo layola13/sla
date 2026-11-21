@@ -930,8 +930,20 @@ impl<'c> Codegen<'c> {
                     {
                         let rec = self.new_tmp();
                         self.ins(&format!("{rec} = load {}+0 as ptr", address.ptr));
-                        self.borrow_source_temps
-                            .insert(rec.clone(), address.ptr.clone());
+                        // DEF-RUST-VECELEM-BORROW-LOAD-LEAK (task 47):
+                        // the slot address is consumed by this load,
+                        // so retire it (and its chained slot base)
+                        // here, exactly as the field arm above
+                        // retires its projection ptr after loading.
+                        // Chaining rec -> address.ptr instead left
+                        // both temps live whenever the borrow value
+                        // was MOVED rather than released (a Vec push
+                        // forgets rec with ^rec, which never settles
+                        // the chain), and the verifier rejects the
+                        // live ptr_add address at function exit
+                        // (MemoryLeak trap 1012,
+                        // test_unit_s100_vec_borrow_push).
+                        self.emit_release(&address.ptr)?;
                         return Ok(rec);
                     }
                 }
