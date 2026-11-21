@@ -4,7 +4,7 @@
 // transfer of a Copy byte — and the host rejected it with
 // CapabilityMismatch. After the fix the argument is passed by value.
 fn s100_lower_byte(b: u8) -> u8 {
-    if b >= 65 && b <= 90 { return b + 32; }
+    if b >= 65 && b <= 90 { return b + 32; };
     return b;
 }
 
