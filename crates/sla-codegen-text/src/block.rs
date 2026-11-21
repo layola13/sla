@@ -78,12 +78,28 @@ impl<'c> Codegen<'c> {
     }
 
     /// codegen.zig:8035 `genScopedBlock`: `var` declarations get a
-    /// scoped alias for the block's duration.
+    /// scoped alias for the block's duration. Repeated `let`
+    /// declarations get the same alias treatment as `gen_block`
+    /// (DEF-RUST-CODEGEN-SCOPED-BLOCK-LET-ALIAS): without it a
+    /// shadowing `let` inside a bare block resolves by name to the
+    /// outer binding (e.g. an outer held iterator-chain plan) and
+    /// the inner use is emitted as the builtin terminal (panic
+    /// 31016) instead of the user fn.
     pub(crate) fn gen_scoped_block(&mut self, block: &[Node]) -> Result<()> {
         let mut scoped_var_aliases: Vec<String> = Vec::new();
+        let mut scoped_let_aliases: Vec<String> = Vec::new();
+        self.enter_block_for_loop_local_tracking();
         let saved_tracking = self.enter_block_tracking(block);
-        let result = self.gen_scoped_block_inner(block, &mut scoped_var_aliases);
+        let result = self.gen_scoped_block_inner(
+            block,
+            &mut scoped_var_aliases,
+            &mut scoped_let_aliases,
+        );
         self.exit_block_tracking(saved_tracking);
+        self.leave_block_for_loop_local_tracking();
+        for name in scoped_let_aliases.iter().rev() {
+            self.pop_binding_alias(name);
+        }
         for name in scoped_var_aliases.iter().rev() {
             self.pop_binding_alias(name);
         }
@@ -94,12 +110,53 @@ impl<'c> Codegen<'c> {
         &mut self,
         block: &[Node],
         scoped_var_aliases: &mut Vec<String>,
+        scoped_let_aliases: &mut Vec<String>,
     ) -> Result<()> {
         for (index, stmt) in block.iter().enumerate() {
             self.current_stmt_index = index;
             if let Node::VarStmt(v) = stmt {
                 self.push_binding_alias(&v.name);
                 scoped_var_aliases.push(v.name.clone());
+            }
+            // Mirror of `gen_block_inner`'s repeated-`let` branch:
+            // a shadowing `let` gets a fresh alias for the block's
+            // duration so later uses resolve to the inner binding.
+            if let Node::LetStmt(let_stmt) = stmt {
+                if !is_discard_name(&let_stmt.name) {
+                    let source_name = let_stmt.name.clone();
+                    let resolved_name = self.resolve_binding_name(&source_name);
+                    if self.repeated_let_bindings.contains(&source_name)
+                        || self.stack_alloc_bindings.contains(&resolved_name)
+                    {
+                        let alias = self.push_binding_alias(&source_name);
+                        scoped_let_aliases.push(source_name.clone());
+                        if self.addressable_bindings.contains(&source_name) {
+                            self.addressable_bindings.insert(alias.clone());
+                        }
+                        if self.assigned_bindings.contains(&source_name) {
+                            self.assigned_bindings.insert(alias.clone());
+                        }
+                        self.let_binding_aliases
+                            .insert(sla_lowering::node_key(stmt), alias.clone());
+                        // Generate the let under its alias name —
+                        // gen_let_stmt resolves the name through
+                        // let_binding_aliases. The ORIGINAL node
+                        // must be generated, never a clone: checker
+                        // facts (expr types, cleanups) are keyed by
+                        // node address, so a cloned let's value
+                        // misses every lookup (MissingType on the
+                        // second same-name let in sibling blocks).
+                        self.gen_stmt(stmt)?;
+                        self.remember_loop_body_top_level_local(&alias);
+                    } else {
+                        self.gen_stmt(stmt)?;
+                        self.remember_loop_body_top_level_local(&source_name);
+                    }
+                    if self.async_pending_return_emitted {
+                        break;
+                    }
+                    continue;
+                }
             }
             self.gen_stmt(stmt)?;
         }

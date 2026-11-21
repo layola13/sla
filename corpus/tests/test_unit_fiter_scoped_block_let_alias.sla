@@ -1,0 +1,27 @@
+// Regression test for DEF-RUST-CODEGEN-SCOPED-BLOCK-LET-ALIAS (task 39).
+// A `let` that shadows a held iterator-chain binding inside a bare `{...}`
+// block must get a scoped alias (mirroring gen_block): without it the
+// inner use resolves by name to the outer chain plan and `sum(c)` is
+// emitted as the builtin terminal over `a` (panic 31016) instead of the
+// user fn. The same shape inside an `if` block (H7) already passed;
+// this is the bare-block form (task-31 probe H10).
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+fn sum(v: Vec<i64>) -> bool {
+    return true;
+}
+
+@test "held chain survives bare-block shadowing"() {
+    let a: Vec<i64> = Vec::new();
+    a.push(5);
+    a.push(7);
+    a.push(8);
+    let c = a.iter().rev();
+    {
+        let c: Vec<i64> = Vec::new();
+        c.push(1);
+        if sum(c) != true { panic(31016); };
+    }
+    if c.sum() != 20 { panic(31017); };
+}
