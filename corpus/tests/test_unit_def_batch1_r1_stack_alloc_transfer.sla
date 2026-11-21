@@ -24,7 +24,7 @@ fn ptr_len_roundtrip(data: ptr, len_value: int) -> int {
 // parameter register.
 fn sl_byte(sl: &Slice<u8>, off: u64) -> u8 {
     let b: u8 = 0;
-    SLICE_GET(b, sl, off);
+    SLICE_GET_U8(b, sl, off);
     return b;
 }
 

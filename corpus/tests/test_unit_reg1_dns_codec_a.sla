@@ -41,7 +41,7 @@ fn reg1_veq(v: &Vec<u8>, s: String) -> bool {
     let i: u64 = 0;
     while i < ns {
         let b: u8 = 0;
-        SLICE_GET(b, sl, i);
+        SLICE_GET_U8(b, sl, i);
         if b != PTR_BYTE_AT(p, i) { return false; };
         i = i + 1;
     }

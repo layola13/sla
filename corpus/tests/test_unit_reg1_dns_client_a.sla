@@ -35,7 +35,7 @@ fn reg1_veq(v: &Vec<u8>, s: String) -> bool {
     let i: u64 = 0;
     while i < ns {
         let b: u8 = 0;
-        SLICE_GET(b, sl, i);
+        SLICE_GET_U8(b, sl, i);
         if b != PTR_BYTE_AT(p, i) { return false; };
         i = i + 1;
     }
@@ -53,9 +53,9 @@ fn reg1_veq_vec(a: &Vec<u8>, b: &Vec<u8>) -> bool {
     let i: u64 = 0;
     while i < na {
         let x: u8 = 0;
-        SLICE_GET(x, asl, i);
+        SLICE_GET_U8(x, asl, i);
         let y: u8 = 0;
-        SLICE_GET(y, bsl, i);
+        SLICE_GET_U8(y, bsl, i);
         if x != y { return false; };
         i = i + 1;
     }

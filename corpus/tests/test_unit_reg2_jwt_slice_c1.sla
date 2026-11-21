@@ -21,7 +21,7 @@ fn vb(p: ptr, n: u64) -> Vec<u8> {
 fn vec_byte(v: &Vec<u8>, i: u64) -> u8 {
     let sl: Slice<u8> = VEC_AS_SLICE(v);
     let b: u8 = 0;
-    SLICE_GET(b, sl, i);
+    SLICE_GET_U8(b, sl, i);
     return b;
 }
 
