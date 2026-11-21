@@ -174,9 +174,15 @@ mod tests {
             .unwrap(),
             PrimType::Ptr
         );
-        // A generic File is not the handle type and stays loud,
-        // as do inferred types.
-        assert!(prim_type(&ud("File", vec![prim(Primitive::U8)])).is_err());
+        // A generic File is not the u64 handle type (isFileType
+        // needs no generics), but it still passes as a pointer:
+        // Zig primType else arm returns Ptr for any user-defined
+        // type via abiPassesAsPointer, so File<u8> is Ptr, not loud.
+        // Inferred types stay loud.
+        assert_eq!(
+            prim_type(&ud("File", vec![prim(Primitive::U8)])).unwrap(),
+            PrimType::Ptr
+        );
         assert!(prim_type(&Type::Infer).is_err());
     }
 }

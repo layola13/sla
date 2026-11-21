@@ -14,16 +14,16 @@
 //! `generate` returns the body's error.
 
 use sla_ast::{
-    ClosureLiteral, FuncDecl, LetStmt, Literal, Node, Primitive, Program, Type, WhileStmt,
+    FuncDecl, InlineAsmExpr, LetStmt, Literal, Node, Primitive, Program, Type, WhileStmt,
 };
 use sla_lowering::MapCheckInfo;
 
 #[test]
 fn erroring_while_body_returns_error_not_panic() {
     let cond = Node::Literal(Literal::BoolVal(true));
-    let closure = Node::ClosureLiteral(ClosureLiteral {
-        params: Vec::new(),
-        body: Box::new(Node::Literal(Literal::IntVal(0))),
+    let asm_expr = Node::InlineAsmExpr(InlineAsmExpr {
+        template: "nop".to_string(),
+        operands: Vec::new(),
     });
     let body = vec![Node::WhileStmt(WhileStmt {
         cond: Box::new(cond),
@@ -31,7 +31,7 @@ fn erroring_while_body_returns_error_not_panic() {
         body: vec![Node::LetStmt(LetStmt {
             name: "x".to_string(),
             ty: None,
-            value: Box::new(closure),
+            value: Box::new(asm_expr),
         })],
     })];
     let program = Node::Program(Program {
@@ -60,8 +60,10 @@ fn erroring_while_body_returns_error_not_panic() {
     // MapCheckInfo keys facts by node identity): the condition
     // is boolean; the let's value has a (placeholder scalar)
     // type so gen_let_stmt walks its arms and reaches the
-    // closure-literal arm, which is the unsupported shape that
-    // errors INSIDE the while body block.
+    // inline-asm arm, which is the unsupported shape that
+    // errors INSIDE the while body block. (Closure literals used
+    // to play this role, but inline closure expansion now supports
+    // them, so the test uses inline asm instead.)
     let mut check = MapCheckInfo::new();
     if let Node::Program(prog) = &program {
         if let Node::FuncDecl(f) = &prog.decls[0] {
@@ -78,8 +80,8 @@ fn erroring_while_body_returns_error_not_panic() {
     match &result {
         Err(sla_codegen_text::TextError::Unsupported { feature, .. }) => {
             assert!(
-                feature.contains("closure"),
-                "expected the closure-literal error from the while body, got: {feature}"
+                feature.contains("inline_asm"),
+                "expected the inline-asm error from the while body, got: {feature}"
             );
         }
         other => panic!("expected the body's loud Unsupported error, got: {other:?}"),

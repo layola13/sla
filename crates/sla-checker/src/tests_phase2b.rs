@@ -356,7 +356,10 @@ fn generic_function_checked_against_unsubstituted_signature() {
     // D-C11: instantiation is the monomorphizer's job; the checker
     // sees the generic body with `T` as an opaque user type and
     // checks calls against the RAW signature, so `id(5)` mismatches
-    // `T` against i64 at checker level (the real pipeline never
+    // `T` against i64 at checker level. The call MUST be bare (no
+    // explicit generics): an explicit `id::<i32>(5)` substitutes via
+    // R-3 (pinned by r3_generic_call_substitutes_params_and_return)
+    // and passes. (The real pipeline never
     // feeds this shape to the checker — mono specializes first;
     // venue probe p_generic passes through the full pipeline).
     let mut id_fn = match func("id", vec![param("x", generic_t())], generic_t(), vec![
@@ -377,7 +380,7 @@ fn generic_function_checked_against_unsubstituted_signature() {
         args: vec![int_lit(5)],
         associated_target: None,
         callee: None,
-        generics: vec![i32_ty()],
+        generics: vec![],
     });
     let mut id_fn2 = match func("id", vec![param("x", generic_t())], generic_t(), vec![
         ret(ident("x")),

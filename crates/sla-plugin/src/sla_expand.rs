@@ -214,8 +214,9 @@ impl SlaModuleTable {
             Err(kind) => {
                 // Bodies mode only: a module whose bodies (or a
                 // signature inside it) use a parser surface the
-                // Rust parser has not ported — impl blocks,
-                // `&[T][owner]`, `T!`, `go` — must not take down
+                // Rust parser has not ported — `&[T][owner]`, `T!`
+                // (`go` and impl blocks used to be in this list
+                // but are ported now) — must not take down
                 // programs that import it transitively. Retry
                 // decl-only for THIS module and record it in
                 // body_fallback_modules (see ExpandedProgram).
