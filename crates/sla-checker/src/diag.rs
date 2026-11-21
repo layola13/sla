@@ -65,6 +65,11 @@ pub enum ErrorKind {
     GoMethodCallee,
     GoBorrowPayload,
     GoAsyncSelect,
+    // (A) DEF-RUST-GO-STRUCTARG-PREMATURE-RELEASE: the spawned
+    // entry receives exactly one word — a spawned function's single
+    // parameter must be a pointer or word-sized scalar, mirroring
+    // Zig `goParamIsWordOrPtr` (type_checker.zig:4324).
+    GoNonWordParam,
     DeferNonCall,
     // R-3 closing: a syntax sugar whose callee shape the
     // desugarer cannot clone (corpus neg_desugar_failed).
@@ -131,6 +136,7 @@ impl ErrorKind {
             ErrorKind::GoMethodCallee => "GoMethodCallee",
             ErrorKind::GoBorrowPayload => "GoBorrowPayload",
             ErrorKind::GoAsyncSelect => "GoAsyncSelect",
+            ErrorKind::GoNonWordParam => "GoNonWordParam",
             ErrorKind::DeferNonCall => "DeferNonCall",
             ErrorKind::DesugarFailed => "DesugarFailed",
             ErrorKind::UnknownCheckHook => "UnknownCheckHook",

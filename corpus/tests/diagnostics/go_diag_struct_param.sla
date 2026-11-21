@@ -1,0 +1,24 @@
+// DEF-RUST-GO-STRUCTARG-PREMATURE-RELEASE (A): a struct passed by
+// value as a `go` argument is rejected at check time (GoNonWordParam),
+// mirroring Zig `goParamIsWordOrPtr` — the spawned entry receives
+// exactly one word, so larger values must be boxed and their pointer
+// passed (see go_diag_borrow_payload.sla for the sanctioned
+// Box::new + Box::into_raw shape).
+// Negative: `sla check` must reject this file.
+@import "sa_std/task.sai"
+
+struct GoDiagStructParam {
+    ch: Chan<u64>,
+}
+
+fn go_diag_struct_worker(p: GoDiagStructParam) {
+    let (v, closed) = p.ch.recv();
+    if closed { panic(9751); };
+    p.ch.send(v + 1);
+}
+
+fn go_diag_struct_main() -> i32 {
+    let ch: Chan<u64> = Chan::new(0);
+    let h = go go_diag_struct_worker(GoDiagStructParam { ch: ch });
+    return 0;
+}

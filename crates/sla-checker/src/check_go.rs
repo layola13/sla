@@ -16,6 +16,13 @@
 //!   goroutine boundary: an argument whose type mentions a
 //!   borrow (directly, or inside a struct with borrow fields —
 //!   reached through pointers too) is GoBorrowPayload.
+//! * the spawned entry receives exactly one word, so a spawned
+//!   function's single parameter must be a pointer or word-sized
+//!   scalar (GoNonWordParam): primitives, pointers, fn-pointers
+//!   and `Chan` pass; structs (even word-sized ones), tuples,
+//!   arrays, `String`, `Vec`, borrows and futures do not —
+//!   mirroring Zig `goParamIsWordOrPtr` (type_checker.zig:4324).
+//!   Box larger values and pass the pointer instead.
 //! * arena route 6: inside an `arena {}` domain, spawning with
 //!   an arena-owned argument is ArenaGoroutine (the arena
 //!   checker's synthetic-`go` route, driven here with the real
@@ -41,6 +48,26 @@ use crate::types_util::u64_ty;
 
 fn err(kind: ErrorKind, msg: String) -> Diagnostic {
     Diagnostic::new(kind, msg)
+}
+
+/// Mirror of Zig `goParamIsWordOrPtr` (type_checker.zig:4324):
+/// the spawned entry receives exactly one word, so the callee's
+/// single parameter must be a primitive (non-void), a pointer, a
+/// fn-pointer, or `Chan`. Structs (even word-sized ones), tuples,
+/// arrays, `String`, `Vec`, borrows, futures and closures are
+/// rejected — box larger values and pass the pointer instead.
+/// (`String`/`Vec` are `UserDefined` here, so the name test
+/// rejects them exactly as Zig's does.)
+fn go_param_is_word_or_ptr(ty: &Type) -> bool {
+    match ty {
+        Type::Primitive(p) => {
+            !matches!(p, sla_ast::types::Primitive::VoidType)
+        }
+        Type::Pointer(_) => true,
+        Type::FnPtr(_) => true,
+        Type::UserDefined(u) => u.name == "Chan",
+        _ => false,
+    }
 }
 
 impl Checker {
@@ -231,6 +258,23 @@ impl Checker {
                 format!(
                     "GoArity: `go` spawns take at most one argument, got {}",
                     call.args.len()
+                ),
+            ));
+        }
+        // (A) DEF-RUST-GO-STRUCTARG-PREMATURE-RELEASE: the spawned
+        // entry receives exactly one word — mirror Zig
+        // `goParamIsWordOrPtr` and reject a callee whose single
+        // parameter is not a pointer or word-sized scalar. Only
+        // when the call actually supplies the one argument, so a
+        // bare arity slip keeps its own diagnostic.
+        if call.args.len() == 1
+            && sig.params.len() == 1
+            && !go_param_is_word_or_ptr(&sig.params[0].ty)
+        {
+            return Err(err(
+                ErrorKind::GoNonWordParam,
+                format!(
+                    "GoNonWordParam: go: parameter of spawned function `{name}` must be a pointer or word-sized scalar (the entry receives one word); box larger values and pass the pointer"
                 ),
             ));
         }
