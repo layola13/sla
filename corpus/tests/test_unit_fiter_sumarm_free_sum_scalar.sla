@@ -1,0 +1,24 @@
+// DEF-RUST-FITER-SUMARM-SHADOW regression (task 29):
+// the `sum` terminal arm had no `funcs` gate, so a user free
+// `fn sum` was unreachable — a non-collection argument was
+// rejected at check time as `sum over {Type}` (P2), and a
+// collection argument was accepted as the builtin while the
+// codegen emitted the user fn (P1 disagreement). The fix adds
+// the gate (same shape as count/max, extended to every
+// function registry) so the call resolves to the user fn at
+// BOTH levels. Shapes: free fn sum over a scalar (P2, the
+// head repro) and free fn sum over Vec<i64> (P1).
+
+fn sum(x: i64) -> i64 {
+    return x + 100;
+}
+
+@test "free fn sum over scalar wins"() {
+    let r = sum(5);
+    if r != 105 { panic(29021); };
+}
+
+@test "free fn sum over scalar, second call"() {
+    let r = sum(41);
+    if r != 141 { panic(29022); };
+}

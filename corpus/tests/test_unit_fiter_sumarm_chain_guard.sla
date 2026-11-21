@@ -1,0 +1,59 @@
+// DEF-RUST-FITER-SUMARM-SHADOW regression (task 29):
+// the chain guard. A direct iterator-chain argument is the
+// builtin window terminal in method form (`v.iter().sum()` /
+// `.count()` / `.max()`), which the user-fn gate must not
+// pre-empt — the checker and the codegen agree the terminal
+// owns chain arguments. Without the guard, a user fn named
+// `count` / `max` / `sum` misresolved the method call to the
+// user fn at check time while the codegen emitted the
+// terminal (a bool-returning user fn failed the method form
+// at check time; an i64-returning user fn max made the
+// method call's Option result unmatchable). Each test uses a
+// bool-returning user fn so the checker's verdict is visible
+// in the type: if the method call resolved to the user fn,
+// the comparison would be a check-time TypeMismatch.
+@import "sa_std/string.sa"
+@import "sa_std/vec.sa"
+
+fn count(v: Vec<i64>) -> bool {
+    return true;
+}
+
+fn sum(v: Vec<i64>) -> bool {
+    return true;
+}
+
+fn max(v: Vec<i64>) -> i64 {
+    return 999;
+}
+
+@test "method count with bool user fn count"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(5);
+    v.push(7);
+    v.push(8);
+    if v.iter().count() != 3 { panic(29023); };
+    if count(v) != true { panic(29024); };
+}
+
+@test "method sum with bool user fn sum"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(5);
+    v.push(7);
+    v.push(8);
+    if v.iter().sum() != 20 { panic(29025); };
+    if sum(v) != true { panic(29026); };
+}
+
+@test "method max with user fn max, match form"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(5);
+    v.push(7);
+    v.push(8);
+    let m = v.iter().max();
+    match m {
+        Some(x) => { if x != 8 { panic(29027); } },
+        None => { panic(29028); },
+    };
+    if max(v) != 999 { panic(29029); };
+}

@@ -121,6 +121,23 @@ impl Checker {
         let name = call.func_name.as_str();
 
         // 1. `sum` special: element type of an array / Vec-like.
+        // DEF-RUST-FITER-SUMARM-SHADOW: this arm had no `funcs`
+        // gate at all, so a user free `fn sum` (or extern `fn
+        // sum`) was unreachable — a non-collection argument was
+        // rejected as `sum over {Type}` and a collection
+        // argument was accepted as the builtin while the
+        // codegen emitted the user fn (checker/codegen
+        // disagreement, P1). The gate below is the same shape
+        // as the count/max gate, extended to every function
+        // registry (see `user_fn_owns_name`): when a user
+        // function owns `sum` and the argument is not a direct
+        // iterator chain, the call falls through to the plain
+        // function stages below. A direct chain argument is
+        // the builtin window terminal in method form
+        // (`v.iter().sum()`), which the gate must not
+        // pre-empt — the checker and the codegen agree the
+        // terminal owns chain arguments (see
+        // `call_arg_is_iter_chain`).
         if name == "sum" {
             // Zig's order: receiver-inferred resolution
             // (type_checker.zig :9669) runs long before the
@@ -139,16 +156,21 @@ impl Checker {
             if let Some(result) = self.check_receiver_call(call) {
                 return result;
             }
-            if call.args.len() != 1 {
-                return Err(Diagnostic::new(
-                    ErrorKind::InvalidArgsCount,
-                    "sum expects exactly 1 argument",
-                ));
+            if self.call_arg_is_iter_chain(call) || !self.user_fn_owns_name(name) {
+                if call.args.len() != 1 {
+                    return Err(Diagnostic::new(
+                        ErrorKind::InvalidArgsCount,
+                        "sum expects exactly 1 argument",
+                    ));
+                }
+                let target_ty = self.check_expr(&call.args[0])?;
+                // Zig sum arm: element-type extraction lives in
+                // check_assoc_helpers.rs (R-2 replay split).
+                return crate::check_assoc_helpers::check_sum_call(self, &target_ty);
             }
-            let target_ty = self.check_expr(&call.args[0])?;
-            // Zig sum arm: element-type extraction lives in
-            // check_assoc_helpers.rs (R-2 replay split).
-            return crate::check_assoc_helpers::check_sum_call(self, &target_ty);
+            // A user function owns `sum` and the argument is
+            // not a chain: fall through to the plain function
+            // stages below.
         }
 
         // 1b. `count` / `max` specials (LINE-FITER-TEXT-PORT):
@@ -172,22 +194,46 @@ impl Checker {
         // the window arm claims a call only when no declared
         // function owns the name (the overload-member stage at
         // 1a uses the same `funcs.contains_key` probe).
-        if (name == "count" || name == "max") && !self.funcs.contains_key(name) {
+        // DEF-RUST-FITER-SUMARM-SHADOW: the gate checked
+        // `funcs` ONLY, so an extern `fn max` / `fn count`
+        // (`.sai` contract, in `extern_funcs`) was claimed by
+        // the builtin arm before the extern FFI bypass ran.
+        // The gate now covers every function registry (see
+        // `user_fn_owns_name`), and — as for `sum` above — a
+        // direct iterator-chain argument is the builtin
+        // terminal in method form, which the gate must not
+        // pre-empt: without the chain guard a user fn named
+        // `count` / `max` misresolved `v.iter().count()` /
+        // `v.iter().max()` to the user fn at check time while
+        // the codegen emitted the terminal (a bool-returning
+        // user `fn count` failed the method form at check
+        // time; an i64-returning user `fn max` made the
+        // method call's Option result unmatchable). The
+        // receiver cascade now runs before the gate (as in the
+        // `sum` arm), so a user type's own `count` / `max`
+        // method wins even when a free fn of the same name
+        // exists.
+        if name == "count" || name == "max" {
             if let Some(result) = self.check_receiver_call(call) {
                 return result;
             }
-            if call.args.len() != 1 {
-                return Err(Diagnostic::new(
-                    ErrorKind::InvalidArgsCount,
-                    format!("{name} expects exactly 1 argument"),
-                ));
+            if self.call_arg_is_iter_chain(call) || !self.user_fn_owns_name(name) {
+                if call.args.len() != 1 {
+                    return Err(Diagnostic::new(
+                        ErrorKind::InvalidArgsCount,
+                        format!("{name} expects exactly 1 argument"),
+                    ));
+                }
+                let target_ty = self.check_expr(&call.args[0])?;
+                return if name == "count" {
+                    crate::check_assoc_helpers::check_count_call(self, &target_ty)
+                } else {
+                    crate::check_assoc_helpers::check_max_call(self, &target_ty)
+                };
             }
-            let target_ty = self.check_expr(&call.args[0])?;
-            return if name == "count" {
-                crate::check_assoc_helpers::check_count_call(self, &target_ty)
-            } else {
-                crate::check_assoc_helpers::check_max_call(self, &target_ty)
-            };
+            // A user function owns the name and the argument is
+            // not a chain: fall through to the plain function
+            // stages below.
         }
 
         // 1a-member. Direct call to one overload member by its
@@ -523,6 +569,86 @@ impl Checker {
         ))
     }
 
+    /// DEF-RUST-FITER-SUMARM-SHADOW: whether a user function
+    /// owns this name, in ANY function registry. The builtin
+    /// sum/count/max terminals must yield to all of them:
+    /// locally-declared singletons (`funcs`), locally-declared
+    /// overload sets (`func_overload_sets` — a name promoted
+    /// to a set is REMOVED from `funcs`, check_program.rs,
+    /// so checking `funcs` alone misses overloaded user
+    /// functions), extern contracts (`extern_funcs` /
+    /// `extern_overload_sets`, same promotion rule), and
+    /// imported signatures (`imported_funcs` /
+    /// `imported_overload_sets`, registered from `.sa`
+    /// imports by expand_wire.rs).
+    fn user_fn_owns_name(&self, name: &str) -> bool {
+        self.funcs.contains_key(name)
+            || self.func_overload_sets.contains_key(name)
+            || self.extern_funcs.contains_key(name)
+            || self.extern_overload_sets.contains_key(name)
+            || self.imported_funcs.contains_key(name)
+            || self.imported_overload_sets.contains_key(name)
+    }
+
+    /// Whether the call's single argument is a direct iterator
+    /// chain (`x.iter()` / `.into_iter()` with rev/skip/take/
+    /// copied stages). Mirrors the codegen's `iter_chain_plan_ref`
+    /// walk (iter_window.rs) exactly, including the duplicate
+    /// skip/take rejection — a chain argument means this call
+    /// is the builtin window terminal in method form, which the
+    /// user-fn gate must not pre-empt (the checker and the
+    /// codegen agree the terminal owns chain arguments, while
+    /// user functions own non-chain arguments). Held-chain
+    /// bindings (an identifier holding a chain) are NOT detected
+    /// here: the checker has no chain-binding table, so they
+    /// still resolve to the user fn at check time while the
+    /// codegen emits the terminal — the same residual the
+    /// count/max gate already had; see RESULT.md.
+    fn call_arg_is_iter_chain(&self, call: &CallExpr) -> bool {
+        if call.args.len() != 1 {
+            return false;
+        }
+        let mut skip_seen = false;
+        let mut take_seen = false;
+        let mut cur: &Node = &call.args[0];
+        loop {
+            match cur {
+                Node::CallExpr(c) => {
+                    if (c.func_name == "iter" || c.func_name == "into_iter")
+                        && c.args.len() == 1
+                    {
+                        return true;
+                    }
+                    if c.func_name == "rev" && c.args.len() == 1 {
+                        cur = &c.args[0];
+                        continue;
+                    }
+                    if c.func_name == "skip" && c.args.len() == 2 {
+                        if skip_seen {
+                            return false;
+                        }
+                        skip_seen = true;
+                        cur = &c.args[0];
+                        continue;
+                    }
+                    if c.func_name == "take" && c.args.len() == 2 {
+                        if take_seen {
+                            return false;
+                        }
+                        take_seen = true;
+                        cur = &c.args[0];
+                        continue;
+                    }
+                    if c.func_name == "copied" && c.args.len() == 1 {
+                        cur = &c.args[0];
+                        continue;
+                    }
+                    return false;
+                }
+                _ => return false,
+            }
+        }
+    }
 
     /// Associated-target calls (`Target::name(...)`), mirroring
     /// the venue associated block (:8438-8810). Returns `None` on
