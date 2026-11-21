@@ -196,6 +196,100 @@ impl<'c> Codegen<'c> {
         Ok((reg, name, generics))
     }
 
+    /// FUSED `v.pop().unwrap()` (DEF-RUST-POP-OPTION-UNBOXING, DIAG
+    /// fix-4; mirror of the Zig task-48 fusion, codegen.zig
+    /// isUnwrapCall arm): when the receiver is a direct `Vec::pop()`
+    /// call, skip the heap Option box entirely and run try_pop
+    /// straight into the unwrapped value, panicking on None exactly
+    /// like OPTION_UNWRAP does. Saves 2 heap malloc/free per call
+    /// (the try_pop out slot + the 16-byte Option box). The out slot
+    /// lives on the stack (`stack_alloc 8`), mirroring the chan_make
+    /// arm (call.rs:868) — a stack slot is released implicitly at
+    /// scope exit; an explicit `!` on it is a host StackEscape error.
+    /// The try_pop call and the load mirror the unfused pop arm
+    /// exactly (sized entry + load by element type), so the fused
+    /// path is behavior-identical to the unfused one for every
+    /// element type.
+    /// Returns None (fall through to the normal OPTION_UNWRAP) unless
+    /// the receiver is a direct Vec pop the surface pop arm would
+    /// claim — same claim conditions (Vec receiver, no user-fn
+    /// shadow), so a user `fn pop` or a non-Vec pop never fuses.
+    fn try_gen_pop_unwrap_fused(
+        &mut self,
+        call: &CallExpr,
+    ) -> Result<Option<SurfaceCall>> {
+        let Node::CallExpr(inner) = &call.args[0] else {
+            return Ok(None);
+        };
+        if inner.func_name != "pop"
+            || inner.args.len() != 1
+            || inner.callee.is_some()
+            || inner.associated_target.is_some()
+        {
+            return Ok(None);
+        }
+        let Some((tname, generics)) = self.classify_receiver(inner) else {
+            return Ok(None);
+        };
+        if tname != "Vec"
+            || generics.is_empty()
+            || self.user_fn_shadows_surface(inner, "Vec", &generics)
+        {
+            return Ok(None);
+        }
+        let recv = self.gen_expr(&inner.args[0])?;
+        let ok_reg = self.new_tmp();
+        let value_slot = self.new_tmp();
+        let result_reg = self.new_tmp();
+        let some_label = self.new_label("L_VEC_POP_UNWRAP_SOME");
+        let none_label = self.new_label("L_VEC_POP_UNWRAP_NONE");
+        let end_label = self.new_label("L_VEC_POP_UNWRAP_END");
+        // Element type of the popped value: the sized try_pop entry
+        // needs the slot size, and the load must read the slot as the
+        // element type (task 54 §2a — the unfused pop arm does exactly
+        // this; the legacy word-stride entry is stale since task 54
+        // landed and reads the wrong slot for narrow elements).
+        let elem = generics
+            .first()
+            .ok_or_else(|| missing_fact())?
+            .clone();
+        self.ins(&format!("{value_slot} = stack_alloc 8"));
+        self.ins(&format!(
+            "{ok_reg} = call @sa_vec_try_pop_sized(&{recv}, &{value_slot}, {})",
+            vec_element_slot_size(&elem)
+        ));
+        self.w(&format!(
+            "    br {ok_reg} -> {some_label}, {none_label}\n\n"
+        ));
+        self.wl(&format!("{some_label}:"));
+        self.w(&format!("    !{ok_reg}\n"));
+        // The sized entry zeroes the slot and moves the element at its
+        // own width, so the slot holds the width-exact value: load it
+        // as the element type, exactly like the unfused pop arm, so a
+        // narrow signed element comes back sign-extended instead of
+        // zero-extended.
+        let load_ty = if matches!(elem, Type::Primitive(_)) {
+            crate::codegen::type_string(&elem)
+        } else {
+            "ptr"
+        };
+        self.ins(&format!(
+            "{result_reg} = load {value_slot}+0 as {load_ty}"
+        ));
+        self.w(&format!("    jmp {end_label}\n\n"));
+        self.wl(&format!("{none_label}:"));
+        self.w(&format!("    !{ok_reg}\n"));
+        // OPTION_UNWRAP's None arm, verbatim (option.sa:497-498):
+        // panic 17 with the same message and length.
+        self.ins("EXPAND PANIC_MSG 17, *OPTION_UNWRAP_PANIC, 39");
+        self.ins(&format!("{result_reg} = add 0, 0"));
+        self.wl(&format!("{end_label}:"));
+        if sla_lowering::call_arg_needs_release(&inner.args[0]) {
+            self.emit_release(&recv)?;
+        }
+        Ok(Some(SurfaceCall::Value(result_reg)))
+    }
+
     /// codegen.zig:13671 `constructorArgNeedsConsume`
     /// (DEF-TEXT31-BOX-CONSUME): retire the source of a
     /// Box/Rc/Arc::new argument as consumed when the argument
@@ -921,6 +1015,15 @@ impl<'c> Codegen<'c> {
         if let Some(macro_name) = unary_value {
             if call.args.len() != 1 {
                 return Err(missing_fact());
+            }
+            // FUSED pop().unwrap(): try the fusion first; it returns
+            // None unless the receiver is a direct Vec pop (see
+            // try_gen_pop_unwrap_fused), in which case the normal
+            // OPTION_UNWRAP below never runs.
+            if macro_name == "OPTION_UNWRAP" {
+                if let Some(fused) = self.try_gen_pop_unwrap_fused(call)? {
+                    return Ok(Some(fused));
+                }
             }
             let (recv, _, _) = self.surface_receiver(call)?;
             let reg = self.new_tmp();

@@ -234,6 +234,20 @@ impl<'a> Scanner<'a> {
             }
         }
 
+        // FUSED pop().unwrap() (DEF-RUST-POP-OPTION-UNBOXING,
+        // surface.rs try_gen_pop_unwrap_fused): the fused emission
+        // expands PANIC_MSG in program text on the None arm, so a
+        // direct `.unwrap()` on a `.pop()` call needs
+        // sa_std/core/panic.sa even though the source has no panic
+        // call. Conservative shape-only rule (a kept import only
+        // costs time): any unwrap-on-pop call keeps panic.
+        if call.func_name == "unwrap"
+            && call.args.len() == 1
+            && matches!(&call.args[0], Node::CallExpr(inner) if inner.func_name == "pop")
+        {
+            self.flags.panic = true;
+        }
+
         match call.func_name.as_str() {
             "format" => {
                 self.flags.string_format = true;
