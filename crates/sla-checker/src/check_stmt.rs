@@ -481,6 +481,21 @@ impl Checker {
                     ))
                 }
             };
+            // DEF-RUST-CONST-NOT-ENFORCED (task 74): a `const`
+            // binding is immutable — assigning to it is a loud
+            // error, mirroring Zig type_checker.zig:8125 ("let
+            // bindings can be reassigned and indexed; const
+            // bindings cannot"). `check_let` records const-ness
+            // in the scope's `is_const` slot (top-level consts
+            // via check_program.rs:640, local consts via
+            // ConstStmt -> check_let); `let` bindings and
+            // parameters stay mutable (`is_const = false`).
+            if self.scopes.lookup(name).map(|b| b.is_const).unwrap_or(false) {
+                return Err(Diagnostic::new(
+                    ErrorKind::ConstReassign,
+                    format!("ConstReassign: cannot assign to const binding `{name}`"),
+                ));
+            }
             // R-6 (F3): reassigning a root with a live field borrow
             // is a BorrowConflict; otherwise the assignment drops
             // the target's own registered borrows.
@@ -521,6 +536,29 @@ impl Checker {
         // place_of_expr yields no place for them at the root).
         if !matches!(target, Node::DerefExpr(_)) {
             self.check_assign_place_free(target)?;
+        }
+        // DEF-RUST-CONST-NOT-ENFORCED (task 74): a field/index
+        // write whose place roots at a `const` binding is the
+        // same violation one level down. Deref targets write
+        // THROUGH the binding and stay exempt, like the
+        // BorrowConflict gate above.
+        if !matches!(target, Node::DerefExpr(_)) {
+            if let Some(place) = crate::check_field_borrow::place_of_expr(target) {
+                if self
+                    .scopes
+                    .lookup(&place.root)
+                    .map(|b| b.is_const)
+                    .unwrap_or(false)
+                {
+                    return Err(Diagnostic::new(
+                        ErrorKind::ConstReassign,
+                        format!(
+                            "ConstReassign: cannot assign to field of const binding `{}`",
+                            place.root
+                        ),
+                    ));
+                }
+            }
         }
         let target_ty = self.check_expr(target)?;
         let val_ty = self.check_expr(value)?;

@@ -92,6 +92,12 @@ pub enum ErrorKind {
     LoopConditionalConsume,
     UncloneableClone,
     UncloneableCopy,
+    // DEF-RUST-CONST-NOT-ENFORCED (task 74): assignment to a
+    // `const` binding — the Zig side rejects this at
+    // type_checker.zig:8125 ("const bindings cannot [be
+    // reassigned]"); the Rust `check_assign` never consulted
+    // `is_const`, so the three const forms passed check/build.
+    ConstReassign,
 }
 
 impl ErrorKind {
@@ -150,6 +156,7 @@ impl ErrorKind {
             ErrorKind::LoopConditionalConsume => "LoopConditionalConsume",
             ErrorKind::UncloneableClone => "UncloneableClone",
             ErrorKind::UncloneableCopy => "UncloneableCopy",
+            ErrorKind::ConstReassign => "ConstReassign",
         }
     }
 }

@@ -111,6 +111,8 @@ mod tests_r3;
 
 #[cfg(test)]
 mod tests_r4;
+#[cfg(test)]
+mod tests_const_assign;
 
 pub use checker::{
     Checker, EnumVariantInfo, ExternParam, ExternSig, FuncSig, ImportedMacroInfo,
