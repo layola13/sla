@@ -303,7 +303,13 @@ impl Checker {
     /// root's storage is dropped when the function returns, so
     /// the borrow would dangle. A root that is itself borrow-like
     /// (a borrow parameter, or a binding aliasing one) points
-    /// into the caller's frame and passes. `root_ty` is the root
+    /// into the caller's frame and passes. A root that is a raw
+    /// pointer (`*T`, `Type::Pointer`) dereferenced by the borrow
+    /// (`&(*p)`, first segment `"@"`) likewise passes: the borrow
+    /// reborrows the pointee, which the pointer does not own, so
+    /// the pointee outlives the pointer variable's frame (task 43,
+    /// D-1). A bare `&p` (no deref) still borrows the pointer slot
+    /// itself and stays rejected. `root_ty` is the root
     /// binding's type as resolved by the caller (the live scope
     /// table at a `return` statement; the recorded root-identifier
     /// type at a tail expression, where the body frame is already
@@ -325,6 +331,20 @@ impl Checker {
         let Some(place) = place else { return Ok(()) };
         let Some(root_ty) = root_ty else { return Ok(()) };
         if crate::types_util::is_borrow_like_type(root_ty) {
+            return Ok(());
+        }
+        // D-1 (task 43): a borrow through a raw-pointer deref
+        // (`&(*p)` where `p: *T`) reborrows the pointee, which the
+        // pointer does not own - the pointee's lifetime is not tied
+        // to the pointer variable's frame, so returning it does not
+        // dangle when the frame exits. `*T` is `Type::Pointer`, not
+        // the `RawPtr` primitive, so `is_borrow_like_type` (Borrow
+        // | RawPtr) does not cover it. The first segment must be a
+        // deref ("@"): a bare `&p` borrows the pointer slot itself
+        // and stays rejected.
+        if matches!(root_ty, Type::Pointer(_))
+            && place.segs.first().map(|s| s.as_str()) == Some("@")
+        {
             return Ok(());
         }
         Err(Self::borrow_conflict(format!(
