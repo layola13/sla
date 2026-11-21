@@ -1,0 +1,77 @@
+// DEF-RUST-FITER-HELDCHAIN-RESIDUAL regression (task 31):
+// the checker chain-binding table. A held chain binding
+// (`let c = v.iter().rev(); c.sum()`) must resolve its terminal
+// method calls to the builtin window terminal, not to a user
+// fn of the same name — the checker mirrors the codegen's
+// iter_chain_plan_held with a per-binding table keyed by
+// BindingId. Without the table, a bool-returning user fn `sum`
+// made `c.sum()` a check-time TypeMismatch (the checker picked
+// the user fn while the codegen emitted the terminal). Each
+// test uses a bool-returning user fn so the checker's verdict
+// is visible in the type.
+@import "sa_std/vec.sa"
+
+fn sum(v: Vec<i64>) -> bool {
+    return true;
+}
+
+fn count(v: Vec<i64>) -> bool {
+    return true;
+}
+
+fn max(v: Vec<i64>) -> i64 {
+    return 999;
+}
+
+@test "held chain sum with bool user fn sum"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(5);
+    v.push(7);
+    v.push(8);
+    let c = v.iter().rev();
+    if c.sum() != 20 { panic(31001); };
+    if sum(v) != true { panic(31002); };
+}
+
+@test "held chain count with bool user fn count"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(5);
+    v.push(7);
+    v.push(8);
+    let c = v.iter().rev();
+    if c.count() != 3 { panic(31003); };
+    if count(v) != true { panic(31004); };
+}
+
+@test "held chain max with user fn max, match form"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(5);
+    v.push(7);
+    v.push(8);
+    let c = v.iter().rev();
+    let m = c.max();
+    match m {
+        Some(x) => { if x != 8 { panic(31005); } },
+        None => { panic(31006); },
+    };
+    if max(v) != 999 { panic(31007); };
+}
+
+@test "held skip chain sum"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(5);
+    v.push(7);
+    v.push(8);
+    let c = v.iter().skip(1);
+    if c.sum() != 15 { panic(31008); };
+}
+
+@test "held chain sum small values"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(1);
+    v.push(2);
+    v.push(3);
+    v.push(4);
+    let c = v.iter().rev();
+    if c.sum() != 10 { panic(31009); };
+}

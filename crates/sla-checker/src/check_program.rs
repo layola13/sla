@@ -681,6 +681,14 @@ impl Checker {
         // the return gate.
         self.origin_check_decl(func)?;
         self.origin_reset();
+        // DEF-RUST-FITER-HELDCHAIN-RESIDUAL: clear the held
+        // chain-binding table per function, mirroring the
+        // codegen's per-function `iter_chain_bindings.clear()`
+        // (reset_function_state). Entries are keyed by BindingId
+        // (globally unique within one program check), so stale
+        // entries could never be looked up anyway; the clear is
+        // hygiene and the exact mirror.
+        self.chain_bindings.clear();
         let saved_variadic = self.current_fn_is_variadic;
         self.current_fn_is_variadic = self.current_fn_is_variadic || func.is_variadic;
         self.current_func = Some(func.clone());
@@ -851,6 +859,11 @@ impl Checker {
 
     /// Test bodies check like void functions with no parameters.
     pub fn check_test(&mut self, test: &TestDecl) -> CheckResult<()> {
+        // DEF-RUST-FITER-HELDCHAIN-RESIDUAL: clear the held
+        // chain-binding table per test, as for functions above
+        // (the codegen resets `iter_chain_bindings` per test
+        // decl too).
+        self.chain_bindings.clear();
         let frame = self.scopes.push_frame();
         let saved_root = self.fn_root_depth;
         let saved_ret = self

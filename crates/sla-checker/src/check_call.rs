@@ -8,7 +8,7 @@
 //! consumption specials (`mem::forget`, `Box::into_raw`,
 //! `ManuallyDrop::into_inner`) precede generic associated resolution.
 
-use crate::checker::{Checker, FuncSig};
+use crate::checker::{ChainStages, Checker, FuncSig};
 use crate::diag::{CheckResult, Diagnostic, ErrorKind};
 use crate::rules::MacroParamConsumption;
 use crate::types_util::{
@@ -590,34 +590,34 @@ impl Checker {
             || self.imported_overload_sets.contains_key(name)
     }
 
-    /// Whether the call's single argument is a direct iterator
-    /// chain (`x.iter()` / `.into_iter()` with rev/skip/take/
-    /// copied stages). Mirrors the codegen's `iter_chain_plan_ref`
-    /// walk (iter_window.rs) exactly, including the duplicate
-    /// skip/take rejection — a chain argument means this call
-    /// is the builtin window terminal in method form, which the
-    /// user-fn gate must not pre-empt (the checker and the
-    /// codegen agree the terminal owns chain arguments, while
-    /// user functions own non-chain arguments). Held-chain
-    /// bindings (an identifier holding a chain) are NOT detected
-    /// here: the checker has no chain-binding table, so they
-    /// still resolve to the user fn at check time while the
-    /// codegen emits the terminal — the same residual the
-    /// count/max gate already had; see RESULT.md.
-    fn call_arg_is_iter_chain(&self, call: &CallExpr) -> bool {
-        if call.args.len() != 1 {
-            return false;
-        }
+    /// DEF-RUST-FITER-HELDCHAIN-RESIDUAL: reduce an iterator-chain
+    /// expression (direct or held) to its stages, mirroring the
+    /// codegen's `iter_chain_plan_ref` + `iter_chain_plan_held`
+    /// (iter_window.rs) exactly — including the duplicate skip/take
+    /// rejection and the held-composition refusal (an outer skip
+    /// over a held skip, or take over take, is not a single
+    /// window). Returns None when the expression is not a chain.
+    /// The direct walk and the held walk are one loop here (the
+    /// codegen splits them into ref/held because the ref form
+    /// borrows original nodes while the held form clones stored
+    /// plans; the checker only needs the stages, so one walk
+    /// serves both): `iter` / `into_iter` closes a direct chain,
+    /// an identifier closes a held chain through the
+    /// chain-binding table (see `chain_stages_for_let`).
+    pub(crate) fn iter_chain_stages(&self, node: &Node) -> Option<ChainStages> {
         let mut skip_seen = false;
         let mut take_seen = false;
-        let mut cur: &Node = &call.args[0];
+        let mut cur: &Node = node;
         loop {
             match cur {
                 Node::CallExpr(c) => {
                     if (c.func_name == "iter" || c.func_name == "into_iter")
                         && c.args.len() == 1
                     {
-                        return true;
+                        return Some(ChainStages {
+                            skip: skip_seen,
+                            take: take_seen,
+                        });
                     }
                     if c.func_name == "rev" && c.args.len() == 1 {
                         cur = &c.args[0];
@@ -625,7 +625,7 @@ impl Checker {
                     }
                     if c.func_name == "skip" && c.args.len() == 2 {
                         if skip_seen {
-                            return false;
+                            return None;
                         }
                         skip_seen = true;
                         cur = &c.args[0];
@@ -633,7 +633,7 @@ impl Checker {
                     }
                     if c.func_name == "take" && c.args.len() == 2 {
                         if take_seen {
-                            return false;
+                            return None;
                         }
                         take_seen = true;
                         cur = &c.args[0];
@@ -643,11 +643,71 @@ impl Checker {
                         cur = &c.args[0];
                         continue;
                     }
-                    return false;
+                    return None;
                 }
-                _ => return false,
+                Node::Identifier(name) => {
+                    // Held-chain binding: look up the innermost
+                    // binding and its recorded stages. Refuse
+                    // exactly as the codegen does
+                    // (`iter_chain_plan_held`): an outer skip over
+                    // a held skip (or take over take) is not a
+                    // single window, so the call is not a chain
+                    // and resolves to the user fn at both levels.
+                    // A name that is not a scope binding (a
+                    // function, a type) is not a chain either.
+                    let binding = self.scopes.lookup(name)?;
+                    let stages = self.chain_bindings.get(&binding.id)?;
+                    if skip_seen && stages.skip {
+                        return None;
+                    }
+                    if take_seen && stages.take {
+                        return None;
+                    }
+                    return Some(ChainStages {
+                        skip: skip_seen || stages.skip,
+                        take: take_seen || stages.take,
+                    });
+                }
+                _ => return None,
             }
         }
+    }
+
+    /// DEF-RUST-FITER-HELDCHAIN-RESIDUAL: the chain stages a let
+    /// site records for its binding (mirrors codegen
+    /// `iter_chain_plan_for_let` + gen_let_stmt, which records
+    /// only when the value is a CallExpr). A non-call value —
+    /// including a bare identifier alias (`let d = c;`) — records
+    /// nothing, exactly as in the codegen: the alias is not a
+    /// chain binding there, so `d.sum()` is not a terminal there
+    /// either. Callers compute the stages BEFORE defining the
+    /// binding (see `check_let`): the value's identifiers must
+    /// resolve to the pre-let bindings — a shadowing let's value
+    /// refers to the outer binding, mirroring the codegen, which
+    /// resolves the RHS before pushing the new alias.
+    pub(crate) fn chain_stages_for_let(&self, value: &Node) -> Option<ChainStages> {
+        if !matches!(value, Node::CallExpr(_)) {
+            return None;
+        }
+        self.iter_chain_stages(value)
+    }
+
+    /// Whether the call's single argument is an iterator chain
+    /// (direct or held — see `iter_chain_stages`). Mirrors the
+    /// codegen's `iter_chain_plan_ref` walk (iter_window.rs) for
+    /// the direct form, extended to held-chain bindings: a chain
+    /// argument means this call is the builtin window terminal
+    /// in method form, which the user-fn gate must not pre-empt
+    /// (the checker and the codegen agree the terminal owns chain
+    /// arguments, while user functions own non-chain arguments).
+    /// Held-chain bindings (an identifier holding a chain) are
+    /// detected through the chain-binding table now; the
+    /// DEF-RUST-FITER-HELDCHAIN-RESIDUAL fix.
+    fn call_arg_is_iter_chain(&self, call: &CallExpr) -> bool {
+        if call.args.len() != 1 {
+            return false;
+        }
+        self.iter_chain_stages(&call.args[0]).is_some()
     }
 
     /// Associated-target calls (`Target::name(...)`), mirroring

@@ -132,6 +132,19 @@ impl Checker {
         is_const: bool,
     ) -> CheckResult<()> {
         let val_ty = self.check_expr(value)?;
+        // DEF-RUST-FITER-HELDCHAIN-RESIDUAL: compute the value's
+        // chain stages BEFORE defining the binding (see
+        // `chain_stages_for_let`): the value's identifiers must
+        // resolve to the pre-let bindings — a shadowing let's value
+        // refers to the outer binding, mirroring the codegen,
+        // which resolves the RHS before pushing the new alias.
+        // Const lets never hold a chain (a chain is a runtime
+        // view, not a compile-time value).
+        let chain_stages = if is_const {
+            None
+        } else {
+            self.chain_stages_for_let(value)
+        };
         // DEF-RUST-STRPTR-CHECKER: refineStringLiteralForSlot at
         // the let / fn-const sites (Zig :7486 / :7620; see helper).
         let slot_ty = declared.cloned().unwrap_or_else(|| val_ty.clone());
@@ -211,13 +224,24 @@ impl Checker {
             None
         };
         if !is_discard_name(name) {
-            self.define_symbol_with_state(
+            let binding_id = self.define_symbol_with_state(
                 name,
                 expected.clone(),
                 is_const,
                 ValueState::Active,
                 borrow_source,
             )?;
+            // DEF-RUST-FITER-HELDCHAIN-RESIDUAL: record a held
+            // iterator-chain binding (mirrors codegen
+            // gen_let_stmt, which inserts at the let site).
+            // Reassignment never clears the entry — the codegen
+            // never removes from `iter_chain_bindings` either
+            // (insert at let, clear per function), so the mirror
+            // is exact; a reassigned chain binding is the
+            // codegen's shape, not the checker's, to dispute.
+            if let Some(stages) = chain_stages {
+                self.chain_bindings.insert(binding_id, stages);
+            }
             // R-3: arena domain gates for the new binding.
             self.arena_on_let(name, &expected, value)?;
             // R-3: borrow-origin registration for view bindings.

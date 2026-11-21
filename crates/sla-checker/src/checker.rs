@@ -211,6 +211,20 @@ pub struct LoopCtx {
     pub in_return_value: bool,
 }
 
+/// Stages carried by a held iterator-chain binding
+/// (DEF-RUST-FITER-HELDCHAIN-RESIDUAL): whether the held plan
+/// carries a skip / take stage. The codegen's held plan refuses
+/// an outer skip over a held skip (or take over take), so the
+/// checker needs these flags to refuse exactly the same shapes
+/// (see `iter_chain_stages` in check_call.rs). `rev` is not
+/// stored: rev composes by XOR and never refuses, so it cannot
+/// change the chain verdict.
+#[derive(Debug, Clone, Copy)]
+pub struct ChainStages {
+    pub skip: bool,
+    pub take: bool,
+}
+
 /// The checker. One instance checks one program (Zig `TypeChecker`
 /// is likewise created per compilation).
 #[derive(Debug)]
@@ -258,6 +272,21 @@ pub struct Checker {
     /// event on their owner; reading one is
     /// BorrowUseAfterInvalidation.
     pub origin_invalidated: std::collections::HashSet<String>,
+    /// DEF-RUST-FITER-HELDCHAIN-RESIDUAL: held iterator-chain
+    /// bindings (mirrors codegen `iter_chain_bindings`,
+    /// codegen.rs:93): BindingId -> the chain stages the held
+    /// plan carries. Recorded at let sites whose value is an
+    /// iterator chain (see `chain_stages_for_let` /
+    /// `record_chain_binding` in check_call.rs); consulted by
+    /// the sum/count/max arms (`call_arg_is_iter_chain`) so a
+    /// held chain (`let c = a.iter().rev(); c.sum()`) is
+    /// recognized as the builtin window terminal. Keyed by
+    /// BindingId, so shadowing and scope exit are handled by
+    /// construction (each let gets a fresh id; popped bindings
+    /// are never looked up again). Cleared per function with
+    /// the other function-local ledgers (see `check_func` /
+    /// `check_test` in check_program.rs).
+    pub chain_bindings: HashMap<BindingId, ChainStages>,
     pub extern_funcs: HashMap<String, ExternSig>,
     pub imported_funcs: HashMap<String, FuncSig>,
     pub macros: HashMap<String, MacroDecl>,
@@ -373,6 +402,7 @@ impl Checker {
             field_borrows: Vec::new(),
             origin_views: Vec::new(),
             origin_invalidated: std::collections::HashSet::new(),
+            chain_bindings: HashMap::new(),
             extern_funcs: HashMap::new(),
             imported_funcs: HashMap::new(),
             macros: HashMap::new(),
