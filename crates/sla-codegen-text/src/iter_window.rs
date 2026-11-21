@@ -46,7 +46,7 @@
 //! GrowVec sources (Zig's emitter errors on them too: its source
 //! dispatch knows only vecElementType / arrayType).
 
-use sla_ast::{Node, Type};
+use sla_ast::{BinaryExpr, BinaryOp, Literal, Node, Type};
 use sla_lowering::{call_arg_needs_release, is_unsigned_integer_type};
 
 use crate::codegen::{type_size, type_string, Codegen};
@@ -148,14 +148,52 @@ impl<'c> Codegen<'c> {
         }
     }
 
+/// Compose two skip amounts additively: skip(m) then skip(n) is
+/// skip(m+n). Folds to a single integer literal when both amounts
+/// are literals (the common case, incl. H5's 1 + 1 = 2); otherwise
+/// synthesizes a `BinaryExpr(Add)` node, which the window loop
+/// generates as an ordinary expression (its skip slot is filled
+/// via `gen_expr`, `gen_iter_window_loop`).
+fn compose_skip_add(outer: Node, inner: Node) -> Node {
+    if let (Node::Literal(Literal::IntVal(a)), Node::Literal(Literal::IntVal(b))) =
+        (&outer, &inner)
+    {
+        if let Some(sum) = a.checked_add(*b) {
+            return Node::Literal(Literal::IntVal(sum));
+        }
+    }
+    Node::BinaryExpr(BinaryExpr {
+        op: BinaryOp::Add,
+        left: Box::new(outer),
+        right: Box::new(inner),
+    })
+}
+
+/// Compose two take amounts by min: take(m) then take(n) is
+/// take(min(m, n)). Only folds when both amounts are integer
+/// literals; otherwise returns None (a runtime min has no
+/// single-node form, so the caller refuses as before).
+fn compose_take_min(outer: Node, inner: Node) -> Option<Node> {
+    if let (Node::Literal(Literal::IntVal(a)), Node::Literal(Literal::IntVal(b))) =
+        (&outer, &inner)
+    {
+        return Some(Node::Literal(Literal::IntVal((*a).min(*b))));
+    }
+    None
+}
+
     /// The held-binding composition of `iterChainPlan`: walk the
     /// receiver's stage calls (references) down to an identifier
     /// with a recorded plan and compose. On a hit, returns the
     /// composed plan as owned clones (plus the held plan's
     /// recorded source type). Held stages are the inner stages;
-    /// an outer skip/take over a held skip/take does not compose
-    /// into a single window constant, so it refuses
-    /// loudly-by-fallthrough (None), exactly as in the Zig.
+    /// an outer skip over a held skip COMPOSES additively
+    /// (skip(m) then skip(n) is skip(m+n) — H5 emission
+    /// completion, DEF-RUST-CODEGEN-HELDCHAIN-STAGE-EMISSION);
+    /// an outer take over a held take composes by min when both
+    /// amounts are integer literals, and still refuses (None)
+    /// otherwise — a runtime min has no single-node form.
+    /// `rev` composes by XOR, as before.
     fn iter_chain_plan_held(&self, recv: &Node) -> Option<IterChainPlan> {
         let mut rev = false;
         let mut skip: Option<Node> = None;
@@ -194,17 +232,34 @@ impl<'c> Codegen<'c> {
                 Node::Identifier(name) => {
                     let resolved = self.resolve_binding_name(name);
                     let held = self.iter_chain_bindings.get(&resolved)?;
-                    if skip.is_some() && held.skip.is_some() {
-                        return None;
-                    }
-                    if take.is_some() && held.take.is_some() {
-                        return None;
-                    }
+                    // Compose outer stages over the held plan
+                    // (H5 emission completion): skip adds, take
+                    // takes the min. A non-literal take-over-take
+                    // still refuses (None), as before.
+                    let skip = match (skip, held.skip.clone()) {
+                        (Some(outer), Some(inner)) => {
+                            Some(Self::compose_skip_add(outer, inner))
+                        }
+                        (Some(outer), None) => Some(outer),
+                        (None, Some(inner)) => Some(inner),
+                        (None, None) => None,
+                    };
+                    let take = match (take, held.take.clone()) {
+                        (Some(outer), Some(inner)) => {
+                            match Self::compose_take_min(outer, inner) {
+                                Some(min) => Some(min),
+                                None => return None,
+                            }
+                        }
+                        (Some(outer), None) => Some(outer),
+                        (None, Some(inner)) => Some(inner),
+                        (None, None) => None,
+                    };
                     return Some(IterChainPlan {
                         source: held.source.clone(),
                         rev: rev != held.rev,
-                        skip: skip.or_else(|| held.skip.clone()),
-                        take: take.or_else(|| held.take.clone()),
+                        skip,
+                        take,
                         source_ty: held.source_ty.clone(),
                     });
                 }
