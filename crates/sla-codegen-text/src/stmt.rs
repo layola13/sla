@@ -1237,14 +1237,55 @@ impl<'c> Codegen<'c> {
         false
     }
 
+    /// DEF-RUST-MEMSTEADY-DROPPED-ELEM-DROP (task 84): drop the
+    /// value currently stored in the slot at `ptr_reg` before the
+    /// store overwrites it. Mirrors the Zig plugin's
+    /// `emitOverwrittenValueDropText` (codegen.zig:1813): load the
+    /// old slot word and release it by the element type's drop
+    /// plan (`emit_release` on a temp registered with the element
+    /// type). The Rust checker has no `assignDropMode`
+    /// annotation, so the decision is made here from the place
+    /// keys (the plugin checker's `walkTaintAssign` rule): a
+    /// value that might denote the same place as the target keeps
+    /// its value (no drop) -- this covers `ring[i] = ring[i]`
+    /// and the dynamic-index uncertainty `ring[i] = ring[j]` /
+    /// `ring[i] = ring[0]`. The checker guarantees the root was
+    /// initialized (UseBeforeInit), so an in-range slot always
+    /// holds a live owned value; index reads are AliasedHusk
+    /// views (drop.rs `decide_value_taint`), forgotten -- never
+    /// freed -- so no read alias can double-free. NOT ported:
+    /// the plugin's taint downgrade (a tainted target place keeps
+    /// only a shallow free); if a corpus case needs it the
+    /// census will show it.
+    fn emit_overwritten_element_drop(
+        &mut self,
+        ptr_reg: &str,
+        elem_ty: &sla_ast::Type,
+        target: &Node,
+        value: &Node,
+    ) -> Result<()> {
+        let same_place = match (Self::place_key(target), Self::place_key(value)) {
+            (Some(t), Some(v)) => !Self::place_keys_diverge(&t, &v),
+            _ => false,
+        };
+        if same_place {
+            return Ok(());
+        }
+        let old_reg = self.new_tmp();
+        self.ins(&format!("{old_reg} = load {ptr_reg}+0 as ptr"));
+        self.remember_local_binding_type(&old_reg, elem_ty);
+        self.emit_release(&old_reg)
+    }
+
     /// codegen.zig `genIndexAssign` vec arm for owned (non-scalar)
     /// elements: same bounds/ptr/store shape as the scalar arm,
     /// but the element word is stored as u64 (a handle/record
     /// pointer's bits) and the stored value goes through
-    /// finishStoredValueAfterSlotStore. No overwritten-element
-    /// drop is emitted — the SAB crate's index_assign surface
-    /// rules likewise store without one, and these shapes pass
-    /// the host verifier on that route.
+    /// finishStoredValueAfterSlotStore. The overwritten element is
+    /// dropped before the store (task 84,
+    /// `emit_overwritten_element_drop`); the SAB crate's
+    /// index_assign surface rules store without one, and these
+    /// shapes pass the host verifier on that route.
     fn gen_vec_index_assign_owned(
         &mut self,
         idx: &sla_ast::IndexExpr,
@@ -1280,6 +1321,7 @@ impl<'c> Codegen<'c> {
             vec_element_slot_size(elem)
         ));
         self.ins(&format!("{ptr_reg} = ptr_add {data_reg}, {offset_reg}"));
+        self.emit_overwritten_element_drop(&ptr_reg, elem, &assign.target, &assign.value)?;
         self.ins(&format!("store {ptr_reg}+0, {val_reg} as u64"));
         self.finish_stored_value_after_slot_store(&val_reg, &assign.value)?;
         self.mark_assignment_moved_source(&assign.target, &assign.value);

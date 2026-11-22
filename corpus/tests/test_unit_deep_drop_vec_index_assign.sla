@@ -1,0 +1,48 @@
+@import "sa_std/vec.sa"
+
+// DEF-RUST-MEMSTEADY-DROPPED-ELEM-DROP (task 84): overwriting a
+// Vec element by index-assign must drop the overwritten element
+// before the new one is stored. Functional half: the slot must read
+// back as the new value after every overwrite (dropping the
+// incoming value or corrupting the slot breaks the readback). The
+// leak half is locked by the memsteady A/B memory numbers in the
+// task-84 batch report (716,896 KB -> 107,244 KB, rustc 102,400 KB).
+
+fn filled_vec(n: u64, seed: u8) -> Vec<u8> {
+    let v: Vec<u8> = Vec::new();
+    let i: u64 = 0;
+    while i < n {
+        v.push(seed + (i % 5) as u8);
+        i = i + 1;
+    }
+    return v;
+}
+
+fn sum_vec(v: &Vec<u8>) -> u64 {
+    let sum: u64 = 0;
+    let i: u64 = 0;
+    while i < 48 {
+        sum = sum + (v[i] as u64);
+        i = i + 1;
+    }
+    return sum;
+}
+
+@test "index assign drops overwritten vec element"() {
+    // sum = 48 * seed + 93 (see deep_drop_vec_reassign for the math).
+    let ring: Vec<Vec<u8>> = Vec::new();
+    let s: u64 = 0;
+    while s < 4 {
+        ring.push(filled_vec(48, 1));
+        s = s + 1;
+    }
+    let r: u64 = 0;
+    while r < 25 {
+        let slot: u64 = r % 4;
+        ring[slot] = filled_vec(48, 4);
+        if sum_vec(&ring[slot]) != 93 + 192 { panic(4401); };
+        ring[slot] = filled_vec(48, 1);
+        if sum_vec(&ring[slot]) != 93 + 48 { panic(4402); };
+        r = r + 1;
+    }
+}
