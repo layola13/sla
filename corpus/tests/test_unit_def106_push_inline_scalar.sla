@@ -1,0 +1,149 @@
+// DEF task 106: Vec push() for scalar element types is inlined in
+// the text codegen (surface.rs emit_inline_push_scalar) as a capacity
+// check + direct slot store + len increment, instead of a runtime
+// `call @sa_vec_push` per iteration. The runtime call remains on
+// the grow path (len == cap).
+// This file is the behavioral guard for that lowering: it passes
+// on the base sla (pop-fixed, runtime push path) and on the fixed
+// sla (inline push path). The emission difference (no VEC_PUSH
+// macro / sa_vec_push call in the fixed .sa hot loop for scalar
+// pushes) is checked by the task's scripts.
+//
+// Shapes locked: push/pop round-trip order for i64/i32; narrow
+// values (i8 -2, u8 255, i16 -3, u16 60000, u32 70000); bool
+// round-trip; isize/usize round-trip (store types i64/u64);
+// growth path (1000 pushes from empty forces several grows);
+// push-after-pop (fast path with len < cap, non-zero len);
+// push to exactly capacity then one more (boundary); a
+// churn-like loop (100 pushes + 100 pops, acc 50).
+//
+// NOTE (pre-existing, out of scope): no f32/f64 comparison
+// tests -- float `==`/`!=`/`>` comparisons are broken in this
+// SLA version independent of push/pop (task 101 RESULT §6).
+
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+@test "push i64 round-trip lifo"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    if v.pop().unwrap() != 30 { panic(10601); };
+    if v.pop().unwrap() != 20 { panic(10602); };
+    if v.pop().unwrap() != 10 { panic(10603); };
+    if !v.pop().is_none() { panic(10604); };
+}
+
+@test "push i32 round-trip lifo"() {
+    let v: Vec<i32> = Vec::new();
+    v.push(7);
+    v.push(8);
+    if v.pop().unwrap() != 8 { panic(10611); };
+    if v.pop().unwrap() != 7 { panic(10612); };
+    if !v.pop().is_none() { panic(10613); };
+}
+
+@test "push i8 narrow sign extension"() {
+    let v: Vec<i8> = Vec::new();
+    v.push(-2);
+    v.push(5);
+    if v.pop().unwrap() != 5 { panic(10621); };
+    if v.pop().unwrap() != -2 { panic(10622); };
+    if !v.pop().is_none() { panic(10623); };
+}
+
+@test "push u8 narrow value"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(255);
+    v.push(0);
+    if v.pop().unwrap() != 0 { panic(10631); };
+    if v.pop().unwrap() != 255 { panic(10632); };
+    if !v.pop().is_none() { panic(10633); };
+}
+
+@test "push i16 narrow sign extension"() {
+    let v: Vec<i16> = Vec::new();
+    v.push(-3);
+    if v.pop().unwrap() != -3 { panic(10641); };
+    if !v.pop().is_none() { panic(10642); };
+}
+
+@test "push u16 narrow value"() {
+    let v: Vec<u16> = Vec::new();
+    v.push(60000);
+    if v.pop().unwrap() != 60000 { panic(10651); };
+    if !v.pop().is_none() { panic(10652); };
+}
+
+@test "push u32 value"() {
+    let v: Vec<u32> = Vec::new();
+    v.push(70000);
+    if v.pop().unwrap() != 70000 { panic(10661); };
+    if !v.pop().is_none() { panic(10662); };
+}
+
+@test "push bool round-trip"() {
+    let v: Vec<bool> = Vec::new();
+    v.push(true);
+    v.push(false);
+    if v.pop().unwrap() != false { panic(10691); };
+    if v.pop().unwrap() != true { panic(10692); };
+    if !v.pop().is_none() { panic(10693); };
+}
+
+@test "push isize round-trip"() {
+    let v: Vec<isize> = Vec::new();
+    v.push(-9);
+    v.push(11);
+    if v.pop().unwrap() != 11 { panic(10701); };
+    if v.pop().unwrap() != -9 { panic(10702); };
+    if !v.pop().is_none() { panic(10703); };
+}
+
+@test "push usize round-trip"() {
+    let v: Vec<usize> = Vec::new();
+    v.push(123456);
+    if v.pop().unwrap() != 123456 { panic(10711); };
+    if !v.pop().is_none() { panic(10712); };
+}
+
+@test "push growth 1000 values"() {
+    let v: Vec<i64> = Vec::new();
+    let i: i64 = 0;
+    while i < 1000 { v.push(i); i = i + 1; }
+    if v.pop().unwrap() != 999 { panic(10721); };
+    if v.pop().unwrap() != 998 { panic(10722); };
+    let j: i64 = 0;
+    let acc: i64 = 0;
+    while j < 998 { let p = v.pop().unwrap(); acc = acc + (p & 1); j = j + 1; }
+    if acc != 499 { panic(10723); };
+    if !v.pop().is_none() { panic(10724); };
+}
+
+@test "push after pop fast path"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(1);
+    v.push(2);
+    v.push(3);
+    if v.pop().unwrap() != 3 { panic(10731); };
+    v.push(4);
+    v.push(5);
+    if v.pop().unwrap() != 5 { panic(10732); };
+    if v.pop().unwrap() != 4 { panic(10733); };
+    if v.pop().unwrap() != 2 { panic(10734); };
+    if v.pop().unwrap() != 1 { panic(10735); };
+    if !v.pop().is_none() { panic(10736); };
+}
+
+@test "push loop churn-like 100 values"() {
+    let v: Vec<i64> = Vec::new();
+    let i: i64 = 0;
+    while i < 100 { v.push(i); i = i + 1; }
+    let acc: i64 = 0;
+    let j: i64 = 0;
+    while j < 100 { let p = v.pop().unwrap(); acc = acc + (p & 1); j = j + 1; }
+    if acc != 50 { panic(10741); };
+    if !v.pop().is_none() { panic(10742); };
+}

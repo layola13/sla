@@ -65,15 +65,15 @@ fn slot_size(elem: &Type) -> usize {
     vec_element_slot_size(elem)
 }
 
-/// Task 101: scalar element types whose Vec pop can be inlined as
-/// a len check + len decrement + direct slot load. Numeric/bool
-/// primitives only: the value is a plain register word with no
-/// drop glue, so moving it out of the slot is a single typed load
-/// (sign-extended for narrow signed types, exactly like the
-/// runtime pop's load). Pointer-like primitives (RawPtr/VoidType/
-/// VaList) and all non-primitives keep the runtime
-/// `sa_vec_try_pop_sized` call.
-fn scalar_pop_inline_eligible(elem: &Type) -> bool {
+/// Task 101/106: scalar element types whose Vec pop/push can be
+/// inlined in the text codegen. Numeric/bool primitives only: the
+/// value is a plain register word with no drop glue, so moving it
+/// into/out of a slot is a single typed store/load (sign-extended
+/// for narrow signed types, exactly like the runtime pop's load).
+/// Pointer-like primitives (RawPtr/VoidType/VaList) and all
+/// non-primitives keep the runtime calls (`sa_vec_try_pop_sized`
+/// / `sa_vec_push`).
+fn scalar_vec_inline_eligible(elem: &Type) -> bool {
     matches!(
         elem,
         Type::Primitive(
@@ -331,6 +331,115 @@ impl<'c> Codegen<'c> {
         Ok(())
     }
 
+
+    /// Task 106: inline scalar Vec push. Emits the capacity check
+    /// + direct slot store for a scalar element type, with the
+    /// runtime `VEC_PUSH` macro only on the grow path (len ==
+    /// cap). The emitted shape mirrors the task-101 inline pop
+    /// for the branch structure and the Vec index-assign arm for
+    /// the slot store:
+    ///   {len} = load {recv}+{len_def} as u64
+    ///   {cap} = load {recv}+{cap_def} as u64
+    ///   {ok} = ult {len}, {cap}
+    ///   !{cap}
+    ///   br {ok} -> {fast}, {slow}
+    /// {fast}:
+    ///   !{ok}
+    ///   {data} = load {recv}+{ptr_def} as ptr
+    ///   {off} = mul {len}, {slot}
+    ///   {ptr} = ptr_add {data}, {off}
+    ///   store {ptr}+0, {value} as {store_ty}
+    ///   {one} = 1
+    ///   {newlen} = add {len}, {one}
+    ///   store {recv}+{len_def}, {newlen} as u64
+    ///   [!{ptr} !{off} !{data} !{newlen} !{one} !{len}]
+    ///   jmp {end}
+    /// {slow}:
+    ///   !{ok}
+    ///   EXPAND {macro} {recv}, {value}, {slot}
+    ///   jmp {end}
+    /// {end}:
+    /// On return the insertion point is at the END label; the
+    /// caller runs the arm's value-finish step (shared by both
+    /// paths, exactly as the call path did) and returns Void.
+    /// Behavior is identical to `sa_vec_push` for scalar
+    /// elements: the fast path stores the value word into the
+    /// slot and bumps len (the buffer is untouched otherwise --
+    /// the slot write only runs when len < cap, so no OOB
+    /// store); the slow path is the runtime call verbatim, so
+    /// growth, reallocation, and the first push into an empty
+    /// vec all behave exactly as before. Narrow values are
+    /// stored with the typed store (same rule as the index-assign
+    /// arm); the value register itself is only read, never
+    /// consumed, by the inline sequence -- the caller's
+    /// surface_finish_value runs unchanged after END.
+    fn emit_inline_push_scalar(
+        &mut self,
+        recv: &str,
+        elem: &Type,
+        len_def: &str,
+        cap_def: &str,
+        ptr_def: &str,
+        value_reg: &str,
+        macro_name: &str,
+        ok_reg: &str,
+        fast_label: &str,
+        slow_label: &str,
+        end_label: &str,
+    ) -> Result<()> {
+        let len_reg = self.new_tmp();
+        let cap_reg = self.new_tmp();
+        let data_reg = self.new_tmp();
+        let offset_reg = self.new_tmp();
+        let ptr_reg = self.new_tmp();
+        let one_reg = self.new_tmp();
+        let newlen_reg = self.new_tmp();
+        let store_ty = if matches!(elem, Type::Primitive(_)) {
+            crate::codegen::type_string(elem)
+        } else {
+            "ptr"
+        };
+        self.ins(&format!("{len_reg} = load {recv}+{len_def} as u64"));
+        self.ins(&format!("{cap_reg} = load {recv}+{cap_def} as u64"));
+        self.ins(&format!("{ok_reg} = ult {len_reg}, {cap_reg}"));
+        self.w(&format!("    !{cap_reg}\n"));
+        self.w(&format!(
+            "    br {ok_reg} -> {fast_label}, {slow_label}\n\n"
+        ));
+        self.wl(&format!("{fast_label}:"));
+        self.w(&format!("    !{ok_reg}\n"));
+        self.ins(&format!("{data_reg} = load {recv}+{ptr_def} as ptr"));
+        self.ins(&format!(
+            "{offset_reg} = mul {len_reg}, {}",
+            vec_element_slot_size(elem)
+        ));
+        self.ins(&format!("{ptr_reg} = ptr_add {data_reg}, {offset_reg}"));
+        self.ins(&format!(
+            "store {ptr_reg}+0, {value_reg} as {store_ty}"
+        ));
+        self.emit_int_const(&one_reg, 1);
+        self.ins(&format!("{newlen_reg} = add {len_reg}, {one_reg}"));
+        self.ins(&format!(
+            "store {recv}+{len_def}, {newlen_reg} as u64"
+        ));
+        self.emit_release(&ptr_reg)?;
+        self.emit_release(&offset_reg)?;
+        self.emit_release(&data_reg)?;
+        self.emit_release(&newlen_reg)?;
+        self.emit_release(&one_reg)?;
+        self.emit_release(&len_reg)?;
+        self.w(&format!("    jmp {end_label}\n\n"));
+        self.wl(&format!("{slow_label}:"));
+        self.w(&format!("    !{ok_reg}\n"));
+        self.ins(&format!(
+            "EXPAND {macro_name} {recv}, {value_reg}, {}",
+            slot_size(elem)
+        ));
+        self.w(&format!("    jmp {end_label}\n\n"));
+        self.wl(&format!("{end_label}:"));
+        Ok(())
+    }
+
     fn try_gen_pop_unwrap_fused(
         &mut self,
         call: &CallExpr,
@@ -370,7 +479,7 @@ impl<'c> Codegen<'c> {
             .first()
             .ok_or_else(|| missing_fact())?
             .clone();
-        if scalar_pop_inline_eligible(&elem) {
+        if scalar_vec_inline_eligible(&elem) {
             // Task 101: inline scalar pop -- no call, no
             // out-slot. The helper leaves the insertion point at
             // the SOME label with result_reg holding the popped
@@ -1236,6 +1345,25 @@ impl<'c> Codegen<'c> {
                 }
                 let planned = self.surface_value_consumed(call, 1)?;
                 let value = planned.reg.clone();
+                if macro_name == "VEC_PUSH" && scalar_vec_inline_eligible(&elem) {
+                    // Task 106: inline scalar push -- capacity check +
+                    // direct slot store on the fast path, runtime call on
+                    // the grow path. The helper leaves the insertion point
+                    // at the END label; the value-finish step below is
+                    // shared by both paths, exactly as the call path did
+                    // it. GrowVec keeps the macro (different growth
+                    // semantics -- not inlined).
+                    let ok_reg = self.new_tmp();
+                    let fast_label = self.new_label("L_VEC_PUSH_FAST");
+                    let slow_label = self.new_label("L_VEC_PUSH_SLOW");
+                    let end_label = self.new_label("L_VEC_PUSH_END");
+                    self.emit_inline_push_scalar(
+                        &recv, &elem, "Vec_len", "Vec_cap", "Vec_ptr", &value, &macro_name,
+                        &ok_reg, &fast_label, &slow_label, &end_label,
+                    )?;
+                    self.surface_finish_value(&planned, true)?;
+                    return Ok(Some(SurfaceCall::Void));
+                }
                 self.ins(&format!(
                     "EXPAND {macro_name} {recv}, {value}, {}",
                     slot_size(&elem)
@@ -1307,7 +1435,7 @@ impl<'c> Codegen<'c> {
                 let some_label = self.new_label("L_VEC_POP_SOME");
                 let none_label = self.new_label("L_VEC_POP_NONE");
                 let end_label = self.new_label("L_VEC_POP_END");
-        if scalar_pop_inline_eligible(&elem) {
+        if scalar_vec_inline_eligible(&elem) {
             // Task 101: inline scalar pop -- no call, no
             // out-slot. The helper leaves the insertion point at
             // the SOME label with value_reg holding the popped
