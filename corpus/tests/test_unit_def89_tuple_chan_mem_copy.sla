@@ -1,0 +1,97 @@
+// DEF task 89: a channel send of an aggregate (non-word) payload
+// stages the payload with `call @sa_mem_copy` (chan.rs
+// gen_chan_send; select.rs send staging), whose definition lives
+// in sa_std/core/mem.sa. The minimal-import scan had no site
+// for that emission, so a program that imported nothing else
+// providing mem.sa failed at the host with
+// `error[UnknownRegister]: callee is not declared`, trap 1007.
+// This file therefore imports ONLY sa_std/task.sai — importing
+// ptr.sa / vec.sa would transitively provide mem.sa and mask
+// the defect (that is why test_unit_go_chan_methods.sla, which
+// imports ptr.sa, never caught it).
+//
+// Shapes locked: (i64,i64) tuple (the named defect), (u64,bool)
+// tuple, struct payload, enum payload, a select send-case with
+// a tuple payload (its staging address temp also leaked,
+// MemoryLeak 1012, before the select.rs retirement fix), and a
+// word-payload control that passes on both sides.
+
+@import "sa_std/task.sai"
+
+struct PairMsg {
+    a: u64,
+    b: u64,
+}
+
+enum Sig {
+    Ping,
+    Pong,
+}
+
+@test "chan tuple i64 pair payload round-trips"() {
+    let ch: Chan<(i64, i64)> = Chan::new(1);
+    ch.send((11, 22));
+    let (t, closed) = ch.recv();
+    if closed { panic(89101); };
+    if t.0 != 11 { panic(89102); };
+    if t.1 != 22 { panic(89103); };
+    ch.destroy();
+}
+
+@test "chan tuple u64 bool payload round-trips"() {
+    let ch: Chan<(u64, bool)> = Chan::new(1);
+    ch.send((7, true));
+    let (t, closed) = ch.recv();
+    if closed { panic(89111); };
+    if t.0 != 7 { panic(89112); };
+    if !t.1 { panic(89113); };
+    ch.destroy();
+}
+
+@test "chan struct payload round-trips"() {
+    let ch: Chan<PairMsg> = Chan::new(1);
+    ch.send(PairMsg { a: 30, b: 12 });
+    let (m, closed) = ch.recv();
+    if closed { panic(89121); };
+    if m.a != 30 { panic(89122); };
+    if m.b != 12 { panic(89123); };
+    ch.destroy();
+}
+
+@test "chan enum payload round-trips"() {
+    let ch: Chan<Sig> = Chan::new(1);
+    ch.send(Sig::Ping);
+    let (s, closed) = ch.recv();
+    if closed { panic(89131); };
+    let v: i32 = match s {
+        Sig::Ping => { 1 },
+        Sig::Pong => { 2 },
+    };
+    if v != 1 { panic(89132); };
+    ch.destroy();
+}
+
+@test "chan select send-case tuple payload round-trips"() {
+    let ch: Chan<(i64, i64)> = Chan::new(1);
+    select {
+        case ch.send((11, 22)) {
+        }
+        timeout(5000000000) {
+            panic(89141);
+        }
+    }
+    let (t, closed) = ch.recv();
+    if closed { panic(89142); };
+    if t.0 != 11 { panic(89143); };
+    if t.1 != 22 { panic(89144); };
+    ch.destroy();
+}
+
+@test "chan word payload still works"() {
+    let ch: Chan<i64> = Chan::new(1);
+    ch.send(42);
+    let (v, closed) = ch.recv();
+    if closed { panic(89151); };
+    if v != 42 { panic(89152); };
+    ch.destroy();
+}

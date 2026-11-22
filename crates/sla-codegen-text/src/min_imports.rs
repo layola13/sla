@@ -111,6 +111,10 @@ pub struct MinImports {
     /// doubling bulk copy); that callee is defined in
     /// `core/mem.sa`. Without the import the host rejects the
     /// call as an undeclared callee (test_unit_def_r8pin_slot_transfer).
+    /// Also a channel send of an aggregate (non-word) payload
+    /// emits `call @sa_mem_copy` (chan.rs gen_chan_send, and the
+    /// select.rs send staging); the same import declares it
+    /// (task 89: Chan<(i64,i64)> trapped 1007 undeclared).
     pub mem: bool,
 }
 
@@ -243,6 +247,12 @@ fn substitute_ty(ty: &Type, params: &[String], args: &[Type]) -> Type {
 struct Scanner<'a> {
     check: &'a dyn CheckInfo,
     flags: MinImports,
+    /// Top-level enum declaration names in the (import-expanded)
+    /// program tree, collected like `Codegen::enum_index` in
+    /// generate_program. Needed by the chan-send rule, whose
+    /// word/aggregate predicate must know whether a payload type
+    /// is an enum (CheckInfo carries no enum lookup).
+    enum_names: HashSet<String>,
     /// Function declarations by name, collected from the program
     /// tree (plain names plus `Target_method` mangled keys for
     /// impl/overload methods): the fallback for the
@@ -257,9 +267,22 @@ impl<'a> Scanner<'a> {
             check,
             flags: MinImports::default(),
             fn_index: HashMap::new(),
+            enum_names: HashSet::new(),
         };
         scanner.collect_fn_index(program);
+        scanner.collect_enum_names(program);
         scanner
+    }
+
+    fn collect_enum_names(&mut self, program: &Node) {
+        let Node::Program(prog) = program else {
+            return;
+        };
+        for decl in &prog.decls {
+            if let Node::EnumDecl(e) = decl {
+                self.enum_names.insert(e.name.clone());
+            }
+        }
     }
 
     fn collect_fn_index(&mut self, program: &Node) {

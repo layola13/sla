@@ -248,6 +248,30 @@ impl<'a> Scanner<'a> {
             self.flags.panic = true;
         }
 
+        // Channel send of an aggregate payload (task 89):
+        // chan.rs gen_chan_send stages non-word payloads with
+        // `call @sa_mem_copy(&slot, &val, size)`, and select.rs
+        // stages send-case payloads the same way; @sa_mem_copy
+        // is defined in sa_std/core/mem.sa. The receiver type
+        // fact is the same one the emitter's `chan_method`
+        // requires (a missing fact means no chan emission, so
+        // no flag — emitter and scan agree by construction).
+        // Select send cases reach here too: the walk visits a
+        // select arm's call through arm.recv.
+        if call.func_name == "send"
+            && call.callee.is_none()
+            && call.associated_target.is_none()
+            && call.args.len() == 2
+        {
+            if let Some(Type::UserDefined(u)) = self.check.expr_type(&call.args[0]) {
+                if u.name == "Chan" && u.generics.len() == 1 {
+                    if self.chan_send_needs_mem_copy(&u.generics[0]) {
+                        self.flags.mem = true;
+                    }
+                }
+            }
+        }
+
         match call.func_name.as_str() {
             "format" => {
                 self.flags.string_format = true;

@@ -181,6 +181,11 @@ impl<'c> Codegen<'c> {
                 let addr = self.new_tmp();
                 self.ins(&format!("{addr} = ptr_add {slots}, {off}"));
                 self.ins(&format!("call @sa_mem_copy(&{addr}, &{val}, {size})"));
+                // Task 89: the staging address is a fresh temp —
+                // retire it (the word branch retires its value
+                // the same way); without this the select-send
+                // arm leaks the temp (host MemoryLeak 1012).
+                self.emit_release(&addr)?;
                 self.emit_forget_moved_value(&val)?;
             }
         }

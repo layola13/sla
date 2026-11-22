@@ -93,6 +93,31 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    /// Mirror of chan.rs `chan_payload_is_word` plus the
+    /// pointer branch of `gen_chan_send`: true when a channel
+    /// send of this payload type stages via
+    /// `call @sa_mem_copy` (chan.rs:200, select.rs send
+    /// staging), i.e. the payload is NOT a word payload.
+    /// Primitives and raw pointers move the word into the slot;
+    /// a user-defined type is a word only when it has neither
+    /// a struct nor an enum declaration (a decl-less handle);
+    /// tuples, arrays and everything else are address-resident.
+    /// Exact-name lookups mirror the emitter (CheckInfo::
+    /// struct_decl is exact-match on tc.structs;
+    /// Codegen::enum_decl is exact-match on the program index).
+    /// Where the checker facts are thin the caller keeps the
+    /// import instead of guessing — a kept import only costs time.
+    pub(super) fn chan_send_needs_mem_copy(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Primitive(_) | Type::Pointer(_) | Type::FnPtr(_) => false,
+            Type::UserDefined(u) => {
+                self.check.struct_decl(&u.name).is_some()
+                    || self.enum_names.contains(&u.name)
+            }
+            _ => true,
+        }
+    }
+
     /// The declared type of a struct field, with generics
     /// substituted from the use-site type (`Pair<String>.a`).
     pub(super) fn struct_field_ty(&self, ty: &Type, field_name: &str) -> Option<Type> {
