@@ -26,6 +26,15 @@ impl<'c> Codegen<'c> {
         if let Some(pattern) = &while_stmt.let_pattern {
             return self.gen_while_let_stmt(while_stmt, pattern);
         }
+        // Task 114: Vec-header local lift. The analysis runs before
+        // any emission for this loop; the setup loads run once,
+        // before the head jump; the lift stays on the stack while
+        // the body is emitted so the inline push/pop arms find it.
+        let lifts = self.plan_vec_lift(while_stmt);
+        if !lifts.is_empty() {
+            self.emit_vec_lift_setup(&lifts);
+            self.vec_header_lifts.extend(lifts.iter().cloned());
+        }
         let head_label = self.new_label("L_WHILE_HEAD");
         let body_label = self.new_label("L_WHILE_BODY");
         let cond_false_label = self.new_label("L_WHILE_COND_FALSE");
@@ -56,6 +65,15 @@ impl<'c> Codegen<'c> {
         let mut flow = self.gen_block(&while_stmt.body);
         self.loop_continue_labels.pop();
         self.loop_break_labels.pop();
+        // Task 114: retire the lift as soon as the body is emitted
+        // (mirroring the loop-label pops above, so an error path
+        // cannot leak it into a later loop). The write-back below
+        // uses the local `lifts`, not the stack.
+        if !lifts.is_empty() {
+            let n = lifts.len();
+            self.vec_header_lifts
+                .truncate(self.vec_header_lifts.len() - n);
+        }
 
         if flow.is_ok() && !block_terminates(&while_stmt.body) {
             flow = self.emit_active_loop_body_local_cleanups(None, false);
@@ -72,6 +90,13 @@ impl<'c> Codegen<'c> {
         self.w(&format!("    !{cond_reg}\n"));
         self.w(&format!("    jmp {exit_label}\n\n"));
         self.wl(&format!("{exit_label}:"));
+        // Task 114: write the lifted header fields back. This runs
+        // at the exit label, so `break` (which jumps straight here)
+        // hits it too; a `return` in the body voids the lift in the
+        // analysis, so no return can bypass it.
+        if !lifts.is_empty() {
+            self.emit_vec_lift_writeback(&lifts);
+        }
         Ok(())
     }
 

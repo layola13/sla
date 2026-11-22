@@ -67,6 +67,7 @@ mod release;
 mod stmt;
 mod stmt_while;
 mod user_macro;
+mod vec_lift;
 mod vtable;
 
 pub use codegen::Codegen;

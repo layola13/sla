@@ -1,0 +1,256 @@
+// DEF task 114: Vec-header local lift ("loop-entry scalar
+// promotion"). At a qualifying plain `while` loop's entry the
+// generated code loads the Vec's ptr/len/cap into fresh scalar
+// locals, the inline push/pop arms operate only on those locals
+// inside the loop, and len is written back at the loop exit
+// (vec_lift.rs; surface.rs emit_inline_push_scalar /
+// emit_inline_pop_scalar). The lift locals' addresses never
+// escape, so LLVM mem2reg promotes them to registers; the
+// per-iteration header traffic drops from 5 memory ops to ~2.
+//
+// This file is the behavioral guard for that lowering. It passes
+// on the base sla (101+106, unlifted inline push/pop) and on the
+// fixed sla (lifted). The emission difference (no
+// `load v+Vec_len/cap/ptr` and no `store v+Vec_len` inside the
+// fixed .sa hot loop; a setup load triple before the loop head and
+// a single write-back store after the exit label) is checked by
+// the task's scripts.
+//
+// Shapes locked:
+// - lift on push-only, pop-only, and mixed push+pop loops;
+// - growth path (1000 pushes from empty forces several grows --
+//   the push slow path must sync len back and reload ptr/len/cap);
+// - push-after-pop (fast path with len < cap, non-zero len);
+// - narrow types in a loop (i8 sign extension, u8 value);
+// - two Vecs lifted in one loop; nested loops (the inner loop
+//   lifts, the outer loop does not);
+// - `break` (write-back must run on the exit jump) and `continue`
+//   (locals stay live across the head jump);
+// - a loop that never executes (setup + write-back are a no-op).
+// Disqualification shapes (no lift; the unlifted path must still
+// be correct): an index read in the body, `v.len()` in the loop
+// condition, a `return` in the body.
+//
+// NOTE (pre-existing, out of scope): no f32/f64 comparison
+// tests -- float `==`/`!=`/`>` comparisons are broken in this
+// SLA version independent of push/pop (task 101 RESULT §6).
+
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+@test "lift push loop 100 values"() {
+    let v: Vec<i64> = Vec::new();
+    let i: i64 = 0;
+    while i < 100 { v.push(i); i = i + 1; }
+    let acc: i64 = 0;
+    let j: i64 = 0;
+    while j < 100 { let p = v.pop().unwrap(); acc = acc + (p & 1); j = j + 1; }
+    if acc != 50 { panic(11401); };
+    if !v.pop().is_none() { panic(11402); };
+}
+
+@test "lift growth 1000 pushes"() {
+    let v: Vec<i64> = Vec::new();
+    let i: i64 = 0;
+    while i < 1000 { v.push(i); i = i + 1; }
+    if v.pop().unwrap() != 999 { panic(11411); };
+    if v.pop().unwrap() != 998 { panic(11412); };
+    let j: i64 = 0;
+    let acc: i64 = 0;
+    while j < 998 { let p = v.pop().unwrap(); acc = acc + (p & 1); j = j + 1; }
+    if acc != 499 { panic(11413); };
+    if !v.pop().is_none() { panic(11414); };
+}
+
+@test "lift pop then push same loop"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(1);
+    v.push(2);
+    v.push(3);
+    let i: i64 = 0;
+    while i < 3 {
+        let p = v.pop().unwrap();
+        v.push(p + 10);
+        i = i + 1;
+    }
+    // [1,2,3] -> pop 3 push 13 -> pop 13 push 23 -> pop 23 push 33
+    // final contents [1, 2, 33].
+    if v.pop().unwrap() != 33 { panic(11421); };
+    if v.pop().unwrap() != 2 { panic(11422); };
+    if v.pop().unwrap() != 1 { panic(11423); };
+    if !v.pop().is_none() { panic(11424); };
+}
+
+@test "lift break write-back"() {
+    let v: Vec<i64> = Vec::new();
+    let i: i64 = 0;
+    while i < 10 {
+        v.push(i);
+        i = i + 1;
+        if i == 5 { break; };
+    }
+    // break must hit the exit write-back: len in memory is 5.
+    if v.pop().unwrap() != 4 { panic(11431); };
+    if v.pop().unwrap() != 3 { panic(11432); };
+    if v.pop().unwrap() != 2 { panic(11433); };
+    if v.pop().unwrap() != 1 { panic(11434); };
+    if v.pop().unwrap() != 0 { panic(11435); };
+    if !v.pop().is_none() { panic(11436); };
+}
+
+@test "lift continue keeps locals live"() {
+    let v: Vec<i64> = Vec::new();
+    let i: i64 = 0;
+    while i < 10 {
+        let x = i;
+        i = i + 1;
+        if x == 3 { continue; };
+        if x == 7 { continue; };
+        v.push(x);
+    }
+    // pushed 0,1,2,4,5,6,8,9.
+    if v.pop().unwrap() != 9 { panic(11441); };
+    if v.pop().unwrap() != 8 { panic(11442); };
+    if v.pop().unwrap() != 6 { panic(11443); };
+    if v.pop().unwrap() != 5 { panic(11444); };
+    if v.pop().unwrap() != 4 { panic(11445); };
+    if v.pop().unwrap() != 2 { panic(11446); };
+    if v.pop().unwrap() != 1 { panic(11447); };
+    if v.pop().unwrap() != 0 { panic(11448); };
+    if !v.pop().is_none() { panic(11449); };
+}
+
+@test "lift empty loop is a no-op"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(42);
+    let i: i64 = 0;
+    while i < 0 { v.push(i); i = i + 1; }
+    if v.pop().unwrap() != 42 { panic(11451); };
+    if !v.pop().is_none() { panic(11452); };
+}
+
+@test "lift push-after-pop loop"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(1);
+    v.push(2);
+    v.push(3);
+    if v.pop().unwrap() != 3 { panic(11461); };
+    let i: i64 = 0;
+    while i < 2 { v.push(4 + i); i = i + 1; }
+    if v.pop().unwrap() != 5 { panic(11462); };
+    if v.pop().unwrap() != 4 { panic(11463); };
+    if v.pop().unwrap() != 2 { panic(11464); };
+    if v.pop().unwrap() != 1 { panic(11465); };
+    if !v.pop().is_none() { panic(11466); };
+}
+
+@test "lift narrow i8 loop sign extension"() {
+    let v: Vec<i8> = Vec::new();
+    let i: i64 = 0;
+    while i < 3 {
+        if i == 0 { v.push(-2); };
+        if i == 1 { v.push(5); };
+        if i == 2 { v.push(-100); };
+        i = i + 1;
+    }
+    if v.pop().unwrap() != -100 { panic(11471); };
+    if v.pop().unwrap() != 5 { panic(11472); };
+    if v.pop().unwrap() != -2 { panic(11473); };
+    if !v.pop().is_none() { panic(11474); };
+}
+
+@test "lift narrow u8 loop value"() {
+    let v: Vec<u8> = Vec::new();
+    let i: i64 = 0;
+    while i < 2 {
+        if i == 0 { v.push(255); };
+        if i == 1 { v.push(0); };
+        i = i + 1;
+    }
+    if v.pop().unwrap() != 0 { panic(11481); };
+    if v.pop().unwrap() != 255 { panic(11482); };
+    if !v.pop().is_none() { panic(11483); };
+}
+
+@test "lift two vecs one loop"() {
+    let v: Vec<i64> = Vec::new();
+    let w: Vec<i64> = Vec::new();
+    let i: i64 = 0;
+    while i < 5 { v.push(i); w.push(i * 10); i = i + 1; }
+    if v.pop().unwrap() != 4 { panic(11491); };
+    if w.pop().unwrap() != 40 { panic(11492); };
+    if v.pop().unwrap() != 3 { panic(11493); };
+    if w.pop().unwrap() != 30 { panic(11494); };
+    let j: i64 = 0;
+    while j < 3 {
+        let a = v.pop().unwrap();
+        let b = w.pop().unwrap();
+        if a * 10 != b { panic(11495); };
+        j = j + 1;
+    }
+    if !v.pop().is_none() { panic(11496); };
+    if !w.pop().is_none() { panic(11497); };
+}
+
+@test "lift nested loops"() {
+    let v: Vec<i64> = Vec::new();
+    let round: i64 = 0;
+    while round < 3 {
+        let i: i64 = 0;
+        while i < 5 { v.push(round * 10 + i); i = i + 1; }
+        round = round + 1;
+    }
+    // v = [0..4, 10..14, 20..24]; sum 10 + 60 + 110 = 180.
+    let acc: i64 = 0;
+    let k: i64 = 0;
+    while k < 15 { let p = v.pop().unwrap(); acc = acc + p; k = k + 1; }
+    if acc != 180 { panic(11501); };
+    if !v.pop().is_none() { panic(11502); };
+}
+
+@test "no lift index read in body"() {
+    let v: Vec<i64> = Vec::new();
+    let i: i64 = 0;
+    while i < 5 {
+        v.push(i * 2);
+        if v[0] != 0 { panic(11511); };
+        i = i + 1;
+    }
+    if v.pop().unwrap() != 8 { panic(11512); };
+    if v.pop().unwrap() != 6 { panic(11513); };
+    if v.pop().unwrap() != 4 { panic(11514); };
+    if v.pop().unwrap() != 2 { panic(11515); };
+    if v.pop().unwrap() != 0 { panic(11516); };
+    if !v.pop().is_none() { panic(11517); };
+}
+
+@test "no lift len in condition"() {
+    let v: Vec<i64> = Vec::new();
+    while v.len() < 5 { v.push(7); }
+    let n: i64 = 0;
+    while n < 5 {
+        if v.pop().unwrap() != 7 { panic(11521); };
+        n = n + 1;
+    }
+    if !v.pop().is_none() { panic(11522); };
+}
+
+@test "no lift return in body smoke"() {
+    // A `return` in the body voids the lift (it would bypass the
+    // exit write-back). This is a smoke test that the unlifted path
+    // still runs correctly; for i64 elements a stale len on the
+    // scope-exit drop is unobservable, so the return case cannot
+    // discriminate the write-back itself -- it only guards that the
+    // loop still executes and the values are right.
+    let v: Vec<i64> = Vec::new();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    let i: i64 = 0;
+    while i < 5 {
+        if v.pop().unwrap() == 20 { return; };
+        i = i + 1;
+    }
+    panic(11531);
+}

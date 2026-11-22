@@ -281,6 +281,15 @@ pub struct Codegen<'c> {
     pub(crate) loop_continue_labels: Vec<String>,
     pub(crate) loop_body_local_scopes: Vec<Vec<String>>,
     pub(crate) loop_body_block_depths: Vec<usize>,
+    /// Task 114: active Vec-header lifts (vec_lift.rs), innermost
+    /// last. Pushed by `gen_while_stmt` for the duration of the loop
+    /// body's emission; the inline push/pop arms consult it. Cleared
+    /// per function in `reset_function_state` as a safety net.
+    pub(crate) vec_header_lifts: Vec<crate::vec_lift::VecHeaderLift>,
+    /// Task 114: counter for fresh lift-local names
+    /// (`__vec_lift{n}_ptr/len/cap`). Global across the file like
+    /// `tmp_idx` — never reset, so names never collide.
+    pub(crate) vec_lift_idx: usize,
 
     // Statement tracking (liveness.rs): the innermost block being
     // generated, as a raw pointer + len (the AST outlives codegen;
@@ -399,6 +408,8 @@ impl<'c> Codegen<'c> {
             loop_continue_labels: Vec::new(),
             loop_body_local_scopes: Vec::new(),
             loop_body_block_depths: Vec::new(),
+            vec_header_lifts: Vec::new(),
+            vec_lift_idx: 0,
             current_block: None,
             current_stmt_index: 0,
             move_out_stmt: None,
@@ -526,6 +537,9 @@ impl<'c> Codegen<'c> {
         self.active_inline_macro = None;
         self.active_macro_try_cleanup = None;
         self.for_slot_override = None;
+        // Task 114: a lift left on the stack by an error path in
+        // `gen_while_stmt` must not leak into the next function.
+        self.vec_header_lifts.clear();
         self.clear_binding_aliases();
         self.let_binding_aliases.clear();
         self.hoisted_allocs.clear();

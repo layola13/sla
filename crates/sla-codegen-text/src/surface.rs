@@ -72,8 +72,9 @@ fn slot_size(elem: &Type) -> usize {
 /// for narrow signed types, exactly like the runtime pop's load).
 /// Pointer-like primitives (RawPtr/VoidType/VaList) and all
 /// non-primitives keep the runtime calls (`sa_vec_try_pop_sized`
-/// / `sa_vec_push`).
-fn scalar_vec_inline_eligible(elem: &Type) -> bool {
+/// / `sa_vec_push`). `pub(crate)` so the task-114 lift analysis
+/// (vec_lift.rs) applies the same claim condition.
+pub(crate) fn scalar_vec_inline_eligible(elem: &Type) -> bool {
     matches!(
         elem,
         Type::Primitive(
@@ -130,7 +131,9 @@ impl<'c> Codegen<'c> {
     /// non-committal until a rule actually matches — ordinary
     /// user calls flow through the same dispatch and may carry
     /// no receiver facts at all (the fixture CheckInfo stubs).
-    fn classify_receiver(&self, call: &CallExpr) -> Option<(String, Vec<Type>)> {
+    /// `pub(crate)` so the task-114 lift analysis (vec_lift.rs)
+    /// applies the same claim condition as the surface arms.
+    pub(crate) fn classify_receiver(&self, call: &CallExpr) -> Option<(String, Vec<Type>)> {
         let recv_ty = self.expr_type(&call.args[0]).or_else(|| {
             // Worker bodies are generated from the spawn helper's
             // CLONED closure AST (thread_spawn.rs stores
@@ -164,8 +167,10 @@ impl<'c> Codegen<'c> {
     /// registered funcs): the first-match func_decl lookup can
     /// return a same-named std wrapper whose signature does not
     /// match this call, and stopping there would miss the
-    /// program's own shadowing declaration.
-    fn user_fn_shadows_surface(
+    /// program's own shadowing declaration. `pub(crate)` so the
+    /// task-114 lift analysis (vec_lift.rs) applies the same claim
+    /// condition as the surface arms.
+    pub(crate) fn user_fn_shadows_surface(
         &self,
         call: &CallExpr,
         tname: &str,
@@ -276,6 +281,17 @@ impl<'c> Codegen<'c> {
     /// only runs when len > 0), and a narrow signed element
     /// comes back sign-extended via the typed load (same rule as
     /// the index-read and unfused pop arms).
+    ///
+    /// Task 114: when the receiver is lifted by an enclosing loop
+    /// (`vec_lift.rs`), `len_reg`/`data_reg` are the lift locals
+    /// instead of fresh temps: no header loads are emitted, the
+    /// len store becomes a retire-then-copy into the len local
+    /// (`!len; len = add newlen, 0` — the `add x, 0` copy idiom,
+    /// so `newlen` stays live for the offset below; a plain
+    /// `{len} = {newlen}` would be an SA-level move and the offset
+    /// would trap UseAfterMove), and the locals are never released
+    /// (they stay live across iterations; the loop exit retires
+    /// them). The unlifted shape is byte-identical to before.
     fn emit_inline_pop_scalar(
         &mut self,
         recv: &str,
@@ -287,11 +303,17 @@ impl<'c> Codegen<'c> {
         some_label: &str,
         none_label: &str,
     ) -> Result<()> {
-        let len_reg = self.new_tmp();
+        // Task 114: lift lookup (cloned up front so the borrow ends
+        // before the mutable emission below).
+        let lift = self.lifted_vec_header(recv).cloned();
+        let lifted = lift.is_some();
+        let (len_reg, data_reg) = match &lift {
+            Some(l) => (l.len_local.clone(), l.ptr_local.clone()),
+            None => (self.new_tmp(), self.new_tmp()),
+        };
         let zero_reg = self.new_tmp();
         let one_reg = self.new_tmp();
         let newlen_reg = self.new_tmp();
-        let data_reg = self.new_tmp();
         let offset_reg = self.new_tmp();
         let ptr_reg = self.new_tmp();
         let load_ty = if matches!(elem, Type::Primitive(_)) {
@@ -299,7 +321,9 @@ impl<'c> Codegen<'c> {
         } else {
             "ptr"
         };
-        self.ins(&format!("{len_reg} = load {recv}+{len_def} as u64"));
+        if !lifted {
+            self.ins(&format!("{len_reg} = load {recv}+{len_def} as u64"));
+        }
         self.emit_int_const(&zero_reg, 0);
         self.ins(&format!("{ok_reg} = ult {zero_reg}, {len_reg}"));
         self.w(&format!("    !{zero_reg}\n"));
@@ -310,10 +334,20 @@ impl<'c> Codegen<'c> {
         self.w(&format!("    !{ok_reg}\n"));
         self.emit_int_const(&one_reg, 1);
         self.ins(&format!("{newlen_reg} = sub {len_reg}, {one_reg}"));
-        self.ins(&format!(
-            "store {recv}+{len_def}, {newlen_reg} as u64"
-        ));
-        self.ins(&format!("{data_reg} = load {recv}+{ptr_def} as ptr"));
+        if lifted {
+            // Retire the old len value, then copy the new len into
+            // the lift local (a copy, not a move: `newlen` is still
+            // needed for the offset below).
+            self.w(&format!("    !{len_reg}\n"));
+            self.ins(&format!("{len_reg} = add {newlen_reg}, 0"));
+        } else {
+            self.ins(&format!(
+                "store {recv}+{len_def}, {newlen_reg} as u64"
+            ));
+        }
+        if !lifted {
+            self.ins(&format!("{data_reg} = load {recv}+{ptr_def} as ptr"));
+        }
         self.ins(&format!(
             "{offset_reg} = mul {newlen_reg}, {}",
             vec_element_slot_size(elem)
@@ -324,10 +358,14 @@ impl<'c> Codegen<'c> {
         ));
         self.emit_release(&ptr_reg)?;
         self.emit_release(&offset_reg)?;
-        self.emit_release(&data_reg)?;
+        if !lifted {
+            self.emit_release(&data_reg)?;
+        }
         self.emit_release(&newlen_reg)?;
         self.emit_release(&one_reg)?;
-        self.emit_release(&len_reg)?;
+        if !lifted {
+            self.emit_release(&len_reg)?;
+        }
         Ok(())
     }
 
@@ -373,6 +411,18 @@ impl<'c> Codegen<'c> {
     /// arm); the value register itself is only read, never
     /// consumed, by the inline sequence -- the caller's
     /// surface_finish_value runs unchanged after END.
+    ///
+    /// Task 114: when the receiver is lifted by an enclosing loop
+    /// (`vec_lift.rs`), `len_reg`/`cap_reg`/`data_reg` are the lift
+    /// locals instead of fresh temps: no header loads are emitted,
+    /// the len store becomes a retire-then-copy into the len local
+    /// (`!len; len = add newlen, 0` — the `add x, 0` copy idiom, so
+    /// the shape stays identical to the unlifted path), and the
+    /// locals are never released. The slow path syncs the lifted len
+    /// back before the runtime call (the call reads the header) and
+    /// reloads all three fields into the lift locals after it
+    /// (growth may have reallocated). The unlifted shape is
+    /// byte-identical to before.
     fn emit_inline_push_scalar(
         &mut self,
         recv: &str,
@@ -387,9 +437,18 @@ impl<'c> Codegen<'c> {
         slow_label: &str,
         end_label: &str,
     ) -> Result<()> {
-        let len_reg = self.new_tmp();
-        let cap_reg = self.new_tmp();
-        let data_reg = self.new_tmp();
+        // Task 114: lift lookup (cloned up front so the borrow ends
+        // before the mutable emission below).
+        let lift = self.lifted_vec_header(recv).cloned();
+        let lifted = lift.is_some();
+        let (len_reg, cap_reg, data_reg) = match &lift {
+            Some(l) => (
+                l.len_local.clone(),
+                l.cap_local.clone(),
+                l.ptr_local.clone(),
+            ),
+            None => (self.new_tmp(), self.new_tmp(), self.new_tmp()),
+        };
         let offset_reg = self.new_tmp();
         let ptr_reg = self.new_tmp();
         let one_reg = self.new_tmp();
@@ -399,16 +458,22 @@ impl<'c> Codegen<'c> {
         } else {
             "ptr"
         };
-        self.ins(&format!("{len_reg} = load {recv}+{len_def} as u64"));
-        self.ins(&format!("{cap_reg} = load {recv}+{cap_def} as u64"));
+        if !lifted {
+            self.ins(&format!("{len_reg} = load {recv}+{len_def} as u64"));
+            self.ins(&format!("{cap_reg} = load {recv}+{cap_def} as u64"));
+        }
         self.ins(&format!("{ok_reg} = ult {len_reg}, {cap_reg}"));
-        self.w(&format!("    !{cap_reg}\n"));
+        if !lifted {
+            self.w(&format!("    !{cap_reg}\n"));
+        }
         self.w(&format!(
             "    br {ok_reg} -> {fast_label}, {slow_label}\n\n"
         ));
         self.wl(&format!("{fast_label}:"));
         self.w(&format!("    !{ok_reg}\n"));
-        self.ins(&format!("{data_reg} = load {recv}+{ptr_def} as ptr"));
+        if !lifted {
+            self.ins(&format!("{data_reg} = load {recv}+{ptr_def} as ptr"));
+        }
         self.ins(&format!(
             "{offset_reg} = mul {len_reg}, {}",
             vec_element_slot_size(elem)
@@ -419,22 +484,58 @@ impl<'c> Codegen<'c> {
         ));
         self.emit_int_const(&one_reg, 1);
         self.ins(&format!("{newlen_reg} = add {len_reg}, {one_reg}"));
-        self.ins(&format!(
-            "store {recv}+{len_def}, {newlen_reg} as u64"
-        ));
+        if lifted {
+            // Retire the old len value, then copy the new len into
+            // the lift local (a copy, not a move, so the release
+            // list below stays the same shape as the unlifted path).
+            self.w(&format!("    !{len_reg}\n"));
+            self.ins(&format!("{len_reg} = add {newlen_reg}, 0"));
+        } else {
+            self.ins(&format!(
+                "store {recv}+{len_def}, {newlen_reg} as u64"
+            ));
+        }
         self.emit_release(&ptr_reg)?;
         self.emit_release(&offset_reg)?;
-        self.emit_release(&data_reg)?;
+        if !lifted {
+            self.emit_release(&data_reg)?;
+        }
         self.emit_release(&newlen_reg)?;
         self.emit_release(&one_reg)?;
-        self.emit_release(&len_reg)?;
+        if !lifted {
+            self.emit_release(&len_reg)?;
+        }
         self.w(&format!("    jmp {end_label}\n\n"));
         self.wl(&format!("{slow_label}:"));
         self.w(&format!("    !{ok_reg}\n"));
+        if lifted {
+            // Sync the lifted len back: the runtime push reads the
+            // header, and only len can be stale (the fast path never
+            // changes ptr/cap).
+            self.ins(&format!("store {recv}+{len_def}, {len_reg} as u64"));
+        }
         self.ins(&format!(
             "EXPAND {macro_name} {recv}, {value_reg}, {}",
             slot_size(elem)
         ));
+        if let Some(l) = &lift {
+            // Growth may have reallocated: reload all three header
+            // fields into the lift locals before the next iteration
+            // reads them. Each reload retires the local's old value
+            // first, then moves the fresh load in.
+            let tmp = self.new_tmp();
+            self.ins(&format!("{tmp} = load {recv}+{ptr_def} as ptr"));
+            self.w(&format!("    !{}\n", l.ptr_local));
+            self.ins(&format!("{} = {tmp}", l.ptr_local));
+            let tmp = self.new_tmp();
+            self.ins(&format!("{tmp} = load {recv}+{len_def} as u64"));
+            self.w(&format!("    !{}\n", l.len_local));
+            self.ins(&format!("{} = {tmp}", l.len_local));
+            let tmp = self.new_tmp();
+            self.ins(&format!("{tmp} = load {recv}+{cap_def} as u64"));
+            self.w(&format!("    !{}\n", l.cap_local));
+            self.ins(&format!("{} = {tmp}", l.cap_local));
+        }
         self.w(&format!("    jmp {end_label}\n\n"));
         self.wl(&format!("{end_label}:"));
         Ok(())
