@@ -679,7 +679,23 @@ impl<'c> Codegen<'c> {
             // marker left the register Active at function exit —
             // a host MemoryLeak (test_unit_ptr_out_param).
             // emit_forget_moved_value also marks it consumed.
-            let _ = self.emit_forget_moved_value(name);
+            //
+            // DEF-RUST-INDEXASSIGN-MOVED-BIND-RELEASE (task 73):
+            // the marker must name the REGISTER holding the
+            // moved value, not the binding name. A `let` binding
+            // is aliased to a fresh temp (resolve_binding_name),
+            // and `finish_stored_value_after_slot_store` already
+            // retired that temp (`^tmp_N`) just above; emitting
+            // `^<name>` here settles a register that was never
+            // declared (UnknownRegister 1007 — `ring[slot] = b`
+            // in memsteady). Resolve to the register and skip
+            // when it is already consumed; when the binding IS
+            // its own register (no alias), the marker is still
+            // emitted exactly as before.
+            let reg = self.resolve_binding_name(name);
+            if !self.consumed_bindings.contains(&reg) {
+                let _ = self.emit_forget_moved_value(&reg);
+            }
         }
     }
 
