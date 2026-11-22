@@ -65,6 +65,37 @@ fn slot_size(elem: &Type) -> usize {
     vec_element_slot_size(elem)
 }
 
+/// Task 101: scalar element types whose Vec pop can be inlined as
+/// a len check + len decrement + direct slot load. Numeric/bool
+/// primitives only: the value is a plain register word with no
+/// drop glue, so moving it out of the slot is a single typed load
+/// (sign-extended for narrow signed types, exactly like the
+/// runtime pop's load). Pointer-like primitives (RawPtr/VoidType/
+/// VaList) and all non-primitives keep the runtime
+/// `sa_vec_try_pop_sized` call.
+fn scalar_pop_inline_eligible(elem: &Type) -> bool {
+    matches!(
+        elem,
+        Type::Primitive(
+            Primitive::Boolean
+                | Primitive::I8
+                | Primitive::I16
+                | Primitive::I32
+                | Primitive::I64
+                | Primitive::Isize
+                | Primitive::U8
+                | Primitive::U16
+                | Primitive::U32
+                | Primitive::U64
+                | Primitive::Usize
+                | Primitive::F32
+                | Primitive::F64
+                | Primitive::Integer
+                | Primitive::Float
+        )
+    )
+}
+
 /// codegen.zig:6686 `atomicOrderingToken` over
 /// lowering_rules.zig:5012: the ordering operand of an atomic
 /// call is written in SLA as the identifier `Ordering::SeqCst`
@@ -214,6 +245,92 @@ impl<'c> Codegen<'c> {
     /// the receiver is a direct Vec pop the surface pop arm would
     /// claim — same claim conditions (Vec receiver, no user-fn
     /// shadow), so a user `fn pop` or a non-Vec pop never fuses.
+
+    /// Task 101: inline scalar Vec pop. Emits the len check +
+    /// len decrement + direct slot load for a scalar element
+    /// type, with no runtime call and no stack out-slot. The
+    /// emitted shape mirrors the Vec index-read arm for the load
+    /// sequence (expr.rs) and the fused pop arm for the branch
+    /// structure:
+    ///   {len} = load {recv}+{len_def} as u64
+    ///   {zero} = 0
+    ///   {ok} = ult {zero}, {len}
+    ///   !{zero}
+    ///   br {ok} -> {some}, {none}
+    /// {some}:
+    ///   !{ok}
+    ///   {one} = 1
+    ///   {newlen} = sub {len}, {one}
+    ///   store {recv}+{len_def}, {newlen} as u64
+    ///   {data} = load {recv}+{ptr_def} as ptr
+    ///   {off} = mul {newlen}, {slot}
+    ///   {ptr} = ptr_add {data}, {off}
+    ///   {result} = load {ptr}+0 as {load_ty}
+    ///   [!{ptr} !{off} !{data} !{newlen} !{one} !{len}]
+    /// On return the insertion point is inside the SOME arm right
+    /// after the load; the caller emits its SOME tail, then the
+    /// NONE label + tail (starting with `!{ok}`), then the END
+    /// label. Behavior is identical to `sa_vec_try_pop_sized`
+    /// for scalar elements: an empty vec takes the NONE arm
+    /// without touching the buffer (no null deref -- the slot load
+    /// only runs when len > 0), and a narrow signed element
+    /// comes back sign-extended via the typed load (same rule as
+    /// the index-read and unfused pop arms).
+    fn emit_inline_pop_scalar(
+        &mut self,
+        recv: &str,
+        elem: &Type,
+        len_def: &str,
+        ptr_def: &str,
+        ok_reg: &str,
+        result_reg: &str,
+        some_label: &str,
+        none_label: &str,
+    ) -> Result<()> {
+        let len_reg = self.new_tmp();
+        let zero_reg = self.new_tmp();
+        let one_reg = self.new_tmp();
+        let newlen_reg = self.new_tmp();
+        let data_reg = self.new_tmp();
+        let offset_reg = self.new_tmp();
+        let ptr_reg = self.new_tmp();
+        let load_ty = if matches!(elem, Type::Primitive(_)) {
+            crate::codegen::type_string(elem)
+        } else {
+            "ptr"
+        };
+        self.ins(&format!("{len_reg} = load {recv}+{len_def} as u64"));
+        self.emit_int_const(&zero_reg, 0);
+        self.ins(&format!("{ok_reg} = ult {zero_reg}, {len_reg}"));
+        self.w(&format!("    !{zero_reg}\n"));
+        self.w(&format!(
+            "    br {ok_reg} -> {some_label}, {none_label}\n\n"
+        ));
+        self.wl(&format!("{some_label}:"));
+        self.w(&format!("    !{ok_reg}\n"));
+        self.emit_int_const(&one_reg, 1);
+        self.ins(&format!("{newlen_reg} = sub {len_reg}, {one_reg}"));
+        self.ins(&format!(
+            "store {recv}+{len_def}, {newlen_reg} as u64"
+        ));
+        self.ins(&format!("{data_reg} = load {recv}+{ptr_def} as ptr"));
+        self.ins(&format!(
+            "{offset_reg} = mul {newlen_reg}, {}",
+            vec_element_slot_size(elem)
+        ));
+        self.ins(&format!("{ptr_reg} = ptr_add {data_reg}, {offset_reg}"));
+        self.ins(&format!(
+            "{result_reg} = load {ptr_reg}+0 as {load_ty}"
+        ));
+        self.emit_release(&ptr_reg)?;
+        self.emit_release(&offset_reg)?;
+        self.emit_release(&data_reg)?;
+        self.emit_release(&newlen_reg)?;
+        self.emit_release(&one_reg)?;
+        self.emit_release(&len_reg)?;
+        Ok(())
+    }
+
     fn try_gen_pop_unwrap_fused(
         &mut self,
         call: &CallExpr,
@@ -253,6 +370,27 @@ impl<'c> Codegen<'c> {
             .first()
             .ok_or_else(|| missing_fact())?
             .clone();
+        if scalar_pop_inline_eligible(&elem) {
+            // Task 101: inline scalar pop -- no call, no
+            // out-slot. The helper leaves the insertion point at
+            // the SOME label with result_reg holding the popped
+            // value; the None arm + END below are the same shape
+            // as the call path (PANIC_MSG 17 verbatim).
+            self.emit_inline_pop_scalar(
+                &recv, &elem, "Vec_len", "Vec_ptr", &ok_reg, &result_reg, &some_label,
+                &none_label,
+            )?;
+            self.w(&format!("    jmp {end_label}\n\n"));
+            self.wl(&format!("{none_label}:"));
+            self.w(&format!("    !{ok_reg}\n"));
+            self.ins("EXPAND PANIC_MSG 17, *OPTION_UNWRAP_PANIC, 39");
+            self.ins(&format!("{result_reg} = add 0, 0"));
+            self.wl(&format!("{end_label}:"));
+            if sla_lowering::call_arg_needs_release(&inner.args[0]) {
+                self.emit_release(&recv)?;
+            }
+            return Ok(Some(SurfaceCall::Value(result_reg)));
+        }
         self.ins(&format!("{value_slot} = stack_alloc 8"));
         self.ins(&format!(
             "{ok_reg} = call @sa_vec_try_pop_sized(&{recv}, &{value_slot}, {})",
@@ -1169,6 +1307,33 @@ impl<'c> Codegen<'c> {
                 let some_label = self.new_label("L_VEC_POP_SOME");
                 let none_label = self.new_label("L_VEC_POP_NONE");
                 let end_label = self.new_label("L_VEC_POP_END");
+        if scalar_pop_inline_eligible(&elem) {
+            // Task 101: inline scalar pop -- no call, no
+            // out-slot. The helper leaves the insertion point at
+            // the SOME label with value_reg holding the popped
+            // value; wrap it in Some below. NOTE: no
+            // `!{value_reg}` in the NONE arm -- unlike the call
+            // path, value_reg is only defined on the SOME path
+            // here (the slot load runs after the branch).
+            self.emit_inline_pop_scalar(
+                &recv, &elem, "Vec_len", "Vec_ptr", &ok_reg, &value_reg, &some_label,
+                &none_label,
+            )?;
+            self.ins(&format!(
+                "EXPAND OPTION_NEW_SOME {option_reg}, {value_reg}"
+            ));
+            self.w(&format!("    !{value_reg}\n"));
+            self.w(&format!("    jmp {end_label}\n\n"));
+            self.wl(&format!("{none_label}:"));
+            self.w(&format!("    !{ok_reg}\n"));
+            self.ins(&format!("EXPAND OPTION_NEW_NONE {option_reg}"));
+            self.w(&format!("    jmp {end_label}\n\n"));
+            self.wl(&format!("{end_label}:"));
+            if sla_lowering::call_arg_needs_release(&call.args[0]) {
+                self.emit_release(&recv)?;
+            }
+            return Ok(Some(SurfaceCall::Value(option_reg)));
+        }
                 self.ins(&format!("{value_slot} = alloc 8"));
                 self.ins(&format!(
                     "{ok_reg} = call @sa_vec_try_pop_sized(&{recv}, &{value_slot}, {})",

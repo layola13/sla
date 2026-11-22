@@ -1,0 +1,117 @@
+// DEF task 101: Vec pop() for scalar element types is inlined in
+// the text codegen (surface.rs emit_inline_pop_scalar) as a len
+// check + len decrement + direct slot load, instead of a runtime
+// `call @sa_vec_try_pop_sized` + stack out-slot per iteration.
+// This file is the behavioral guard for that lowering: it passes
+// on the base sla (runtime call path) and on the fixed sla (inline
+// path). The emission difference (no sa_vec_try_pop_sized in the
+// fixed .sa for scalar pops) is checked by the task's scripts.
+//
+// Shapes locked: LIFO order + empty-pop None for i64/i32; narrow
+// sign-extension (i8 -2 must come back -2, not 254; i16 -3;
+// u8 255; u16 60000; u32 70000); bool round-trip; plain (unfused)
+// pop returning Option; a churn-like loop popping 100 values.
+//
+// NOTE (pre-existing, out of scope): f32/f64 pop tests were
+// removed -- float `==`/`!=`/`>` comparisons are broken in this
+// SLA version independent of pop (probe float_probe.sla: pop,
+// index read, and `==`/`>`/`<` all misbehave identically on base
+// and fixed, including an index read with no pop at all; the
+// pattern is consistent with the compared value reading as 0.0).
+// The inline pop itself is behavior-identical to the runtime pop
+// for floats (probe outputs identical on both sides), so f32/f64
+// stay in the inline gate; only the comparison-based test is
+// untestable here.
+
+@import "sa_std/io/print.sai"
+@import "sa_std/fmt.sai"
+@import "sa_std/vec.sa"
+
+@test "pop i64 lifo + empty none"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    if v.pop().unwrap() != 30 { panic(10101); };
+    if v.pop().unwrap() != 20 { panic(10102); };
+    if v.pop().unwrap() != 10 { panic(10103); };
+    if !v.pop().is_none() { panic(10104); };
+}
+
+@test "pop i32 lifo + empty none"() {
+    let v: Vec<i32> = Vec::new();
+    v.push(7);
+    v.push(8);
+    if v.pop().unwrap() != 8 { panic(10111); };
+    if v.pop().unwrap() != 7 { panic(10112); };
+    if !v.pop().is_none() { panic(10113); };
+}
+
+@test "pop i8 narrow sign extension"() {
+    let v: Vec<i8> = Vec::new();
+    v.push(-2);
+    v.push(5);
+    if v.pop().unwrap() != 5 { panic(10121); };
+    if v.pop().unwrap() != -2 { panic(10122); };
+    if !v.pop().is_none() { panic(10123); };
+}
+
+@test "pop u8 narrow value"() {
+    let v: Vec<u8> = Vec::new();
+    v.push(255);
+    v.push(0);
+    if v.pop().unwrap() != 0 { panic(10131); };
+    if v.pop().unwrap() != 255 { panic(10132); };
+    if !v.pop().is_none() { panic(10133); };
+}
+
+@test "pop i16 narrow sign extension"() {
+    let v: Vec<i16> = Vec::new();
+    v.push(-3);
+    if v.pop().unwrap() != -3 { panic(10141); };
+    if !v.pop().is_none() { panic(10142); };
+}
+
+@test "pop u16 narrow value"() {
+    let v: Vec<u16> = Vec::new();
+    v.push(60000);
+    if v.pop().unwrap() != 60000 { panic(10151); };
+    if !v.pop().is_none() { panic(10152); };
+}
+
+@test "pop u32 value"() {
+    let v: Vec<u32> = Vec::new();
+    v.push(70000);
+    if v.pop().unwrap() != 70000 { panic(10161); };
+    if !v.pop().is_none() { panic(10162); };
+}
+
+@test "pop bool round-trip"() {
+    let v: Vec<bool> = Vec::new();
+    v.push(true);
+    v.push(false);
+    if v.pop().unwrap() != false { panic(10191); };
+    if v.pop().unwrap() != true { panic(10192); };
+    if !v.pop().is_none() { panic(10193); };
+}
+
+@test "pop unfused option shape"() {
+    let v: Vec<i64> = Vec::new();
+    v.push(42);
+    let o = v.pop();
+    if !o.is_some() { panic(10201); };
+    if o.unwrap() != 42 { panic(10202); };
+    let o2 = v.pop();
+    if !o2.is_none() { panic(10203); };
+}
+
+@test "pop loop churn-like 100 values"() {
+    let v: Vec<i64> = Vec::new();
+    let i: i64 = 0;
+    while i < 100 { v.push(i); i = i + 1; }
+    let acc: i64 = 0;
+    let j: i64 = 0;
+    while j < 100 { let p = v.pop().unwrap(); acc = acc + (p & 1); j = j + 1; }
+    if acc != 50 { panic(10211); };
+    if !v.pop().is_none() { panic(10212); };
+}
