@@ -220,20 +220,40 @@ fn scalar_param_release_stays_bare() {
 }
 
 #[test]
-fn vec_of_scalar_release_stays_bare() {
-    // Zig parity: planValueDrop(Vec<i64>) is Buffer, and the
-    // emitRelease plan switch has no Buffer arm — a plain Vec
-    // binding release stays the generic `!` tail (the buffer
-    // free lives on the deep-value path for field/element
-    // values, not on binding releases).
+fn vec_of_scalar_release_frees_buffer() {
+    // Task 72 (DEF-RUST-VEC-SCOPE-EXIT-NO-FREE): planValueDrop(Vec<i64>)
+    // is Buffer, and the old emitRelease plan switch had no Buffer arm,
+    // so a plain Vec binding release stayed the generic `!` tail and
+    // leaked the backing store at scope exit (churnops: ~200 MB over
+    // 200k rounds). The Zig side frees Buffer bindings at scope exit
+    // through its vec_buf_bindings map; the Rust side now does the same
+    // via the new Buffer arm (EXPAND VEC_FREE), with no element drops
+    // (scalar elements).
     let (program, check) = release_param_program(ud("Vec", vec![i64_ty()]), vec![]);
     let out = emit(&program, &check);
     assert!(
-        !out.contains("EXPAND VEC_FREE"),
-        "a Vec<i64> binding release must stay bare (Buffer plan), got:\n{out}"
+        out.contains("EXPAND VEC_FREE p"),
+        "a Vec<i64> binding release must free its buffer, got:\n{out}"
     );
     assert!(
         !out.contains("EXPAND ARC_DROP "),
         "a Vec<i64> release must not emit element drops, got:\n{out}"
+    );
+}
+
+#[test]
+fn growvec_of_scalar_release_frees_buffer() {
+    // Task 72, same defect on the GrowVec surface: planValueDrop
+    // (GrowVec<i64>) is BufferGrowVec, which likewise fell through to
+    // the generic `!` tail. The new BufferGrowVec arm emits GROWVEC_FREE.
+    let (program, check) = release_param_program(ud("GrowVec", vec![i64_ty()]), vec![]);
+    let out = emit(&program, &check);
+    assert!(
+        out.contains("EXPAND GROWVEC_FREE p"),
+        "a GrowVec<i64> binding release must free its buffer, got:\n{out}"
+    );
+    assert!(
+        !out.contains("EXPAND ARC_DROP "),
+        "a GrowVec<i64> release must not emit element drops, got:\n{out}"
     );
 }

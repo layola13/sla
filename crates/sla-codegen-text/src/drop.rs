@@ -547,6 +547,25 @@ impl<'c> Codegen<'c> {
     }
 }
 
+/// Root identifier of a place expression, peeling deref as
+/// well as field/index/borrow/move (`*rc` -> `rc`; `(*rc).f` -> `rc`).
+/// The shared `root_identifier` (sla-lowering, mirroring Zig 6031)
+/// does NOT peel DerefExpr, so `decide_value_taint`'s place arm
+/// bailed with None for every deref value -- the arm was dead code
+/// for `*rc` / `*arc` / `*box` (task 72: the def_r8 double-free).
+/// Local to this file: the shared helper's contract is Zig's.
+fn place_root_identifier(expr: &Node) -> Option<&str> {
+    match expr {
+        Node::Identifier(name) => Some(name),
+        Node::FieldExpr(f) => place_root_identifier(&f.expr),
+        Node::IndexExpr(idx) => place_root_identifier(&idx.target),
+        Node::DerefExpr(d) => place_root_identifier(&d.expr),
+        Node::BorrowExpr(b) => place_root_identifier(&b.expr),
+        Node::MoveExpr(m) => place_root_identifier(&m.expr),
+        _ => None,
+    }
+}
+
 /// The field of the root place in a place expression
 /// (`p.a.b` -> `a`; `p.items[0]` -> `items`).
 fn place_first_field(mut expr: &Node) -> Option<String> {
@@ -653,7 +672,7 @@ impl<'c> Codegen<'c> {
                 TaintDecision::None
             }
             Node::FieldExpr(_) | Node::IndexExpr(_) | Node::DerefExpr(_) => {
-                let Some(root) = root_identifier(value) else {
+                let Some(root) = place_root_identifier(value) else {
                     return TaintDecision::None;
                 };
                 let resolved_root = self.resolve_binding_name(root);
@@ -704,9 +723,17 @@ impl<'c> Codegen<'c> {
                     }
                     return TaintDecision::Tainted(TaintForm::AliasedHusk);
                 }
-                // DerefExpr with an owned root: no evidence in the
-                // 10 names; leave untainted (gate will tell).
-                TaintDecision::None
+                // DerefExpr with an owned root: the result aliases
+                // the cell's payload (task 72 census: `let s = *rc` /
+                // `*arc` / `*box` is a VIEW into the smart-pointer
+                // cell, whose drop frees the payload -- freeing the
+                // view as well double-frees it: def_r8 SIGSEGV x3).
+                // Mirror IndexExpr: taint AliasedHusk. Smart-pointer
+                // results stay untainted (bump-compensated).
+                if is_smart {
+                    return TaintDecision::None;
+                }
+                TaintDecision::Tainted(TaintForm::AliasedHusk)
             }
             _ => TaintDecision::None,
         }

@@ -302,13 +302,20 @@ fn match_arm_exit_cleanups_projection_empty_list_releases_nothing() {
 }
 
 /// Control: when the checker lists the payload binding, the
-/// emitter releases it at arm exit.
+/// emitter releases it at arm exit. The payload here is a Vec
+/// binding (Buffer plan), so since task 72 the release is the
+/// buffer free, not the bare `!` tail — accept either release
+/// shape; the exact VEC_FREE emission is pinned in
+/// drop_elaboration_emission::vec_of_scalar_release_frees_buffer.
 #[test]
 fn match_arm_exit_cleanups_projection_listed_binding_released() {
     let out = emit_with_arm_lists(vec![vec!["s".to_string()], Vec::new()]);
     let alias = payload_alias(&out);
+    let released = out.contains(&format!("!{alias}"))
+        || out.contains(&format!("EXPAND VEC_FREE {alias}"))
+        || out.contains(&format!("EXPAND GROWVEC_FREE {alias}"));
     assert!(
-        out.contains(&format!("!{alias}")),
+        released,
         "checker listed the payload for arm exit, but the emitter never released {alias}:\n{out}"
     );
 }

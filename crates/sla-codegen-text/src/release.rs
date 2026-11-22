@@ -679,6 +679,31 @@ impl<'c> Codegen<'c> {
                         self.consumed_bindings.insert(resolved.clone());
                         return Ok(());
                     }
+                    // DEF-RUST-VEC-SCOPE-EXIT-NO-FREE (task 72): a
+                    // Buffer-plan binding (Vec<T> with primitive T,
+                    // or String) owns a heap buffer that the generic
+                    // `!` tail does not free -- the tail releases the
+                    // register only, so the backing store leaked once
+                    // per scope exit (churnops retained ~200 MB). The
+                    // Zig mirror frees these through its
+                    // vec_buf_bindings map; the Rust port dropped the
+                    // maps, and this dispatch had no Buffer arm, so
+                    // the binding fell through to `!`. Mirror the
+                    // DeepVec arm: free the buffer and retire the
+                    // register without the `!` tail (VEC_FREE's
+                    // expansion consumes the register itself via
+                    // `^`; STRING_BUF_FREE expands to the same
+                    // macro, so String is covered by this arm too).
+                    crate::drop::DropPlan::Buffer => {
+                        self.ins(&format!("EXPAND VEC_FREE {resolved}"));
+                        self.consumed_bindings.insert(resolved.clone());
+                        return Ok(());
+                    }
+                    crate::drop::DropPlan::BufferGrowVec => {
+                        self.ins(&format!("EXPAND GROWVEC_FREE {resolved}"));
+                        self.consumed_bindings.insert(resolved.clone());
+                        return Ok(());
+                    }
                     plan @ (crate::drop::DropPlan::ArcPtr(_)
                     | crate::drop::DropPlan::RcPtr(_)
                     | crate::drop::DropPlan::BoxPtr(_)) => {
