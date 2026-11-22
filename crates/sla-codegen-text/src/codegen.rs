@@ -166,6 +166,21 @@ pub struct Codegen<'c> {
     pub(crate) global_const_bindings: HashSet<String>,
     pub(crate) global_scalar_consts: Vec<(String, Literal)>,
     pub(crate) func_index: Vec<(String, FuncDecl)>,
+    /// First-definition index into `func_index` per bare name,
+    /// built alongside it in `generate_program`. `func_decl`
+    /// used to linearly scan the whole index on every call -- and
+    /// the sla-cli `CheckInfo` leaves the trait-default `func`
+    /// (None), so the scan ran for every callee -- O(n) per call,
+    /// O(n^2) per program, with per-function cost growing along
+    /// the file (chunk timings 0.8s -> 2.7s per 2000 fns at 100k).
+    /// Same first-match value as the scan, O(1) lookup.
+    pub(crate) func_first_idx: HashMap<String, usize>,
+    /// Non-decl-only definition count per bare function name,
+    /// built alongside `func_index` in `generate_program`.
+    /// `decl_symbol` used to count this by a linear scan of the
+    /// whole index on every call (O(n) per function, O(n^2) per
+    /// program: ~4s at 100k synth). Same count, O(1) lookup.
+    pub(crate) func_def_counts: HashMap<String, usize>,
     /// Impl / overload methods by mangled name (`Type_method`,
     /// `Type__Trait_method`), collected in `generate_program`
     /// alongside the emission of their bodies. Kept separate from
@@ -360,6 +375,8 @@ impl<'c> Codegen<'c> {
             global_const_bindings: HashSet::new(),
             global_scalar_consts: Vec::new(),
             func_index: Vec::new(),
+            func_first_idx: HashMap::new(),
+            func_def_counts: HashMap::new(),
             assoc_index: Vec::new(),
             enum_index: Vec::new(),
             trait_index: Vec::new(),
@@ -540,6 +557,11 @@ impl<'c> Codegen<'c> {
     pub(crate) fn func_decl(&self, name: &str) -> Option<FuncDecl> {
         if let Some(f) = self.check.func(name) {
             return Some(f.clone());
+        }
+        if let Some(&idx) = self.func_first_idx.get(name) {
+            if let Some((_, f)) = self.func_index.get(idx) {
+                return Some(f.clone());
+            }
         }
         for (n, f) in &self.func_index {
             if n == name {
@@ -963,13 +985,7 @@ impl<'c> Codegen<'c> {
         if is_main_name(&f.name) {
             return base;
         }
-        if self
-            .func_index
-            .iter()
-            .filter(|(n, d)| n == &f.name && !d.is_decl_only)
-            .count()
-            <= 1
-        {
+        if self.func_def_counts.get(&f.name).copied().unwrap_or(0) <= 1 {
             return base;
         }
         if f.is_extern

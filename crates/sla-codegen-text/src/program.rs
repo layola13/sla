@@ -55,7 +55,12 @@ impl<'c> Codegen<'c> {
         // Program-local function index for symbol/call lookups.
         for decl in decls {
             if let Node::FuncDecl(f) = decl {
+                let idx = self.func_index.len();
+                self.func_first_idx.entry(f.name.clone()).or_insert(idx);
                 self.func_index.push((f.name.clone(), f.clone()));
+                if !f.is_decl_only {
+                    *self.func_def_counts.entry(f.name.clone()).or_insert(0) += 1;
+                }
             }
             if let Node::EnumDecl(e) = decl {
                 self.enum_index.push((e.name.clone(), e.clone()));
