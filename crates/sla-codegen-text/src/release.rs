@@ -663,7 +663,15 @@ impl<'c> Codegen<'c> {
                             "Vec_ptr",
                             "Vec_len",
                         )?;
-                        self.ins(&format!("EXPAND VEC_FREE {resolved}"));
+                        // Task 137 (P1): a stack-allocated Vec header
+                        // frees only the buffer — the header itself is
+                        // a stack slot, not a heap block (VEC_FREE
+                        // would free the stack slot).
+                        if self.stack_header_bindings.contains(&resolved) {
+                            self.ins(&format!("EXPAND VEC_FREE_BUF {resolved}"));
+                        } else {
+                            self.ins(&format!("EXPAND VEC_FREE {resolved}"));
+                        }
                         self.consumed_bindings.insert(resolved.clone());
                         return Ok(());
                     }
@@ -695,7 +703,18 @@ impl<'c> Codegen<'c> {
                     // `^`; STRING_BUF_FREE expands to the same
                     // macro, so String is covered by this arm too).
                     crate::drop::DropPlan::Buffer => {
-                        self.ins(&format!("EXPAND VEC_FREE {resolved}"));
+                        // Task 137 (P1): a stack-allocated Vec header
+                        // frees only the buffer — the header itself is
+                        // a stack slot, not a heap block. (Buffer also
+                        // covers String, which can never be in
+                        // stack_header_bindings — only Vec bindings
+                        // are recorded there — so this branch is
+                        // Vec-only in practice.)
+                        if self.stack_header_bindings.contains(&resolved) {
+                            self.ins(&format!("EXPAND VEC_FREE_BUF {resolved}"));
+                        } else {
+                            self.ins(&format!("EXPAND VEC_FREE {resolved}"));
+                        }
                         self.consumed_bindings.insert(resolved.clone());
                         return Ok(());
                     }

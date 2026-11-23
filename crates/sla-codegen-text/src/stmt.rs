@@ -7,9 +7,11 @@
 use sla_ast::{CallExpr, Literal, Node, Type};
 use sla_lowering::{
     call_arg_needs_release, is_borrow_like_type, is_discard_name, is_panic_builtin_name,
-    is_println_call, is_stack_alloc_node, is_void_type, node_key, root_identifier,
-    stmt_terminates, stored_value_moves_identifier,
+    is_println_call, is_stack_alloc_node, is_temporary_register_name, is_void_type,
+    node_key, root_identifier, stmt_terminates, stored_value_moves_identifier,
 };
+
+use crate::surface::peel_name;
 
 use crate::codegen::{type_size, type_string, vec_element_slot_size, Codegen};
 use crate::{unsupported, Result, TextError};
@@ -207,6 +209,72 @@ impl<'c> Codegen<'c> {
                     self.ins(&format!("EXPAND {init_macro} {resolved_name}, {value_reg}"));
                     self.release_after_call_arg_if_needed(&call.args[0], &value_reg)?;
                     return Ok(());
+                }
+            }
+        }
+
+        // Task 137 (P1): stack-allocated Vec header — `let v: Vec<T>
+        // = Vec::new()` (or `vec(...)`) where the binding provably
+        // never escapes its own scope. The header is allocated on
+        // the stack and initialised in place (`emit_stack_vec_ctor`:
+        // `stack_alloc Vec_SIZE` + `VEC_NEW_STACK`); the scope-exit
+        // release frees only the buffer (`VEC_FREE_BUF`, release.rs).
+        // The analysis runs over the rest of the enclosing block
+        // (the binding's whole lifetime); the emission-time filters
+        // mirror the lift's final filter (vec_lift.rs), plus the
+        // addressable-storage guard so this arm never steals a
+        // binding the generic path must stack-allocate itself.
+        // Any doubt falls through to the generic path (heap header,
+        // exactly as today).
+        if let Node::CallExpr(call) = &*let_stmt.value {
+            let is_vec_ctor = call.callee.is_none()
+                && ((call.func_name == "new"
+                    && call.associated_target.as_deref() == Some("Vec")
+                    && call.args.is_empty())
+                    || (call.func_name == "vec" && call.associated_target.is_none()));
+            if is_vec_ctor {
+                if let Some((name, generics)) = let_ty.as_ref().and_then(peel_name) {
+                    if name == "Vec" {
+                        if let Some(elem) = generics.first() {
+                            // The remainder borrows self's tracked
+                            // block, so clone it before the &mut
+                            // analysis call (Node: Clone).
+                            let rest: Option<Vec<Node>> = self
+                                .current_block_remainder_for(stmt)
+                                .map(<[Node]>::to_vec);
+                            // NOTE: the lift's final filter checks
+                            // the `assigned_value_slots` SET, but at
+                            // let-emission time that set is still
+                            // empty — the generic arm populates it
+                            // later. The predicate below is the
+                            // same question asked at this point in
+                            // the function (cf. the generic arm).
+                            let stack_ok = !is_temporary_register_name(&resolved_name)
+                                && !self.binding_needs_assigned_value_slot(
+                                    &resolved_name,
+                                    let_ty.as_ref().unwrap(),
+                                )
+                                && !self.addressable_bindings.contains(&let_stmt.name)
+                                && !self
+                                    .binding_needs_addressable_storage(
+                                        &resolved_name,
+                                        let_ty.as_ref().unwrap(),
+                                    )
+                                && !self.thread_capture_regs.contains_key(&let_stmt.name)
+                                && !self
+                                    .closure_param_regs
+                                    .iter()
+                                    .any(|(param, _)| param == &let_stmt.name)
+                                && rest.as_deref().is_some_and(|r| {
+                                    self.plan_vec_stack_header(&resolved_name, r)
+                                });
+                            if stack_ok {
+                                self.emit_stack_vec_ctor(&resolved_name, call, elem)?;
+                                self.stack_header_bindings.insert(resolved_name.clone());
+                                return Ok(());
+                            }
+                        }
+                    }
                 }
             }
         }

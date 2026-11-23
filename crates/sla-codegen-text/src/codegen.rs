@@ -290,6 +290,16 @@ pub struct Codegen<'c> {
     /// (`__vec_lift{n}_ptr/len/cap`). Global across the file like
     /// `tmp_idx` — never reset, so names never collide.
     pub(crate) vec_lift_idx: usize,
+    /// Task 137 (P1): resolved `.sa` names of Vec bindings whose
+    /// header is stack-allocated (vec_stack.rs). Parallel to
+    /// `stack_alloc_bindings` but deliberately SEPARATE: a
+    /// stack-header binding MUST still reach the drop-plan dispatch
+    /// in `emit_release` (which frees only the buffer via
+    /// VEC_FREE_BUF), while `stack_alloc_bindings` members return
+    /// early there with no free at all. Inserting a stack-header
+    /// binding into `stack_alloc_bindings` would leak its buffer.
+    /// Cleared per function in `reset_function_state`.
+    pub(crate) stack_header_bindings: HashSet<String>,
 
     // Statement tracking (liveness.rs): the innermost block being
     // generated, as a raw pointer + len (the AST outlives codegen;
@@ -410,6 +420,7 @@ impl<'c> Codegen<'c> {
             loop_body_block_depths: Vec::new(),
             vec_header_lifts: Vec::new(),
             vec_lift_idx: 0,
+            stack_header_bindings: HashSet::new(),
             current_block: None,
             current_stmt_index: 0,
             move_out_stmt: None,
@@ -540,6 +551,10 @@ impl<'c> Codegen<'c> {
         // Task 114: a lift left on the stack by an error path in
         // `gen_while_stmt` must not leak into the next function.
         self.vec_header_lifts.clear();
+        // Task 137: a stack-header decision is per-function; a stale
+        // entry would free a later function's heap Vec with
+        // VEC_FREE_BUF.
+        self.stack_header_bindings.clear();
         self.clear_binding_aliases();
         self.let_binding_aliases.clear();
         self.hoisted_allocs.clear();

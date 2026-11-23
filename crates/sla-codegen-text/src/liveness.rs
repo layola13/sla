@@ -301,6 +301,27 @@ impl<'c> Codegen<'c> {
             .map(|(ptr, len)| unsafe { std::slice::from_raw_parts(ptr, len) })
     }
 
+    /// Task 137 (P1): the statements after `current_stmt_index` in
+    /// the current block — the remainder of the enclosing block in
+    /// which a `let` being emitted lives — or None when block
+    /// tracking is not active for this statement. Validated: the
+    /// statement at `current_stmt_index` must be `stmt` itself (by
+    /// node key); otherwise the tracking is stale (e.g. an async
+    /// desugar path emitting outside a block iterator) and the
+    /// caller must fail closed to a heap header. `gen_block_inner`
+    /// / `gen_scoped_block_inner` / the tail-value stores all set
+    /// `current_stmt_index` before each `gen_stmt`, so the check
+    /// passes on every ordinary block path.
+    pub(crate) fn current_block_remainder_for(&self, stmt: &Node) -> Option<&[Node]> {
+        let block = self.current_block_slice()?;
+        let idx = self.current_stmt_index;
+        let cur = block.get(idx)?;
+        if node_key(cur) != node_key(stmt) {
+            return None;
+        }
+        block.get(idx + 1..)
+    }
+
     /// codegen.zig:12003 `identifierUsedLaterInCurrentBlock`: a
     /// later statement in the current block reads the identifier
     /// (nested blocks included, via the recursive use scan). A

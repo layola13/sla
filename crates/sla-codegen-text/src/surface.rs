@@ -29,7 +29,7 @@ pub(crate) enum SurfaceCall {
     Void,
 }
 
-fn peel_name(ty: &Type) -> Option<(&str, &[Type])> {
+pub(crate) fn peel_name(ty: &Type) -> Option<(&str, &[Type])> {
     let mut cur = ty;
     loop {
         match cur {
@@ -754,6 +754,70 @@ impl<'c> Codegen<'c> {
         self.emit_lowered_call_arg_cleanups(std::slice::from_ref(planned), None)
     }
 
+    /// One `VEC_PUSH` of `arg` into the vec in `reg`, planned exactly
+    /// as the ("Vec", "push") receiver arm plans its value. Extracted
+    /// from the bare `vec(...)` arm (task 137) so the stack-allocated
+    /// ctor (`emit_stack_vec_ctor`) can reuse it for per-element
+    /// initialisation. `is_stack` selects the borrow-form push
+    /// (`VEC_PUSH_STACK_B`, task 144 shape (b)) for a stack-allocated
+    /// header — the move-form `VEC_PUSH` would trap (host StackEscape,
+    /// trap 1025) on a stack allocation; a heap vec in a temp takes
+    /// the plain form, exactly as before.
+    fn emit_vec_push_element(
+        &mut self,
+        reg: &str,
+        arg: &Node,
+        elem: &Type,
+        is_stack: bool,
+    ) -> Result<()> {
+        let push_macro = if is_stack { "VEC_PUSH_STACK_B" } else { "VEC_PUSH" };
+        if let Some(copy_reg) = self.push_arg_copy_materialization_node(arg, elem)? {
+            self.ins(&format!(
+                "EXPAND {push_macro} {reg}, {copy_reg}, {}",
+                slot_size(elem)
+            ));
+            // The copy's ownership moves into the vec:
+            // forget it, never release (same as the push receiver arm).
+            self.emit_forget_moved_value(&copy_reg)?;
+            return Ok(());
+        }
+        let planned = self.surface_value_consumed_node(arg)?;
+        let value = planned.reg.clone();
+        self.ins(&format!(
+            "EXPAND {push_macro} {reg}, {value}, {}",
+            slot_size(elem)
+        ));
+        self.surface_finish_value(&planned, true)
+    }
+
+    /// Task 137 (P1): emit a stack-allocated Vec header into `target`
+    /// for `let target: Vec<elem> = Vec::new()` (or `vec(...)`).
+    /// Precondition: `plan_vec_stack_header` approved this binding
+    /// (non-escaping over its whole lifetime) and the caller applied
+    /// the emission-time filters (temp name, assigned-value slot,
+    /// addressable, captures). Emits `stack_alloc` for the header
+    /// plus the three in-place init stores via `VEC_NEW_STACK`
+    /// (the `Vec_SIZE` form mirrors the Slice precedent in
+    /// call.rs:599), then one `VEC_PUSH_STACK_B` per `vec(...)`
+    /// element (borrow form, task 144 shape (b) — the move-form
+    /// `VEC_PUSH` would trap on a stack allocation); `Vec::new()`
+    /// takes no elements.
+    /// The scope-exit release frees only the buffer (`VEC_FREE_BUF`)
+    /// — see release.rs.
+    pub(crate) fn emit_stack_vec_ctor(
+        &mut self,
+        target: &str,
+        call: &CallExpr,
+        elem: &Type,
+    ) -> Result<()> {
+        self.ins(&format!("{target} = stack_alloc Vec_SIZE"));
+        self.ins(&format!("EXPAND VEC_NEW_STACK {target}"));
+        for arg in &call.args {
+            self.emit_vec_push_element(target, arg, elem, true)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn gen_std_surface_call(
         &mut self,
         expr: &Node,
@@ -1053,26 +1117,7 @@ impl<'c> Codegen<'c> {
             let reg = self.new_tmp();
             self.ins(&format!("EXPAND VEC_NEW {reg}"));
             for arg in &call.args {
-                if let Some(copy_reg) =
-                    self.push_arg_copy_materialization_node(arg, &elem)?
-                {
-                    self.ins(&format!(
-                        "EXPAND VEC_PUSH {reg}, {copy_reg}, {}",
-                        slot_size(&elem)
-                    ));
-                    // The copy's ownership moves into the vec:
-                    // forget it, never release (same as the push
-                    // receiver arm).
-                    self.emit_forget_moved_value(&copy_reg)?;
-                    continue;
-                }
-                let planned = self.surface_value_consumed_node(arg)?;
-                let value = planned.reg.clone();
-                self.ins(&format!(
-                    "EXPAND VEC_PUSH {reg}, {value}, {}",
-                    slot_size(&elem)
-                ));
-                self.surface_finish_value(&planned, true)?;
+                self.emit_vec_push_element(&reg, arg, &elem, false)?;
             }
             return Ok(Some(SurfaceCall::Value(reg)));
         }
@@ -1430,12 +1475,32 @@ impl<'c> Codegen<'c> {
                 } else {
                     "GROWVEC_PUSH"
                 };
+                // Task 137 (P1, R908) as reworked by task 144 (shape
+                // (b)): a stack-allocated Vec header cannot be passed
+                // by move (host StackEscape, trap 1025) — push it by
+                // borrow (`VEC_PUSH_STACK_B`), handing the old buffer
+                // back to the caller for the free.
+                // `recv` is the binding's own register when the
+                // receiver is a direct `let` binding (the only shape
+                // the analysis approves); any other receiver shape is
+                // not in `stack_header_bindings` and keeps the move
+                // form. GrowVec bindings are never stack headers.
+                // The inline-eligibility check below still keys on
+                // `macro_name` ("VEC_PUSH"); `push_macro` only
+                // selects which macro the slow path expands.
+                let push_macro = if tname == "Vec"
+                    && self.stack_header_bindings.contains(&recv)
+                {
+                    "VEC_PUSH_STACK_B"
+                } else {
+                    macro_name
+                };
                 // CLASSB-DEF1: a copy-like element pushed from a
                 // live binding stores an independent copy; the
                 // source stays usable and owning.
                 if let Some(copy_reg) = self.push_arg_copy_materialization(call, &elem)? {
                     self.ins(&format!(
-                        "EXPAND {macro_name} {recv}, {copy_reg}, {}",
+                        "EXPAND {push_macro} {recv}, {copy_reg}, {}",
                         slot_size(&elem)
                     ));
                     // The copy's ownership moves into the vec:
@@ -1459,14 +1524,14 @@ impl<'c> Codegen<'c> {
                     let slow_label = self.new_label("L_VEC_PUSH_SLOW");
                     let end_label = self.new_label("L_VEC_PUSH_END");
                     self.emit_inline_push_scalar(
-                        &recv, &elem, "Vec_len", "Vec_cap", "Vec_ptr", &value, &macro_name,
+                        &recv, &elem, "Vec_len", "Vec_cap", "Vec_ptr", &value, push_macro,
                         &ok_reg, &fast_label, &slow_label, &end_label,
                     )?;
                     self.surface_finish_value(&planned, true)?;
                     return Ok(Some(SurfaceCall::Void));
                 }
                 self.ins(&format!(
-                    "EXPAND {macro_name} {recv}, {value}, {}",
+                    "EXPAND {push_macro} {recv}, {value}, {}",
                     slot_size(&elem)
                 ));
                 self.surface_finish_value(&planned, true)?;
