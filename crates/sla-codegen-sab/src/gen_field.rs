@@ -293,7 +293,7 @@ impl<'c> Driver<'c> {
             let inner_ty = self.check.expr_type(inner).cloned();
             if let Some(ty) = &inner_ty {
                 if self.index_borrow_loads_stored_pointer(ty) {
-                    let source = self.gen_index_address(index)?;
+                    let source = self.gen_index_address(index, 32)?;
                     let owner = self.b().new_tmp();
                     self.b().record_reg(owner);
                     self.emit_load(owner, source.reg, 0, PrimType::Ptr);
@@ -401,7 +401,7 @@ impl<'c> Driver<'c> {
                 })
             }
             Node::IndexExpr(idx) => {
-                let source = self.gen_index_address(idx)?;
+                let source = self.gen_index_address(idx, 32)?;
                 Ok(AddressSource {
                     reg: source.reg,
                     release_regs: source.release_regs,
@@ -554,7 +554,7 @@ impl<'c> Driver<'c> {
                     ));
                 }
                 if self.index_borrow_loads_stored_pointer(&elem_ty) {
-                    let place = self.gen_index_address(idx)?;
+                    let place = self.gen_index_address(idx, 32)?;
                     let release_regs = self.field_projection_release_regs(&place);
                     let owner = self.b().new_tmp();
                     self.emit_load(owner, place.reg, 0, PrimType::Ptr);

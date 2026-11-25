@@ -47,7 +47,7 @@ use crate::surface_query::{
 use crate::types::{StdSurfaceArgKind, StdSurfaceRule, StdSurfaceRuleKind};
 
 /// Zig `SliceAbi.len_offset` (lowering_rules.zig:3372).
-const SLICE_ABI_LEN_OFFSET: usize = 8;
+pub(crate) const SLICE_ABI_LEN_OFFSET: usize = 8;
 
 impl<'c> Driver<'c> {
     /// The ported bare-call method probe chain, in Zig

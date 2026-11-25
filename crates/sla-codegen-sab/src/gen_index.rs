@@ -150,7 +150,7 @@ impl<'c> Driver<'c> {
                     )
                 })?,
             };
-            let source = self.gen_index_address(idx)?;
+            let source = self.gen_index_address(idx, 32)?;
             let dst = self.b().new_tmp();
             self.b().record_reg(dst);
             self.emit_load(dst, source.reg, 0, storage_prim_type(&elem_ty)?);
@@ -326,13 +326,13 @@ impl<'c> Driver<'c> {
     /// ordinary targets take the array / Slice paths, any
     /// other generic target takes the `.index_address`
     /// surface rule.
-    pub(crate) fn gen_index_address(&mut self, idx: &IndexExpr) -> Result<AddressSource> {
+    pub(crate) fn gen_index_address(&mut self, idx: &IndexExpr, panic_code: i64) -> Result<AddressSource> {
         let target_ty = self.check.expr_type(&idx.target).cloned().ok_or_else(|| {
             Error::MissingType("index target has no checker type".to_string())
         })?;
         match ordinary_index_address_target_type(&target_ty) {
-            Some(Type::Array(arr)) => self.gen_index_address_array(idx, &arr),
-            Some(slice_ty) => self.gen_slice_index_address(idx, &slice_ty),
+            Some(Type::Array(arr)) => self.gen_index_address_array(idx, &arr, panic_code),
+            Some(slice_ty) => self.gen_slice_index_address(idx, &slice_ty, panic_code),
             _ => self.gen_surface_index_address(idx, &target_ty),
         }
     }
@@ -345,6 +345,7 @@ impl<'c> Driver<'c> {
         &mut self,
         idx: &IndexExpr,
         slice_ty: &Type,
+        panic_code: i64,
     ) -> Result<AddressSource> {
         let elem_ty = first_generic_arg(slice_ty).ok_or_else(|| {
             unsupported(
@@ -380,6 +381,32 @@ impl<'c> Driver<'c> {
             return Ok(source);
         }
         let index_reg = self.gen_expr(&idx.index)?;
+        // 159(a): slice bounds check (mirrors gen_vec_pod_index_read; the miss
+        // arm uses branch-local releases, per this port's branch convention).
+        let slice_len_reg = self.b().new_tmp();
+        let slice_in_bounds = self.b().new_tmp();
+        self.b().record_reg(slice_len_reg);
+        self.b().record_reg(slice_in_bounds);
+        self.emit_load(slice_len_reg, target_reg, crate::gen_method_call::SLICE_ABI_LEN_OFFSET, PrimType::U64);
+        crate::release_prim::emit_op(
+            &mut self.state,
+            slice_in_bounds,
+            OpKind::Ult,
+            Operand::Reg(index_reg),
+            Operand::Reg(slice_len_reg),
+        );
+        self.emit_release(slice_len_reg)?;
+        let slice_hit_label = self.b().new_label("L_SLICE_INDEX_HIT");
+        let slice_miss_label = self.b().new_label("L_SLICE_INDEX_MISS");
+        self.b().emit_branch(slice_in_bounds, &slice_hit_label, &slice_miss_label);
+        self.b().emit_label(&slice_miss_label);
+        self.branch_release_if_owned(slice_in_bounds);
+        self.branch_release_if_owned(index_reg);
+        self.branch_release_if_owned(base_ptr);
+        self.branch_release_if_owned(target_reg);
+        self.b().emit_panic_code(panic_code);
+        self.b().emit_label(&slice_hit_label);
+        self.branch_release_if_owned(slice_in_bounds);
         let offset = self.b().new_tmp();
         self.b().record_reg(offset);
         crate::release_prim::emit_op(
@@ -592,6 +619,43 @@ impl<'c> Driver<'c> {
         .clone();
         let target_reg = self.gen_expr(&idx.target)?;
         let index_reg = self.gen_expr(&idx.index)?;
+        // 159(b): a non-POD Vec/GrowVec read reaches the `.index` surface rule
+        // unchecked (gen_vec_pod_index_read covers inline-POD only; the direct
+        // path is disabled, see issue014). Bounds-check here, miss -> panic 32.
+        if vec_element_type(target_ty)
+            .or_else(|| user_defined_generic_inner(target_ty, "GrowVec"))
+            .is_some()
+        {
+            let is_grow = user_defined_generic_inner(target_ty, "GrowVec").is_some();
+            let len_off = if is_grow {
+                crate::release_drop::GROWVEC_ABI_LEN_OFFSET
+            } else {
+                crate::release_drop::VEC_ABI_LEN_OFFSET
+            };
+            let vec_len_reg = self.b().new_tmp();
+            let vec_in_bounds = self.b().new_tmp();
+            self.b().record_reg(vec_len_reg);
+            self.b().record_reg(vec_in_bounds);
+            self.emit_load(vec_len_reg, target_reg, len_off, PrimType::U64);
+            crate::release_prim::emit_op(
+                &mut self.state,
+                vec_in_bounds,
+                OpKind::Ult,
+                Operand::Reg(index_reg),
+                Operand::Reg(vec_len_reg),
+            );
+            self.emit_release(vec_len_reg)?;
+            let vec_hit_label = self.b().new_label("L_VEC_INDEX_HIT");
+            let vec_miss_label = self.b().new_label("L_VEC_INDEX_MISS");
+            self.b().emit_branch(vec_in_bounds, &vec_hit_label, &vec_miss_label);
+            self.b().emit_label(&vec_miss_label);
+            self.branch_release_if_owned(vec_in_bounds);
+            self.branch_release_if_owned(index_reg);
+            self.branch_release_if_owned(target_reg);
+            self.b().emit_panic_code(32);
+            self.b().emit_label(&vec_hit_label);
+            self.branch_release_if_owned(vec_in_bounds);
+        }
         let dst = self.b().new_tmp();
         self.b().record_reg(dst);
         // DEF-ZRANGE: indexing a Vec of heap-handle elements
@@ -623,7 +687,7 @@ impl<'c> Driver<'c> {
     /// Zig `branchReleaseIfOwned`: release a register on a
     /// branch path unless it is a frame local, a stack
     /// allocation, or marked non-owning.
-    fn branch_release_if_owned(&mut self, reg: u32) {
+    pub(crate) fn branch_release_if_owned(&mut self, reg: u32) {
         if self.is_local_reg(reg) {
             return;
         }

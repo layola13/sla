@@ -4,7 +4,7 @@
 //! `driver.rs`. Split from `driver.rs` solely for the 700-line
 //! file discipline; the two files are one decomposition unit (B4).
 
-use sla_ast::{BinaryOp, CallExpr, IfExpr, IndexExpr, Literal, Node, Primitive, Type, WhileStmt};
+use sla_ast::{BinaryOp, CallExpr, IfExpr, IndexExpr, Literal, Node, Primitive, SliceExpr, Type, WhileStmt};
 use sla_lowering::{is_panic_builtin_name, is_println_call, plan_scalar_binary_op};
 
 use crate::error::{Error, Result};
@@ -174,6 +174,7 @@ impl<'c> Driver<'c> {
             Node::UnsafeExpr(u) => self.gen_unsafe_expr(expr, u),
             Node::TryExpr(t) => self.gen_try(expr, t),
             Node::InlineAsmExpr(_) => self.gen_inline_asm(),
+            Node::SliceExpr(slc) => self.gen_slice_expr(slc),
             // I group: aggregate literal materialization (Zig
             // genExpr dispatch, current-head sab_codegen.zig
             // 12345–12349 + enum literal arm).
@@ -227,6 +228,80 @@ impl<'c> Driver<'c> {
                 self.gen_string_literal(&text)
             }
         }
+    }
+
+    /// Zig `genSliceExpr` (sab_codegen.zig:15303), completed: the Zig
+    /// version returns only the base pointer, but a Slice value in
+    /// this backend is a `{ptr, len}` pair (SliceAbi offsets 0 / 8),
+    /// so build the pair on a stack slot like `gen_string_literal`.
+    /// Literal start/end on an array target only (the Zig bound);
+    /// anything else is `UnsupportedSabDirectFeature`.
+    pub(crate) fn gen_slice_expr(&mut self, slc: &SliceExpr) -> Result<u32> {
+        let target_ty = self.check.expr_type(&slc.target).cloned().ok_or_else(|| {
+            Error::MissingType("slice target has no checker type".to_string())
+        })?;
+        let Type::Array(arr) = &target_ty else {
+            return Err(unsupported(
+                "slice expression over a non-array target",
+                "G gen_expr",
+                "15303",
+            ));
+        };
+        let (start, end) = match (&*slc.start, &*slc.end) {
+            (Node::Literal(Literal::IntVal(start)), Node::Literal(Literal::IntVal(end)))
+                if *start >= 0 && *end >= *start =>
+            {
+                (*start as usize, *end as usize)
+            }
+            _ => {
+                return Err(unsupported(
+                    "slice expression with non-literal or inverted bounds",
+                    "G gen_expr",
+                    "15303",
+                ));
+            }
+        };
+        let base_reg = self.gen_expr(&slc.target)?;
+        let stride = crate::layout::array_stride(&arr.elem);
+        let start_reg = self.b().new_tmp();
+        self.b().emit_assign_imm(start_reg, start as i64);
+        let offset_reg = self.b().new_tmp();
+        self.b().record_reg(offset_reg);
+        crate::release_prim::emit_op(
+            &mut self.state,
+            offset_reg,
+            crate::ir::OpKind::Mul,
+            Operand::Reg(start_reg),
+            Operand::ImmI64(stride as i64),
+        );
+        let ptr_reg = self.b().new_tmp();
+        self.b().record_reg(ptr_reg);
+        crate::release_prim::emit_ptr_add(
+            &mut self.state,
+            ptr_reg,
+            base_reg,
+            Operand::Reg(offset_reg),
+        );
+        self.emit_release(offset_reg)?;
+        self.emit_release(start_reg)?;
+        let len_reg = self.b().new_tmp();
+        self.b().emit_assign_imm(len_reg, (end - start) as i64);
+        // The view cell must be heap-allocated, not stack-allocated:
+        // a stack cell renamed into the `let` binding trips the host
+        // verifier (StackEscape 1025). Zig emits `alloc Slice_SIZE`
+        // for the same production (codegen.zig `genSliceViewCall`;
+        // see slice_view_emission.rs, LINE-STACKESCAPE-FIX). The cell
+        // is owned by the binding; the elements stay borrowed.
+        let slice_reg = self.b().new_tmp();
+        self.emit_alloc(slice_reg, 16);
+        self.emit_store(slice_reg, 0, ptr_reg, PrimType::Ptr);
+        self.emit_store(slice_reg, 8, len_reg, PrimType::U64);
+        self.emit_release(ptr_reg)?;
+        self.emit_release(len_reg)?;
+        if !self.is_local_reg(base_reg) {
+            self.emit_release(base_reg)?;
+        }
+        Ok(slice_reg)
     }
 
     /// Zig `genCall` (lines 15159–15580) dispatch head + the plain

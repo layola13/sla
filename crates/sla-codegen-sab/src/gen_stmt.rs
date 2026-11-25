@@ -276,6 +276,14 @@ impl<'c> Driver<'c> {
             }
         }
         self.b().emit_assign_reg(dst, src);
+        // 159(c): transfer the borrow-address-temp metadata from the
+        // expression result to the binding's register. The bare assign
+        // copies the value, but the temps stay keyed by the pre-copy
+        // register, so the scope-exit cleanup of the binding never
+        // disposes them (MemoryLeak 1012 for `let r = &a[i]`).
+        // Metadata transfer only — mirrors release_emit::emit_assign_reg
+        // without its source-consumption steps.
+        crate::release_meta::transfer_release_metadata(&mut self.state, dst, src)?;
         if matches!(ty, Some(Type::Primitive(sla_ast::types::Primitive::RawPtr)))
             && !self.is_local_reg(src)
             && !matches!(value, Node::CallExpr(_))

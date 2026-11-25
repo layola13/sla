@@ -255,7 +255,7 @@ impl<'c> Driver<'c> {
             unreachable!("array guard checked above")
         };
         let arr = arr.clone();
-        let target = self.gen_index_address_array(idx, &arr)?;
+        let target = self.gen_index_address_array(idx, &arr, 87)?;
         let value = self.gen_expr(&assign.value)?;
         crate::release_prim::emit_store(
             &mut self.state,
@@ -310,6 +310,7 @@ impl<'c> Driver<'c> {
         &mut self,
         idx: &IndexExpr,
         arr: &ArrayType,
+        panic_code: i64,
     ) -> Result<AddressSource> {
         let mut target_source = if let Node::FieldExpr(f) = &*idx.target {
             self.gen_field_address(f)?
@@ -349,6 +350,33 @@ impl<'c> Driver<'c> {
             return Ok(source);
         }
         let index_reg = self.gen_expr(&idx.index)?;
+        // 159(a): fixed-array bounds check (length is a compile-time constant;
+        // mirrors gen_vec_pod_index_read; miss arm uses branch-local releases).
+        let arr_len_reg = self.b().new_tmp();
+        let arr_in_bounds = self.b().new_tmp();
+        self.b().record_reg(arr_in_bounds);
+        self.b().emit_assign_imm(arr_len_reg, arr.len as i64);
+        crate::release_prim::emit_op(
+            &mut self.state,
+            arr_in_bounds,
+            OpKind::Ult,
+            Operand::Reg(index_reg),
+            Operand::Reg(arr_len_reg),
+        );
+        self.emit_release(arr_len_reg)?;
+        let arr_hit_label = self.b().new_label("L_ARRAY_INDEX_HIT");
+        let arr_miss_label = self.b().new_label("L_ARRAY_INDEX_MISS");
+        self.b().emit_branch(arr_in_bounds, &arr_hit_label, &arr_miss_label);
+        self.b().emit_label(&arr_miss_label);
+        self.branch_release_if_owned(arr_in_bounds);
+        self.branch_release_if_owned(index_reg);
+        self.branch_release_if_owned(target_reg);
+        for reg in &target_source.release_regs {
+            self.branch_release_if_owned(*reg);
+        }
+        self.b().emit_panic_code(panic_code);
+        self.b().emit_label(&arr_hit_label);
+        self.branch_release_if_owned(arr_in_bounds);
         let (elem_ptr, offset) = self.gen_array_element_ptr(arr, target_reg, index_reg);
         if let Some(offset) = offset {
             self.emit_release(offset)?;
