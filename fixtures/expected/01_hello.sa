@@ -1,11 +1,12 @@
 @import "sa_std/io/print.sai"
-@import "sa_std/fmt.sai"
+@import "sa_std/string.sa"
 @import "sa_std/string.sa"
 @import "sa_std/io/print.sai"
 
 [MACRO] SLA_ARRAY_FILL_U8 %array_ptr, %value, %length
     call @sa_mem_set(&%array_ptr, %value, %length)
 [END_MACRO]
+@import "sa_std/ffi.sa"
 @const SLA_FNPTR_VT_main = vtable { call = @main }
 @main() -> i32:
 L_ENTRY:
@@ -14,9 +15,41 @@ L_ENTRY:
     @const SLA_STR_1 = utf8:"\n"
     call @sa_print_bytes(&SLA_STR_1, 1)
     tmp_0 = 0
-    return tmp_0
+    tmp_1 = 32
+    tmp_2 = shl tmp_0, tmp_1
+    tmp_3 = ashr tmp_2, tmp_1
+    !tmp_0
+    !tmp_2
+    !tmp_1
+    return tmp_3
 
 @test "basic 01 hello world"():
 L_TEST_ENTRY_0:
+    @const SLA_STR_2 = utf8:"hello world\0"
+    tmp_5 = 11
+    tmp_4 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_4, &SLA_STR_2, tmp_5
+    !tmp_5
+    @const SLA_STR_3 = utf8:"hello world\0"
+    tmp_7 = 11
+    tmp_6 = stack_alloc Slice_SIZE
+    EXPAND SLICE_NEW tmp_6, &SLA_STR_3, tmp_7
+    !tmp_7
+    EXPAND STR_EQ tmp_8, tmp_4, tmp_6
+    tmp_9 = 0
+    tmp_10 = eq tmp_8, tmp_9
+    !tmp_8
+    !tmp_9
+    br tmp_10 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_10
+    panic(101)
+
+L_ELSE_2:
+    !tmp_10
+    jmp L_MERGE_3
+
+L_MERGE_3:
     return
 

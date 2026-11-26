@@ -28,3 +28,37 @@ via `sa sla build <file>.sla`, on 2026-11-07, and pulled back byte-exact
 Note: the venue plugin tree is the venue's checked-out head, not byte-wise
 the local `~/workspace/local-sa` tree; the compare is self-consistent
 (same inputs, venue Zig output as reference).
+
+## Regeneration — 2026-11-26 (task 172, parity reconciliation)
+
+The five expected outputs were regenerated wholesale from the current
+Zig plugin with the same recipe as above (`sa sla build <file>.sla`,
+`SA_PLUGIN_DEV=1`, `SA_STD_DIR=<sci tree>/sa_std`): sci `500477e5`,
+sa_plugin_sla master `50358f93` (its `src/` is unchanged through
+`56ab2c53`; the intervening commits touch only `sla_std/`), ReleaseFast
+builds with `env -u SA_PLUGIN_DEV`, plugin installed into an isolated
+HOME (installed `libsla.so` 39,676,856 B), caches cleared,
+`SLA_NO_FRESHNESS_CACHE=1`.
+
+| expected | sha256 |
+|---|---|
+| 01_hello.sa | 90a79e2eadd14856135da3f99fcc06ac8d5e2451c9f6514aabdd2b3c333345bf |
+| 02_arith.sa | 6877bbdfd578e9968b8c6a53cfefdcc82369e10cdb94584813d5cc00ed949d0c |
+| 03_if_else.sa | bba6af2088a52b9fac271f7a25ecf3657c14ee6d86daf0b27478c6f5b988ad0c |
+| 04_while_sum.sa | b70e88000923d3e40087642a7acf4a1ec2c312510778dffbf6abf6c422722ae4 |
+| 07_functions.sa | ff2bfa333dbd0701f6038efd581fd13740758f1f8e8a65148a03165b5066f4b0 |
+
+Why the bytes moved: the 2026-11-07 outputs had drifted from the
+plugin in four change classes, each traced to a landed, gated change
+in sa_plugin_sla (full attribution in the reconciliation record):
+narrow-integer width canonicalization at binding/consumption
+boundaries (DEF-TEXT-SHIFT-WRAP form G, `e4e2d9e2`, plus follow-ons),
+scope-exit retirement order/set (FB-016/020 declaration-order
+cleanup, `b03d45ac`; DEF-REFCELL-PAYLOAD-ACCOUNTING tail-param
+release, `34e192d5`), `@test` body materialization in build mode
+(task 112 B+C, `0b90f8d4`), and the A1 minimum-import prune
+(R441 form B, `6e40419e`) with the conditional `ffi.sa` import
+(CLOSING clusters, 2026-11-17). The Rust codegen does not yet mirror
+those four behaviours, so `fixture_parity` is expected red on
+01/02/03/04/07 until the Rust follow-ups land; the residuals are
+exactly those classes and nothing else.

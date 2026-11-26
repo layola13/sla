@@ -31,54 +31,200 @@ L_ELSE_1:
 L_MERGE_2:
     tmp_4 = load tmp_1+0 as i32
     !tmp_1
-    return tmp_4
+    tmp_5 = 32
+    tmp_6 = shl tmp_4, tmp_5
+    tmp_7 = ashr tmp_6, tmp_5
+    !tmp_4
+    !tmp_6
+    !tmp_5
+    !a
+    !b
+    return tmp_7
 
 @main() -> i32:
 L_ENTRY:
-    tmp_5 = 7
-    tmp_6 = 42
-    tmp_7 = call @sla__max(tmp_5, tmp_6)
-    !tmp_5
-    !tmp_6
-    tmp_8 = call @sa_fmt_u64(tmp_7, 10)
-    tmp_9 = call @sa_fmt_buffer_data(tmp_8)
-    tmp_10 = call @sa_fmt_buffer_len(tmp_8)
-    tmp_11 = tmp_9
-    call @sa_print_bytes(&tmp_11, tmp_10)
-    call @sa_fmt_buffer_free(^tmp_8)
-    !tmp_11
+    tmp_8 = 7
+    tmp_9 = 32
+    tmp_10 = shl tmp_8, tmp_9
+    tmp_11 = ashr tmp_10, tmp_9
+    !tmp_8
     !tmp_10
-    !tmp_7
+    !tmp_9
+    tmp_12 = 42
+    tmp_13 = 32
+    tmp_14 = shl tmp_12, tmp_13
+    tmp_15 = ashr tmp_14, tmp_13
+    !tmp_12
+    !tmp_14
+    !tmp_13
+    tmp_16 = call @sla__max(tmp_11, tmp_15)
+    !tmp_11
+    !tmp_15
+    tmp_17 = call @sa_fmt_i64(tmp_16, 10)
+    tmp_18 = call @sa_fmt_buffer_data(tmp_17)
+    tmp_19 = call @sa_fmt_buffer_len(tmp_17)
+    tmp_20 = tmp_18
+    call @sa_print_bytes(&tmp_20, tmp_19)
+    call @sa_fmt_buffer_free(^tmp_17)
+    !tmp_20
+    !tmp_19
+    !tmp_16
     @const SLA_STR_0 = utf8:"\n"
     call @sa_print_bytes(&SLA_STR_0, 1)
-    tmp_12 = 0
-    tmp_13 = 3
-    tmp_14 = sub tmp_12, tmp_13
-    !tmp_12
-    !tmp_13
-    tmp_15 = 0
-    tmp_16 = 9
-    tmp_17 = sub tmp_15, tmp_16
-    !tmp_15
-    !tmp_16
-    tmp_18 = call @sla__max(tmp_14, tmp_17)
-    !tmp_14
-    !tmp_17
-    tmp_19 = call @sa_fmt_u64(tmp_18, 10)
-    tmp_20 = call @sa_fmt_buffer_data(tmp_19)
-    tmp_21 = call @sa_fmt_buffer_len(tmp_19)
-    tmp_22 = tmp_20
-    call @sa_print_bytes(&tmp_22, tmp_21)
-    call @sa_fmt_buffer_free(^tmp_19)
-    !tmp_22
+    tmp_21 = 0
+    tmp_22 = 3
+    tmp_23 = sub tmp_21, tmp_22
     !tmp_21
-    !tmp_18
+    !tmp_22
+    tmp_24 = 32
+    tmp_25 = shl tmp_23, tmp_24
+    tmp_26 = ashr tmp_25, tmp_24
+    !tmp_23
+    !tmp_25
+    !tmp_24
+    tmp_27 = 0
+    tmp_28 = 9
+    tmp_29 = sub tmp_27, tmp_28
+    !tmp_27
+    !tmp_28
+    tmp_30 = 32
+    tmp_31 = shl tmp_29, tmp_30
+    tmp_32 = ashr tmp_31, tmp_30
+    !tmp_29
+    !tmp_31
+    !tmp_30
+    tmp_33 = call @sla__max(tmp_26, tmp_32)
+    !tmp_26
+    !tmp_32
+    tmp_34 = call @sa_fmt_i64(tmp_33, 10)
+    tmp_35 = call @sa_fmt_buffer_data(tmp_34)
+    tmp_36 = call @sa_fmt_buffer_len(tmp_34)
+    tmp_37 = tmp_35
+    call @sa_print_bytes(&tmp_37, tmp_36)
+    call @sa_fmt_buffer_free(^tmp_34)
+    !tmp_37
+    !tmp_36
+    !tmp_33
     @const SLA_STR_1 = utf8:"\n"
     call @sa_print_bytes(&SLA_STR_1, 1)
-    tmp_23 = 0
-    return tmp_23
+    tmp_38 = 0
+    tmp_39 = 32
+    tmp_40 = shl tmp_38, tmp_39
+    tmp_41 = ashr tmp_40, tmp_39
+    !tmp_38
+    !tmp_40
+    !tmp_39
+    return tmp_41
 
 @test "basic 03 max branches"():
 L_TEST_ENTRY_3:
+    tmp_42 = 7
+    tmp_43 = 32
+    tmp_44 = shl tmp_42, tmp_43
+    tmp_45 = ashr tmp_44, tmp_43
+    !tmp_42
+    !tmp_44
+    !tmp_43
+    tmp_46 = 42
+    tmp_47 = 32
+    tmp_48 = shl tmp_46, tmp_47
+    tmp_49 = ashr tmp_48, tmp_47
+    !tmp_46
+    !tmp_48
+    !tmp_47
+    tmp_50 = call @sla__max(tmp_45, tmp_49)
+    !tmp_45
+    !tmp_49
+    tmp_51 = 42
+    tmp_52 = ne tmp_50, tmp_51
+    !tmp_50
+    !tmp_51
+    br tmp_52 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_52
+    panic(301)
+
+L_ELSE_5:
+    !tmp_52
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    tmp_55 = 0
+    tmp_56 = 3
+    tmp_57 = sub tmp_55, tmp_56
+    !tmp_55
+    !tmp_56
+    tmp_58 = 32
+    tmp_59 = shl tmp_57, tmp_58
+    tmp_60 = ashr tmp_59, tmp_58
+    !tmp_57
+    !tmp_59
+    !tmp_58
+    tmp_61 = 0
+    tmp_62 = 9
+    tmp_63 = sub tmp_61, tmp_62
+    !tmp_61
+    !tmp_62
+    tmp_64 = 32
+    tmp_65 = shl tmp_63, tmp_64
+    tmp_66 = ashr tmp_65, tmp_64
+    !tmp_63
+    !tmp_65
+    !tmp_64
+    tmp_67 = call @sla__max(tmp_60, tmp_66)
+    !tmp_60
+    !tmp_66
+    tmp_68 = 0
+    tmp_69 = 3
+    tmp_70 = sub tmp_68, tmp_69
+    !tmp_68
+    !tmp_69
+    tmp_71 = ne tmp_67, tmp_70
+    !tmp_67
+    !tmp_70
+    br tmp_71 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_71
+    panic(302)
+
+L_ELSE_8:
+    !tmp_71
+    jmp L_MERGE_9
+
+L_MERGE_9:
+    tmp_74 = 5
+    tmp_75 = 32
+    tmp_76 = shl tmp_74, tmp_75
+    tmp_77 = ashr tmp_76, tmp_75
+    !tmp_74
+    !tmp_76
+    !tmp_75
+    tmp_78 = 5
+    tmp_79 = 32
+    tmp_80 = shl tmp_78, tmp_79
+    tmp_81 = ashr tmp_80, tmp_79
+    !tmp_78
+    !tmp_80
+    !tmp_79
+    tmp_82 = call @sla__max(tmp_77, tmp_81)
+    !tmp_77
+    !tmp_81
+    tmp_83 = 5
+    tmp_84 = ne tmp_82, tmp_83
+    !tmp_82
+    !tmp_83
+    br tmp_84 -> L_THEN_10, L_ELSE_11
+
+L_THEN_10:
+    !tmp_84
+    panic(303)
+
+L_ELSE_11:
+    !tmp_84
+    jmp L_MERGE_12
+
+L_MERGE_12:
     return
 

@@ -11,58 +11,166 @@
 @sla__while_sum(limit: i32) -> i32:
 L_ENTRY:
     tmp_0 = 0
-    t = add tmp_0, 0
-    !tmp_0
-    tmp_1 = 0
-    i = add tmp_1, 0
+    tmp_1 = 32
+    tmp_2 = shl tmp_0, tmp_1
+    t = ashr tmp_2, tmp_1
+    !tmp_2
     !tmp_1
+    !tmp_0
+    tmp_3 = 0
+    tmp_4 = 32
+    tmp_5 = shl tmp_3, tmp_4
+    i = ashr tmp_5, tmp_4
+    !tmp_5
+    !tmp_4
+    !tmp_3
     jmp L_WHILE_HEAD_0
 
 L_WHILE_HEAD_0:
-    tmp_2 = slt i, limit
-    br tmp_2 -> L_WHILE_BODY_1, L_WHILE_COND_FALSE_2
+    tmp_6 = slt i, limit
+    br tmp_6 -> L_WHILE_BODY_1, L_WHILE_COND_FALSE_2
 
 L_WHILE_BODY_1:
-    !tmp_2
-    tmp_3 = add t, i
+    !tmp_6
+    tmp_7 = add t, i
     !t
-    t = tmp_3
-    tmp_4 = 1
-    tmp_5 = add i, tmp_4
-    !tmp_4
+    tmp_8 = 32
+    tmp_9 = shl tmp_7, tmp_8
+    t = ashr tmp_9, tmp_8
+    !tmp_9
+    !tmp_8
+    !tmp_7
+    tmp_10 = 1
+    tmp_11 = add i, tmp_10
+    !tmp_10
     !i
-    i = tmp_5
+    tmp_12 = 32
+    tmp_13 = shl tmp_11, tmp_12
+    i = ashr tmp_13, tmp_12
+    !tmp_13
+    !tmp_12
+    !tmp_11
     jmp L_WHILE_HEAD_0
 
 L_WHILE_COND_FALSE_2:
-    !tmp_2
+    !tmp_6
     jmp L_WHILE_EXIT_3
 
 L_WHILE_EXIT_3:
+    tmp_14 = 32
+    tmp_15 = shl t, tmp_14
+    tmp_16 = ashr tmp_15, tmp_14
+    !tmp_15
+    !tmp_14
     !i
     !limit
-    return t
+    !t
+    return tmp_16
 
 @main() -> i32:
 L_ENTRY:
-    tmp_6 = 10
-    tmp_7 = call @sla__while_sum(tmp_6)
-    !tmp_6
-    tmp_8 = call @sa_fmt_u64(tmp_7, 10)
-    tmp_9 = call @sa_fmt_buffer_data(tmp_8)
-    tmp_10 = call @sa_fmt_buffer_len(tmp_8)
-    tmp_11 = tmp_9
-    call @sa_print_bytes(&tmp_11, tmp_10)
-    call @sa_fmt_buffer_free(^tmp_8)
-    !tmp_11
-    !tmp_10
-    !tmp_7
+    tmp_17 = 10
+    tmp_18 = 32
+    tmp_19 = shl tmp_17, tmp_18
+    tmp_20 = ashr tmp_19, tmp_18
+    !tmp_17
+    !tmp_19
+    !tmp_18
+    tmp_21 = call @sla__while_sum(tmp_20)
+    !tmp_20
+    tmp_22 = call @sa_fmt_i64(tmp_21, 10)
+    tmp_23 = call @sa_fmt_buffer_data(tmp_22)
+    tmp_24 = call @sa_fmt_buffer_len(tmp_22)
+    tmp_25 = tmp_23
+    call @sa_print_bytes(&tmp_25, tmp_24)
+    call @sa_fmt_buffer_free(^tmp_22)
+    !tmp_25
+    !tmp_24
+    !tmp_21
     @const SLA_STR_0 = utf8:"\n"
     call @sa_print_bytes(&SLA_STR_0, 1)
-    tmp_12 = 0
-    return tmp_12
+    tmp_26 = 0
+    tmp_27 = 32
+    tmp_28 = shl tmp_26, tmp_27
+    tmp_29 = ashr tmp_28, tmp_27
+    !tmp_26
+    !tmp_28
+    !tmp_27
+    return tmp_29
 
 @test "basic 04 while sum"():
 L_TEST_ENTRY_4:
+    tmp_30 = 10
+    tmp_31 = 32
+    tmp_32 = shl tmp_30, tmp_31
+    tmp_33 = ashr tmp_32, tmp_31
+    !tmp_30
+    !tmp_32
+    !tmp_31
+    tmp_34 = call @sla__while_sum(tmp_33)
+    !tmp_33
+    tmp_35 = 45
+    tmp_36 = ne tmp_34, tmp_35
+    !tmp_34
+    !tmp_35
+    br tmp_36 -> L_THEN_5, L_ELSE_6
+
+L_THEN_5:
+    !tmp_36
+    panic(401)
+
+L_ELSE_6:
+    !tmp_36
+    jmp L_MERGE_7
+
+L_MERGE_7:
+    tmp_39 = 0
+    tmp_40 = 32
+    tmp_41 = shl tmp_39, tmp_40
+    tmp_42 = ashr tmp_41, tmp_40
+    !tmp_39
+    !tmp_41
+    !tmp_40
+    tmp_43 = call @sla__while_sum(tmp_42)
+    !tmp_42
+    tmp_44 = 0
+    tmp_45 = ne tmp_43, tmp_44
+    !tmp_43
+    !tmp_44
+    br tmp_45 -> L_THEN_8, L_ELSE_9
+
+L_THEN_8:
+    !tmp_45
+    panic(402)
+
+L_ELSE_9:
+    !tmp_45
+    jmp L_MERGE_10
+
+L_MERGE_10:
+    tmp_48 = 1
+    tmp_49 = 32
+    tmp_50 = shl tmp_48, tmp_49
+    tmp_51 = ashr tmp_50, tmp_49
+    !tmp_48
+    !tmp_50
+    !tmp_49
+    tmp_52 = call @sla__while_sum(tmp_51)
+    !tmp_51
+    tmp_53 = 0
+    tmp_54 = ne tmp_52, tmp_53
+    !tmp_52
+    !tmp_53
+    br tmp_54 -> L_THEN_11, L_ELSE_12
+
+L_THEN_11:
+    !tmp_54
+    panic(403)
+
+L_ELSE_12:
+    !tmp_54
+    jmp L_MERGE_13
+
+L_MERGE_13:
     return
 

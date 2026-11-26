@@ -63,94 +63,230 @@ L_ENTRY:
     !tmp_22
     tmp_24 = add tmp_23, d
     !tmp_23
-    !b
+    tmp_25 = 32
+    tmp_26 = shl tmp_24, tmp_25
+    tmp_27 = ashr tmp_26, tmp_25
+    !tmp_24
+    !tmp_26
+    !tmp_25
     !a
+    !b
     !c
     !d
-    return tmp_24
+    return tmp_27
 
 @main() -> i32:
 L_ENTRY:
-    tmp_25 = 2
-    tmp_26 = 3
-    tmp_27 = 4
-    tmp_28 = mul tmp_26, tmp_27
-    !tmp_26
-    !tmp_27
-    tmp_29 = add tmp_25, tmp_28
-    !tmp_25
-    !tmp_28
-    tmp_30 = call @sa_fmt_u64(tmp_29, 10)
-    tmp_31 = call @sa_fmt_buffer_data(tmp_30)
-    tmp_32 = call @sa_fmt_buffer_len(tmp_30)
-    tmp_33 = tmp_31
-    call @sa_print_bytes(&tmp_33, tmp_32)
-    call @sa_fmt_buffer_free(^tmp_30)
-    !tmp_33
-    !tmp_32
+    tmp_28 = 2
+    tmp_29 = 3
+    tmp_30 = 4
+    tmp_31 = mul tmp_29, tmp_30
     !tmp_29
+    !tmp_30
+    tmp_32 = add tmp_28, tmp_31
+    !tmp_28
+    !tmp_31
+    tmp_33 = call @sa_fmt_i64(tmp_32, 10)
+    tmp_34 = call @sa_fmt_buffer_data(tmp_33)
+    tmp_35 = call @sa_fmt_buffer_len(tmp_33)
+    tmp_36 = tmp_34
+    call @sa_print_bytes(&tmp_36, tmp_35)
+    call @sa_fmt_buffer_free(^tmp_33)
+    !tmp_36
+    !tmp_35
+    !tmp_32
     @const SLA_STR_0 = utf8:"\n"
     call @sa_print_bytes(&SLA_STR_0, 1)
-    tmp_34 = 20
-    tmp_35 = 8
-    tmp_36 = sub tmp_34, tmp_35
-    !tmp_34
-    !tmp_35
-    tmp_37 = 3
-    tmp_38 = sdiv tmp_36, tmp_37
-    !tmp_36
+    tmp_37 = 20
+    tmp_38 = 8
+    tmp_39 = sub tmp_37, tmp_38
     !tmp_37
-    tmp_39 = call @sa_fmt_u64(tmp_38, 10)
-    tmp_40 = call @sa_fmt_buffer_data(tmp_39)
-    tmp_41 = call @sa_fmt_buffer_len(tmp_39)
-    tmp_42 = tmp_40
-    call @sa_print_bytes(&tmp_42, tmp_41)
-    call @sa_fmt_buffer_free(^tmp_39)
-    !tmp_42
-    !tmp_41
     !tmp_38
+    tmp_40 = 3
+    tmp_41 = sdiv tmp_39, tmp_40
+    !tmp_39
+    !tmp_40
+    tmp_42 = call @sa_fmt_i64(tmp_41, 10)
+    tmp_43 = call @sa_fmt_buffer_data(tmp_42)
+    tmp_44 = call @sa_fmt_buffer_len(tmp_42)
+    tmp_45 = tmp_43
+    call @sa_print_bytes(&tmp_45, tmp_44)
+    call @sa_fmt_buffer_free(^tmp_42)
+    !tmp_45
+    !tmp_44
+    !tmp_41
     @const SLA_STR_1 = utf8:"\n"
     call @sa_print_bytes(&SLA_STR_1, 1)
-    tmp_43 = 17
-    tmp_44 = 5
-    tmp_45 = srem tmp_43, tmp_44
-    !tmp_43
-    !tmp_44
-    tmp_46 = call @sa_fmt_u64(tmp_45, 10)
-    tmp_47 = call @sa_fmt_buffer_data(tmp_46)
-    tmp_48 = call @sa_fmt_buffer_len(tmp_46)
-    tmp_49 = tmp_47
-    call @sa_print_bytes(&tmp_49, tmp_48)
-    call @sa_fmt_buffer_free(^tmp_46)
-    !tmp_49
+    tmp_46 = 17
+    tmp_47 = 5
+    tmp_48 = srem tmp_46, tmp_47
+    !tmp_46
+    !tmp_47
+    tmp_49 = call @sa_fmt_i64(tmp_48, 10)
+    tmp_50 = call @sa_fmt_buffer_data(tmp_49)
+    tmp_51 = call @sa_fmt_buffer_len(tmp_49)
+    tmp_52 = tmp_50
+    call @sa_print_bytes(&tmp_52, tmp_51)
+    call @sa_fmt_buffer_free(^tmp_49)
+    !tmp_52
+    !tmp_51
     !tmp_48
-    !tmp_45
     @const SLA_STR_2 = utf8:"\n"
     call @sa_print_bytes(&SLA_STR_2, 1)
-    tmp_50 = 0
-    tmp_51 = 2
-    tmp_52 = 3
-    tmp_53 = add tmp_51, tmp_52
-    !tmp_51
-    !tmp_52
-    tmp_54 = sub tmp_50, tmp_53
-    !tmp_50
-    !tmp_53
-    tmp_55 = call @sa_fmt_u64(tmp_54, 10)
-    tmp_56 = call @sa_fmt_buffer_data(tmp_55)
-    tmp_57 = call @sa_fmt_buffer_len(tmp_55)
-    tmp_58 = tmp_56
-    call @sa_print_bytes(&tmp_58, tmp_57)
-    call @sa_fmt_buffer_free(^tmp_55)
-    !tmp_58
-    !tmp_57
+    tmp_53 = 0
+    tmp_54 = 2
+    tmp_55 = 3
+    tmp_56 = add tmp_54, tmp_55
     !tmp_54
+    !tmp_55
+    tmp_57 = sub tmp_53, tmp_56
+    !tmp_53
+    !tmp_56
+    tmp_58 = call @sa_fmt_i64(tmp_57, 10)
+    tmp_59 = call @sa_fmt_buffer_data(tmp_58)
+    tmp_60 = call @sa_fmt_buffer_len(tmp_58)
+    tmp_61 = tmp_59
+    call @sa_print_bytes(&tmp_61, tmp_60)
+    call @sa_fmt_buffer_free(^tmp_58)
+    !tmp_61
+    !tmp_60
+    !tmp_57
     @const SLA_STR_3 = utf8:"\n"
     call @sa_print_bytes(&SLA_STR_3, 1)
-    tmp_59 = 0
-    return tmp_59
+    tmp_62 = 0
+    tmp_63 = 32
+    tmp_64 = shl tmp_62, tmp_63
+    tmp_65 = ashr tmp_64, tmp_63
+    !tmp_62
+    !tmp_64
+    !tmp_63
+    return tmp_65
 
 @test "basic 02 arith precedence"():
 L_TEST_ENTRY_0:
+    tmp_66 = 2
+    tmp_67 = 3
+    tmp_68 = 4
+    tmp_69 = mul tmp_67, tmp_68
+    !tmp_67
+    !tmp_68
+    tmp_70 = add tmp_66, tmp_69
+    !tmp_66
+    !tmp_69
+    tmp_71 = 14
+    tmp_72 = ne tmp_70, tmp_71
+    !tmp_70
+    !tmp_71
+    br tmp_72 -> L_THEN_1, L_ELSE_2
+
+L_THEN_1:
+    !tmp_72
+    panic(201)
+
+L_ELSE_2:
+    !tmp_72
+    jmp L_MERGE_3
+
+L_MERGE_3:
+    tmp_75 = 20
+    tmp_76 = 8
+    tmp_77 = sub tmp_75, tmp_76
+    !tmp_75
+    !tmp_76
+    tmp_78 = 3
+    tmp_79 = sdiv tmp_77, tmp_78
+    !tmp_77
+    !tmp_78
+    tmp_80 = 4
+    tmp_81 = ne tmp_79, tmp_80
+    !tmp_79
+    !tmp_80
+    br tmp_81 -> L_THEN_4, L_ELSE_5
+
+L_THEN_4:
+    !tmp_81
+    panic(202)
+
+L_ELSE_5:
+    !tmp_81
+    jmp L_MERGE_6
+
+L_MERGE_6:
+    tmp_84 = 17
+    tmp_85 = 5
+    tmp_86 = srem tmp_84, tmp_85
+    !tmp_84
+    !tmp_85
+    tmp_87 = 2
+    tmp_88 = ne tmp_86, tmp_87
+    !tmp_86
+    !tmp_87
+    br tmp_88 -> L_THEN_7, L_ELSE_8
+
+L_THEN_7:
+    !tmp_88
+    panic(203)
+
+L_ELSE_8:
+    !tmp_88
+    jmp L_MERGE_9
+
+L_MERGE_9:
+    tmp_91 = 0
+    tmp_92 = 2
+    tmp_93 = 3
+    tmp_94 = add tmp_92, tmp_93
+    !tmp_92
+    !tmp_93
+    tmp_95 = sub tmp_91, tmp_94
+    !tmp_91
+    !tmp_94
+    tmp_96 = 0
+    tmp_97 = 5
+    tmp_98 = sub tmp_96, tmp_97
+    !tmp_96
+    !tmp_97
+    tmp_99 = ne tmp_95, tmp_98
+    !tmp_95
+    !tmp_98
+    br tmp_99 -> L_THEN_10, L_ELSE_11
+
+L_THEN_10:
+    !tmp_99
+    panic(204)
+
+L_ELSE_11:
+    !tmp_99
+    jmp L_MERGE_12
+
+L_MERGE_12:
+    tmp_102 = call @sla__arith_values()
+    tmp_103 = 14
+    tmp_104 = 40
+    tmp_105 = add tmp_103, tmp_104
+    !tmp_103
+    !tmp_104
+    tmp_106 = 200
+    tmp_107 = add tmp_105, tmp_106
+    !tmp_105
+    !tmp_106
+    tmp_108 = 5
+    tmp_109 = sub tmp_107, tmp_108
+    !tmp_107
+    !tmp_108
+    tmp_110 = ne tmp_102, tmp_109
+    !tmp_102
+    !tmp_109
+    br tmp_110 -> L_THEN_13, L_ELSE_14
+
+L_THEN_13:
+    !tmp_110
+    panic(205)
+
+L_ELSE_14:
+    !tmp_110
+    jmp L_MERGE_15
+
+L_MERGE_15:
     return
 

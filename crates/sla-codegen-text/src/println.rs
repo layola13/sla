@@ -96,14 +96,27 @@ impl<'c> Codegen<'c> {
                 let fmt_fn = match prim {
                     Primitive::F32 | Primitive::F64 | Primitive::Float => "@sa_fmt_f64",
                     Primitive::Boolean => "@sa_fmt_bool",
+                    // (xxxvi) DEF-SLA-PRINTLN-I64-SIGNED: signed
+                    // integer primitives must print through
+                    // @sa_fmt_i64; the old catch-all routed them
+                    // to @sa_fmt_u64, so -3 printed as
+                    // 18446744073709551613 (2^64-3). Mirrors the
+                    // Zig plugin's DEF-DEMOS-SIGNED-FMT arms
+                    // (codegen.zig, CLOSING-D, 2026-11-17).
+                    Primitive::Integer
+                    | Primitive::I8
+                    | Primitive::I16
+                    | Primitive::I32
+                    | Primitive::I64
+                    | Primitive::Isize => "@sa_fmt_i64",
                     _ => "@sa_fmt_u64",
                 };
                 let val = self.gen_expr(arg)?;
                 let fmt_buf = self.new_tmp();
                 let data = self.new_tmp();
                 let len = self.new_tmp();
-                if fmt_fn == "@sa_fmt_u64" {
-                    self.ins(&format!("{fmt_buf} = call @sa_fmt_u64({val}, 10)"));
+                if fmt_fn == "@sa_fmt_u64" || fmt_fn == "@sa_fmt_i64" {
+                    self.ins(&format!("{fmt_buf} = call {fmt_fn}({val}, 10)"));
                 } else {
                     self.ins(&format!("{fmt_buf} = call {fmt_fn}({val})"));
                 }
