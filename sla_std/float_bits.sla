@@ -1,0 +1,193 @@
+// S2 float bits + constants surface -- staging (oc-box-2 / 25026).
+//
+// Target home: sa_plugin_sla/sla_std/float_bits.sla
+//
+// All entry points take/return the IEEE-754 binary64 bit pattern as u64.
+// SLA `as` is numeric (1.0 as u64 == 1), so there is no f64<->int bitcast;
+// the bit pattern is the natural substrate/oracle/fuzz shape (same choice
+// as S3 float_repr). CPython `struct` / `math` / `sys.float_info` are the
+// oracle. NOTE: this SLA backend does not lower module `const` (it emits an
+// undeclared register), so the constant surface is exposed as `*_bits()`
+// accessor functions, like bitpack_u64_max().
+
+// ---- mask helpers ----
+fn f64_sign_bit() -> u64 {
+    return (1 as u64) << 63;
+}
+
+fn f64_mag_mask() -> u64 {
+    return ((2147483647 as u64) << 32) | 4294967295;
+}
+
+fn f64_frac_mask() -> u64 {
+    return ((1048575 as u64) << 32) | 4294967295;
+}
+
+// ---- constants (u64 bit patterns) ----
+fn f64_zero_bits() -> u64 { return 0; }
+fn f64_neg_zero_bits() -> u64 { return ((2147483648 as u64) << 32); }
+fn f64_inf_bits() -> u64 { return ((2146435072 as u64) << 32); }
+fn f64_neg_inf_bits() -> u64 { return ((4293918720 as u64) << 32); }
+fn f64_nan_bits() -> u64 { return ((2146959360 as u64) << 32); }
+fn f64_max_bits() -> u64 { return ((2146435071 as u64) << 32) | 4294967295; }
+fn f64_min_bits() -> u64 { return ((4293918719 as u64) << 32) | 4294967295; }
+fn f64_min_pos_bits() -> u64 { return 1; }
+fn f64_min_normal_bits() -> u64 { return ((1048576 as u64) << 32); }
+fn f64_epsilon_bits() -> u64 { return ((1018167296 as u64) << 32); }
+
+// ---- decomposition ----
+fn f64_exp_field(bits: u64) -> i64 {
+    return ((bits >> 52) & 2047) as i64;
+}
+
+fn f64_frac_bits(bits: u64) -> u64 {
+    return bits & f64_frac_mask();
+}
+
+fn f64_mag_bits(bits: u64) -> u64 {
+    return bits & f64_mag_mask();
+}
+
+// ---- classification (i64 0/1) ----
+fn f64_is_nan(bits: u64) -> i64 {
+    if f64_exp_field(bits) == 2047 && f64_frac_bits(bits) != 0 {
+        return 1;
+    };
+    return 0;
+}
+
+fn f64_is_inf(bits: u64) -> i64 {
+    if f64_exp_field(bits) == 2047 && f64_frac_bits(bits) == 0 {
+        return 1;
+    };
+    return 0;
+}
+
+fn f64_is_finite(bits: u64) -> i64 {
+    if f64_exp_field(bits) == 2047 {
+        return 0;
+    };
+    return 1;
+}
+
+fn f64_is_normal(bits: u64) -> i64 {
+    let e = f64_exp_field(bits);
+    if e > 0 && e < 2047 {
+        return 1;
+    };
+    return 0;
+}
+
+fn f64_is_subnormal(bits: u64) -> i64 {
+    if f64_exp_field(bits) == 0 && f64_frac_bits(bits) != 0 {
+        return 1;
+    };
+    return 0;
+}
+
+fn f64_is_zero(bits: u64) -> i64 {
+    if f64_mag_bits(bits) == 0 {
+        return 1;
+    };
+    return 0;
+}
+
+fn f64_signbit(bits: u64) -> i64 {
+    return (bits >> 63) as i64;
+}
+
+// ---- comparison: total order over finite/infinite values, signed zeros
+// compare equal; returns -1 / 0 / 1. NaNs are excluded (callers check first).
+fn f64_cmp_mag(a: u64, b: u64) -> i64 {
+    let am = f64_mag_bits(a);
+    let bm = f64_mag_bits(b);
+    if am < bm {
+        return -1;
+    };
+    if am > bm {
+        return 1;
+    };
+    return 0;
+}
+
+fn f64_cmp_bits(a: u64, b: u64) -> i64 {
+    let sa = f64_signbit(a);
+    let sb = f64_signbit(b);
+    let za = f64_is_zero(a);
+    let zb = f64_is_zero(b);
+    if za == 1 && zb == 1 {
+        return 0;
+    };
+    if za == 1 {
+        if sb == 1 {
+            return 1;
+        };
+        return -1;
+    };
+    if zb == 1 {
+        if sa == 1 {
+            return -1;
+        };
+        return 1;
+    };
+    if sa != sb {
+        if sa == 1 {
+            return -1;
+        };
+        return 1;
+    };
+    let c = f64_cmp_mag(a, b);
+    if sa == 1 {
+        return 0 - c;
+    };
+    return c;
+}
+
+// ---- transformations ----
+fn f64_abs_bits(bits: u64) -> u64 {
+    return bits & f64_mag_mask();
+}
+
+fn f64_neg_bits(bits: u64) -> u64 {
+    if f64_signbit(bits) == 1 {
+        return bits - f64_sign_bit();
+    };
+    return bits + f64_sign_bit();
+}
+
+fn f64_copysign(bits: u64, sign_from: u64) -> u64 {
+    return (bits & f64_mag_mask()) | (sign_from & f64_sign_bit());
+}
+
+// One representable step from x toward y (CPython math.nextafter).
+// NaN on either side yields the canonical quiet NaN, matching CPython.
+fn f64_nextafter_bits(x: u64, y: u64) -> u64 {
+    if f64_is_nan(x) == 1 || f64_is_nan(y) == 1 {
+        return f64_nan_bits();
+    };
+    let c = f64_cmp_bits(x, y);
+    if c == 0 {
+        return x;
+    };
+    let up = 0;
+    if c < 0 {
+        up = 1;
+    };
+    if f64_is_zero(x) == 1 {
+        if up == 1 {
+            return f64_min_pos_bits();
+        };
+        return f64_min_pos_bits() + f64_sign_bit();
+    };
+    let s = f64_signbit(x);
+    if s == 0 {
+        if up == 1 {
+            return x + 1;
+        };
+        return x - 1;
+    };
+    if up == 1 {
+        return x - 1;
+    };
+    return x + 1;
+}
