@@ -1587,9 +1587,7 @@
         "sa_http_client_new_with_proxy",
         "sa_http_client_new_with_profile_proxy",
         "sa_http_fetch_bytes",
-        "sa_http_websocket_read",
         "sa_http_client_new_v2",
-        "sa_http_websocket_read_v2",
         "sa_http_client_sse_post",
         "sa_http_client_sse_turn",
         "sa_http_client_sse_turn_ex",
@@ -1709,6 +1707,11 @@
           "signature": "@extern sa_http_client_websocket_connect(client: ptr, &url: ptr, url_len: u64, &out_ws: ptr) -> u32"
         },
         {
+          "extern": "sa_http_websocket_read",
+          "reason": "param `ws: ptr`: lone input pointer with no len/cap partner -- pointee not constructible",
+          "signature": "@extern sa_http_websocket_read(ws: ptr, max_len: u64, &out_opcode: ptr, &out_ptr: ptr, &out_len: ptr) -> u32"
+        },
+        {
           "extern": "sa_http_websocket_write",
           "reason": "param `ws: ptr`: lone input pointer with no len/cap partner -- pointee not constructible",
           "signature": "@extern sa_http_websocket_write(ws: ptr, opcode: u8, &data: ptr, data_len: u64) -> u32"
@@ -1797,6 +1800,11 @@
           "extern": "sa_http_websocket_poll_v2",
           "reason": "param `ws: ptr`: lone input pointer with no len/cap partner -- pointee not constructible",
           "signature": "@extern sa_http_websocket_poll_v2(ws: ptr, interests: u32, timeout_ms: u32, &out_events: ptr) -> u32"
+        },
+        {
+          "extern": "sa_http_websocket_read_v2",
+          "reason": "param `ws: ptr`: lone input pointer with no len/cap partner -- pointee not constructible",
+          "signature": "@extern sa_http_websocket_read_v2(ws: ptr, max_len: u64, &out_opcode: ptr, &out_ptr: ptr, &out_len: ptr) -> u32"
         },
         {
           "extern": "sa_http_websocket_write_v2",
@@ -2084,9 +2092,7 @@
       ],
       "smoke": [
         "sa_http_server_new",
-        "sa_http_server_websocket_read",
-        "sa_http_server_new_v2",
-        "sa_http_server_websocket_read_v2"
+        "sa_http_server_new_v2"
       ],
       "unwrappable": [],
       "needs_state": [
@@ -2179,6 +2185,11 @@
           "extern": "sa_http_server_websocket_upgrade",
           "reason": "param `req: ptr`: lone input pointer with no len/cap partner -- pointee not constructible",
           "signature": "@extern sa_http_server_websocket_upgrade(req: ptr, &out_ws: ptr) -> u32"
+        },
+        {
+          "extern": "sa_http_server_websocket_read",
+          "reason": "param `ws: ptr`: lone input pointer with no len/cap partner -- pointee not constructible",
+          "signature": "@extern sa_http_server_websocket_read(ws: ptr, max_len: u64, &out_opcode: ptr, &out_data: ptr, &out_len: ptr) -> u32"
         },
         {
           "extern": "sa_http_server_websocket_write",
@@ -2319,6 +2330,11 @@
           "extern": "sa_http_server_websocket_poll_v2",
           "reason": "param `ws: ptr`: lone input pointer with no len/cap partner -- pointee not constructible",
           "signature": "@extern sa_http_server_websocket_poll_v2(ws: ptr, interests: u32, timeout_ms: u32, &out_events: ptr) -> u32"
+        },
+        {
+          "extern": "sa_http_server_websocket_read_v2",
+          "reason": "param `ws: ptr`: lone input pointer with no len/cap partner -- pointee not constructible",
+          "signature": "@extern sa_http_server_websocket_read_v2(ws: ptr, max_len: u64, &out_opcode: ptr, &out_data: ptr, &out_len: ptr) -> u32"
         },
         {
           "extern": "sa_http_server_websocket_write_v2",
@@ -4332,7 +4348,6 @@
         "sa_std_process_parent_id",
         "sa_std_process_user_id",
         "sa_std_process_group_id",
-        "sa_std_process_abort",
         "sa_std_process_exit_status_code",
         "sa_std_process_exit_status_signal",
         "sa_std_process_exit_status_core_dumped",
@@ -4343,6 +4358,11 @@
       ],
       "unwrappable": [],
       "needs_state": [
+        {
+          "extern": "sa_std_process_abort",
+          "reason": "terminates the process by design (SIGABRT): a smoke call kills the test runner; wrap-only, behaviour covered by hand-written process tests",
+          "signature": "@extern sa_std_process_abort() -> void"
+        },
         {
           "extern": "sa_std_process_child_id",
           "reason": "param `handle: u64`: needs a live handle handle",
@@ -4854,16 +4874,12 @@
         "sa_task_yield",
         "sa_task_sleep_ns",
         "sa_task_sleep_ms",
-        "sa_task_current",
-        "sa_task_live_count",
         "sa_task_deadlock_guard_arm",
         "sa_chan_make",
         "sa_sync_mutex_new",
         "sa_sync_rwlock_new",
         "sa_sync_waitgroup_new",
-        "sa_sync_once_new",
-        "sa_coop_take_result",
-        "sa_coop_finish"
+        "sa_sync_once_new"
       ],
       "unwrappable": [],
       "needs_state": [
@@ -4881,6 +4897,16 @@
           "extern": "sa_task_detach",
           "reason": "param `handle: u64`: needs a live handle handle",
           "signature": "@extern sa_task_detach(handle: u64) -> i32"
+        },
+        {
+          "extern": "sa_task_current",
+          "reason": "producer-shaped but state-valued: the current-task handle is 0 on a bare test thread, so the producer nonzero assert cannot hold; needs a live task context",
+          "signature": "@extern sa_task_current(&out_handle: ptr) -> i32"
+        },
+        {
+          "extern": "sa_task_live_count",
+          "reason": "producer-shaped but state-valued: the live-task count is 0 before any spawn, so the producer nonzero assert cannot hold; needs a live task context",
+          "signature": "@extern sa_task_live_count(&out_count: ptr) -> i32"
         },
         {
           "extern": "sa_task_spawn_supervised",
@@ -4996,6 +5022,16 @@
           "extern": "sa_sync_destroy",
           "reason": "param `handle: u64`: needs a live handle handle",
           "signature": "@extern sa_sync_destroy(handle: u64) -> i32"
+        },
+        {
+          "extern": "sa_coop_take_result",
+          "reason": "wasm-cooperative-runtime-only extern (task.sai): no native symbol exists by design, so a native smoke cannot link it; covered by the wasm goroutine corpus",
+          "signature": "@extern sa_coop_take_result(&out_status: ptr) -> i32"
+        },
+        {
+          "extern": "sa_coop_finish",
+          "reason": "wasm-cooperative-runtime-only extern (task.sai): no native symbol exists by design, so a native smoke cannot link it; covered by the wasm goroutine corpus",
+          "signature": "@extern sa_coop_finish() -> void"
         },
         {
           "extern": "sa_coop_run_main",

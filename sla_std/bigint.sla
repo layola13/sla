@@ -1,0 +1,541 @@
+// S4 bigint base -- staging implementation (oc-box-2 / 25026).
+// Decimal-ready sign-magnitude arbitrary-precision integer:
+//   sign: -1 / 0 / 1 ; mag: little-endian base-10^9 limbs (0 <= limb < 10^9)
+// Base 10^9 keeps every limb arithmetic intermediate inside i64
+// (10^18 < 2^63) and makes decimal conversion a pure radix change.
+//
+// The i128-pair "Pair" surface (Pair128) is the stepping stone shared
+// with the #14 pair helpers; it is defined at the bottom of this file.
+//
+// Target home: sa_plugin_sla/sla_std/bigint.sla
+
+struct BigInt {
+    sign: i64,
+    mag: Vec<i64>,
+}
+
+struct DivMod {
+    q: BigInt,
+    r: BigInt,
+}
+
+fn big_base() -> i64 {
+    return 1000000000;
+}
+
+fn big_zero() -> BigInt {
+    return BigInt { sign: 0, mag: Vec::new() };
+}
+
+fn big_one() -> BigInt {
+    let m: Vec<i64> = Vec::new();
+    m.push(1);
+    return BigInt { sign: 1, mag: m };
+}
+
+fn big_sign(a: &BigInt) -> i64 {
+    return a.sign;
+}
+
+fn big_is_zero(a: &BigInt) -> bool {
+    return a.sign == 0;
+}
+
+fn clone_mag(m: &Vec<i64>) -> Vec<i64> {
+    let out: Vec<i64> = Vec::new();
+    let i = 0;
+    while i < len(m) {
+        out.push(m[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn big_clone(a: &BigInt) -> BigInt {
+    return BigInt { sign: a.sign, mag: clone_mag(&a.mag) };
+}
+
+fn trim_mag(m: &Vec<i64>) -> Vec<i64> {
+    let n = len(m);
+    while n > 0 {
+        if m[n - 1] != 0 {
+            break;
+        };
+        n = n - 1;
+    }
+    let out: Vec<i64> = Vec::new();
+    let i = 0;
+    while i < n {
+        out.push(m[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn big_from_i64(n: i64) -> BigInt {
+    if n == 0 {
+        return big_zero();
+    };
+    let neg = n < 0;
+    let m: Vec<i64> = Vec::new();
+    let t = n;
+    while t != 0 {
+        let d = t % 1000000000;
+        if d < 0 {
+            m.push(-d);
+        } else {
+            m.push(d);
+        };
+        t = t / 1000000000;
+    }
+    let s = 1;
+    if neg {
+        return BigInt { sign: -1, mag: m };
+    };
+    return BigInt { sign: s, mag: m };
+}
+
+fn big_neg(a: &BigInt) -> BigInt {
+    return BigInt { sign: -a.sign, mag: clone_mag(&a.mag) };
+}
+
+fn big_abs(a: &BigInt) -> BigInt {
+    if a.sign < 0 {
+        return BigInt { sign: 1, mag: clone_mag(&a.mag) };
+    };
+    return big_clone(a);
+}
+
+fn big_cmp_mag(a: &Vec<i64>, b: &Vec<i64>) -> i64 {
+    if len(a) != len(b) {
+        if len(a) > len(b) {
+            return 1;
+        };
+        return -1;
+    };
+    let i = len(a);
+    while i > 0 {
+        i = i - 1;
+        if a[i] > b[i] {
+            return 1;
+        };
+        if a[i] < b[i] {
+            return -1;
+        };
+    }
+    return 0;
+}
+
+fn big_cmp(a: &BigInt, b: &BigInt) -> i64 {
+    if a.sign != b.sign {
+        if a.sign < b.sign {
+            return -1;
+        };
+        return 1;
+    };
+    let c = big_cmp_mag(&a.mag, &b.mag);
+    if a.sign < 0 {
+        return -c;
+    };
+    return c;
+}
+
+fn big_eq(a: &BigInt, b: &BigInt) -> bool {
+    return big_cmp(a, b) == 0;
+}
+
+fn add_mag(a: &Vec<i64>, b: &Vec<i64>) -> Vec<i64> {
+    let out: Vec<i64> = Vec::new();
+    let n = len(a);
+    let m = len(b);
+    let k = n;
+    if m > k {
+        k = m;
+    };
+    let carry = 0;
+    let i = 0;
+    while i < k {
+        let av = 0;
+        let bv = 0;
+        if i < n {
+            av = a[i];
+        };
+        if i < m {
+            bv = b[i];
+        };
+        let s = av + bv + carry;
+        if s >= 1000000000 {
+            out.push(s - 1000000000);
+            carry = 1;
+        } else {
+            out.push(s);
+            carry = 0;
+        };
+        i = i + 1;
+    }
+    if carry != 0 {
+        out.push(carry);
+    };
+    return out;
+}
+
+// Requires |a| >= |b|.
+fn sub_mag(a: &Vec<i64>, b: &Vec<i64>) -> Vec<i64> {
+    let out: Vec<i64> = Vec::new();
+    let n = len(a);
+    let borrow = 0;
+    let i = 0;
+    while i < n {
+        let av = a[i];
+        let bv = 0;
+        if i < len(b) {
+            bv = b[i];
+        };
+        let d = av - bv - borrow;
+        if d < 0 {
+            out.push(d + 1000000000);
+            borrow = 1;
+        } else {
+            out.push(d);
+            borrow = 0;
+        };
+        i = i + 1;
+    }
+    out = trim_mag(&out);
+    return out;
+}
+
+fn big_add(a: &BigInt, b: &BigInt) -> BigInt {
+    if a.sign == 0 {
+        return big_clone(b);
+    };
+    if b.sign == 0 {
+        return big_clone(a);
+    };
+    if a.sign == b.sign {
+        return BigInt { sign: a.sign, mag: add_mag(&a.mag, &b.mag) };
+    };
+    let c = big_cmp_mag(&a.mag, &b.mag);
+    if c == 0 {
+        return big_zero();
+    };
+    if c > 0 {
+        return BigInt { sign: a.sign, mag: sub_mag(&a.mag, &b.mag) };
+    };
+    return BigInt { sign: b.sign, mag: sub_mag(&b.mag, &a.mag) };
+}
+
+fn big_sub(a: &BigInt, b: &BigInt) -> BigInt {
+    return big_add(a, &big_neg(b));
+}
+
+fn big_mul(a: &BigInt, b: &BigInt) -> BigInt {
+    if a.sign == 0 || b.sign == 0 {
+        return big_zero();
+    };
+    let n = len(a.mag);
+    let m = len(b.mag);
+    let out: Vec<i64> = Vec::new();
+    let z = 0;
+    while z < n + m {
+        out.push(0);
+        z = z + 1;
+    }
+    let i = 0;
+    while i < n {
+        let carry = 0;
+        let j = 0;
+        while j < m {
+            let idx = i + j;
+            let cur = out[idx] + a.mag[i] * b.mag[j] + carry;
+            out[idx] = cur % 1000000000;
+            carry = cur / 1000000000;
+            j = j + 1;
+        }
+        out[i + m] = carry;
+        i = i + 1;
+    }
+    out = trim_mag(&out);
+    let s = 1;
+    if a.sign != b.sign {
+        return BigInt { sign: -1, mag: out };
+    };
+    return BigInt { sign: s, mag: out };
+}
+
+fn mul_small(m: &Vec<i64>, d: i64) -> Vec<i64> {
+    let out: Vec<i64> = Vec::new();
+    if d == 0 {
+        return out;
+    };
+    let carry = 0;
+    let i = 0;
+    while i < len(m) {
+        let cur = m[i] * d + carry;
+        out.push(cur % 1000000000);
+        carry = cur / 1000000000;
+        i = i + 1;
+    }
+    if carry != 0 {
+        out.push(carry);
+    };
+    return out;
+}
+
+// Floor/Euclidean divmod: q = a // b, r = a % b with 0 <= r < |b|
+// (r carries b's sign, matching Python's divmod). Zero divisor traps.
+fn big_divmod(a: &BigInt, b: &BigInt) -> DivMod {
+    if b.sign == 0 {
+        panic(9001);
+    };
+    if a.sign == 0 {
+        return DivMod { q: big_zero(), r: big_zero() };
+    };
+    let n = len(a.mag);
+    let qmag: Vec<i64> = Vec::new();
+    let z = 0;
+    while z < n {
+        qmag.push(0);
+        z = z + 1;
+    }
+    let rem: Vec<i64> = Vec::new();
+    let k = n;
+    while k > 0 {
+        k = k - 1;
+        let newrem: Vec<i64> = Vec::new();
+        newrem.push(a.mag[k]);
+        let j = 0;
+        while j < len(rem) {
+            newrem.push(rem[j]);
+            j = j + 1;
+        }
+        rem = trim_mag(&newrem);
+        let lo = 0;
+        let hi = 1000000000;
+        while lo + 1 < hi {
+            let mid = (lo + hi) / 2;
+            let cand = mul_small(&b.mag, mid);
+            let c = big_cmp_mag(&cand, &rem);
+            if c <= 0 {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        qmag[k] = lo;
+        let sub = mul_small(&b.mag, lo);
+        rem = sub_mag(&rem, &sub);
+    }
+    qmag = trim_mag(&qmag);
+    let na = a.sign < 0;
+    let nb = b.sign < 0;
+    let diff_sign = na != nb;
+    let q = BigInt { sign: 0, mag: qmag };
+    let rs0 = b.sign;
+    if len(rem) == 0 {
+        rs0 = 0;
+    };
+    let r = BigInt { sign: rs0, mag: rem };
+    if !diff_sign || r.sign == 0 {
+        let qs = 1;
+        if diff_sign {
+            qs = -1;
+        };
+        return DivMod { q: BigInt { sign: qs, mag: q.mag }, r: r };
+    };
+    let qpos = BigInt { sign: 1, mag: q.mag };
+    let qnext = big_add(&qpos, &big_one());
+    let qneg = big_neg(&qnext);
+    let bpos = BigInt { sign: 1, mag: clone_mag(&b.mag) };
+    let rpos = BigInt { sign: 1, mag: r.mag };
+    let rcomp = big_sub(&bpos, &rpos);
+    let rs = 1;
+    if b.sign < 0 {
+        rs = -1;
+    };
+    let rneg = BigInt { sign: rs, mag: rcomp.mag };
+    return DivMod { q: qneg, r: rneg };
+}
+
+fn big_div(a: &BigInt, b: &BigInt) -> BigInt {
+    let d = big_divmod(a, b);
+    return d.q;
+}
+
+fn big_rem(a: &BigInt, b: &BigInt) -> BigInt {
+    let d = big_divmod(a, b);
+    return d.r;
+}
+
+// BigInt from magnitude decimal digits (most significant first) + sign.
+fn big_from_digits(digits: &Vec<i64>, sign: i64) -> BigInt {
+    let mag: Vec<i64> = Vec::new();
+    mag.push(0);
+    let i = 0;
+    while i < len(digits) {
+        let carry = digits[i];
+        let k = 0;
+        while k < len(mag) {
+            let cur = mag[k] * 10 + carry;
+            mag[k] = cur % 1000000000;
+            carry = cur / 1000000000;
+            k = k + 1;
+        }
+        if carry != 0 {
+            mag.push(carry);
+        };
+        i = i + 1;
+    }
+    mag = trim_mag(&mag);
+    if len(mag) == 0 {
+        return big_zero();
+    };
+    return BigInt { sign: sign, mag: mag };
+}
+
+// Magnitude decimal digits, most significant first; "0" for zero.
+fn big_to_digits(a: &BigInt) -> Vec<i64> {
+    let work = clone_mag(&a.mag);
+    let rev: Vec<i64> = Vec::new();
+    while len(work) > 0 {
+        let rem = 0;
+        let k = len(work);
+        while k > 0 {
+            k = k - 1;
+            let cur = rem * 1000000000 + work[k];
+            work[k] = cur / 10;
+            rem = cur % 10;
+        }
+        rev.push(rem);
+        let t = len(work);
+        while t > 0 {
+            if work[t - 1] != 0 {
+                break;
+            };
+            t = t - 1;
+        }
+        let shrunk: Vec<i64> = Vec::new();
+        let j = 0;
+        while j < t {
+            shrunk.push(work[j]);
+            j = j + 1;
+        }
+        work = shrunk;
+    }
+    let out: Vec<i64> = Vec::new();
+    if len(rev) == 0 {
+        out.push(0);
+        return out;
+    };
+    let i = len(rev);
+    while i > 0 {
+        i = i - 1;
+        out.push(rev[i]);
+    }
+    return out;
+}
+
+fn big_from_decimal_str(s: &String) -> BigInt {
+    let bs = s.as_bytes();
+    let n = len(bs);
+    let sign = 1;
+    let start = 0;
+    if n > 0 {
+        let c = bs[0] as i64;
+        if c == 45 {
+            sign = -1;
+            start = 1;
+        } else if c == 43 {
+            start = 1;
+        };
+    };
+    let digits: Vec<i64> = Vec::new();
+    let i = start;
+    while i < n {
+        let d = bs[i] as i64 - 48;
+        if d < 0 {
+            panic(9002);
+        };
+        if d > 9 {
+            panic(9002);
+        };
+        digits.push(d);
+        i = i + 1;
+    }
+    return big_from_digits(&digits, sign);
+}
+
+fn big_to_decimal_str(a: &BigInt) -> String {
+    let digits = big_to_digits(a);
+    let s: String = format("");
+    if a.sign < 0 {
+        s = format("-");
+    };
+    let i = 0;
+    while i < len(digits) {
+        s = format("{}{}", s, digits[i]);
+        i = i + 1;
+    }
+    return s;
+}
+
+// i128-pair stepping stone: Pair-shaped (shared with #14 pair helpers).
+// Two base-2^62 limbs: 0 <= hi < 2^62, 0 <= lo < 2^62, value = hi*2^62 + lo.
+struct Pair128 {
+    hi: i64,
+    lo: i64,
+}
+
+fn pair128_make(hi: i64, lo: i64) -> Pair128 {
+    return Pair128 { hi: hi, lo: lo };
+}
+
+fn pair128_from_i64(x: i64) -> Pair128 {
+    return Pair128 { hi: 0, lo: x };
+}
+
+fn pair128_cmp(a: Pair128, b: Pair128) -> i64 {
+    if a.hi != b.hi {
+        if a.hi > b.hi {
+            return 1;
+        };
+        return -1;
+    };
+    if a.lo > b.lo {
+        return 1;
+    };
+    if a.lo < b.lo {
+        return -1;
+    };
+    return 0;
+}
+
+fn pair128_add(a: Pair128, b: Pair128) -> Pair128 {
+    let lo = a.lo + b.lo;
+    let carry = 0;
+    if lo >= 4611686018427387904 {
+        lo = lo - 4611686018427387904;
+        carry = 1;
+    };
+    return Pair128 { hi: a.hi + b.hi + carry, lo: lo };
+}
+
+fn pair128_sub(a: Pair128, b: Pair128) -> Pair128 {
+    let lo = a.lo - b.lo;
+    let borrow = 0;
+    if lo < 0 {
+        lo = lo + 4611686018427387904;
+        borrow = 1;
+    };
+    return Pair128 { hi: a.hi - b.hi - borrow, lo: lo };
+}
+
+fn pair128_to_big(a: Pair128) -> BigInt {
+    let r = big_from_i64(a.hi);
+    let i = 0;
+    while i < 62 {
+        r = big_add(&r, &big_clone(&r));
+        i = i + 1;
+    }
+    return big_add(&r, &big_from_i64(a.lo));
+}
