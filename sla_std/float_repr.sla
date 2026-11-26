@@ -1,0 +1,291 @@
+// S3 f64 -> decimal shortest round-trip repr -- staging (oc-box-2 / 25026).
+//
+// Algorithm: exact interval / precision-sweep shortest conversion
+// (Burger-Dybvig "Dragon4" family). Decode the IEEE-754 bit pattern into
+// m * 2^e, form the exact round-to-even rounding interval of the float
+// (with the half-ULP / quarter-ULP power-of-two lower boundary), then for
+// n = 1..17 round the exact value to the nearest n-digit decimal and test
+// containment in that interval. The first n that fits is the shortest
+// round-tripping decimal. All arithmetic is exact, using the S4 BigInt.
+//
+// API is bit-based: `f64_repr(bits: u64)` -- SLA `as` is numeric (1.0 as
+// u64 == 1), so the caller supplies the IEEE-754 bits; this is also the
+// oracle/fuzz input shape. Output follows CPython repr() formatting.
+//
+// Target home: sa_plugin_sla/sla_std/float_repr.sla
+
+@import "bigint.sla"
+
+struct ReprParts {
+    cls: i64,
+    negative: i64,
+    digits: Vec<i64>,
+    exp10: i64,
+}
+
+fn max_i64(a: i64, b: i64) -> i64 {
+    if a > b {
+        return a;
+    };
+    return b;
+}
+
+fn big_mul10(a: &BigInt, d: i64) -> BigInt {
+    if a.sign == 0 {
+        return big_zero();
+    };
+    return BigInt { sign: a.sign, mag: mul_small(&a.mag, d) };
+}
+
+fn pow2_table() -> Vec<BigInt> {
+    let t: Vec<BigInt> = Vec::new();
+    t.push(big_one());
+    let i = 1;
+    while i <= 1100 {
+        let prev = big_clone(&t[i - 1]);
+        t.push(big_add(&prev, &big_clone(&prev)));
+        i = i + 1;
+    }
+    return t;
+}
+
+fn pow10_table() -> Vec<BigInt> {
+    let t: Vec<BigInt> = Vec::new();
+    t.push(big_one());
+    let i = 1;
+    while i <= 370 {
+        let prev = big_clone(&t[i - 1]);
+        t.push(big_mul10(&prev, 10));
+        i = i + 1;
+    }
+    return t;
+}
+
+fn big_is_odd(a: &BigInt) -> i64 {
+    if len(a.mag) == 0 {
+        return 0;
+    };
+    return a.mag[0] % 2;
+}
+
+fn cmp_vs_pow10(vn: &BigInt, den: &BigInt, k: i64, p10: &Vec<BigInt>) -> i64 {
+    let lhs = big_clone(vn);
+    let rhs = big_clone(den);
+    if k >= 0 {
+        rhs = big_mul(&rhs, &p10[k]);
+    } else {
+        lhs = big_mul(&lhs, &p10[-k]);
+    };
+    return big_cmp(&lhs, &rhs);
+}
+
+fn leading_exp(vn: &BigInt, den: &BigInt, p10: &Vec<BigInt>) -> i64 {
+    let lo = -400;
+    let hi = 400;
+    while lo < hi {
+        let mid = (lo + hi + 1) / 2;
+        let c = cmp_vs_pow10(vn, den, mid, p10);
+        if c >= 0 {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        };
+    }
+    return lo;
+}
+
+fn trim_digits(d: &Vec<i64>) -> Vec<i64> {
+    let out: Vec<i64> = Vec::new();
+    let n = len(d);
+    let last = n;
+    while last > 1 {
+        if d[last - 1] != 0 {
+            break;
+        };
+        last = last - 1;
+    }
+    let i = 0;
+    while i < last {
+        out.push(d[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn f64_parts(bits: u64) -> ReprParts {
+    let neg = 0;
+    if (bits >> 63) != 0 {
+        neg = 1;
+    };
+    let ef = ((bits >> 52) & 2047) as i64;
+    let frac = bits & 4503599627370495;
+    if ef == 2047 {
+        let empty: Vec<i64> = Vec::new();
+        if frac != 0 {
+            return ReprParts { cls: 2, negative: neg, digits: empty, exp10: 0 };
+        };
+        return ReprParts { cls: 1, negative: neg, digits: empty, exp10: 0 };
+    };
+    let m = frac as i64;
+    let e = ef - 1075;
+    if ef == 0 {
+        e = -1074;
+    } else {
+        m = m + 4503599627370496;
+    };
+    if m == 0 {
+        let zero: Vec<i64> = Vec::new();
+        zero.push(0);
+        return ReprParts { cls: 0, negative: neg, digits: zero, exp10: 0 };
+    };
+
+    let p2 = pow2_table();
+    let p10 = pow10_table();
+    let ep = max_i64(e, 0);
+    let en = max_i64(-e, 0);
+    let vn = big_mul(&big_from_i64(m), &p2[ep + 2]);
+    let den = big_clone(&p2[en + 2]);
+    let hn = big_clone(&p2[ep + 1]);
+    let qn = big_clone(&p2[ep]);
+    let low = big_clone(&vn);
+    if ef > 1 && frac == 0 {
+        low = big_sub(&vn, &qn);
+    } else {
+        low = big_sub(&vn, &hn);
+    };
+    let high = big_add(&vn, &hn);
+    let inclusive = 0;
+    if m % 2 == 0 {
+        inclusive = 1;
+    };
+    let k = leading_exp(&vn, &den, &p10);
+
+    let n = 1;
+    while n <= 17 {
+        let shift = n - 1 - k;
+        let num = big_clone(&vn);
+        let d = big_clone(&den);
+        if shift >= 0 {
+            num = big_mul(&num, &p10[shift]);
+        } else {
+            d = big_mul(&d, &p10[-shift]);
+        };
+        let dm = big_divmod(&num, &d);
+        let q = dm.q;
+        let rr = big_clone(&dm.r);
+        let r2 = big_add(&dm.r, &rr);
+        let rc = big_cmp(&r2, &d);
+        if rc > 0 || (rc == 0 && big_is_odd(&q) == 1) {
+            q = big_add(&q, &big_one());
+        };
+        let s10 = k - n + 1;
+        let dnum = big_clone(&q);
+        let dden = big_one();
+        if s10 >= 0 {
+            dnum = big_mul(&dnum, &p10[s10]);
+        } else {
+            dden = big_clone(&p10[-s10]);
+        };
+        let lhs = big_mul(&dnum, &den);
+        let lcmp = big_cmp(&lhs, &big_mul(&low, &dden));
+        let hcmp = big_cmp(&lhs, &big_mul(&high, &dden));
+        let lok = 0;
+        if lcmp > 0 || (inclusive == 1 && lcmp == 0) {
+            lok = 1;
+        };
+        let hok = 0;
+        if hcmp < 0 || (inclusive == 1 && hcmp == 0) {
+            hok = 1;
+        };
+        if lok == 1 && hok == 1 {
+            let dg = big_to_digits(&q);
+            let nd = len(dg);
+            return ReprParts { cls: 0, negative: neg, digits: dg, exp10: k + nd - n };
+        };
+        n = n + 1;
+    }
+    return ReprParts { cls: 0, negative: neg, digits: big_to_digits(&vn), exp10: k };
+}
+
+fn f64_repr(bits: u64) -> String {
+    let p = f64_parts(bits);
+    if p.cls == 2 {
+        return format("nan");
+    };
+    if p.cls == 1 {
+        if p.negative == 1 {
+            return format("-inf");
+        };
+        return format("inf");
+    };
+    let digits = trim_digits(&p.digits);
+    let k = p.exp10;
+    let s: String = format("");
+    if p.negative == 1 {
+        s = format("-");
+    };
+    if k >= -4 && k < 16 {
+        if k < 0 {
+            s = format("{}0.", s);
+            let i = 0;
+            while i < -k - 1 {
+                s = format("{}0", s);
+                i = i + 1;
+            }
+            let j = 0;
+            while j < len(digits) {
+                s = format("{}{}", s, digits[j]);
+                j = j + 1;
+            }
+        } else {
+            let nd = len(digits);
+            let intlen = k + 1;
+            let i = 0;
+            while i < intlen {
+                if i < nd {
+                    s = format("{}{}", s, digits[i]);
+                } else {
+                    s = format("{}0", s);
+                };
+                i = i + 1;
+            }
+            s = format("{}.", s);
+            if intlen < nd {
+                let j = intlen;
+                while j < nd {
+                    s = format("{}{}", s, digits[j]);
+                    j = j + 1;
+                }
+            } else {
+                s = format("{}0", s);
+            };
+        };
+    } else {
+        s = format("{}{}", s, digits[0]);
+        if len(digits) > 1 {
+            s = format("{}.", s);
+            let i = 1;
+            while i < len(digits) {
+                s = format("{}{}", s, digits[i]);
+                i = i + 1;
+            }
+        };
+        s = format("{}e", s);
+        if k >= 0 {
+            s = format("{}+", s);
+        } else {
+            s = format("{}-", s);
+        };
+        let a = k;
+        if a < 0 {
+            a = -a;
+        };
+        let es: String = format("{}", a);
+        if len(es.as_bytes()) < 2 {
+            s = format("{}0{}", s, a);
+        } else {
+            s = format("{}{}", s, a);
+        };
+    };
+    return s;
+}
