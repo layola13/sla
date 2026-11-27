@@ -1,0 +1,480 @@
+// S6 bytes -- sla_std bytes type (re-delivery, task 175).
+//
+// Target home: sa_plugin_sla/sla_std/bytes.sla (mirrored byte-identically
+// into layola13/sla sla_std/bytes.sla per the dual-sync rule).
+//
+// This file is a REWRITE (2026-11-27). The original S6 delivery
+// (bytes.sla 6,813 B, sha f1b5129a..., 20 functions, oracle 158/158
+// groups) was lost with Colab box 25026; no local copy survived and
+// the original is NOT reconstructed from memory. This file re-implements
+// the same contract from the surviving spec
+// (~/workspace/sapy/SUBSTRATE-GAPS-CONSOLIDATED.md:383 and S6 in §3a)
+// and the surviving consumers (plistlib <data>, hmac PBKDF2, binascii,
+// struct/array, pprint). Any bytes.sla recovered from any source must
+// first be verified against sha f1b5129a... before use; on mismatch it
+// is discarded and this rewrite stands.
+//
+// A pure-SLA Bytes value: an immutable-by-convention sequence of byte
+// values 0-255 with CPython `bytes` semantics at the SLA level. The psa
+// runtime's dynamic tag-15 carrier (emit.rs DYN_RUNTIME:
+// __psa_bytes_new/get/concat/repeat/slice/repr over the same
+// Box<Vec<u8>> payload) is the psa side of this settlement; this file
+// is the sla_std side. The two agree on the payload shape and on the
+// carrier-pointer idiom (see __psa_bytes_set_h below), so psa-side glue
+// can move between a tag-15 PsaVal and this Bytes type by unboxing the
+// Box<Vec<u8>> pointer, exactly as the bigint glue does for BigInt
+// (staging-gap-bigint/src/big_runtime.sla).
+//
+// Value semantics (SLA has no &mut): every mutating operation takes
+// &Bytes and returns a fresh Bytes; the argument is never modified.
+// The single exception is __psa_bytes_set_h, which writes in place
+// through a raw carrier pointer -- that is the gap-#22 primitive the
+// psa_std hmac PBKDF2 accumulator needs.
+//
+// Panic codes (sla_std block, cf. bigint.sla 9001/9002):
+//   9010 bytes index out of range (bytes_get / bytes_set)
+//   9011 bytes_from_hex: odd digit count or non-hex digit
+//   9012 bytes_from_b64: bad character, bad padding or bad length
+//   9013 bytes_slice: step zero
+// Bounds failures inside __psa_bytes_set_h trap on the SLA runtime's
+// own index check (same as __psa_vec_set_h); no separate code.
+//
+// Deliberately NOT in this file (registered follow-ups, see NOTES.md):
+//   * bytes_to_str -- SLA has no String-from-bytes constructor
+//     (String.as_bytes() exists, the inverse does not); Bytes->text
+//     conversions return Bytes (ASCII payload) and the psa glue
+//     bridges to a tag-6 str with the __psa_big_to_psastr push loop.
+//   * bytes methods as a psa method surface (decode/find/split ...)
+//     -- that is D5 method-table work at the psa layer, not sla_std.
+//   * bytearray -- does not exist in psa at all.
+
+struct Bytes {
+    data: Vec<u8>,
+}
+
+// Internal: clone a byte vector element-wise.
+fn bytes_clone_vec(v: &Vec<u8>) -> Vec<u8> {
+    let out: Vec<u8> = Vec::new();
+    let i = 0;
+    while i < len(v) {
+        out.push(v[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn bytes_new() -> Bytes {
+    return Bytes { data: Vec::new() };
+}
+
+fn bytes_clone(b: &Bytes) -> Bytes {
+    return bytes_from_vec(&b.data);
+}
+
+fn bytes_from_vec(v: &Vec<u8>) -> Bytes {
+    return Bytes { data: bytes_clone_vec(v) };
+}
+
+fn bytes_from_str(s: &String) -> Bytes {
+    // Raw UTF-8 bytes of the string, copied. For ASCII input this is
+    // the identity map; non-ASCII input yields its UTF-8 encoding
+    // bytes (the CPython bytes(s, "utf-8") case). No encoding argument
+    // exists at this layer.
+    let bs = s.as_bytes();
+    let v: Vec<u8> = Vec::new();
+    let i = 0;
+    while i < len(bs) {
+        v.push(bs[i]);
+        i = i + 1;
+    }
+    return bytes_from_vec(&v);
+}
+
+fn bytes_len(b: &Bytes) -> i64 {
+    return len(b.data);
+}
+
+fn bytes_get(b: &Bytes, idx: i64) -> u8 {
+    let n = len(b.data);
+    let j = idx;
+    if j < 0 { j = j + n; };
+    if j < 0 || j >= n { panic(9010); };
+    return b.data[j];
+}
+
+fn bytes_set(b: &Bytes, idx: i64, x: u8) -> Bytes {
+    // Value-semantics in-place write: the argument is unchanged, the
+    // returned Bytes carries the new byte. For the true in-place
+    // carrier write see __psa_bytes_set_h below.
+    let n = len(b.data);
+    let j = idx;
+    if j < 0 { j = j + n; };
+    if j < 0 || j >= n { panic(9010); };
+    let v = bytes_clone_vec(&b.data);
+    v[j] = x;
+    return Bytes { data: v };
+}
+
+fn bytes_push(b: &Bytes, x: u8) -> Bytes {
+    let v = bytes_clone_vec(&b.data);
+    v.push(x);
+    return Bytes { data: v };
+}
+
+fn bytes_concat(a: &Bytes, b: &Bytes) -> Bytes {
+    let out: Vec<u8> = Vec::new();
+    let i = 0;
+    while i < len(a.data) {
+        out.push(a.data[i]);
+        i = i + 1;
+    }
+    let k = 0;
+    while k < len(b.data) {
+        out.push(b.data[k]);
+        k = k + 1;
+    }
+    return Bytes { data: out };
+}
+
+fn bytes_repeat(a: &Bytes, n: i64) -> Bytes {
+    let out: Vec<u8> = Vec::new();
+    let r = 0;
+    while r < n {
+        let i = 0;
+        while i < len(a.data) {
+            out.push(a.data[i]);
+            i = i + 1;
+        }
+        r = r + 1;
+    }
+    return Bytes { data: out };
+}
+
+fn bytes_slice(b: &Bytes, lo: i64, hi: i64, step: i64) -> Bytes {
+    // CPython slice.indices(n) semantics. lo/hi are explicit bounds
+    // (callers pass 0 / n for a full copy); negative bounds count
+    // from the end and are clamped; step 0 panics 9013.
+    if step == 0 { panic(9013); };
+    let n = len(b.data);
+    let out: Vec<u8> = Vec::new();
+    if step > 0 {
+        let start = lo;
+        if start < 0 { start = start + n; };
+        if start < 0 { start = 0; };
+        if start > n { start = n; };
+        let stop = hi;
+        if stop < 0 { stop = stop + n; };
+        if stop < 0 { stop = 0; };
+        if stop > n { stop = n; };
+        let i = start;
+        while i < stop {
+            out.push(b.data[i]);
+            i = i + step;
+        }
+    } else {
+        let start = lo;
+        if start < 0 { start = start + n; };
+        if start < 0 { start = -1; };
+        if start >= n { start = n - 1; };
+        let stop = hi;
+        if stop < 0 { stop = stop + n; };
+        if stop < 0 { stop = -1; };
+        if stop >= n { stop = n - 1; };
+        let i = start;
+        while i > stop {
+            out.push(b.data[i]);
+            i = i + step;
+        }
+    };
+    return Bytes { data: out };
+}
+
+fn bytes_eq(a: &Bytes, b: &Bytes) -> bool {
+    let na = len(a.data);
+    let nb = len(b.data);
+    if na != nb { return false; };
+    let i = 0;
+    while i < na {
+        if a.data[i] != b.data[i] { return false; };
+        i = i + 1;
+    }
+    return true;
+}
+
+fn bytes_cmp(a: &Bytes, b: &Bytes) -> i64 {
+    // Byte-wise lexicographic order; shorter prefix sorts first.
+    // Returns -1 / 0 / 1 (SEMANTICS.md contract), never the raw
+    // difference. Same algorithm as the psa runtime's __psa_str_cmp.
+    let na = len(a.data);
+    let nb = len(b.data);
+    let n = na;
+    if nb < n { n = nb; };
+    let i = 0;
+    while i < n {
+        let x = a.data[i] as i64;
+        let y = b.data[i] as i64;
+        if x != y {
+            if x < y { return -1; };
+            return 1;
+        };
+        i = i + 1;
+    }
+    if na < nb { return -1; };
+    if na > nb { return 1; };
+    return 0;
+}
+
+fn bytes_find(hay: &Bytes, needle: &Bytes) -> i64 {
+    // Index of the first occurrence, or -1. Empty needle matches at 0
+    // (CPython). Naive O(n*m) scan; no fast path is needed at this
+    // layer -- callers with hot loops keep their own search.
+    let n = len(hay.data);
+    let m = len(needle.data);
+    if m == 0 { return 0; };
+    if m > n { return -1; };
+    let s = 0;
+    while s <= n - m {
+        let k = 0;
+        let ok = true;
+        while k < m {
+            if hay.data[s + k] != needle.data[k] { ok = false; break; };
+            k = k + 1;
+        }
+        if ok { return s; };
+        s = s + 1;
+    }
+    return -1;
+}
+
+fn bytes_contains(hay: &Bytes, needle: &Bytes) -> bool {
+    return bytes_find(hay, needle) != -1;
+}
+
+// Internal: hex digit value of a nibble (0-15) as an ASCII byte.
+fn bytes_hex_digit(d: i64) -> u8 {
+    if d < 10 { return (48 + d) as u8; };
+    return (87 + d) as u8;
+}
+
+// Internal: value of a hex digit byte, or -1.
+fn bytes_hex_val(c: i64) -> i64 {
+    if c >= 48 && c <= 57 { return c - 48; };
+    if c >= 97 && c <= 102 { return c - 87; };
+    if c >= 65 && c <= 70 { return c - 55; };
+    return -1;
+}
+
+fn bytes_to_hex(b: &Bytes) -> Bytes {
+    // Lowercase hex, no separators (CPython bytes.hex()).
+    let out: Vec<u8> = Vec::new();
+    let i = 0;
+    while i < len(b.data) {
+        let x = b.data[i] as i64;
+        out.push(bytes_hex_digit(x >> 4));
+        out.push(bytes_hex_digit(x & 15));
+        i = i + 1;
+    }
+    return Bytes { data: out };
+}
+
+fn bytes_from_hex(s: &String) -> Bytes {
+    // CPython bytes.fromhex, exactly: ASCII whitespace is skipped
+    // only BETWEEN byte pairs -- a space inside a pair ("a b") is a
+    // loud refusal, as is an odd digit count or a non-hex digit.
+    // (The first draft skipped whitespace everywhere and wrongly
+    // accepted "a b"; the oracle generator caught it -- see NOTES.md.)
+    // All three failures panic 9011.
+    let bs = s.as_bytes();
+    let out: Vec<u8> = Vec::new();
+    let hi = 0;
+    let first = true;
+    let i = 0;
+    while i < len(bs) {
+        let c = bs[i] as i64;
+        if first {
+            let is_ws = c == 32 || c == 9 || c == 10 || c == 13 || c == 11 || c == 12;
+            if !is_ws {
+                let v = bytes_hex_val(c);
+                if v < 0 { panic(9011); };
+                hi = v;
+                first = false;
+            };
+        } else {
+            let v = bytes_hex_val(c);
+            if v < 0 { panic(9011); };
+            out.push(((hi << 4) | v) as u8);
+            first = true;
+        };
+        i = i + 1;
+    }
+    if !first { panic(9011); };
+    return Bytes { data: out };
+}
+
+// Internal: base64 alphabet byte for a 6-bit value.
+fn bytes_b64_chr(v: i64) -> u8 {
+    if v < 26 { return (65 + v) as u8; };
+    if v < 52 { return (97 + v - 26) as u8; };
+    if v < 62 { return (48 + v - 52) as u8; };
+    if v == 62 { return 43; };
+    return 47;
+}
+
+// Internal: 6-bit value of a base64 alphabet byte, or -1.
+fn bytes_b64_val(c: i64) -> i64 {
+    if c >= 65 && c <= 90 { return c - 65; };
+    if c >= 97 && c <= 122 { return c - 71; };
+    if c >= 48 && c <= 57 { return c + 4; };
+    if c == 43 { return 62; };
+    if c == 47 { return 63; };
+    return -1;
+}
+
+fn bytes_to_b64(b: &Bytes) -> Bytes {
+    // Standard base64 with '=' padding, no line breaks. plistlib wraps
+    // the lines itself (76 - 8*depth chars, matching CPython's writer
+    // at every depth); binascii's encodebytes adds its own newlines.
+    // Callers needing line breaks chunk this output.
+    let out: Vec<u8> = Vec::new();
+    let n = len(b.data);
+    let i = 0;
+    while i + 3 <= n {
+        let x = b.data[i] as i64;
+        let y = b.data[i + 1] as i64;
+        let z = b.data[i + 2] as i64;
+        out.push(bytes_b64_chr(x >> 2));
+        out.push(bytes_b64_chr(((x & 3) << 4) | (y >> 4)));
+        out.push(bytes_b64_chr(((y & 15) << 2) | (z >> 6)));
+        out.push(bytes_b64_chr(z & 63));
+        i = i + 3;
+    }
+    let r = n - i;
+    if r == 1 {
+        let x = b.data[i] as i64;
+        out.push(bytes_b64_chr(x >> 2));
+        out.push(bytes_b64_chr((x & 3) << 4));
+        out.push(61);
+        out.push(61);
+    } else if r == 2 {
+        let x = b.data[i] as i64;
+        let y = b.data[i + 1] as i64;
+        out.push(bytes_b64_chr(x >> 2));
+        out.push(bytes_b64_chr(((x & 3) << 4) | (y >> 4)));
+        out.push(bytes_b64_chr((y & 15) << 2));
+        out.push(61);
+    };
+    return Bytes { data: out };
+}
+
+fn bytes_from_b64(s: &String) -> Bytes {
+    // Strict form: ASCII whitespace is skipped; every other character
+    // must be in the base64 alphabet or '=' padding. '=' may only
+    // appear as the last one or two characters, and the cleaned length
+    // must be a multiple of 4; anything else panics 9012. CPython's
+    // validate=False leniency (ignore all non-alphabet characters) is
+    // NOT taken here: plistlib keeps its own lenient stream decoder
+    // for <data>, and this API refuses junk loudly instead of guessing.
+    let bs = s.as_bytes();
+    let clean: Vec<u8> = Vec::new();
+    let i = 0;
+    while i < len(bs) {
+        let c = bs[i] as i64;
+        let is_ws = c == 32 || c == 9 || c == 10 || c == 13 || c == 11 || c == 12;
+        if c == 61 || bytes_b64_val(c) >= 0 {
+            clean.push(bs[i]);
+        } else if !is_ws {
+            panic(9012);
+        };
+        i = i + 1;
+    }
+    let m = len(clean);
+    if m % 4 != 0 { panic(9012); };
+    let pad = 0;
+    // Nested ifs, not &&: && evaluates eagerly in the current
+    // compiler ((xviii) root B), so clean[m-1] would read out of
+    // bounds for empty input. Do not fold back until B1 lands.
+    if m >= 1 { if clean[m - 1] == 61 { pad = pad + 1; }; };
+    if m >= 2 { if clean[m - 2] == 61 { pad = pad + 1; }; };
+    let k = 0;
+    while k < m - pad {
+        if clean[k] == 61 { panic(9012); };
+        k = k + 1;
+    }
+    let out: Vec<u8> = Vec::new();
+    let j = 0;
+    while j < m {
+        let a = bytes_b64_val(clean[j] as i64);
+        let b = bytes_b64_val(clean[j + 1] as i64);
+        let c2 = clean[j + 2];
+        let d2 = clean[j + 3];
+        let c = 0;
+        if c2 != 61 { c = bytes_b64_val(c2 as i64); };
+        let d = 0;
+        if d2 != 61 { d = bytes_b64_val(d2 as i64); };
+        out.push(((a << 2) | (b >> 4)) as u8);
+        if c2 != 61 { out.push((((b & 15) << 4) | (c >> 2)) as u8); };
+        if d2 != 61 { out.push((((c & 63) << 6) | d) as u8); };
+        j = j + 4;
+    }
+    return Bytes { data: out };
+}
+
+fn bytes_repr(b: &Bytes) -> Bytes {
+    // CPython repr: b prefix, single quotes unless the payload has a
+    // single quote and no double quote; printable ASCII passes
+    // through, backslash / the quote char / \t \n \r are escaped,
+    // every other byte becomes \xNN (lowercase hex). Same algorithm
+    // as the psa runtime's __psa_bytes_repr, returning Bytes here
+    // (the psa glue bridges Bytes to a tag-6 str when it needs one).
+    let n = len(b.data);
+    let has_sq = false;
+    let has_dq = false;
+    let i = 0;
+    while i < n {
+        let x = b.data[i];
+        if x == 39 { has_sq = true; };
+        if x == 34 { has_dq = true; };
+        i = i + 1;
+    }
+    let q: u8 = 39;
+    if has_sq && !has_dq { q = 34; };
+    let out: Vec<u8> = Vec::new();
+    out.push(98);
+    out.push(q);
+    let k = 0;
+    while k < n {
+        let x = b.data[k];
+        if x == 92 { out.push(92); out.push(92); }
+        else if x == q { out.push(92); out.push(q); }
+        else if x == 10 { out.push(92); out.push(110); }
+        else if x == 9 { out.push(92); out.push(116); }
+        else if x == 13 { out.push(92); out.push(114); }
+        else if x < 32 || x >= 127 {
+            out.push(92);
+            out.push(120);
+            out.push(bytes_hex_digit((x >> 4) as i64));
+            out.push(bytes_hex_digit((x & 15) as i64));
+        }
+        else { out.push(x); };
+        k = k + 1;
+    }
+    out.push(q);
+    return Bytes { data: out };
+}
+
+fn __psa_bytes_set_h(p: ptr, i: i64, x: u8) {
+    // Gap #22: in-place byte write through a tag-15/tag-6 carrier
+    // pointer (v.ipay as ptr). Same Box round-trip idiom as
+    // __psa_vec_set_h / __psa_bytes_push_h in the psa runtime:
+    // re-box, write, hand the box back so the carrier is not freed.
+    // Carrier type here is Box<Bytes>: a *Vec<u8> view of a Bytes
+    // allocation does NOT alias the payload Vec (probe_seth.sla,
+    // 2026-11-27: Vec carrier passes, Bytes-as-Vec traps code=87).
+    // Bounds failures trap on the SLA runtime's own index check.
+    // This is what the hmac PBKDF2 XOR accumulator calls instead of
+    // rebuilding its buffer every round, and what any psa_std code
+    // calls when it must mutate a carrier byte in place.
+    let b = unsafe { Box::from_raw(p as *Bytes) };
+    (*b).data[i] = x;
+    let rp: i64 = Box::into_raw(b) as i64;
+}
