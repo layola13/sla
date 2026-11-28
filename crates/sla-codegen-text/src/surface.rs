@@ -1931,6 +1931,22 @@ impl<'c> Codegen<'c> {
                 }
                 Ok(Some(SurfaceCall::Void))
             }
+            ("HashMap", "keys") => {
+                // DEF-RUST-BUNDLE3-KEYS: mirror the Zig text
+                // codegen arm (codegen.zig: hash-map `keys` emits
+                // `EXPAND MAP_KEYS reg, recv`); the MAP_KEYS macro
+                // in sa_std lowers to @sa_map_keys_vec and yields
+                // the key words as a Vec, which the checker types
+                // as Vec<K>. The receiver is only borrowed (the
+                // map keeps its entries), as with `get`.
+                if call.args.len() != 1 {
+                    return Err(missing_fact());
+                }
+                let (recv, _, _) = self.surface_receiver(call)?;
+                let reg = self.new_tmp();
+                self.ins(&format!("EXPAND MAP_KEYS {reg}, {recv}"));
+                Ok(Some(SurfaceCall::Value(reg)))
+            }
             ("HashMap", "get") | ("BTreeMap", "get") => {
                 if call.args.len() != 2 {
                     return Err(missing_fact());

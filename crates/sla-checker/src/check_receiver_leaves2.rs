@@ -398,6 +398,24 @@ impl Checker {
             "insert" => (|| {
                 arity(call, 3)?;
                 let key_ty = self.check_expr(&call.args[1])?;
+                // DEF-RUST-BUNDLE3-STRKEY: mirror Zig's
+                // refineStringLiteralArg on the HashMap key slot
+                // (type_checker.zig hash-map arms): a string
+                // literal's standalone type is raw_ptr, so without
+                // refinement every `m.insert("k", v)` on a
+                // HashMap<String, V> was a bare TypeMismatch here,
+                // while the std-leaf3 HashSet remove arm already
+                // refined. BTreeMap keeps the unrefined check, as
+                // in Zig.
+                let key_ty = if btree {
+                    key_ty
+                } else {
+                    crate::check_expr_util::refine_string_literal_key(
+                        &call.args[1],
+                        key_ty,
+                        &key,
+                    )
+                };
                 let value_ty = self.check_expr(&call.args[2])?;
                 if !types_equal(&key, &key_ty)
                     || !types_equal(&value, &value_ty)
@@ -425,6 +443,18 @@ impl Checker {
             "get" => (|| {
                 arity(call, 2)?;
                 let key_ty = self.check_expr(&call.args[1])?;
+                // DEF-RUST-BUNDLE3-STRKEY: same literal-key
+                // refinement as the insert arm (Zig's HashMap get
+                // arm refines the key slot likewise).
+                let key_ty = if btree {
+                    key_ty
+                } else {
+                    crate::check_expr_util::refine_string_literal_key(
+                        &call.args[1],
+                        key_ty,
+                        &key,
+                    )
+                };
                 if !types_equal(&key, &key_ty) {
                     return Err(type_mismatch());
                 }
@@ -437,6 +467,19 @@ impl Checker {
                 ))
             })(),
             "clear" => arity(call, 1).map(|_| void_ty()),
+            // DEF-RUST-BUNDLE3-KEYS: HashMap `keys` leaf, mirroring
+            // Zig's checker arm (type_checker.zig: `keys` on a
+            // hash-map receiver returns Vec<key>). Until this arm
+            // every `m.keys()` fell through the cascade to
+            // `Undefined call: keys`. BTreeMap is excluded: its Zig
+            // lowering is a dedicated expansion this text backend
+            // does not have, so the call keeps falling through
+            // exactly as before instead of checking here and
+            // failing in codegen.
+            "keys" if !btree => (|| {
+                arity(call, 1)?;
+                Ok(user_ty("Vec", vec![key.clone()]))
+            })(),
             _ => return None,
         })
     }
