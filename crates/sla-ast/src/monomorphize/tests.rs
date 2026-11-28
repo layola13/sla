@@ -10,7 +10,8 @@ use super::types::mangled_name;
 use super::{monomorphize_program, MonomorphizeError};
 use crate::decls::{EnumDecl, EnumVariant, Field, FuncDecl, Param, Program, StructDecl};
 use crate::exprs::{
-    CallExpr, EnumLiteral, EnumLiteralField, FieldExpr, GenericFuncRef, Literal,
+    BorrowExpr, CallExpr, EnumLiteral, EnumLiteralField, FieldExpr, GenericFuncRef,
+    Literal,
 };
 use crate::node::Node;
 use crate::stmts::{LetStmt, ReturnStmt};
@@ -395,14 +396,20 @@ fn uninferable_generic_call_is_left_ordinary() {
         ud("T", vec![]),
         vec![ret(ident("x"))],
     );
+    // The argument is a call expression: it has no shallow
+    // type, so the call stays ordinary. (An identifier argument
+    // bound to a declared parameter used to stand here; that
+    // shape IS inferable since DEF-RUST-BUNDLE3-GENBORROW —
+    // see identifier_argument_infers_from_declared_param.)
+    let next_fn = func("next", &[], vec![], i32_ty(), vec![ret(int_lit(1))]);
     let main_fn = func(
         "main",
         &[],
-        vec![param("x", i32_ty())],
+        vec![],
         i32_ty(),
-        vec![ret(call("id", vec![], vec![ident("x")]))],
+        vec![ret(call("id", vec![], vec![call("next", vec![], vec![])]))],
     );
-    let mut root = program(vec![id_fn, main_fn]);
+    let mut root = program(vec![id_fn, next_fn, main_fn]);
     monomorphize_program(&mut root).expect("monomorphize must succeed");
     assert!(find_func(&root, "id_i32").is_none());
     let main_fn = find_func(&root, "main").expect("main stays");
@@ -413,6 +420,94 @@ fn uninferable_generic_call_is_left_ordinary() {
         panic!("return value must be the call")
     };
     assert_eq!(c.func_name, "id", "an uninferable call is not rewritten");
+}
+
+#[test]
+fn identifier_argument_infers_from_declared_param() {
+    // DEF-RUST-BUNDLE3-GENBORROW: an identifier argument types
+    // from its declared parameter type — the resolution Zig's
+    // inferNodeType gets from its checker scopes — so the call
+    // is rewritten to the mangled instance.
+    let id_fn = func(
+        "id",
+        &["T"],
+        vec![param("x", ud("T", vec![]))],
+        ud("T", vec![]),
+        vec![ret(ident("x"))],
+    );
+    let main_fn = func(
+        "main",
+        &[],
+        vec![param("x", i32_ty())],
+        i32_ty(),
+        vec![ret(call("id", vec![], vec![ident("x")]))],
+    );
+    let mut root = program(vec![id_fn, main_fn]);
+    monomorphize_program(&mut root).expect("monomorphize must succeed");
+    assert!(find_func(&root, "id_i32").is_some());
+    let main_fn = find_func(&root, "main").expect("main stays");
+    let Node::ReturnStmt(r) = &main_fn.body[0] else {
+        panic!("body must be the return")
+    };
+    let Node::CallExpr(c) = &**r.value.as_ref().expect("return value") else {
+        panic!("return value must be the call")
+    };
+    assert_eq!(c.func_name, "id_i32", "the inferred call is rewritten");
+}
+
+#[test]
+fn field_argument_infers_from_struct_declaration() {
+    // DEF-RUST-BUNDLE3-GENBORROW: the gosla anchor shape — a
+    // generic call on a borrow of a declared struct field
+    // (`&sm.m`) infers from the field's declared type.
+    let holder = Node::StructDecl(StructDecl {
+        name: "Holder".to_string(),
+        derives: Vec::new(),
+        generics: Vec::new(),
+        fields: vec![Field {
+            name: "items".to_string(),
+            ty: Box::new(ud("Vec", vec![prim(Primitive::I64)])),
+        }],
+        is_union: false,
+        is_opaque: false,
+    });
+    let vlen_fn = func(
+        "vlen",
+        &["T"],
+        vec![param(
+            "v",
+            Type::Borrow(Box::new(ud("Vec", vec![ud("T", vec![])]))),
+        )],
+        i32_ty(),
+        vec![ret(int_lit(0))],
+    );
+    let field_arg = Node::BorrowExpr(BorrowExpr {
+        expr: Box::new(Node::FieldExpr(FieldExpr {
+            expr: Box::new(ident("h")),
+            field_name: "items".to_string(),
+        })),
+    });
+    let main_fn = func(
+        "main",
+        &[],
+        vec![param(
+            "h",
+            Type::Borrow(Box::new(ud("Holder", vec![]))),
+        )],
+        i32_ty(),
+        vec![ret(call("vlen", vec![], vec![field_arg]))],
+    );
+    let mut root = program(vec![holder, vlen_fn, main_fn]);
+    monomorphize_program(&mut root).expect("monomorphize must succeed");
+    assert!(find_func(&root, "vlen_i64").is_some());
+    let main_fn = find_func(&root, "main").expect("main stays");
+    let Node::ReturnStmt(r) = &main_fn.body[0] else {
+        panic!("body must be the return")
+    };
+    let Node::CallExpr(c) = &**r.value.as_ref().expect("return value") else {
+        panic!("return value must be the call")
+    };
+    assert_eq!(c.func_name, "vlen_i64", "the field call is rewritten");
 }
 
 #[test]

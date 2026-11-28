@@ -62,6 +62,24 @@ pub fn register_imported_signatures(
                     checker.register_imported_signature(&func.name, sig.clone());
                     let alias = format!("{}__{}", module.namespace, func.name);
                     checker.register_imported_signature(&alias, sig);
+                    if !func.generics.is_empty() {
+                        // DEF-RUST-BUNDLE3-GENBORROW: keep the
+                        // template's generic parameter names next
+                        // to the imported signature, the record
+                        // register_func_as keeps for program
+                        // functions. Without it the signature
+                        // checker cannot substitute an implicit
+                        // generic call at all (its parameter types
+                        // still mention K / V) and reports the
+                        // self-contradictory "expects borrow,
+                        // actual borrow".
+                        checker
+                            .func_generics
+                            .insert(func.name.clone(), func.generics.clone());
+                        checker
+                            .func_generics
+                            .insert(alias, func.generics.clone());
+                    }
                 }
                 Node::ImplDecl(impl_decl) => {
                     let Some(type_name) =

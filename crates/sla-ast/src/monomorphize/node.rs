@@ -188,7 +188,10 @@ impl Monomorphizer {
             Node::FuncDecl(f) => {
                 let params = self.specialize_params(f.params)?;
                 let ret_ty = Box::new(self.specialize_type(*f.ret_ty)?);
-                let body = self.specialize_block(f.body)?;
+                self.push_var_scope(&params);
+                let body = self.specialize_block(f.body);
+                self.pop_var_scope();
+                let body = body?;
                 Node::FuncDecl(FuncDecl {
                     name: f.name,
                     is_pub: f.is_pub,
@@ -220,12 +223,17 @@ impl Monomorphizer {
             | Node::ShaderDecl(_)
             | Node::ImportDecl(_)
             | Node::UsingDecl(_) => node,
-            Node::TestDecl(t) => Node::TestDecl(TestDecl {
-                name: t.name,
-                is_ignored: t.is_ignored,
-                should_panic: t.should_panic,
-                body: self.specialize_block(t.body)?,
-            }),
+            Node::TestDecl(t) => {
+                self.push_var_scope(&[]);
+                let body = self.specialize_block(t.body);
+                self.pop_var_scope();
+                Node::TestDecl(TestDecl {
+                    name: t.name,
+                    is_ignored: t.is_ignored,
+                    should_panic: t.should_panic,
+                    body: body?,
+                })
+            }
 
             // -- statements --
             Node::LetStmt(l) => {
@@ -239,6 +247,15 @@ impl Monomorphizer {
                     }
                     _ => self.specialize_node(*l.value)?,
                 };
+                // DEF-RUST-BUNDLE3-GENBORROW: later statements in
+                // this block may pass the binding to a generic
+                // call; record its declared type (or the value's
+                // shallow type when unannotated).
+                if let Some(ty) = &new_ty {
+                    self.record_var(&l.name, (**ty).clone());
+                } else if let Some(ty) = self.infer_node_type_shallow(&new_val) {
+                    self.record_var(&l.name, ty);
+                }
                 Node::LetStmt(LetStmt {
                     name: l.name,
                     ty: new_ty,
@@ -268,6 +285,11 @@ impl Monomorphizer {
                     }
                     _ => self.specialize_node(*c.value)?,
                 };
+                if let Some(ty) = &new_ty {
+                    self.record_var(&c.name, (**ty).clone());
+                } else if let Some(ty) = self.infer_node_type_shallow(&new_val) {
+                    self.record_var(&c.name, ty);
+                }
                 Node::ConstStmt(ConstStmt {
                     name: c.name,
                     ty: new_ty,
@@ -282,12 +304,18 @@ impl Monomorphizer {
                 target: Box::new(self.specialize_node(*a.target)?),
                 value: Box::new(self.specialize_node(*a.value)?),
             }),
-            Node::BlockStmt(b) => Node::BlockStmt(BlockStmt {
-                body: self.specialize_block(b.body)?,
-            }),
-            Node::ArenaStmt(b) => Node::ArenaStmt(BlockStmt {
-                body: self.specialize_block(b.body)?,
-            }),
+            Node::BlockStmt(b) => {
+                self.push_var_scope(&[]);
+                let body = self.specialize_block(b.body);
+                self.pop_var_scope();
+                Node::BlockStmt(BlockStmt { body: body? })
+            }
+            Node::ArenaStmt(b) => {
+                self.push_var_scope(&[]);
+                let body = self.specialize_block(b.body);
+                self.pop_var_scope();
+                Node::ArenaStmt(BlockStmt { body: body? })
+            }
             Node::ExprStmt(expr) => Node::ExprStmt(Box::new(self.specialize_node(*expr)?)),
             Node::ReturnStmt(r) => Node::ReturnStmt(ReturnStmt {
                 value: self.specialize_opt_node(r.value)?,

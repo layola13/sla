@@ -108,6 +108,14 @@ pub struct Monomorphizer {
     pub(crate) specialized_impls: HashSet<String>,
     pub(crate) specialized_funcs: HashSet<String>,
     pub(crate) new_decls: Vec<Node>,
+    /// DEF-RUST-BUNDLE3-GENBORROW: declared field types of every
+    /// struct in the program (name -> (generic params, fields)),
+    /// plus a stack of declared variable types for the function
+    /// body currently being walked. Together they let the shallow
+    /// argument inference type identifier and field places the
+    /// way Zig's inferNodeType does from its checker scopes.
+    pub(crate) struct_fields: HashMap<String, (Vec<String>, Vec<(String, Type)>)>,
+    pub(crate) var_scopes: Vec<HashMap<String, Type>>,
 }
 
 impl Monomorphizer {
@@ -122,6 +130,8 @@ impl Monomorphizer {
             specialized_impls: HashSet::new(),
             specialized_funcs: HashSet::new(),
             new_decls: Vec::new(),
+            struct_fields: HashMap::new(),
+            var_scopes: Vec::new(),
         }
     }
 
@@ -152,6 +162,24 @@ impl Monomorphizer {
                     }
                     concrete_names.insert(f.name.as_str());
                 }
+            }
+        }
+
+        // DEF-RUST-BUNDLE3-GENBORROW: index every struct's
+        // declared fields before templates are separated out, so
+        // field places stay typeable during the walk below.
+        for decl in &program.decls {
+            if let Node::StructDecl(s) = decl {
+                self.struct_fields.insert(
+                    s.name.clone(),
+                    (
+                        s.generics.clone(),
+                        s.fields
+                            .iter()
+                            .map(|f| (f.name.clone(), (*f.ty).clone()))
+                            .collect(),
+                    ),
+                );
             }
         }
 
@@ -191,6 +219,42 @@ impl Monomorphizer {
         Ok(())
     }
 
+    /// DEF-RUST-BUNDLE3-GENBORROW: open a declared-type scope
+    /// seeded from a parameter list. A borrow parameter's
+    /// effective type wraps the declared type in Borrow unless
+    /// the type already is a borrow.
+    pub(crate) fn push_var_scope(&mut self, params: &[crate::decls::Param]) {
+        let mut scope = HashMap::new();
+        for p in params {
+            let ty = if p.is_borrow && !matches!(&*p.ty, Type::Borrow(_)) {
+                Type::Borrow(p.ty.clone())
+            } else {
+                (*p.ty).clone()
+            };
+            scope.insert(p.name.clone(), ty);
+        }
+        self.var_scopes.push(scope);
+    }
+
+    pub(crate) fn pop_var_scope(&mut self) {
+        self.var_scopes.pop();
+    }
+
+    /// Record a let/const binding's declared type in the
+    /// innermost active scope (a no-op outside function bodies).
+    pub(crate) fn record_var(&mut self, name: &str, ty: Type) {
+        if let Some(scope) = self.var_scopes.last_mut() {
+            scope.insert(name.to_string(), ty);
+        }
+    }
+
+    pub(crate) fn lookup_var(&self, name: &str) -> Option<Type> {
+        self.var_scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).cloned())
+    }
+
     pub(crate) fn template_not_found(&self, name: &str) -> MonomorphizeError {
         MonomorphizeError::TemplateNotFound(name.to_string())
     }
@@ -223,7 +287,10 @@ impl Monomorphizer {
         let spec_ret = self.substitute_type(&template.ret_ty, &template.generics, args);
         let spec_ret = self.specialize_type(spec_ret)?;
         let spec_body = self.substitute_block(template.body.clone(), &template.generics, args);
-        let spec_body = self.specialize_block(spec_body)?;
+        self.push_var_scope(&spec_params);
+        let spec_body = self.specialize_block(spec_body);
+        self.pop_var_scope();
+        let spec_body = spec_body?;
 
         self.new_decls.push(Node::FuncDecl(FuncDecl {
             name: mangled_name.to_string(),
@@ -264,6 +331,18 @@ impl Monomorphizer {
                 ty: Box::new(self.specialize_type(spec_ty)?),
             });
         }
+        // DEF-RUST-BUNDLE3-GENBORROW: field places on an
+        // instantiated struct type by its mangled name too.
+        self.struct_fields.insert(
+            mangled_name.to_string(),
+            (
+                Vec::new(),
+                spec_fields
+                    .iter()
+                    .map(|f| (f.name.clone(), (*f.ty).clone()))
+                    .collect(),
+            ),
+        );
         self.new_decls.push(Node::StructDecl(StructDecl {
             name: mangled_name.to_string(),
             derives: template.derives.clone(),

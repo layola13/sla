@@ -45,6 +45,22 @@ impl Checker {
         // initialized — the out-parameter reading that used to sit
         // here contradicted the corpus negatives the shape comes
         // from (see LINE_VARPARAM_INTERIM fork adjudication).
+        // DEF-RUST-BUNDLE3-GENBORROW: an implicit generic call
+        // (no turbofish) to a callee whose signature still
+        // mentions its own generic parameters — the imported-.sla
+        // shape, e.g. gosla's `__go_hashmap_keys_g(&sm.m)` against
+        // parameter `m: &HashMap<K, V>` — infers its generic
+        // arguments from the argument types and substitutes
+        // exactly like the explicit path below. Zig infers the
+        // same bindings inside inferGenericArgsForCall. Inference
+        // failure leaves the previous behavior untouched.
+        let inferred_generics: Vec<Type>;
+        let effective_generics: &[Type] = if !call_generics.is_empty() {
+            call_generics
+        } else {
+            inferred_generics = self.infer_call_generics(name, sig, args);
+            &inferred_generics
+        };
         // R-3: an explicitly generic call (`id<Pos>(...)`) checked
         // against a generic function's signature must substitute
         // the signature's types by the call's generic arguments
@@ -53,7 +69,7 @@ impl Checker {
         // instantiations. Non-generic calls and implicit cases
         // (param type already concrete) are untouched.
         let subst_params: Vec<crate::checker::ParamSig>;
-        let sig_params: &[crate::checker::ParamSig] = if !call_generics.is_empty() {
+        let sig_params: &[crate::checker::ParamSig] = if !effective_generics.is_empty() {
             match self.func_generics.get(name) {
                 Some(fn_params) if !fn_params.is_empty() => {
                     subst_params = sig
@@ -64,7 +80,7 @@ impl Checker {
                             p2.ty = crate::check_arena::substitute_generics(
                                 &p.ty,
                                 fn_params,
-                                call_generics,
+                                effective_generics,
                             );
                             p2
                         })
@@ -81,13 +97,13 @@ impl Checker {
         // Pair2<Pos, Vel>, never Pair2<A, B>) — without this the
         // caller compares / field-accesses the raw signature type.
         let subst_ret: Type;
-        let ret_ty: &Type = if !call_generics.is_empty() {
+        let ret_ty: &Type = if !effective_generics.is_empty() {
             match self.func_generics.get(name) {
                 Some(fn_params) if !fn_params.is_empty() => {
                     subst_ret = crate::check_arena::substitute_generics(
                         &sig.ret_ty,
                         fn_params,
-                        call_generics,
+                        effective_generics,
                     );
                     &subst_ret
                 }
@@ -412,5 +428,183 @@ mod tests_r3_expand_wiring {
             sla_parser::source_expand::expand(src).is_err(),
             "an invalid directive must fail as InvalidExpandTuple, never parse raw"
         );
+    }
+}
+// -- DEF-RUST-BUNDLE3-GENBORROW: implicit generic inference -----------
+
+/// Whether `ty` mentions one of the callee's generic parameter
+/// names anywhere (a bare parameter head, or nested inside a
+/// container / borrow / pointer / tuple / array shape).
+fn type_mentions_generic(ty: &Type, fn_params: &[String]) -> bool {
+    match ty {
+        Type::UserDefined(ud) => {
+            (ud.generics.is_empty() && fn_params.iter().any(|g| g == &ud.name))
+                || ud
+                    .generics
+                    .iter()
+                    .any(|g| type_mentions_generic(g, fn_params))
+        }
+        Type::Borrow(inner) | Type::Pointer(inner) | Type::Future(inner) => {
+            type_mentions_generic(inner, fn_params)
+        }
+        Type::Tuple(tuple) => tuple
+            .elems
+            .iter()
+            .any(|t| type_mentions_generic(t, fn_params)),
+        Type::Array(arr) => type_mentions_generic(&arr.elem, fn_params),
+        _ => false,
+    }
+}
+
+/// Structural unification of a signature (template) type against
+/// an argument type, collecting generic bindings — the same walk
+/// sla-ast's monomorphizer performs in collect_generic_bindings.
+/// Borrow layers carry no bindings of their own and peel on both
+/// sides, so a borrow parameter `m: &HashMap<K, V>` (declared
+/// type Borrow(HashMap<K, V>), or a plain type behind an
+/// is_borrow parameter) unifies with the argument's
+/// Borrow(HashMap<i64, i64>) alike. A non-generic template part
+/// must match the argument exactly. Returns false on any shape
+/// conflict; a repeated parameter must bind the same type twice.
+fn unify_generic_bindings(
+    fn_params: &[String],
+    template_ty: &Type,
+    actual_ty: &Type,
+    inferred: &mut [Option<Type>],
+) -> bool {
+    match (template_ty, actual_ty) {
+        (Type::Borrow(t), Type::Borrow(a)) => {
+            return unify_generic_bindings(fn_params, t, a, inferred);
+        }
+        (Type::Borrow(t), _) => {
+            return unify_generic_bindings(fn_params, t, actual_ty, inferred);
+        }
+        (_, Type::Borrow(a)) => {
+            return unify_generic_bindings(fn_params, template_ty, a, inferred);
+        }
+        (Type::Pointer(t), Type::Pointer(a)) => {
+            return unify_generic_bindings(fn_params, t, a, inferred);
+        }
+        _ => {}
+    }
+    match template_ty {
+        Type::UserDefined(ud) => {
+            if ud.generics.is_empty() {
+                if let Some(pos) = fn_params.iter().position(|g| g == &ud.name) {
+                    return match &inferred[pos] {
+                        Some(existing) => types_equal(existing, actual_ty),
+                        None => {
+                            inferred[pos] = Some(actual_ty.clone());
+                            true
+                        }
+                    };
+                }
+            }
+            match actual_ty {
+                Type::UserDefined(actual_ud) => {
+                    actual_ud.name == ud.name
+                        && actual_ud.generics.len() == ud.generics.len()
+                        && ud
+                            .generics
+                            .iter()
+                            .zip(actual_ud.generics.iter())
+                            .all(|(t, a)| {
+                                unify_generic_bindings(fn_params, t, a, inferred)
+                            })
+                }
+                _ => false,
+            }
+        }
+        Type::Tuple(tuple) => match actual_ty {
+            Type::Tuple(actual_tuple) => {
+                tuple.elems.len() == actual_tuple.elems.len()
+                    && tuple
+                        .elems
+                        .iter()
+                        .zip(actual_tuple.elems.iter())
+                        .all(|(t, a)| {
+                            unify_generic_bindings(fn_params, t, a, inferred)
+                        })
+            }
+            _ => false,
+        },
+        Type::Array(arr) => match actual_ty {
+            Type::Array(actual_arr) => {
+                arr.len == actual_arr.len
+                    && unify_generic_bindings(
+                        fn_params,
+                        &arr.elem,
+                        &actual_arr.elem,
+                        inferred,
+                    )
+            }
+            _ => false,
+        },
+        _ => types_equal(template_ty, actual_ty),
+    }
+}
+
+impl Checker {
+    /// Infer a generic callee's type arguments from the call's
+    /// argument types. Only runs when the signature actually
+    /// mentions the callee's generic parameters; the argument
+    /// probe replays `check_expr` under saved value states and
+    /// discards it (the overload probe's pattern in
+    /// check_overload2.rs), so the real per-argument pass below
+    /// re-checks everything with its capability and place rules.
+    /// Any failure — an argument that does not check, a shape
+    /// conflict, an unbound parameter — yields an empty vector
+    /// and the caller keeps the pre-inference behavior.
+    fn infer_call_generics(
+        &mut self,
+        name: &str,
+        sig: &FuncSig,
+        args: &[Node],
+    ) -> Vec<Type> {
+        // Scope: imported callees only. A program generic
+        // function's raw signature is the monomorphizer's
+        // division of labor (D-C11, pinned by
+        // tests_phase2b::generic_function_checked_against_
+        // unsubstituted_signature): fed to the checker raw, its
+        // calls keep mismatching exactly as before. Imported
+        // signatures are the ones no monomorphizer pass
+        // instantiates for the checker, and they are the
+        // bundle-three defect shape.
+        if !self.imported_funcs.contains_key(name) {
+            return Vec::new();
+        }
+        let Some(fn_params) = self.func_generics.get(name).cloned() else {
+            return Vec::new();
+        };
+        if fn_params.is_empty() {
+            return Vec::new();
+        }
+        let mentions = sig
+            .params
+            .iter()
+            .any(|p| type_mentions_generic(&p.ty, &fn_params))
+            || type_mentions_generic(&sig.ret_ty, &fn_params);
+        if !mentions {
+            return Vec::new();
+        }
+        let saved = self.scopes.save_states();
+        let mut inferred: Vec<Option<Type>> = vec![None; fn_params.len()];
+        let mut ok = true;
+        for (param, arg) in sig.params.iter().zip(args.iter()) {
+            let Ok(arg_ty) = self.check_expr(arg) else {
+                ok = false;
+                break;
+            };
+            if !unify_generic_bindings(&fn_params, &param.ty, &arg_ty, &mut inferred)
+            {
+                ok = false;
+                break;
+            }
+        }
+        self.scopes.restore_states(&saved);
+        if !ok || inferred.iter().any(|b| b.is_none()) {
+            return Vec::new();
+        }
+        inferred.into_iter().map(|b| b.unwrap()).collect()
     }
 }

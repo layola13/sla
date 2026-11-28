@@ -161,6 +161,13 @@ impl Monomorphizer {
     /// template's generic parameters from the shallowly-inferred
     /// argument types; `None` when any parameter cannot be bound
     /// (the call then stays an ordinary call, as in Zig).
+    /// DEF-RUST-BUNDLE3-GENBORROW: method view of the shallow
+    /// inference walk, for the node walker's let/const
+    /// recording.
+    pub(crate) fn infer_node_type_shallow(&self, node: &Node) -> Option<Type> {
+        infer_node_type_shallow(self, node)
+    }
+
     pub(crate) fn infer_generic_args_for_call(
         &self,
         template: &FuncDecl,
@@ -171,7 +178,7 @@ impl Monomorphizer {
         }
         let mut inferred: Vec<Option<Type>> = vec![None; template.generics.len()];
         for (param, arg) in template.params.iter().zip(args.iter()) {
-            let actual_ty = infer_node_type_shallow(arg)?;
+            let actual_ty = infer_node_type_shallow(self, arg)?;
             if !collect_generic_bindings(&template.generics, &param.ty, &actual_ty, &mut inferred) {
                 return None;
             }
@@ -275,7 +282,7 @@ fn append_type_name(buf: &mut String, ty: &Type) {
 /// of expression shapes whose type is knowable without the
 /// checker (literals, tuple/array literals, struct literals,
 /// borrows, moves, casts); `None` for everything else.
-fn infer_node_type_shallow(node: &Node) -> Option<Type> {
+fn infer_node_type_shallow(mono: &Monomorphizer, node: &Node) -> Option<Type> {
     match node {
         Node::Literal(lit) => Some(match lit {
             crate::exprs::Literal::IntVal(_) => Type::Primitive(Primitive::I32),
@@ -289,7 +296,7 @@ fn infer_node_type_shallow(node: &Node) -> Option<Type> {
         Node::TupleLiteral(tuple) => {
             let mut elems = Vec::with_capacity(tuple.elements.len());
             for elem in &tuple.elements {
-                elems.push(infer_node_type_shallow(elem)?);
+                elems.push(infer_node_type_shallow(mono, elem)?);
             }
             Some(Type::Tuple(TupleType { elems }))
         }
@@ -297,9 +304,9 @@ fn infer_node_type_shallow(node: &Node) -> Option<Type> {
             if array.elements.is_empty() {
                 return None;
             }
-            let elem_ty = infer_node_type_shallow(&array.elements[0])?;
+            let elem_ty = infer_node_type_shallow(mono, &array.elements[0])?;
             for elem in &array.elements[1..] {
-                if infer_node_type_shallow(elem)? != elem_ty {
+                if infer_node_type_shallow(mono, elem)? != elem_ty {
                     return None;
                 }
             }
@@ -309,7 +316,7 @@ fn infer_node_type_shallow(node: &Node) -> Option<Type> {
             }))
         }
         Node::RepeatArrayLiteral(array) => {
-            let elem_ty = infer_node_type_shallow(&array.value)?;
+            let elem_ty = infer_node_type_shallow(mono, &array.value)?;
             Some(Type::Array(ArrayType {
                 elem: Box::new(elem_ty),
                 len: array.len,
@@ -317,10 +324,21 @@ fn infer_node_type_shallow(node: &Node) -> Option<Type> {
         }
         Node::StructLiteral(lit) => Some((*lit.ty).clone()),
         Node::BorrowExpr(borrow) => {
-            Some(Type::Borrow(Box::new(infer_node_type_shallow(&borrow.expr)?)))
+            Some(Type::Borrow(Box::new(infer_node_type_shallow(mono, &borrow.expr)?)))
         }
-        Node::MoveExpr(mv) => infer_node_type_shallow(&mv.expr),
+        Node::MoveExpr(mv) => infer_node_type_shallow(mono, &mv.expr),
         Node::CastExpr(cast) => Some((*cast.ty).clone()),
+        // DEF-RUST-BUNDLE3-GENBORROW: identifiers and field
+        // places type from the declared-type environment the
+        // walk maintains (params, let/const annotations, struct
+        // field declarations) — the shapes Zig's inferNodeType
+        // resolves from its checker scopes. Anything not
+        // recorded stays None, exactly as before.
+        Node::Identifier(name) => mono.lookup_var(name),
+        Node::FieldExpr(fe) => {
+            let base_ty = infer_node_type_shallow(mono, &fe.expr)?;
+            field_type_of(mono, &base_ty, &fe.field_name)
+        }
         _ => None,
     }
 }
@@ -420,4 +438,24 @@ fn collect_generic_bindings(
         }
         Type::Infer => true,
     }
+}
+
+/// DEF-RUST-BUNDLE3-GENBORROW: the declared type of field
+/// `field` on a value of type `base_ty`, peeling borrow /
+/// pointer layers and substituting the struct template's
+/// generic parameters with the base's type arguments.
+fn field_type_of(mono: &Monomorphizer, base_ty: &Type, field: &str) -> Option<Type> {
+    let mut cur = base_ty;
+    loop {
+        match cur {
+            Type::Borrow(inner) | Type::Pointer(inner) => cur = inner,
+            _ => break,
+        }
+    }
+    let Type::UserDefined(ud) = cur else {
+        return None;
+    };
+    let (generics, fields) = mono.struct_fields.get(&ud.name)?;
+    let (_, field_ty) = fields.iter().find(|(name, _)| name == field)?;
+    Some(mono.substitute_type(field_ty, generics, &ud.generics))
 }
