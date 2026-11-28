@@ -1,0 +1,54 @@
+// HashMap key enumeration -- sla_std typed wrappers (task (lxviii)).
+//
+// Target home: sa_plugin_sla/sla_std/hashmap.sla (mirrored byte-identically
+// into layola13/sla sla_std/hashmap.sla per the dual-sync rule).
+//
+// gosla's gostd/runtime.sla and gostd/sync.sla call the __go_hashmap_keys*
+// helpers to snapshot a HashMap's key set (Go map iteration rides on the
+// snapshot: keys are enumerated once, values are re-read live). Those
+// helpers had zero definition anywhere in sla_std or sa_std, so the
+// gosla corpus could not check (runtime.sla: `Undefined call:
+// __go_hashmap_keys`). This file provides them as typed SLA wrappers over
+// the existing method surface `m.keys()`, which lowers through the
+// imported MAP_KEYS macro to the SA export @sa_map_keys_vec
+// (sa_std/collections/hashmap/hashmap.sa) -- no declaration stubs, the
+// call really reaches the SA function. The same surface is declared in
+// sla_std/std_surface.sla_meta (`method HashMap keys ... MAP_KEYS`)
+// for the SAB generic lowering path.
+//
+// Key representation: @sa_map_keys_vec returns a Vec<u64> of key words
+// (each slot key bitcast to u64). The method surface retypes that Vec to
+// Vec<K> from the map's key type, so for word-sized keys (i64, String
+// handles, Vec<u8> handles) the returned elements ARE the keys --
+// no per-element conversion is needed or performed here.
+//
+// Order: unspecified (the map's internal slot order). gosla documents
+// that a Go program depending on iteration order is already broken;
+// the snapshot SET is what this surface guarantees.
+
+@import "sa_std/vec.sa"
+@import "sa_std/hashmap.sa"
+
+// i64 keys: the exact surface gosla's runtime.sla calls
+// (go_runtime_hashmap_keys_i64_i64).
+fn __go_hashmap_keys(m: &HashMap<i64, i64>) -> Vec<i64> {
+    return m.keys();
+}
+
+// SLA String keys.
+fn __go_hashmap_keys_string(m: &HashMap<String, i64>) -> Vec<String> {
+    return m.keys();
+}
+
+// Go string keys (Go string -> Vec<u8> in gosla's representation):
+// the exact surface gosla's runtime.sla calls
+// (go_runtime_hashmap_keys_bytes_i64).
+fn __go_hashmap_keys_bytes(m: &HashMap<Vec<u8>, i64>) -> Vec<Vec<u8>> {
+    return m.keys();
+}
+
+// Generic keys: the exact surface gosla's sync.sla calls
+// (go_sync_map_range snapshots `__go_hashmap_keys_g(&sm.m)`).
+fn __go_hashmap_keys_g<K, V>(m: &HashMap<K, V>) -> Vec<K> {
+    return m.keys();
+}
